@@ -59,3 +59,11 @@ repos:
     -   id: detect-secrets
         args: ['--baseline', '.secrets.baseline']
         exclude: package.lock.json
+-   repo: https://github.com/doublify/pre-commit-rust
+    rev: v1.0
+    hooks:
+    -   id: fmt
+        args: ["--manifest-path=epi-isolation/Cargo.toml", "--verbose", "--"]
+    -   id: clippy
+        # Use 'all-targets' to run on all code, including tests and examples
+        args: ["--all-targets", "--manifest-path=epi-isolation/Cargo.toml", "--", "-D", "warnings", "-W", "clippy::pedantic"]
