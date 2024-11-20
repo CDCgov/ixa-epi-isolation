@@ -63,7 +63,7 @@ repos:
     rev: v1.0
     hooks:
     -   id: fmt
-        args: ["--manifest-path=epi-isolation/Cargo.toml", "--verbose", "--"]
+        args: ["--verbose", "--"]
     -   id: clippy
         # Use 'all-targets' to run on all code, including tests and examples
-        args: ["--all-targets", "--manifest-path=epi-isolation/Cargo.toml", "--", "-D", "warnings", "-W", "clippy::pedantic"]
+        args: ["--all-targets", "--", "-D", "warnings", "-W", "clippy::pedantic"]
