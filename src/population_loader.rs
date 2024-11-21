@@ -12,7 +12,7 @@ use std::path::Path;
 #[derive(Deserialize, Debug)]
 pub struct PeopleRecord {
     age: u8,
-    homeId: usize,
+    home_id: usize,
 }
 
 define_person_property!(Age, u8);
@@ -22,10 +22,9 @@ define_person_property_with_default!(Alive, bool, true);
 define_derived_property!(CensusTract, usize, [HomeId], |home_id| { home_id / 10_000 });
 
 pub fn create_new_person(context: &mut Context, person_record: &PeopleRecord) -> PersonId {
-    let person = context
-        .add_person(((Age, person_record.age),( HomeId, person_record.homeId)))
-        .unwrap();
-    person
+    context
+        .add_person(((Age, person_record.age), (HomeId, person_record.home_id)))
+        .unwrap()
 }
 
 pub fn init(context: &mut Context) {
