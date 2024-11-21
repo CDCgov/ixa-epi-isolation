@@ -20,6 +20,9 @@ struct Args {
     output_directory: PathBuf,
 }
 
+mod parameters_loader;
+mod population_loader;
+
 fn initialize(args: &Args) -> Result<Context, IxaError> {
     let mut context = Context::new();
     // read the global properties.
@@ -30,6 +33,10 @@ fn initialize(args: &Args) -> Result<Context, IxaError> {
         .clone();
     // model tidyness -- random seed, automatic shutdown
     context.init_random(parameters.seed);
+
+    // load the population from person record in input file
+    population_loader::init(&mut context);
+
     context.add_plan(parameters.max_time, |context| {
         context.shutdown();
     });
