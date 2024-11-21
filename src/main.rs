@@ -23,6 +23,7 @@ struct Args {
 }
 
 mod parameters_loader;
+mod population_loader;
 
 fn initialize(args: &Args) -> Result<Context, IxaError> {
     let mut context = Context::new();
@@ -32,6 +33,9 @@ fn initialize(args: &Args) -> Result<Context, IxaError> {
         .unwrap()
         .clone();
     context.init_random(parameters.seed);
+
+    population_loader::init(&mut context);
+
     context.add_plan(parameters.max_time, |context| {
         context.shutdown();
     });
