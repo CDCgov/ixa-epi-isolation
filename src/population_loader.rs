@@ -9,8 +9,6 @@ use ixa::{
 use serde::Deserialize;
 use std::path::Path;
 
-static MAX_AGE: u8 = 100;
-
 #[derive(Deserialize, Debug)]
 pub struct PeopleRecord {
     age: u8,
@@ -24,11 +22,9 @@ define_person_property_with_default!(Alive, bool, true);
 define_derived_property!(CensusTract, usize, [HomeId], |home_id| { home_id / 10_000 });
 
 pub fn create_new_person(context: &mut Context, person_record: &PeopleRecord) -> PersonId {
-    let person = context.add_person().expect("Failed to create person.");
-
-    context.initialize_person_property(person, Age, person_record.age);
-    context.initialize_person_property(person, HomeId, person_record.homeId);
-
+    let person = context
+        .add_person(((Age, person_record.age),( HomeId, person_record.homeId)))
+        .unwrap();
     person
 }
 
