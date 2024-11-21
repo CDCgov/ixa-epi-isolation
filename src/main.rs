@@ -9,10 +9,15 @@ use std::path::PathBuf;
 #[derive(Parser)]
 #[command(version, about, long_about = None)]
 struct Args {
+    /// path to the input file
     #[arg(short, long)]
     input_file: PathBuf,
+
+    /// path to the output directory
     #[arg(short, long)]
     output_directory: PathBuf,
+
+    /// name of the person property periodic report file
     #[arg(short, long)]
     person_report: String,
 }
