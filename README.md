@@ -5,7 +5,7 @@
 This project presents a general transmission model developed in [ixa](https://github.com/CDCgov/ixa), the Center for Forecasting and Outbreak Analytics' agent-based modeling framework. The transmission model goal is to possess time-varying infectioussness, immunity, interventions, and multiple co-circulating pathogens.
 
 ## How to run the model
-As of 11/21/24, `cargo run -- -i ./input/input.json -o ./output -p incidence`.
+As of 11/21/24, `cargo run -- -i ./input/input.json -o ./output`.
 
 ## Project Admin
 

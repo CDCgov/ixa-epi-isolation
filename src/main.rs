@@ -16,10 +16,6 @@ struct Args {
     /// path to the output directory
     #[arg(short, long)]
     output_directory: PathBuf,
-
-    /// name of the person property periodic report file
-    #[arg(short, long)]
-    person_report: String,
 }
 
 mod parameters_loader;
