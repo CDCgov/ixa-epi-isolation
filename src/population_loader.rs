@@ -10,6 +10,7 @@ use ixa::{
 use serde::Deserialize;
 
 #[derive(Deserialize, Debug)]
+#[allow(non_snake_case)]
 pub struct PeopleRecord {
     age: u8,
     homeId: usize,
@@ -19,7 +20,21 @@ define_person_property!(Age, u8);
 define_person_property!(HomeId, usize);
 define_person_property_with_default!(Alive, bool, true);
 
-define_derived_property!(CensusTract, usize, [HomeId], |homeId| { homeId / 10_000 });
+#[allow(clippy::cast_possible_truncation)]
+#[allow(clippy::cast_sign_loss)]
+const CENSUS_MAX: usize = 1e15 as usize;
+
+#[allow(clippy::cast_possible_truncation)]
+#[allow(clippy::cast_sign_loss)]
+const CENSUS_MIN: usize = 1e14 as usize;
+
+define_derived_property!(CensusTract, usize, [HomeId], |home_id| {
+    if (CENSUS_MIN..CENSUS_MAX).contains(&home_id) {
+        home_id / 10_000
+    } else {
+        0 //Err(IxaError::IxaError(String::from("Census tract invalid from homeId")))
+    }
+});
 
 fn create_person_from_record(
     context: &mut Context,
@@ -55,15 +70,24 @@ mod tests {
     use ixa::{context::Context, people::ContextPeopleExt, random::ContextRandomExt};
 
     #[test]
+    #[allow(clippy::inconsistent_digit_grouping)]
     fn test_create_person_from_record() {
         let mut context = Context::new();
         context.init_random(0);
         let record = PeopleRecord {
             age: 42,
-            homeId: 12345,
+            homeId: 36_09_30_33102_0005,
         };
         let person_id = create_person_from_record(&mut context, &record).unwrap();
         assert_eq!(context.get_person_property(person_id, Age), 42);
-        assert_eq!(context.get_person_property(person_id, HomeId), 12345);
+        assert_eq!(
+            context.get_person_property(person_id, HomeId),
+            36_09_30_33102_0005
+        );
+        assert!(context.get_person_property(person_id, Alive));
+        assert_eq!(
+            context.get_person_property(person_id, CensusTract),
+            36_09_30_33102
+        );
     }
 }
