@@ -21,6 +21,7 @@ struct Args {
 }
 
 mod parameters_loader;
+mod periodic_report_population;
 mod population_loader;
 
 fn initialize(args: &Args) -> Result<Context, IxaError> {
@@ -33,6 +34,9 @@ fn initialize(args: &Args) -> Result<Context, IxaError> {
         .clone();
     // model tidyness -- random seed, automatic shutdown
     context.init_random(parameters.seed);
+
+    //initialize periodic report
+    periodic_report_population::init(&mut context, &args.output_directory)?;
 
     // load the population from person record in input file
     population_loader::init(&mut context)?;
