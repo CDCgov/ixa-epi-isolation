@@ -34,7 +34,7 @@ fn initialize(args: &Args) -> Result<Context, IxaError> {
     context.init_random(parameters.seed);
 
     // load the population from person record in input file
-    population_loader::init(&mut context);
+    population_loader::init(&mut context)?;
 
     context.add_plan(parameters.max_time, |context| {
         context.shutdown();
