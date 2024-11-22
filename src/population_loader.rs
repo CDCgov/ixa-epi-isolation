@@ -52,20 +52,18 @@ pub fn init(context: &mut Context) -> Result<(), IxaError> {
 
 mod tests {
     use super::*;
-    use ixa::{
-        random::ContextRandomExt,
-        context::Context,
-        people::ContextPeopleExt,
-    };
+    use ixa::{context::Context, people::ContextPeopleExt, random::ContextRandomExt};
 
     #[test]
     fn test_create_person_from_record() {
         let mut context = Context::new();
         context.init_random(0);
-        let record = PeopleRecord { age: 42, homeId: 12345 };
+        let record = PeopleRecord {
+            age: 42,
+            homeId: 12345,
+        };
         let person_id = create_person_from_record(&mut context, &record).unwrap();
         assert_eq!(context.get_person_property(person_id, Age), 42);
         assert_eq!(context.get_person_property(person_id, HomeId), 12345);
     }
-
 }
