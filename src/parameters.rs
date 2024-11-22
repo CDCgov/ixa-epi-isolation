@@ -14,5 +14,6 @@ pub struct ParametersValues {
     pub generation_interval: f64,
     pub report_period: f64,
     pub synth_population_file: PathBuf,
+    pub output_file: String,
 }
 define_global_property!(Parameters, ParametersValues);
