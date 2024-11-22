@@ -90,4 +90,23 @@ mod tests {
             36_09_30_33102
         );
     }
+
+    #[test]
+    #[allow(clippy::inconsistent_digit_grouping)]
+    fn test_create_person_from_record_invalid_census_tract() {
+        let mut context = Context::new();
+        context.init_random(0);
+        let record = PeopleRecord {
+            age: 42,
+            homeId: 36_09_30_33102_0005_0005,
+        };
+        let person_id = create_person_from_record(&mut context, &record).unwrap();
+        assert_eq!(context.get_person_property(person_id, Age), 42);
+        assert_eq!(
+            context.get_person_property(person_id, HomeId),
+            36_09_30_33102_0005_0005
+        );
+        assert!(context.get_person_property(person_id, Alive));
+        assert_eq!(context.get_person_property(person_id, CensusTract), 0);
+    }
 }
