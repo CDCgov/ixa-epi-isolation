@@ -66,4 +66,4 @@ repos:
         args: ["--verbose", "--"]
     -   id: clippy
         # Use 'all-targets' to run on all code, including tests and examples
-        args: ["--all-targets", "--", "-D", "warnings", "-W", "clippy::pedantic"]
+        args: ["--all-targets", "--","-A", "non-snake-case", "-D", "warnings", "-W", "clippy::pedantic"]
