@@ -5,7 +5,6 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ParametersValues {
-    pub population: usize,
     pub max_time: f64,
     pub seed: u64,
     pub r_0: f64,
