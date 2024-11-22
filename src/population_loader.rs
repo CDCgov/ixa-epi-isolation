@@ -100,4 +100,6 @@ mod test {
         let synth_file = persist_tmp_csv(&input);
         let _ = load_synth_population(&mut context, synth_file);
     }
+    context.index_property(Age);
+    context.index_property(CensusTract);
 }
