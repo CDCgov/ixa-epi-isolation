@@ -28,14 +28,14 @@ define_global_property!(Parameters, ParametersValues);
 fn validate(parameters: &ParametersValues) -> Result<(), IxaError> {
     if parameters.r_0 < 0.0 {
         return Err(IxaError::IxaError(
-            "r_0 must be a non-negative number".to_string(),
+            "r_0 must be a non-negative number.".to_string(),
         ));
     }
     // need to think about a better way of validation
     // in the long term that makes sense for an arbitrary GI
     if parameters.generation_interval <= 0.0 {
         return Err(IxaError::IxaError(
-            "r_0 must be a non-negative number".to_string(),
+            "The generation interval must be positive.".to_string(),
         ));
     }
     Ok(())
