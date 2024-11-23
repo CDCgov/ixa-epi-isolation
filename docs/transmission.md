@@ -7,11 +7,9 @@ infectious agent and other susceptible agents. Agents become infectious immediat
 upon successful infection attempt, though they may have a transmission probability of
 0 for some time (mimicking an exposed compartment). Once infectious, agents have a pre-assigned
 number of infection attempts. Infection attempt times are drawn from the generation interval.
-Once there are no more infection attempts remaining for the agent, we model the agent as having
-their level of immunity against the disease set to, say, 1 but have them transition back
-to the susceptible compartment. This is to simplify the disease model and make it such that
-immunity levels can be re-calculated when contacts are drawn rather than needing to update
-them on a schedule.
+Once there are no more infection attempts remaining for the agent, the agent moves to the
+recovered compartment (for now), which triggers the immunity manager to set the agent's immunity
+levels.
 
 ## Workflow
 
@@ -36,11 +34,8 @@ the infection attempt is successful. Success is based on:
 5. Repeat steps #3 and #4, decreasing the number of infection attempts left by one each time
 regardless of whether the attempt is successful and ending when the agent has no zero
 infection attempts remaining.
-6. Re-label the agent as susceptible. Doing so will trigger the immunity manager to set the
-agent's natural level of immunity to a value of immunity to mimic the agent being in
-a recovered compartment. However, since we want the model to be general to consider waning
-of immunity, labeling individuals as being in a recovered compartment where they have complete
-immunity restricts the model's flexibility.
+6. Label the agent as recovered. Doing so will trigger the immunity manager to set the
+agent's natural level of immunity.
 
 ## Relationship to other managers/out of scope for the transmission manager
 
