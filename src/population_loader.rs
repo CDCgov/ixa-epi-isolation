@@ -7,6 +7,8 @@ use ixa::{
     people::{ContextPeopleExt, PersonId},
 };
 
+use std::path::Path;
+use std::path::PathBuf;
 use serde::Deserialize;
 
 #[derive(Deserialize, Debug)]
@@ -40,14 +42,9 @@ fn create_person_from_record(
     Ok(person_id)
 }
 
-pub fn init(context: &mut Context) -> Result<(), IxaError> {
-    let parameters = context
-        .get_global_property_value(Parameters)
-        .unwrap()
-        .clone();
-
-    let mut reader =
-        csv::Reader::from_path(parameters.synth_population_file).expect("Failed to open file.");
+fn load_synth_population(context: &mut Context, synth_input_file: PathBuf) -> Result<(), IxaError>{
+       let mut reader =
+        csv::Reader::from_path(synth_input_file).expect("Failed to open file.");
     let mut raw_record = csv::ByteRecord::new();
     let headers = reader.byte_headers().unwrap().clone();
 
@@ -55,7 +52,47 @@ pub fn init(context: &mut Context) -> Result<(), IxaError> {
         let record: PeopleRecord = raw_record.deserialize(Some(&headers)).expect("Failed to parse record.");
         create_person_from_record(context, &record)?;
     }
+    Ok(())
+}
+
+pub fn init(context: &mut Context) -> Result<(), IxaError> {
+    let parameters = context
+        .get_global_property_value(Parameters)
+        .unwrap()
+        .clone();
+
+    load_synth_population(context, PathBuf::from(parameters.synth_population_file))?; 
     context.index_property(Age);
     context.index_property(CensusTract);
     Ok(())
+}
+
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use tempfile::tempdir;
+    use std::io::{Write, Read};
+    use std::path::PathBuf;
+    use std::fs::File;
+    
+    #[test]
+    fn check_synth_file_error() {
+        let mut context = Context::new();
+        let temp_dir = tempdir().unwrap();
+        let path = PathBuf::from(&temp_dir.path());
+        let persisted_file = path.join("synth_pop_test.csv");
+        let mut file = File::create(persisted_file).unwrap();
+        file.write_all(b"
+age,homeId
+43,360930331020001
+42,360930331020002").unwrap();
+        let synth_file = path.join("synth_pop_test.csv");
+        load_synth_population(&mut context, synth_file).unwrap();
+        let age:u8 = 43;
+        let tract:usize = 36093033102;
+
+        assert_eq!(age, context.get_person_property(context.get_person_id(0), Age));
+        assert_eq!(tract, context.get_person_property(context.get_person_id(0), CensusTract));
+    }
 }
