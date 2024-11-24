@@ -45,7 +45,8 @@ fn create_person_from_record(
 }
 
 fn load_synth_population(context: &mut Context, synth_input_file: PathBuf) -> Result<(), IxaError> {
-    let mut reader = csv::Reader::from_path(synth_input_file).expect("Failed to open file. No headers found.");
+    let mut reader =
+        csv::Reader::from_path(synth_input_file).expect("Failed to open file. No headers found.");
     let mut raw_record = csv::ByteRecord::new();
     let headers = reader.byte_headers().unwrap().clone();
 
