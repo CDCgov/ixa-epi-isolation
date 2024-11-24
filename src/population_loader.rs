@@ -45,7 +45,7 @@ fn create_person_from_record(
 }
 
 fn load_synth_population(context: &mut Context, synth_input_file: PathBuf) -> Result<(), IxaError> {
-    let mut reader = csv::Reader::from_path(synth_input_file).expect("Failed to open file.");
+    let mut reader = csv::Reader::from_path(synth_input_file).expect("Failed to open file. No headers found.");
     let mut raw_record = csv::ByteRecord::new();
     let headers = reader.byte_headers().unwrap().clone();
 
@@ -79,7 +79,7 @@ mod test {
     use tempfile::tempdir;
 
     #[test]
-    fn check_synth_file_error() {
+    fn check_synth_file_tract() {
         let mut context = Context::new();
         let temp_dir = tempdir().unwrap();
         let path = PathBuf::from(&temp_dir.path());
