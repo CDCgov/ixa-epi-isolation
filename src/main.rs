@@ -20,6 +20,7 @@ struct Args {
     output_directory: PathBuf,
 }
 
+mod periodic_report_population;
 mod population_loader;
 
 fn initialize(args: &Args) -> Result<Context, IxaError> {

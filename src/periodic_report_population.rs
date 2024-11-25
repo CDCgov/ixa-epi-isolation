@@ -81,7 +81,7 @@ pub fn init(context: &mut Context, output_dir: &Path) -> Result<(), IxaError> {
         update_property_set(context, event);
     });
 
-    context.add_report::<PersonReportItem>(&parameters.output_file)?;
+    context.add_report::<PersonReportItem>(&parameters.population_periodic_report)?;
     context.add_plan(0.0, move |context| {
         send_population_report(context, parameters.report_period);
     });
