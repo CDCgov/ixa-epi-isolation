@@ -22,6 +22,8 @@ struct Args {
 
 mod periodic_report_population;
 mod population_loader;
+mod transmission_manager;
+mod contact;
 
 fn initialize(args: &Args) -> Result<Context, IxaError> {
     let mut context = Context::new();
@@ -39,6 +41,10 @@ fn initialize(args: &Args) -> Result<Context, IxaError> {
 
     // load the population from person record in input file
     population_loader::init(&mut context)?;
+
+
+    // person-to-person transmission workflow
+    transmission_manager::init(&mut context);
 
     context.add_plan(parameters.max_time, |context| {
         context.shutdown();
