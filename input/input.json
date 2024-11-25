@@ -1,4 +1,5 @@
 {
+  "epi_isolation.Parameters": {
     "population": 1000,
     "max_time": 200.0,
     "seed": 123,
@@ -6,4 +7,5 @@
     "infection_duration": 5.0,
     "generation_interval": 5.0,
     "report_period": 1.0
+  }
 }

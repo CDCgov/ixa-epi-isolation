@@ -3,7 +3,9 @@ use ixa::{
     context::Context, error::IxaError, global_properties::ContextGlobalPropertiesExt,
     random::ContextRandomExt,
 };
-use parameters_loader::Parameters;
+
+mod parameters;
+use parameters::Parameters;
 use std::path::PathBuf;
 
 #[derive(Parser)]
@@ -18,13 +20,10 @@ struct Args {
     output_directory: PathBuf,
 }
 
-mod parameters_loader;
-
 fn initialize(args: &Args) -> Result<Context, IxaError> {
     let mut context = Context::new();
-    // read the global properties, setting them as parameters
-    // propagate any errors that may arise with the ? operator
-    parameters_loader::init_parameters(&mut context, &args.input_file)?;
+    // read the global properties.
+    context.load_global_properties(&args.input_file)?;
     let parameters = context
         .get_global_property_value(Parameters)
         .unwrap()
