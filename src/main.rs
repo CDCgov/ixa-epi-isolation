@@ -31,7 +31,6 @@ struct Args {
 
 mod periodic_report_population;
 mod contact;
-mod parameters;
 mod population_loader;
 mod transmission_manager;
 

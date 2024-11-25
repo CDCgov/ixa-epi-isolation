@@ -49,21 +49,19 @@ fn infection_attempt(
     num_infection_attempts_remaining: f64,
     next_infection_time_unif: f64,
 ) -> Result<(), IxaError> {
-    // this is a method from a trait extention implemented in the contact manager
-    // we need to provide the transmitee id to ensure we do not just randomly sample that
-    // an agent infects themselves
-    // as long as this method returns a contact id, it can use any sampling strategy
-    // or logic to get there
-    let contact_id = context.get_contact(transmitee_id)?;
-    // evaluate transmission is its own function because there will be logic there eventually
-    // surrounding interventions
-    // if there are no contacts, to infect, do nothing
-    if let Some(contact_id) = contact_id {
-        evaluate_transmission(context, contact_id, transmitee_id);
-    }
-    // schedule the subsequent infection attempt for this infected agent,
-    // which happens at a greater value of the GI
-    if num_infection_attempts_remaining > 1.0 {
+    // if the person still has people left to infect
+    if num_infection_attempts_remaining >= 1.0 {
+        // this is a method from a trait extention implemented in the contact manager
+        // as long as this method returns a contact id, it can use any underlying sampling strategy
+        let contact_id = context.get_contact(transmitee_id)?;
+        // evaluate transmission is its own function because there will be
+        // intervention-based logic there eventually
+        // if there are no contacts, to infect, do nothing
+        if let Some(contact_id) = contact_id {
+            evaluate_transmission(context, contact_id, transmitee_id);
+        }
+        // schedule the subsequent infection attempt for this infected agent,
+        // which happens at a greater value of the GI
         schedule_next_infection_attempt(
             context,
             transmitee_id,
@@ -148,6 +146,8 @@ fn handle_infectious_status_change(
         let num_infection_attempts =
             context.sample_distr(TransmissionRng, Poisson::new(r_0).unwrap());
         // start scheduling infection attempt events for this person
+        // people who have num_infection_attempts = 0 are still passed through this logic so that
+        // they are set to recovered
         schedule_next_infection_attempt(context, event.person_id, gi, num_infection_attempts, 0.0);
     }
 }
@@ -171,25 +171,40 @@ pub fn init(context: &mut Context) {
 
 #[cfg(test)]
 mod test {
+    use crate::parameters::ParametersValues;
+
     use super::*;
-    use ixa::{context::Context, people::PersonPropertyChangeEvent, random::ContextRandomExt};
+    use ixa::{context::Context, random::ContextRandomExt};
+
+    fn set_up(r_0: f64) -> Context {
+        let p_values = ParametersValues {
+            max_time: 10.0,
+            seed: 42,
+            r_0,
+            infection_duration: 0.1,
+            generation_interval: 3.0,
+            report_period: 1.0,
+            synth_population_file: ".".to_string(),
+        };
+        let mut context = Context::new();
+        context.init_random(p_values.seed);
+        context.set_global_property_value(Parameters, p_values);
+        context
+    }
 
     #[test]
-    fn test_person_with_no_infection_attempts() {
-        let mut context = Context::new();
+    fn test_transitions() {
+        // set a super small r_0 so that the person has a very low probability of infecting others
+        let mut context = set_up(0.000_000_000_000_000_01);
+        init(&mut context);
         let person_id = context.add_person(()).unwrap();
-        let gi = 5.0;
-        let num_infection_attempts_remaining = 0.0;
-        let next_infection_time_unif = 0.5;
 
-        infection_attempt(
-            &mut context,
+        context.set_person_property(
             person_id,
-            gi,
-            num_infection_attempts_remaining,
-            next_infection_time_unif,
-        )
-        .unwrap();
+            InfectiousStatusType,
+            InfectiousStatus::Infectious,
+        );
+        context.execute();
 
         assert_eq!(
             context.get_person_property(person_id, InfectiousStatusType),
@@ -198,45 +213,31 @@ mod test {
     }
 
     #[test]
-    fn test_transition() {
-        let mut context = Context::new();
+    fn test_infection_attempts() {
+        // use a super big r_0 so that the probability of the person having
+        // zero secondary infections is extremely low
+        let mut context = set_up(50.0);
+        init(&mut context);
         let person_id = context.add_person(()).unwrap();
-        let gi = 5.0;
-        let num_infection_attempts_remaining = 3.0;
-        let next_infection_time_unif = 0.5;
-
-        infection_attempt(
-            &mut context,
+        let contact = context.add_person(()).unwrap();
+        // set person to infectious
+        context.set_person_property(
             person_id,
-            gi,
-            num_infection_attempts_remaining,
-            next_infection_time_unif,
-        )
-        .unwrap();
-
+            InfectiousStatusType,
+            InfectiousStatus::Infectious,
+        );
+        // let person infect others
+        context.execute();
+        // check that the person is now recovered
+        assert!(context.get_current_time() > 0.0);
         assert_eq!(
             context.get_person_property(person_id, InfectiousStatusType),
-            InfectiousStatus::Infectious
+            InfectiousStatus::Recovered
         );
-    }
-
-    #[test]
-    fn test_handle_infectious_status_change() {
-        let mut context = Context::new();
-        let person_id = context.add_person(()).unwrap();
-        let event = PersonPropertyChangeEvent {
-            person_id,
-            previous: InfectiousStatus::Susceptible,
-            current: InfectiousStatus::Infectious,
-        };
-        let r_0 = 2.0;
-        let gi = 5.0;
-
-        handle_infectious_status_change(&mut context, event, r_0, gi);
-
-        // Check if the person has scheduled infection attempts
-        let num_infection_attempts =
-            context.sample_distr(TransmissionRng, Poisson::new(r_0).unwrap());
-        assert!(num_infection_attempts > 0.0);
+        // check that the person is now recovered
+        assert_eq!(
+            context.get_person_property(contact, InfectiousStatusType),
+            InfectiousStatus::Recovered
+        );
     }
 }
