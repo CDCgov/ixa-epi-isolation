@@ -1,9 +1,17 @@
-use ixa::{context::Context, define_rng, error::IxaError, people::{ContextPeopleExt, PersonId}, random::ContextRandomExt};
+use ixa::{
+    context::Context,
+    define_rng,
+    error::IxaError,
+    people::{ContextPeopleExt, PersonId},
+    random::ContextRandomExt,
+};
 use statrs::distribution::Categorical;
+
+use crate::population_loader::Alive;
 
 define_rng!(ContactRng);
 
-pub trait ContactManager {
+pub trait QueryContacts {
     /// returns an arbitrary contact for the transmitee
     /// a modeler in the future may institute a more complex contact model
     /// setting weights by contact setting or shared household or the like in this method
@@ -12,13 +20,16 @@ pub trait ContactManager {
     /// does not check any characteristics about the people
     /// this is a generic method that is really just used for help sampling the person id
     /// it is exposed to the user to allow them to make arbitrary sampling decisions
-    fn sample_person_from_list(&mut self, list: Vec<PersonId>, weights: &Vec<f64>) -> Option<PersonId>;
+    fn sample_person_from_list(&mut self, list: Vec<PersonId>, weights: &[f64])
+        -> Option<PersonId>;
 }
 
-impl ContactManager for Context {
+impl QueryContacts for Context {
     fn get_contact(&mut self, transmitee_id: PersonId) -> Result<Option<PersonId>, IxaError> {
         if self.get_current_population() == 1 {
-            return Err(IxaError::IxaError("Cannot get a contact when there is only one person in the population.".to_string()));
+            return Err(IxaError::IxaError(
+                "Cannot get a contact when there is only one person in the population.".to_string(),
+            ));
         };
         // get list of alive people
         let alive_people = self.query_people((Alive, true));
@@ -27,7 +38,10 @@ impl ContactManager for Context {
             // assign weights to each person in the list
             let mut weights = vec![1.0; alive_people.len()];
             // get index of transmitee
-            let transmitee_index = alive_people.iter().position(|&x| x == transmitee_id).unwrap();
+            let transmitee_index = alive_people
+                .iter()
+                .position(|&x| x == transmitee_id)
+                .unwrap();
             // set this weight equal to 0 so we don't select the transmitee as the contact
             weights[transmitee_index] = 0.0;
             let contact_id = self.sample_person_from_list(alive_people, &weights);
@@ -39,24 +53,32 @@ impl ContactManager for Context {
         }
     }
 
-    fn sample_person_from_list(&mut self, list: Vec<PersonId>, weights: &Vec<f64>) -> Option<PersonId> {
+    #[allow(clippy::cast_possible_truncation)]
+    #[allow(clippy::cast_sign_loss)]
+    fn sample_person_from_list(
+        &mut self,
+        list: Vec<PersonId>,
+        weights: &[f64],
+    ) -> Option<PersonId> {
         // subtract one because the weights are 1-indexed
-        let index = self.sample_distr(ContactRng, Categorical::new(weights).unwrap()) - 1.0;
+        let index = self.sample_distr(ContactRng, Categorical::new(weights).unwrap());
         Some(list[index as usize])
     }
 }
 
 #[cfg(test)]
 mod test {
-    use super::*;
-    use ixa::{context::Context, people::ContextPeopleExt, define_person_property_with_default, define_person_property};
+    use super::QueryContacts;
+    use crate::population_loader::Alive;
+    use ixa::{context::Context, people::ContextPeopleExt, random::ContextRandomExt};
 
-    define_person_property_with_default!(Alive, bool, true);
     #[test]
-    #[should_panic(expected = "Cannot get a contact when there is only one person in the population.")]
+    #[should_panic(
+        expected = "Cannot get a contact when there is only one person in the population."
+    )]
     fn test_cant_get_contact_in_pop_of_one() {
         let mut context = Context::new();
-        let transmitee = context.add_person((Alive, true)).unwrap();
+        let transmitee = context.add_person(()).unwrap();
         let _ = context.get_contact(transmitee).unwrap();
     }
 
@@ -64,7 +86,7 @@ mod test {
     fn test_return_none() {
         let mut context = Context::new();
         context.init_random(108);
-        let transmitee = context.add_person((Alive, true)).unwrap();
+        let transmitee = context.add_person(()).unwrap();
         let _ = context.add_person((Alive, false)).unwrap();
         let observed_contact = context.get_contact(transmitee).unwrap();
         assert!(observed_contact.is_none());
@@ -74,9 +96,9 @@ mod test {
     fn test_return_remaining_alive_person() {
         let mut context = Context::new();
         context.init_random(108);
-        let transmitee = context.add_person((Alive, true)).unwrap();
+        let transmitee = context.add_person(()).unwrap();
         let _ = context.add_person((Alive, false)).unwrap();
-        let presumed_contact = context.add_person((Alive, true)).unwrap();
+        let presumed_contact = context.add_person(()).unwrap();
         let observed_contact = context.get_contact(transmitee).unwrap();
         assert_eq!(observed_contact.unwrap(), presumed_contact);
     }
