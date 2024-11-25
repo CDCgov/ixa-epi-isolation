@@ -28,13 +28,13 @@ fn create_person_from_record(
     person_record: &PeopleRecord,
 ) -> Result<PersonId, IxaError> {
     let tract: usize = String::from_utf8(person_record.homeId[..11].to_owned())
-        .expect("Home id should have 11 digits for tract + home id")
+        .expect("Home id should have 11 digits for tract + n digits for home id")
         .parse()
         .expect("Could not parse census tract");
     let home_id: usize = String::from_utf8(person_record.homeId.to_owned())
         .expect("Could not read home id")
         .parse()
-        .expect("Could not read home id");
+        .expect("Could not parse home id");
 
     let person_id = context.add_person((
         (Age, person_record.age),
