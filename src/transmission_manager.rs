@@ -170,4 +170,73 @@ pub fn init(context: &mut Context) {
 }
 
 #[cfg(test)]
-mod test {}
+mod test {
+    use super::*;
+    use ixa::{context::Context, people::PersonPropertyChangeEvent, random::ContextRandomExt};
+
+    #[test]
+    fn test_person_with_no_infection_attempts() {
+        let mut context = Context::new();
+        let person_id = context.add_person(()).unwrap();
+        let gi = 5.0;
+        let num_infection_attempts_remaining = 0.0;
+        let next_infection_time_unif = 0.5;
+
+        infection_attempt(
+            &mut context,
+            person_id,
+            gi,
+            num_infection_attempts_remaining,
+            next_infection_time_unif,
+        )
+        .unwrap();
+
+        assert_eq!(
+            context.get_person_property(person_id, InfectiousStatusType),
+            InfectiousStatus::Recovered
+        );
+    }
+
+    #[test]
+    fn test_transition() {
+        let mut context = Context::new();
+        let person_id = context.add_person(()).unwrap();
+        let gi = 5.0;
+        let num_infection_attempts_remaining = 3.0;
+        let next_infection_time_unif = 0.5;
+
+        infection_attempt(
+            &mut context,
+            person_id,
+            gi,
+            num_infection_attempts_remaining,
+            next_infection_time_unif,
+        )
+        .unwrap();
+
+        assert_eq!(
+            context.get_person_property(person_id, InfectiousStatusType),
+            InfectiousStatus::Infectious
+        );
+    }
+
+    #[test]
+    fn test_handle_infectious_status_change() {
+        let mut context = Context::new();
+        let person_id = context.add_person(()).unwrap();
+        let event = PersonPropertyChangeEvent {
+            person_id,
+            previous: InfectiousStatus::Susceptible,
+            current: InfectiousStatus::Infectious,
+        };
+        let r_0 = 2.0;
+        let gi = 5.0;
+
+        handle_infectious_status_change(&mut context, event, r_0, gi);
+
+        // Check if the person has scheduled infection attempts
+        let num_infection_attempts =
+            context.sample_distr(TransmissionRng, Poisson::new(r_0).unwrap());
+        assert!(num_infection_attempts > 0.0);
+    }
+}
