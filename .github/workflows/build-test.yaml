@@ -18,3 +18,5 @@ jobs:
       run: cargo build --verbose
     - name: Run tests
       run: cargo test --verbose
+    - name: Run main example
+      run: cargo run -- --input-file input/input.json  --output-directory output
