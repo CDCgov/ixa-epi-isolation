@@ -1,6 +1,5 @@
 {
   "epi_isolation.Parameters": {
-    "population": 1000,
     "max_time": 200.0,
     "seed": 123,
     "r_0": 2.5,
