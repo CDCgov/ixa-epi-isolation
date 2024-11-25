@@ -2,7 +2,7 @@ use crate::population_loader::{Age, CensusTract};
 
 use crate::Parameters;
 use ixa::{
-    context::Context,
+    context::{Context, ExecutionPhase},
     create_report_trait, define_data_plugin,
     error::IxaError,
     global_properties::ContextGlobalPropertiesExt,
@@ -15,11 +15,11 @@ use std::path::{Path, PathBuf};
 use std::collections::HashSet;
 
 #[derive(Serialize, Deserialize, Clone, PartialEq)]
-struct PersonReportItem {
+struct PopulationReportItem {
     time: f64,
+    census_tract: usize,
     age: u8,
     population: usize,
-    census_tract: usize,
 }
 
 #[derive(Clone)]
@@ -35,29 +35,25 @@ define_data_plugin!(
     }
 );
 
-create_report_trait!(PersonReportItem);
+create_report_trait!(PopulationReportItem);
 
-fn send_population_report(context: &mut Context, report_period: f64) {
-    let population_data = context.get_data_container_mut(PopulationReportPlugin);
+fn send_population_report(context: &mut Context) {
+    let population_data = context.get_data_container(PopulationReportPlugin).unwrap();
 
-    let current_census_set = population_data.census_tract_set.clone();
+    let current_census_set = &population_data.census_tract_set;
     for age_it in 0..100 {
-        for tract in &current_census_set {
+        for tract in current_census_set {
             let age_pop = context
                 .query_people(((Age, age_it), (CensusTract, (*tract))))
                 .len();
-            context.send_report(PersonReportItem {
+            context.send_report(PopulationReportItem {
                 time: context.get_current_time(),
+                census_tract: *tract,
                 age: age_it,
                 population: age_pop,
-                census_tract: *tract,
             });
         }
     }
-
-    context.add_plan(context.get_current_time() + report_period, move |context| {
-        send_population_report(context, report_period);
-    });
 }
 
 fn update_property_set(context: &mut Context, event: PersonCreatedEvent) {
@@ -81,9 +77,13 @@ pub fn init(context: &mut Context, output_dir: &Path) -> Result<(), IxaError> {
         update_property_set(context, event);
     });
 
-    context.add_report::<PersonReportItem>(&parameters.population_periodic_report)?;
-    context.add_plan(0.0, move |context| {
-        send_population_report(context, parameters.report_period);
-    });
+    context.add_report::<PopulationReportItem>(&parameters.population_periodic_report)?;
+    context.add_periodic_plan_with_phase(
+        parameters.report_period,
+        move |context| {
+            send_population_report(context);
+        },
+        ExecutionPhase::Last,
+    );
     Ok(())
 }
