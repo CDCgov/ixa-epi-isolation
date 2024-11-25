@@ -9,7 +9,7 @@ use ixa::{
 use statrs::distribution::{ContinuousCDF, Exp, Poisson};
 
 use crate::contact::QueryContacts;
-use crate::parameters_loader::Parameters;
+use crate::parameters::Parameters;
 
 #[derive(Debug, Hash, Eq, PartialEq, Clone, Copy)]
 pub enum InfectiousStatus {
