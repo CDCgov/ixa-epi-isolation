@@ -31,6 +31,7 @@ fn create_person_from_record(
         .expect("Home id should have 11 digits for tract + n digits for home id")
         .parse()
         .expect("Could not parse census tract");
+
     let home_id: usize = String::from_utf8(person_record.homeId.to_owned())
         .expect("Could not read home id")
         .parse()
@@ -90,6 +91,35 @@ mod test {
             b"
 age,homeId
 43,360930331020001
+42,360930331020002",
+        )
+        .unwrap();
+        let synth_file = path.join("synth_pop_test.csv");
+        load_synth_population(&mut context, synth_file).unwrap();
+        let age: u8 = 43;
+        let tract: usize = 36_093_033_102;
+
+        assert_eq!(
+            age,
+            context.get_person_property(context.get_person_id(0), Age)
+        );
+        assert_eq!(
+            tract,
+            context.get_person_property(context.get_person_id(0), CensusTract)
+        );
+    }
+
+    #[test]
+    fn check_invalid_home_id() {
+        let mut context = Context::new();
+        let temp_dir = tempdir().unwrap();
+        let path = PathBuf::from(&temp_dir.path());
+        let persisted_file = path.join("synth_pop_test.csv");
+        let mut file = File::create(persisted_file).unwrap();
+        file.write_all(
+            b"
+age,homeId
+43,36093033102
 42,360930331020002",
         )
         .unwrap();
