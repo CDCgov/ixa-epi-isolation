@@ -12,6 +12,8 @@ use std::path::PathBuf;
 
 use crate::population_loader::{Age, CensusTract};
 
+use crate::parameters::Parameters;
+
 #[derive(Parser)]
 #[command(version, about, long_about = None)]
 struct Args {
@@ -26,6 +28,12 @@ struct Args {
     #[arg(short, long, default_value = "false", default_missing_value = "true")]
     force_overwrite: bool,
 }
+
+mod periodic_report_population;
+mod contact;
+mod parameters;
+mod population_loader;
+mod transmission_manager;
 
 fn initialize(args: &Args) -> Result<Context, IxaError> {
     let mut context = Context::new();
@@ -55,6 +63,9 @@ fn initialize(args: &Args) -> Result<Context, IxaError> {
     population_loader::init(&mut context)?;
     context.index_property(Age);
     context.index_property(CensusTract);
+
+    // person-to-person transmission workflow
+    transmission_manager::init(&mut context);
 
     context.add_plan(parameters.max_time, |context| {
         context.shutdown();
