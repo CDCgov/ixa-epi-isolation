@@ -20,7 +20,6 @@ struct Args {
     output_directory: PathBuf,
 }
 
-mod parameters_loader;
 mod periodic_report_population;
 mod population_loader;
 

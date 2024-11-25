@@ -1,4 +1,4 @@
-use crate::parameters_loader::Parameters;
+use crate::parameters::Parameters;
 use ixa::{
     context::Context,
     define_person_property, define_person_property_with_default,
