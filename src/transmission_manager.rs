@@ -171,7 +171,7 @@ pub fn init(context: &mut Context) {
 
 #[cfg(test)]
 mod test {
-    use crate::parameters::ParametersValues;
+    use crate::{parameters::ParametersValues, population_loader::Alive};
 
     use super::*;
     use ixa::{context::Context, random::ContextRandomExt};
@@ -239,5 +239,55 @@ mod test {
             context.get_person_property(contact, InfectiousStatusType),
             InfectiousStatus::Recovered
         );
+    }
+
+    fn variable_number_of_infection_attempts(n_attempts: f64, n_iter: i32) {
+        // infection attempt times are drawn from an exponential distribution
+        // if we fix the number of infection attempts, we can calculate the distribution of
+        // where the infection attempt times should be -- a time we can get because the simulation
+        // ends at the end of the last infection attempt (agent becomes recovered)
+        // in our current naive implementation, we model the mean last infection
+        // attempt as occuring at inverse_cdf(1 - (1 / 2) ^ n) where n is the number of infection attempts
+        let mut sum_end_times = 0.0;
+        // r_0 not in this test is meaningless
+        let context = set_up(1.0);
+        let params = context
+            .get_global_property_value(Parameters)
+            .unwrap()
+            .clone();
+        for seed in 0..n_iter {
+            let mut context = set_up(1.0);
+            context.init_random(seed.try_into().unwrap());
+            let transmitee_id = context.add_person(()).unwrap();
+            // so we can get a contact, but the contact is a dummy
+            let only_contact = context.add_person((Alive, false)).unwrap();
+            infection_attempt(
+                &mut context,
+                transmitee_id,
+                params.generation_interval,
+                n_attempts,
+                0.0,
+            )
+            .unwrap();
+            context.execute();
+            sum_end_times += context.get_current_time();
+            assert_eq!(
+                context.get_person_property(transmitee_id, InfectiousStatusType),
+                InfectiousStatus::Recovered
+            );
+            assert_eq!(
+                context.get_person_property(only_contact, InfectiousStatusType),
+                InfectiousStatus::Susceptible
+            );
+        }
+        // TODO: figure out way to check math for n_attempts > 1
+        let expected_time_elapsed = f64::powf(params.generation_interval, n_attempts);
+
+        assert!(((sum_end_times / f64::from(n_iter)) - expected_time_elapsed).abs() < 0.1);
+    }
+
+    #[test]
+    fn test_variable_number_of_infection_attempts() {
+        variable_number_of_infection_attempts(1.0, 1000);
     }
 }
