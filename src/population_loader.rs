@@ -86,13 +86,14 @@ mod test {
         let tract = [36_093_033_102, 36_093_033_102];
 
         for id in 0..1 {
+            let person_id = context.get_person_id(id);
             assert_eq!(
                 age[id],
-                context.get_person_property(context.get_person_id(id), Age)
+                context.get_person_property(person_id, Age)
             );
             assert_eq!(
                 tract[id],
-                context.get_person_property(context.get_person_id(id), CensusTract)
+                context.get_person_property(person_id, CensusTract)
             );
         }
     }
