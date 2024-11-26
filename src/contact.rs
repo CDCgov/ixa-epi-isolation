@@ -26,8 +26,10 @@ pub trait ContextContactExt {
 #[allow(clippy::cast_possible_truncation)]
 #[allow(clippy::cast_sign_loss)]
 fn sample_person_from_list(context: &mut Context, list: &[PersonId], weights: &[f64]) -> PersonId {
-    let index = context.sample_distr(ContactRng, Categorical::new(weights).unwrap());
-    list[index as usize]
+    let index = context
+        .sample_distr(ContactRng, Categorical::new(weights).unwrap())
+        .floor() as usize;
+    list[index]
 }
 
 impl ContextContactExt for Context {

@@ -31,12 +31,13 @@ define_person_property_with_default!(
     InfectiousStatus::Susceptible
 );
 
+/// This function evaluates whether a transmission event is successful based on the characteristics
+/// of the transmitter and the contact. For now, we assume all transmission events are sucessful.
+/// However, in the future, the success of a transmission event may depend on person-level interventions,
+/// such as whether an agent is wearing a mask. For this reason, we pass the transmitter as well to this
+/// function. This will allow us to evaluate the success of a transmission event based on the properties of
+/// both the transmitter and the contact in the future.
 fn evaluate_transmission(context: &mut Context, contact_id: PersonId, _transmitter_id: PersonId) {
-    // For now, we assume all transmission events are sucessful.
-    // However, in the future, the success of a transmission event may depend on person-level interventions,
-    // such as whether an agent is wearing a mask. For this reason, we pass the transmitter as well to this
-    // function. This will allow us to evaluate the success of a transmission event based on the properties of
-    // both the transmitter and the contact in the future.
     if context.get_person_property(contact_id, InfectiousStatusType)
         == InfectiousStatus::Susceptible
     {
@@ -55,22 +56,21 @@ fn infection_attempt(
     next_infection_time_unif: f64,
 ) -> Result<(), IxaError> {
     // Only attempt the infection if the person has infection attempts remaining.
-    if num_infection_attempts_remaining >= 1 {
+    if num_infection_attempts_remaining > 0 {
         // This is a method from a trait extension implemented in `mod contact`.
         // As long as the method returns a contact id, it can use any underlying sampling strategy
         // to obtain that contact, and that strategy can be separately implemented in `mod contact`
         // without changing the logic here.
         let contact_id = context.get_contact(transmitter_id)?;
 
-        // We evvaluate transmission in its own function because there will be eventually
-        // be intervention-based logic there.
         // If there are no contacts to infect, do nothing.
         if let Some(contact_id) = contact_id {
+            // We evaluate transmission in its own function because there will be eventually
+            // be intervention-based logic that determines whether a transmission event is successful.
             evaluate_transmission(context, contact_id, transmitter_id);
         }
 
         // Schedule the next infection attempt for this infected agent.
-        // The next infection attempt happens at a greater value of the GI than the last infection attempt.
         schedule_next_infection_attempt(
             context,
             transmitter_id,
@@ -89,17 +89,17 @@ fn infection_attempt(
     Ok(())
 }
 
+/// Get the next infection time by sampling from a uniform distribution.
 fn get_next_infection_time_unif(context: &mut Context, last_infection_time_unif: f64) -> f64 {
-    // Get the next infection time by sampling from a uniform distribution.
     // FOR NOW, we are using placeholder math to guarantee the infection times are always increasing.
     // This is not order statistics. This will be corrected at a later time.
     context.sample_range(TransmissionRng, last_infection_time_unif..1.0)
 }
 
+/// Calculate the infection time corresponding to a uniform random number by passing
+/// through the inverse CDF of the generation interval (i.e., inverse transform
+/// sampling).
 fn get_next_infection_time_from_gi(context: &mut Context, next_infection_time_unif: f64) -> f64 {
-    // Calculate the next infection time by passing the next uniform random number
-    // through the inverse CDF of the generation interval (i.e., inverse transform
-    // sampling).
     // In the future, we will generalize the use of an exponential distribution to
     // an arbitrary distribution with a defined inverse CDF.
     let gi = context
@@ -111,13 +111,15 @@ fn get_next_infection_time_from_gi(context: &mut Context, next_infection_time_un
         .inverse_cdf(next_infection_time_unif)
 }
 
+/// Schedule the next infection attempt for the transmitter based on the generation
+/// interval and the number of infection attempts remaining.
 fn schedule_next_infection_attempt(
     context: &mut Context,
     transmitter_id: PersonId,
     num_infection_attempts_remaining: usize,
     last_infection_time_unif: f64,
 ) {
-    // Get the next infection attempt time, which is greater than the last infection attempt time.
+    // Get the next infection attempt time.
     let next_infection_time_unif = get_next_infection_time_unif(context, last_infection_time_unif);
     let next_infection_time_gi = get_next_infection_time_from_gi(context, next_infection_time_unif);
 
@@ -147,6 +149,8 @@ fn handle_infectious_status_change(
     // We don't care about the other transitions here, but this function will still be triggered
     // because it watches for any change in InfectiousStatusType.
     if event.previous == InfectiousStatus::Susceptible {
+        // Person should currently be infectious.
+        assert_eq!(event.current, InfectiousStatus::Infectious);
         // Get the number of infection attempts this person will have.
         let r_0 = context.get_global_property_value(Parameters).unwrap().r_0;
         let num_infection_attempts =
@@ -259,7 +263,8 @@ mod test {
         // the sum of the exponential inverse_cdf evaluated at each draw of the uniform distribution.
 
         let mut sum_end_times = 0.0;
-        // r_0 not in this test is meaningless because we manually set the number of infection attempts.
+        // In this test, e value of r_0 used to set up context is meaningless because we manually
+        // set the number of infection attempts.
         let context = setup(1.0);
         let params = context
             .get_global_property_value(Parameters)
@@ -284,7 +289,7 @@ mod test {
                 InfectiousStatus::Susceptible
             );
         }
-        // TODO: figure out way to check math for n_attempts > 1
+        // TODO(kzs9): figure out way to check math for n_attempts > 1
         let expected_time_elapsed =
             f64::powi(params.generation_interval, n_attempts.try_into().unwrap());
 
