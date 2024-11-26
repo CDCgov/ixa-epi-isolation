@@ -5,7 +5,6 @@ use ixa::{
     people::{ContextPeopleExt, PersonId},
     random::ContextRandomExt,
 };
-use statrs::distribution::Categorical;
 
 use crate::population_loader::Alive;
 
@@ -23,15 +22,6 @@ pub trait ContextContactExt {
     fn get_contact(&mut self, transmitter_id: PersonId) -> Result<Option<PersonId>, IxaError>;
 }
 
-#[allow(clippy::cast_possible_truncation)]
-#[allow(clippy::cast_sign_loss)]
-fn sample_person_from_list(context: &mut Context, list: &[PersonId], weights: &[f64]) -> PersonId {
-    let index = context
-        .sample_distr(ContactRng, Categorical::new(weights).unwrap())
-        .floor() as usize;
-    list[index]
-}
-
 impl ContextContactExt for Context {
     fn get_contact(&mut self, transmitter_id: PersonId) -> Result<Option<PersonId>, IxaError> {
         if self.get_current_population() == 1 {
@@ -44,19 +34,18 @@ impl ContextContactExt for Context {
         // We will sample a random person from this list.
         let mut alive_people = self.query_people((Alive, true));
         if alive_people.len() > 1 {
-            // In the future, we might like to sample people from the list by weights according
-            // to some contact matrix.
-            let mut weights = vec![1.0; alive_people.len()];
+            // Remove the transmitter from the list of contacts.
             // Get the index of the transmitter.
             let transmitter_index = alive_people
                 .iter()
                 .position(|&x| x == transmitter_id)
                 .unwrap();
-            // Remove the transmitter from the list of contacts.
             alive_people.remove(transmitter_index);
-            weights.remove(transmitter_index);
-            let contact_id = sample_person_from_list(self, &alive_people, &weights);
-            Ok(Some(contact_id))
+
+            // In the future, we might like to sample people from the list by weights according
+            // to some contact matrix. We would use sample_weighted instead.
+            let index = self.sample_range(ContactRng, 0..alive_people.len());
+            Ok(Some(alive_people[index]))
         } else {
             // This means that there are no eligible contacts in the population besides the transmitter.
             Ok(None)
