@@ -1,4 +1,5 @@
 use std::fmt::Debug;
+use std::path::PathBuf;
 
 use ixa::define_global_property;
 use serde::{Deserialize, Serialize};
@@ -11,6 +12,6 @@ pub struct ParametersValues {
     pub infection_duration: f64,
     pub generation_interval: f64,
     pub report_period: f64,
-    pub synth_population_file: String,
+    pub synth_population_file: PathBuf,
 }
 define_global_property!(Parameters, ParametersValues);
