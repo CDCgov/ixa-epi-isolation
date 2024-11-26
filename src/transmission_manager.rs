@@ -180,7 +180,7 @@ mod test {
         let p_values = ParametersValues {
             max_time: 10.0,
             seed: 42,
-            r_0: r_0,
+            r_0,
             infection_duration: 0.1,
             generation_interval: 3.0,
             report_period: 1.0,
@@ -194,7 +194,8 @@ mod test {
 
     #[test]
     fn test_transitions() {
-        let mut context = set_up(0.00000000000000001);
+        // set a super small r_0 so that the person has a very low probability of infecting others
+        let mut context = set_up(0.000_000_000_000_000_01);
         init(&mut context);
         let person_id = context.add_person(()).unwrap();
 
@@ -213,6 +214,8 @@ mod test {
 
     #[test]
     fn test_infection_attempts() {
+        // use a super big r_0 so that the probability of the person having
+        // zero secondary infections is extremely low
         let mut context = set_up(50.0);
         init(&mut context);
         let person_id = context.add_person(()).unwrap();
