@@ -17,11 +17,11 @@ use crate::parameters::Parameters;
 #[derive(Parser)]
 #[command(version, about, long_about = None)]
 struct Args {
-    /// path to the input file
+    /// Path to the input file.
     #[arg(short, long)]
     input_file: PathBuf,
 
-    /// path to the output directory
+    /// Path to the output directory.
     #[arg(short, long)]
     output_directory: PathBuf,
 
@@ -36,13 +36,13 @@ mod transmission_manager;
 
 fn initialize(args: &Args) -> Result<Context, IxaError> {
     let mut context = Context::new();
-    // read the global properties.
+    // Read the global properties.
     context.load_global_properties(&args.input_file)?;
     let parameters = context
         .get_global_property_value(Parameters)
         .unwrap()
         .clone();
-    // model tidyness -- random seed, automatic shutdown
+    // Initialize the base random seed.
     context.init_random(parameters.seed);
 
     // set the output directory and overwrite the existing file
@@ -63,16 +63,22 @@ fn initialize(args: &Args) -> Result<Context, IxaError> {
     context.index_property(Age);
     context.index_property(CensusTract);
 
-    // person-to-person transmission workflow
+    // Initialize person-to-person transmission workflow.
+    // This watches for agents going from susceptible to infectious,
+    // and schedules transmission events for them according to the
+    // disease parameters.
     transmission_manager::init(&mut context);
 
+    // Add a plan to shut down the simulation after the maximum time.
     context.add_plan(parameters.max_time, |context| {
         context.shutdown();
     });
-    // make it easy for the user to see what the parameters are
+
+    // Make it easy for the user to see what parameters were loaded and will be
+    // used to run the model.
     println!("{parameters:?}");
-    // if we've gotten to this point, nothing failed so return
-    // context wrapped in Ok so that the user knows nothing failed
+
+    // No errors raised: return context for execution.
     Ok(context)
 }
 
