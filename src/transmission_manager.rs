@@ -178,7 +178,6 @@ mod test {
 
     fn set_up(r_0: f64) -> Context {
         let p_values = ParametersValues {
-            population: 10,
             max_time: 10.0,
             seed: 42,
             r_0: r_0,

@@ -8,8 +8,6 @@ mod parameters;
 use parameters::Parameters;
 use std::path::PathBuf;
 
-use crate::parameters::Parameters;
-
 #[derive(Parser)]
 #[command(version, about, long_about = None)]
 struct Args {
@@ -24,7 +22,6 @@ struct Args {
 
 mod periodic_report_population;
 mod contact;
-mod parameters;
 mod population_loader;
 mod transmission_manager;
 
