@@ -51,11 +51,11 @@ fn evaluate_transmission(context: &mut Context, contact_id: PersonId, _transmitt
 fn infection_attempt(
     context: &mut Context,
     transmitter_id: PersonId,
-    num_infection_attempts_remaining: f64,
+    num_infection_attempts_remaining: usize,
     next_infection_time_unif: f64,
 ) -> Result<(), IxaError> {
     // Only attempt the infection if the person has infection attempts remaining.
-    if num_infection_attempts_remaining >= 1.0 {
+    if num_infection_attempts_remaining >= 1 {
         // This is a method from a trait extension implemented in `mod contact`.
         // As long as the method returns a contact id, it can use any underlying sampling strategy
         // to obtain that contact, and that strategy can be separately implemented in `mod contact`
@@ -74,7 +74,7 @@ fn infection_attempt(
         schedule_next_infection_attempt(
             context,
             transmitter_id,
-            num_infection_attempts_remaining - 1.0,
+            num_infection_attempts_remaining - 1,
             next_infection_time_unif,
         );
     }
@@ -114,7 +114,7 @@ fn get_next_infection_time_from_gi(context: &mut Context, next_infection_time_un
 fn schedule_next_infection_attempt(
     context: &mut Context,
     transmitter_id: PersonId,
-    num_infection_attempts_remaining: f64,
+    num_infection_attempts_remaining: usize,
     last_infection_time_unif: f64,
 ) {
     // Get the next infection attempt time, which is greater than the last infection attempt time.
@@ -137,6 +137,8 @@ fn schedule_next_infection_attempt(
     );
 }
 
+#[allow(clippy::cast_possible_truncation)]
+#[allow(clippy::cast_sign_loss)]
 fn handle_infectious_status_change(
     context: &mut Context,
     event: PersonPropertyChangeEvent<InfectiousStatusType>,
@@ -148,7 +150,7 @@ fn handle_infectious_status_change(
         // Get the number of infection attempts this person will have.
         let r_0 = context.get_global_property_value(Parameters).unwrap().r_0;
         let num_infection_attempts =
-            context.sample_distr(TransmissionRng, Poisson::new(r_0).unwrap());
+            context.sample_distr(TransmissionRng, Poisson::new(r_0).unwrap()) as usize;
 
         // Start scheduling infection attempt events for this person.
         // People who have num_infection_attempts = 0 are still passed through this
@@ -249,7 +251,7 @@ mod test {
         );
     }
 
-    fn variable_number_of_infection_attempts(n_attempts: f64, n_iter: i32) {
+    fn variable_number_of_infection_attempts(n_attempts: usize, n_iter: i32) {
         // Using some math, we can test that the observed time of the end of the simulation
         // is what we expect it to be given the number of infection attempts.
 
@@ -283,13 +285,14 @@ mod test {
             );
         }
         // TODO: figure out way to check math for n_attempts > 1
-        let expected_time_elapsed = f64::powf(params.generation_interval, n_attempts);
+        let expected_time_elapsed =
+            f64::powi(params.generation_interval, n_attempts.try_into().unwrap());
 
         assert!(((sum_end_times / f64::from(n_iter)) - expected_time_elapsed).abs() < 0.1);
     }
 
     #[test]
     fn test_variable_number_of_infection_attempts() {
-        variable_number_of_infection_attempts(1.0, 1000);
+        variable_number_of_infection_attempts(1, 1000);
     }
 }
