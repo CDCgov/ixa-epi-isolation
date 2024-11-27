@@ -50,6 +50,7 @@ mod test {
             generation_interval: 5.0,
             report_period: 1.0,
             synth_population_file: PathBuf::from("."),
+            population_periodic_report: String::new(),
         };
         validate_inputs(&parameters).unwrap();
     }
@@ -65,6 +66,7 @@ mod test {
             generation_interval: 0.0,
             report_period: 1.0,
             synth_population_file: PathBuf::from("."),
+            population_periodic_report: String::new(),
         };
         validate_inputs(&parameters).unwrap();
     }
