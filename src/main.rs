@@ -1,12 +1,14 @@
 use clap::Parser;
 use ixa::{
     context::Context, error::IxaError, global_properties::ContextGlobalPropertiesExt,
-    random::ContextRandomExt,
+    people::ContextPeopleExt, random::ContextRandomExt,
 };
 
 mod parameters;
 use parameters::Parameters;
 use std::path::PathBuf;
+
+use crate::population_loader::{Age, CensusTract};
 
 #[derive(Parser)]
 #[command(version, about, long_about = None)]
@@ -20,6 +22,9 @@ struct Args {
     output_directory: PathBuf,
 }
 
+mod periodic_report_population;
+mod population_loader;
+
 fn initialize(args: &Args) -> Result<Context, IxaError> {
     let mut context = Context::new();
     // read the global properties.
@@ -30,6 +35,15 @@ fn initialize(args: &Args) -> Result<Context, IxaError> {
         .clone();
     // model tidyness -- random seed, automatic shutdown
     context.init_random(parameters.seed);
+
+    //initialize periodic report
+    periodic_report_population::init(&mut context, &args.output_directory)?;
+
+    // load the population from person record in input file
+    population_loader::init(&mut context)?;
+    context.index_property(Age);
+    context.index_property(CensusTract);
+
     context.add_plan(parameters.max_time, |context| {
         context.shutdown();
     });
