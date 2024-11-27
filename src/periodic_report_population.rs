@@ -1,4 +1,4 @@
-use crate::population_loader::{Age, CensusTract};
+use crate::population_loader::{Age, RegionId};
 
 use crate::Parameters;
 use ixa::{
@@ -17,21 +17,21 @@ use std::collections::HashSet;
 #[derive(Serialize, Deserialize, Clone, PartialEq)]
 struct PopulationReportItem {
     time: f64,
-    census_tract: usize,
+    region_id: usize,
     age: u8,
     population: usize,
 }
 
 #[derive(Clone)]
 struct PopulationReportData {
-    census_tract_set: HashSet<usize>,
+    region_set: HashSet<usize>,
 }
 
 define_data_plugin!(
     PopulationReportPlugin,
     PopulationReportData,
     PopulationReportData {
-        census_tract_set: HashSet::new(),
+        region_set: HashSet::new(),
     }
 );
 
@@ -40,15 +40,15 @@ create_report_trait!(PopulationReportItem);
 fn send_population_report(context: &mut Context) {
     let population_data = context.get_data_container(PopulationReportPlugin).unwrap();
 
-    let current_census_set = &population_data.census_tract_set;
+    let current_region_set = &population_data.region_set;
     for age_it in 0..100 {
-        for tract in current_census_set {
+        for region in current_region_set {
             let age_pop = context
-                .query_people(((Age, age_it), (CensusTract, (*tract))))
+                .query_people(((Age, age_it), (RegionId, (*region))))
                 .len();
             context.send_report(PopulationReportItem {
                 time: context.get_current_time(),
-                census_tract: *tract,
+                region_id: *region,
                 age: age_it,
                 population: age_pop,
             });
@@ -57,9 +57,9 @@ fn send_population_report(context: &mut Context) {
 }
 
 fn update_property_set(context: &mut Context, event: PersonCreatedEvent) {
-    let person_census = context.get_person_property(event.person_id, CensusTract);
+    let person_region = context.get_person_property(event.person_id, RegionId);
     let report_plugin = context.get_data_container_mut(PopulationReportPlugin);
-    report_plugin.census_tract_set.insert(person_census);
+    report_plugin.region_set.insert(person_region);
 }
 
 pub fn init(context: &mut Context, output_dir: &Path) -> Result<(), IxaError> {

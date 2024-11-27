@@ -11,25 +11,25 @@ use std::path::PathBuf;
 #[allow(non_snake_case)]
 pub struct PeopleRecord<'a> {
     age: u8,
-    homeId: &'a [u8],
+    home_id: &'a [u8],
 }
 
 define_person_property!(Age, u8);
 define_person_property!(HomeId, usize);
 define_person_property_with_default!(Alive, bool, true);
-define_person_property!(CensusTract, usize);
+define_person_property!(RegionId, usize);
 
 fn create_person_from_record(
     context: &mut Context,
     person_record: &PeopleRecord,
 ) -> Result<(), IxaError> {
-    let tract: String = String::from_utf8(person_record.homeId[..11].to_owned())?;
-    let home_id: String = String::from_utf8(person_record.homeId.to_owned())?;
+    let tract: String = String::from_utf8(person_record.home_id[..11].to_owned())?;
+    let home_id: String = String::from_utf8(person_record.home_id.to_owned())?;
 
     let _person_id = context.add_person((
         (Age, person_record.age),
         (HomeId, home_id.parse()?),
-        (CensusTract, tract.parse()?),
+        (RegionId, tract.parse()?),
     ))?;
 
     Ok(())
@@ -72,7 +72,7 @@ mod test {
     #[test]
     fn check_synth_file_tract() {
         let mut context = Context::new();
-        let input = String::from("age,homeId\n43,360930331020001\n42,360930331020002");
+        let input = String::from("age,home_id\n43,360930331020001\n42,360930331020002");
         let synth_file = persist_tmp_csv(&input);
         load_synth_population(&mut context, synth_file).unwrap();
         let age = [43, 42];
@@ -83,16 +83,16 @@ mod test {
             assert_eq!(age[id], context.get_person_property(person_id, Age));
             assert_eq!(
                 tract[id],
-                context.get_person_property(person_id, CensusTract)
+                context.get_person_property(person_id, RegionId)
             );
         }
     }
 
     #[test]
     #[should_panic(expected = "range end index 11 out of range for slice of length 9")]
-    fn check_invalid_census_tract() {
+    fn check_invalid_region() {
         let mut context = Context::new();
-        let input = String::from("age,homeId\n43,360930331\n42,360930331020002");
+        let input = String::from("age,home_id\n43,360930331\n42,360930331020002");
         let synth_file = persist_tmp_csv(&input);
         let _ = load_synth_population(&mut context, synth_file);
     }
