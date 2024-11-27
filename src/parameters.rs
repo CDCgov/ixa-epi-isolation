@@ -40,6 +40,7 @@ mod test {
     use crate::parameters::ParametersValues;
 
     #[test]
+    #[should_panic(expected = "r_0 must be a non-negative number.")]
     fn test_validate_r_0() {
         let parameters = ParametersValues {
             max_time: 100.0,
@@ -50,10 +51,11 @@ mod test {
             report_period: 1.0,
             synth_population_file: PathBuf::from("."),
         };
-        assert!(validate_inputs(&parameters).is_err());
+        validate_inputs(&parameters).unwrap();
     }
 
     #[test]
+    #[should_panic(expected = "The generation interval must be positive.")]
     fn test_validate_gi() {
         let parameters = ParametersValues {
             max_time: 100.0,
@@ -64,6 +66,6 @@ mod test {
             report_period: 1.0,
             synth_population_file: PathBuf::from("."),
         };
-        assert!(validate_inputs(&parameters).is_err());
+        validate_inputs(&parameters).unwrap();
     }
 }
