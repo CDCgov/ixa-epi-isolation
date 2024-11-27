@@ -180,6 +180,17 @@ fn handle_infectious_status_change(
     }
 }
 
+/// This function seeds the initial infections in the population.
+fn seed_infections(context: &mut Context) {
+    // For now, we just pick a random person and make them infectious.
+    // In the future, we may pick people based on specific person properties.
+    context.set_person_property(
+        context.get_person_id(0),
+        InfectiousStatus,
+        InfectiousStatusType::Infectious,
+    );
+}
+
 pub fn init(context: &mut Context) {
     // Watch for changes in the InfectiousStatusType property.
     context.subscribe_to_event(
@@ -187,6 +198,9 @@ pub fn init(context: &mut Context) {
             handle_infectious_status_change(context, event);
         },
     );
+    context.add_plan(0.0, |context| {
+        seed_infections(context);
+    });
 }
 
 #[cfg(test)]
