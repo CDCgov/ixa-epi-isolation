@@ -35,7 +35,7 @@ define_global_property!(Parameters, ParametersValues, |p| { validate_inputs(p) }
 
 #[cfg(test)]
 mod test {
-    use super::*;
+    use super::validate_inputs;
 
     use crate::parameters::ParametersValues;
 
