@@ -1,4 +1,3 @@
-use ixa::error::IxaError;
 use std::fmt::Debug;
 use std::path::PathBuf;
 
@@ -36,6 +35,7 @@ define_global_property!(Parameters, ParametersValues, |p| { validate_inputs(p) }
 #[cfg(test)]
 mod test {
     use super::validate_inputs;
+    use std::path::PathBuf;
 
     use crate::parameters::ParametersValues;
 
@@ -48,7 +48,7 @@ mod test {
             infection_duration: 5.0,
             generation_interval: 5.0,
             report_period: 1.0,
-            synth_population_file: ".".to_string(),
+            synth_population_file: PathBuf::from("."),
         };
         assert!(validate_inputs(&parameters).is_err());
     }
@@ -62,7 +62,7 @@ mod test {
             infection_duration: 5.0,
             generation_interval: 0.0,
             report_period: 1.0,
-            synth_population_file: ".".to_string(),
+            synth_population_file: PathBuf::from("."),
         };
         assert!(validate_inputs(&parameters).is_err());
     }
