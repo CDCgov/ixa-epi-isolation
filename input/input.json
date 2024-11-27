@@ -1,11 +1,12 @@
 {
   "epi_isolation.Parameters": {
-    "max_time": 200.0,
-    "seed": 123,
-    "r_0": 2.5,
-    "infection_duration": 5.0,
-    "generation_interval": 5.0,
-    "report_period": 1.0,
-    "synth_population_file": "input/people_test.csv"
+      "max_time": 200.0,
+      "seed": 123,
+      "r_0": 2.5,
+      "infection_duration": 5.0,
+      "generation_interval": 5.0,
+      "report_period": 1.0,
+      "synth_population_file": "input/people_test.csv",
+      "population_periodic_report": "people_report.csv"
     }
 }
