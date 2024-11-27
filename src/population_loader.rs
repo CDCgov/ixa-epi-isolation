@@ -53,10 +53,9 @@ fn load_synth_population(context: &mut Context, synth_input_file: PathBuf) -> Re
 pub fn init(context: &mut Context) -> Result<(), IxaError> {
     let parameters = context
         .get_global_property_value(Parameters)
-        .unwrap()
-        .clone();
+        .unwrap();
 
-    load_synth_population(context, parameters.synth_population_file)?;
+    load_synth_population(context, parameters.synth_population_file.clone())?;
     context.index_property(Age);
     context.index_property(CensusTract);
     Ok(())
