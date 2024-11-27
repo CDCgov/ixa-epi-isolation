@@ -93,7 +93,7 @@ mod test {
     }
 
     #[test]
-    #[should_panic(expect = "range end index 11 out of range for slice of length 9")]
+    #[should_panic(expected = "range end index 11 out of range for slice of length 9")]
     fn check_invalid_census_tract() {
         let mut context = Context::new();
         let input = String::from("age,homeId\n43,360930331\n42,360930331020002");
