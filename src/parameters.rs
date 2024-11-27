@@ -1,3 +1,4 @@
+use ixa::error::IxaError;
 use std::fmt::Debug;
 use std::path::PathBuf;
 

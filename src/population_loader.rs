@@ -51,9 +51,7 @@ fn load_synth_population(context: &mut Context, synth_input_file: PathBuf) -> Re
 }
 
 pub fn init(context: &mut Context) -> Result<(), IxaError> {
-    let parameters = context
-        .get_global_property_value(Parameters)
-        .unwrap();
+    let parameters = context.get_global_property_value(Parameters).unwrap();
 
     load_synth_population(context, parameters.synth_population_file.clone())?;
     context.index_property(Age);
@@ -86,10 +84,7 @@ mod test {
 
         for id in 0..1 {
             let person_id = context.get_person_id(id);
-            assert_eq!(
-                age[id],
-                context.get_person_property(person_id, Age)
-            );
+            assert_eq!(age[id], context.get_person_property(person_id, Age));
             assert_eq!(
                 tract[id],
                 context.get_person_property(person_id, CensusTract)
