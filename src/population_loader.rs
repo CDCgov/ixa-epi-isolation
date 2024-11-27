@@ -31,8 +31,8 @@ fn create_person_from_record(
 
     let person_id = context.add_person((
         (Age, person_record.age),
-        (HomeId, home_id.parse().unwrap()),
-        (CensusTract, tract.parse().unwrap()),
+        (HomeId, home_id.parse()?),
+        (CensusTract, tract.parse()?),
     ))?;
 
     Ok(person_id)
