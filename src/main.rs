@@ -3,12 +3,10 @@ use ixa::{
     context::Context, error::IxaError, global_properties::ContextGlobalPropertiesExt,
     random::ContextRandomExt,
 };
-use std::path::PathBuf;
 
 mod parameters;
 use parameters::Parameters;
-use parameters::ParametersValues;
-mod population_loader;
+use std::path::PathBuf;
 
 #[derive(Parser)]
 #[command(version, about, long_about = None)]
@@ -33,7 +31,6 @@ fn initialize(args: &Args) -> Result<Context, IxaError> {
         .get_global_property_value(Parameters)
         .unwrap()
         .clone();
-    validate_inputs(&parameters)?;
     // model tidyness -- random seed, automatic shutdown
     context.init_random(parameters.seed);
 
@@ -46,10 +43,6 @@ fn initialize(args: &Args) -> Result<Context, IxaError> {
     context.add_plan(parameters.max_time, |context| {
         context.shutdown();
     });
-
-    // load the population from person record in input file
-    population_loader::init(&mut context)?;
-
     // make it easy for the user to see what the parameters are
     println!("{parameters:?}");
     // if we've gotten to this point, nothing failed so return
@@ -61,39 +54,4 @@ fn main() {
     let args = Args::parse();
     let mut context = initialize(&args).expect("Error initializing.");
     context.execute();
-}
-
-#[cfg(test)]
-mod test {
-    use super::*;
-
-    use crate::parameters::ParametersValues;
-
-    #[test]
-    fn test_validate_r_0() {
-        let parameters = ParametersValues {
-            max_time: 100.0,
-            seed: 0,
-            r_0: -1.0,
-            infection_duration: 5.0,
-            generation_interval: 5.0,
-            report_period: 1.0,
-            synth_population_file: ".".to_string(),
-        };
-        assert!(validate_inputs(&parameters).is_err());
-    }
-
-    #[test]
-    fn test_validate_gi() {
-        let parameters = ParametersValues {
-            max_time: 100.0,
-            seed: 0,
-            r_0: 2.5,
-            infection_duration: 5.0,
-            generation_interval: 0.0,
-            report_period: 1.0,
-            synth_population_file: ".".to_string(),
-        };
-        assert!(validate_inputs(&parameters).is_err());
-    }
 }
