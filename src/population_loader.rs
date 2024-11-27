@@ -1,10 +1,7 @@
 use crate::parameters::Parameters;
 use ixa::{
-    context::Context,
-    define_person_property, define_person_property_with_default,
-    error::IxaError,
-    global_properties::ContextGlobalPropertiesExt,
-    people::{ContextPeopleExt, PersonId},
+    context::Context, define_person_property, define_person_property_with_default, error::IxaError,
+    global_properties::ContextGlobalPropertiesExt, people::ContextPeopleExt,
 };
 
 use serde::Deserialize;
@@ -25,17 +22,17 @@ define_person_property!(CensusTract, usize);
 fn create_person_from_record(
     context: &mut Context,
     person_record: &PeopleRecord,
-) -> Result<PersonId, IxaError> {
+) -> Result<(), IxaError> {
     let tract: String = String::from_utf8(person_record.homeId[..11].to_owned())?;
     let home_id: String = String::from_utf8(person_record.homeId.to_owned())?;
 
-    let person_id = context.add_person((
+    let _person_id = context.add_person((
         (Age, person_record.age),
         (HomeId, home_id.parse()?),
         (CensusTract, tract.parse()?),
     ))?;
 
-    Ok(person_id)
+    Ok(())
 }
 
 fn load_synth_population(context: &mut Context, synth_input_file: PathBuf) -> Result<(), IxaError> {
@@ -43,6 +40,7 @@ fn load_synth_population(context: &mut Context, synth_input_file: PathBuf) -> Re
     let mut raw_record = csv::ByteRecord::new();
     let headers = reader.byte_headers().unwrap().clone();
 
+    //must be re-written for serde without over-generalizing
     while reader.read_byte_record(&mut raw_record).unwrap() {
         let record: PeopleRecord = raw_record.deserialize(Some(&headers))?;
         create_person_from_record(context, &record)?;
@@ -54,8 +52,6 @@ pub fn init(context: &mut Context) -> Result<(), IxaError> {
     let parameters = context.get_global_property_value(Parameters).unwrap();
 
     load_synth_population(context, parameters.synth_population_file.clone())?;
-    context.index_property(Age);
-    context.index_property(CensusTract);
     Ok(())
 }
 
