@@ -29,8 +29,8 @@ struct Args {
     force_overwrite: bool,
 }
 
-mod periodic_report_population;
 mod contact;
+mod periodic_report_population;
 mod population_loader;
 mod transmission_manager;
 

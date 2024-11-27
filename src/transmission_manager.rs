@@ -191,6 +191,8 @@ pub fn init(context: &mut Context) {
 
 #[cfg(test)]
 mod test {
+    use std::path::PathBuf;
+
     use crate::{parameters::Parameters, parameters::ParametersValues, population_loader::Alive};
 
     use super::{infection_attempt, init, InfectiousStatus, InfectiousStatusType};
@@ -207,7 +209,8 @@ mod test {
             infection_duration: 0.1,
             generation_interval: 3.0,
             report_period: 1.0,
-            synth_population_file: ".".to_string(),
+            synth_population_file: PathBuf::from("."),
+            population_periodic_report: String::new(),
         };
         let mut context = Context::new();
         context.init_random(p_values.seed);
