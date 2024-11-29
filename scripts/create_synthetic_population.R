@@ -4,10 +4,13 @@
 library(tidyverse)
 library(tigris)
 library(tidycensus)
+library(patchwork)
+
+set.seed(1234)
 
 state_synth <- "WY"
 year_synth <- 2023
-population_size <- 100
+population_size <- 1000
 
 ## =================================#
 ## Get population ---------------

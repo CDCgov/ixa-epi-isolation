@@ -8,7 +8,6 @@ use serde::Deserialize;
 use std::path::PathBuf;
 
 #[derive(Deserialize, Debug)]
-#[allow(non_snake_case)]
 pub struct PeopleRecord<'a> {
     age: u8,
     home_id: &'a [u8],
