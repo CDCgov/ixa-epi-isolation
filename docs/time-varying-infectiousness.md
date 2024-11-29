@@ -87,47 +87,54 @@ and canceling some of the remaining infection plans like described above remains
 sequentially scheduling infection attempts enables arbitrary changes to the effective contact rate to occur while
 an agent is infectious and have them be updated in the simplest way possible.
 
-2. **Rejection sampling from an arbitrary generation interval.** Let us consider that we may want to sample at a
-time _faster_ than the infection attempts from the generation interval. Let us call this proposal distribution
-from which we sample at a faster rate, $Y$ so that it has some probability density $s(t)$ and we sample from
-$Ms(t)$. $M$ is a scalar that ensures that rate of sampling from $Y$ is always faster than the rate of the generation
-interval. We can still recover the generation interval distribution: if $g(t)$ is the generation interval distribution,
-we only accept $g(t) / Ms(t)$ draws from $Y$. This is the idea behind
-[rejection sampling](https://en.wikipedia.org/wiki/Rejection_sampling). Note that even if we draw samples from a uniform
-distribution and convert them to the generation interval, we can change the CDF that we use to convert to have sampling
-occur at a faster rate. So, we are still working under the assumption that all draws are from a uniform distribution;
-we are now interested into what distribution we should be transforming those draws (i.e., what inverse CDF to use).
+2. **Rejection sampling from an arbitrary generation interval.** Let us consider a case where the infectiousness
+distribution changes over time. Concretely, imagine that infectiousness is a function of the viral load,
+and an agent gets an antiviral partially through their infection course. Depending on when the agent gets the
+antiviral, they have a different reduction in viral load. Therefore, even if we know that an agent will
+get an antiviral, we don't know their infectiousness distribution in advance.
 
-    Why might this be helpful? Let us consider a few use cases. First, let us consider the case where each person
-has a different generation interval. For instance, imagine that we have estimates of infectiousness over time
-from a within-host viral kinetics model that assumes infectiousness is some function of the viral load. We have
-a different value of the generation interval for each person because our model produces a posterior distribution
-of infectiousness over time, and we assign each person a draw from this posterior distribution. Instead of sampling
-from the person-specific generation interval, we might find the maximum of all these generation intervals and sample
-from that. This makes it easier for us to abstract the sampling part of our code away from the `evaluate_transmission`
-part. In this case, we would only accept a fraction of the sampled times as actual transmission events, a fraction
-that varies over the infection time and depends on the infected individual's specific generation interval parameters.
+    It is still straightforward to sample the appropriate infectiousness distribution without needing to change
+the generation interval. We can just use [rejection sampling](https://en.wikipedia.org/wiki/Rejection_sampling).
+In this case, we still sample infection attempt times from the pre-antiviral infectiousness distribution, and
+we accept those times as actual infection attempts with probability $a(t) / g(t)$ where $a(t)$ is the
+post-antiviral infectiousness distribution and $g(t)$ is the underlying pre-antiviral infectiousness
+distribution. Note that $a(t)$ and $g(t)$ must be on an absolute scale in this example and not scaled to have
+a unit integral. In the case where they are scaled, $g(t)$ can be rescaled to be $Mg(t)$ where $M = \max a(t)$.
 
-    Secondly, continuing with the idea of infectiousness being a function of viral load, imagine that we are
-simulating a case where antivirals become available to the population at some point in the outbreak. When an
-individual gets an antiviral, their viral load will change, changing their infectiousness over time. Since each
-person may get an antiviral at a different time in their infection and it may have a different effect on them,
-rather than changing to sample from the viral load in the presence of an antiviral, we can keep on sampling from
-the previous viral load function, but now only accepting a fraction of samples as infection attempts.
+    This general idea of rejection sampling is useful for other potential applications. Consider the case
+where each person has a different generation interval. For instance, imagine that we have estimates of
+infectiousness over time from a within-host viral kinetics model (once again assuming infectiousness is a
+function of viral load). We have a different value of the generation interval for each person because our
+model produces a posterior distribution of infectiousness over time, and we assign each person a draw from
+this posterior distribution. Instead of sampling from the person-specific generation interval, we might
+want to sample from one overall generation interval that's shared among all agents. This makes it easier for
+us to abstract the sampling part of our code away from the `evaluate_transmission` part. In this case, we
+would only accept a fraction of the sampled times as actual transmission events, a fraction that varies over
+the infection time and depends on the infected individual's specific generation interval parameters. The setup
+is the same as above. We would want to sample from our overall distribution (our "proposal distribution") at
+a faster rate than any of the person-specific distributions. Let us call this proposal distribution from which
+we sample at a faster rate, $Y$ so that it has some probability density $s(t)$ and we sample from $Ms(t)$.
+$M$ is a scalar that ensures that rate of sampling from $Y$ is always faster than the rate of the generation
+interval. We can still recover the per-person infectious distribution: we only accept $g_i(t) / Ms(t)$ draws from $Y$.
 
     However, rejection sampling is inherently inefficient. It requires that we draw plans at a faster rate than events
-actually happen. Nevertheless, there are ways to improve efficiency. The requirement for rejection sampling is that
-we must be sampling at a rate faster than the rate at which events actually happen. The trivial case of this
-is to have us sample at the maximum rate, so that $s(t) = 1$ and $M = \max g(t)$. If $g(t) << \max g(t)$ for nearly
-all $t$, (i.e., a disease where infectiousness is highly concentrated around a given time) this means we are sampling
-at a much faster rate and creating many more events than we need to for most all $t$. This will slow down our simulation.
-Instead, we may like to make $s(t)$ a similar linear approximation for $g(t)$, so that our proposal distribution is more
-closely following our actual generation interval. Thus, continuing with the idea of people getting an antiviral that
-adjusts their infectiousness, once an agent gets an antiviral, we can sample from our linear approximation of $g(t)$ that
-is still always greater than $g(t)$. More generally, the rejection sampling here is a strategy for dealing in the most
-arbitrary sense with
+actually happen, and then we need to evaluate at the time of the event draw whether we mean for something to actually
+happen. Nevertheless, there are ways to improve efficiency. The trivial case for making the sampling rate faster than
+the event rate is to have us sample at the maximum event rate, so that $s(t) = 1$ and $M = \max g(t)$. If
+$g_i(t) << \max g(t)$ for nearly all $t$, (i.e., a disease where infectiousness is highly concentrated around a given time
+or a case where there is significant per-person variability in when an agent has their maximum infectiousness) this is
+particularly inefficient because we are rejecting the majority of samples. Instead, we may try making our proposal
+distribution better fit our underlying distribution. We may make $s(t)$ a similar linear approximation for $g(t)$.
 
-More generally
+    However, this approximation is only possible if we sequentially sample infection attempts. If we sample all our
+infection attempts at the beginning of an agent's infection, we are locked into using a singular sampling rate. This
+is by definition because we have sampled all attempts at once at the beginning of the infection course. Instead, we
+want to update our sampling rate as we go throughout the infection course to best follow the generation interval
+(whether we exactly follow the generation interval and don't use rejection sampling or still use a proposal distribution
+is irrelevant to the mechanics). To update our sampling rate, we must sequentially sample infection attempts, calculating
+the optimal sampling rate at each infection attempt. Thus, sequential sampling enables us to most generally model a
+generation interval or infectiousness distribution that may change over the course of an agent's infection in a non
+pre-defined way.
 
 These examples underscore that sequentially sampling infection attempts rather than pre-scheduling enables
 the modeler to consider changes in both the contact rate and the generation interval without needing to change
@@ -142,7 +149,45 @@ For further detail, the [Wikipedia](https://en.wikipedia.org/wiki/Order_statisti
 great reference as are various notes on the subject from
 [advanced statistics courses](https://colorado.edu/amath/sites/default/files/attached-files/order_stats.pdf).
 
-Let us begin by considering the minimum of $n$ draws from a uniform distribution.
+Let us begin by considering the minimum of $n$ draws from a uniform distribution. We denote the sorted
+first of these draws as $X_{(1)}$, the sorted second as $X_{(2)}$, etc. Note that this is different from $X_1$
+which is the first random draw from the distribution, unsorted. We are interested in the distribution of $X_{(1)}.
+Let us consider the cumulative distribution function since we are working with a continuous random variable.
+
+$$\mathbb{P}\{X_{(1)} \leq x\}$$
+
+We know that if the minimum is below some value, $x$, that could mean that just the minimum is below $x$ or that
+all $n$ of our random samples are below the minimum.
+
+$$\mathbb{P}\{X_{(1)} \leq x\} = 1 - \mathbb{P}\{X_{(1)} > x\}$$
+
+However, we know that at least one of the sampled values is below $x$. Recall that each of the samples is independent
+and identically-distributed.
+
+$$= 1 - \mathbb{P}\{X_i > x\}^n$$
+
+$$= 1 - (1 - F_X(x))^n$$
+
+For a uniform distribution:
+
+$$= 1 - (1 - x)^n$$
+
+Careful inspection reveals that this is a beta distribution with $alpha = 1$ and $beta = n$. More generally,
+one can show that the distribution of the $k$th ordered value of $n$ uniform draws is $\beta(k, n - 1 + k)$.
+
+Therefore, we can draw a distribution for the timing of the first of $n$ infection attempts, the second of $n$
+infection attempts, etc. However, we cannot just independently draw from these distributions. Instead, we must
+update our distributions to be conditioned on the previous draws to ensure that are draws are always increasing.
+In other words, if we draw from the $\beta(1, 5)$ and happen to get a large value, we need to take that into
+account when drawing the second infection attempt time.
+
+We can consider that our sorted infection attempt times are not independent by rephrasing the problem at hand.
+Once we have taken our first infection attempt, $x_{(1)}$, we can set this as the minimum of a new uniform
+distribution, $\mathcal{U}(x_{(1)}, 1)$ from which we need to draw an infection attempt. However, because this
+is a new distribution, we now want to draw the first of $n - 1$ infection attempts from $\mathcal{U}(0, 1)$, and
+then we can scale that value to be on $(x_{(1)}, 1)$. In other words, we are using a trick where we shrink the
+available uniform distribution with each infection attempt and asking what would be the _next_ infection
+attempt on that distribution rather than attempting to do all our math on $\mathcal{U}(0, 1)$.
 
 ## Workflow and approach
 
@@ -151,6 +196,12 @@ These are the steps for simulating an agent's infectious period and their person
 events.
 
 1. Draw a number of secondary infection attempts for the agent, $C_i$. This can be equal to $R_i$ if the sampling times
-are from the generation interval exactly. or, $C_i$ can be greater than $R_i$ if
-2. Draw a beta
-3.
+are from the generation interval exactly, or $C_i$ can be greater than $R_i$ if sampling from a proposal distribution
+and rejecting some attempts to leave a total of $R_i$ infection attempts.
+2. Draw the time for the first of $n$ remaining infection attempts of $\mathcal{U}(0, 1)$. $n = R_i - $ (the number
+of infection attempts that have happened).
+3. Scale the value on $\mathcal{U}(0, 1)$ to be on $\mathcal{U}(x_{(i)}, 1)$ where $x_{(i)}$ is the previous draw (the
+greatest value of the uniform distribution seen before) and physically represents the proportion of the generation interval
+that has occured so far.
+4. Convert the uniform value to generation interval space by passing through the inverse CDF of the generation interval.
+5. Repeat from step two until $n = 0$.
