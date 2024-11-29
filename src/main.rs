@@ -21,7 +21,7 @@ struct Args {
     #[arg(short, long)]
     output_directory: PathBuf,
 
-    #[arg(short, long, default_value_t = false, default_missing_value = "true")]
+    #[arg(short, long, default_value = "false", default_missing_value = "true")]
     force_overwrite: bool,
 }
 
