@@ -62,7 +62,11 @@ fn update_property_set(context: &mut Context, event: PersonCreatedEvent) {
     report_plugin.census_tract_set.insert(person_census);
 }
 
-pub fn init(context: &mut Context, output_dir: &Path) -> Result<(), IxaError> {
+pub fn init(
+    context: &mut Context,
+    output_dir: &Path,
+    force_overwrite: bool,
+) -> Result<(), IxaError> {
     let parameters = context
         .get_global_property_value(Parameters)
         .unwrap()
@@ -70,7 +74,7 @@ pub fn init(context: &mut Context, output_dir: &Path) -> Result<(), IxaError> {
 
     context
         .report_options()
-        .overwrite(true)
+        .overwrite(force_overwrite)
         .directory(PathBuf::from(output_dir));
 
     context.subscribe_to_event(|context, event: PersonCreatedEvent| {

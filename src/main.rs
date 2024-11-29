@@ -20,6 +20,9 @@ struct Args {
     /// path to the output directory
     #[arg(short, long)]
     output_directory: PathBuf,
+
+    #[arg(short, long, default_value = "false", default_missing_value = "true")]
+    force_overwrite: bool,
 }
 
 mod periodic_report_population;
@@ -37,7 +40,7 @@ fn initialize(args: &Args) -> Result<Context, IxaError> {
     context.init_random(parameters.seed);
 
     //initialize periodic report
-    periodic_report_population::init(&mut context, &args.output_directory)?;
+    periodic_report_population::init(&mut context, &args.output_directory, args.force_overwrite)?;
 
     // load the population from person record in input file
     population_loader::init(&mut context)?;
