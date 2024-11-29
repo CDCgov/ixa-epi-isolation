@@ -214,5 +214,6 @@ of infection attempts that have happened).
 greatest value of the uniform distribution seen before) and physically represents the proportion of the generation interval
 that has occured so far.
 4. Convert the uniform value to generation interval space by passing through the inverse CDF of the generation interval.
-Wait for the time of that event to occur.
+Schedule the infection attempt to occur at the modeled time, and wait to schedule the next infection attempt until the end
+of the plan at that given time.
 5. Repeat from step two until $n = 0$.
