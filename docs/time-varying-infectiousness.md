@@ -3,19 +3,22 @@
 ## Motivation
 
 Compartmental models of disease spread often assume people transition between compartments at a
-constant rate, implying exponential waiting times between events. This assumption is particularly
-error-prone when considering the time an individual spends infectious and the time between their
-subsequent infection events -- i.e., when they are infectious enough to be actively transmitting.
-Epidemiological studies often show that infectiousness over the course of an individual's infection
-varies widely, and we would like a general way to model whatever distribution may best represent an
-agent's infectiousness. Even when trying to incorporate more realistic infectiousness distributions
-in compartmental models, significant math manipulations are required. On the other hand, in agent-
-based models (ABMs), we can instead draw infection attempts from any specified infectiousness
-distribution. We detail the process for sampling an arbitrary number of infection attempts appropriately
-from an arbitrary infectiousness curve. We describe why this approach provides great generalizability,
-enabling sampling from an infectiousness curve that may change over time due to an antiviral.
+constant rate, implying exponential waiting times between events. Nevertheless, epidemiological
+studies have shown that this is not the case. People do not have a constant level of infectiousness
+nor do they spend an exponentially-distributed amount of time as infectiousness. Instead,
+infectiousness over the course of an individual's infection varies widely, and we would like a
+general way to model whatever distribution may best represent an agent's infectiousness.
 
-Modeling interventions and immunity are not the subject of this document.
+Even when trying to incorporate more realistic infectiousness distributions into compartmental models,
+significant math manipulations are required. On the other hand, in agent-based models (ABMs), we can
+instead draw infection attempts from any specified infectiousness distribution. We detail the process
+for sampling an arbitrary number of infection attempts appropriately from an arbitrary infectiousness
+curve. We describe an approach that provides great generalizability, enabling sampling when both the
+underlying contact rate and infectiousness distribution change. We motivate our discussion with a
+simple example of an infectious person who becomes hospitalized and takes an antiviral partially
+through their infection.
+
+Modeling general interventions and immunity are not the subject of this document.
 
 ## Assumptions
 
@@ -23,24 +26,25 @@ Modeling interventions and immunity are not the subject of this document.
 this is the generation interval), let us consider the uniform distribution from zero to one --
 $\mathcal{U}(0, 1)$.
     - Using [inverse transform sampling](https://en.wikipedia.org/wiki/inverse_transform_sampling), a
-uniformally-distributed random variable can be transformed to any distribution by passing samples through
+uniformly-distributed random variable can be transformed to any distribution by passing samples through
 the inverse cumulative distribution function (CDF).
-    - Therefore, we need to only consider how to solve the appropriate math for
-$u \sim \mathcal{U}(0, 1)$.
+    - Therefore, we need to only consider how to solve the appropriate math for $u \sim \mathcal{U}(0, 1)$.
+    - We also require that the generation interval have an inverse CDF or we be able to approximate it (i.e.,
+from empirical data).
 2. Infectiousness over time is a relative quantity, so it is completely separate from the absolute degree
 to which someone is infectious, represented by the total number of secondary infection attempts they have.
-That quantity, denoted $C_i$, is directly related to $R_0$.
+That quantity, denoted $C_i$ in the generality, is directly related to $R_0$.
 3. We require $C_i$ ordered draws from the generation interval distribution. We schedule infection attempts
 at these times.
 
 ## Central claim
 
-We could just take $C_i$ draws from the generation inteval (GI) and order them, scheduling an infection
-attempt at each time drawn. However, we instead want to draw the minimum of our $C_i$ draws, have an
-infection attempt, and _then_ schedule the next infection attempt, in other words drawing the second
-smallest of our $C_i$ ordered draws from the GI. We want to use this approach because (a) it is the
-most flexible, allowing for many changes to the GI, and (b) because it is more computationally
-efficient than alternatives.
+We could just take $C_i$ draws from the generation interval (GI) and order them, scheduling an infection
+attempt at each time drawn. However, we argue that we instead want to draw the minimum of our $C_i$ draws,
+have an infection attempt, and _then_ schedule the next infection attempt -- drawing the second
+smallest of our $C_i$ ordered draws from the GI. We argue that we want to use this approach because (a) it
+provides a great deal of flexibility, allowing for many changes to the GI, and (b) because it is more
+computationally efficient than alternatives.
 
 However, wanting to sequentially schedule the infection attempts requires that we have a way of getting
 the smallest of $C_i$ draws from the GI, the second smallest, the third smallest, etc. This is the problem
@@ -52,37 +56,38 @@ case of the uniform distribution.
 
 Let us first explore why scheduling the next infection attempt after the last (i.e., sequentially
 drawing infection attempt times from the GI) is the better approach compared to taking all the draws
-from the GI at the beginning of an individual's infectiousness period and scheduling all the infection
+from the GI at the beginning of an individual's infectiousness period and at once scheduling the infection
 attempts based on those times.
 
 1. **Changes in the number of infection attempts in the middle of an agent's infectious course.** Imagine
 an agent dies while they are still infectious. Clearly, they cannot be infecting others. (Or, if the disease
-in question is ebola, there are well-defined processes by which they may still be infectious and that process
+in question is Ebola, there are well-defined processes by which they may still be infectious and those processes
 should not be lumped with the infection generation interval).
 
     To ensure a dead person does not infect others, we would like to remove the plans where they infect others.
 If we had pre-scheduled all infections, we would have had to store the plan IDs for all the infections in
 `HashMap<PersonId, Vec<PlanId>>`. Then, each time we had executed one of these plans, we would have to have
 removed it from the vector, so that the entry for each `PersonId` tells us the plans we have _left_ for a given
-person. Then, we could iterate through the remaining plans and cancel them.
+person. Then, when the agent dies, we could iterate through the remaining plans and cancel them.
 
     Clearly, this is computationally onerous, requiring us to store a potentially large `HashMap` and iterate
 through a vector every time an infection attempt occurs. Alternatively, if we scheduled infection events
 sequentially, we would only have to store the next infection attempt time. We could instead use a
-`HashMap<PersonId, PlanId>`, removing our need to iterate through a vector and instead enabling us to
-directly use the `.insert` method on the `HashMap`. More generally, if we need to change the number of
-infection attempts part way through an infection course, sequentially scheduling the attempts makes this easier.
+`HashMap<PersonId, PlanId>`, removing the need to iterate through a vector and instead enabling us to
+directly use the `.insert` method on the `HashMap`. More generally, this idea applies to any case where we need
+to change the number of infection attempts part way through an infection course. sequentially scheduling
+the attempts makes it easier to remove infection attempts in the future.
 
     Why not just check whether the agent is alive or not at the beginning of the infection attempt? If they are
 not alive, simply skip the infection attempt. There are two reasons this is not the desired solution. First, once
 an agent is no longer relevant in the simulation, it is much cleaner to handle that at the moment when they are no
 longer involved in the simulation rather than keeping them around and continuously writing code that checks whether
-the agent is still relevant throughout the simulation. Ideally, there will be defined methods in ixa for the teardown
-of people. Secondly, the points made in this example are not pertinent to just an agent no longer being alive: they
-are pertinent to any changes in the number of infection attempts that may occur during the course of an agent's
-infection. Imagine an agent becomes hospitalized partially through their infection course. This change in their
-setting reduces the number of infection attempts they have because they are coming into contact with fewer people.
-Checking an agent's setting at the beginning of an infection attempt becomes cumbersome for many different settings,
+the agent is still relevant. Ideally, there will be defined methods in ixa for the teardown of people. Secondly,
+the points made in this example are not pertinent to just an agent no longer being alive: they are pertinent to
+any changes in the number of infection attempts that may occur during the course of an agent's infection. Imagine
+an agent becomes hospitalized partially through their infection course. This change in their setting reduces
+the number of infection attempts they have because they are coming into contact with fewer people. Checking
+an agent's setting at the beginning of an infection attempt becomes cumbersome for many different settings,
 and canceling some of the remaining infection plans like described above remains inefficient. On the other hand,
 sequentially scheduling infection attempts enables arbitrary changes to the effective contact rate to occur while
 an agent is infectious and have them be updated in the simplest way possible.
@@ -111,9 +116,9 @@ want to sample from one overall generation interval that's shared among all agen
 us to abstract the sampling part of our code away from the `evaluate_transmission` part. In this case, we
 would only accept a fraction of the sampled times as actual transmission events, a fraction that varies over
 the infection time and depends on the infected individual's specific generation interval parameters. The setup
-is the same as above. We would want to sample from our overall distribution (our "proposal distribution") at
-a faster rate than any of the person-specific distributions. Let us call this proposal distribution from which
-we sample at a faster rate, $Y$ so that it has some probability density $s(t)$ and we sample from $Ms(t)$.
+is the same as above. We would want to sample from our overall distribution ("proposal distribution") at
+a faster rate than any of the person-specific distributions. Let us call the probability density of the
+proposal distribution from which we sample at a faster rate $s(t)$, so that we sample from $Ms(t)$.
 $M$ is a scalar that ensures that rate of sampling from $Y$ is always faster than the rate of the generation
 interval. We can still recover the per-person infectious distribution: we only accept $g_i(t) / Ms(t)$ draws from $Y$.
 
@@ -126,7 +131,7 @@ or a case where there is significant per-person variability in when an agent has
 particularly inefficient because we are rejecting the majority of samples. Instead, we may try making our proposal
 distribution better fit our underlying distribution. We may make $s(t)$ a similar linear approximation for $g(t)$.
 
-    However, this approximation is only possible if we sequentially sample infection attempts. If we sample all our
+    However, this approximation is only possible if we sequentially sample infection attempts. If we sample all
 infection attempts at the beginning of an agent's infection, we are locked into using a singular sampling rate. This
 is by definition because we have sampled all attempts at once at the beginning of the infection course. Instead, we
 want to update our sampling rate as we go throughout the infection course to best follow the generation interval
@@ -139,7 +144,7 @@ pre-defined way.
 These examples underscore that sequentially sampling infection attempts rather than pre-scheduling enables
 the modeler to consider changes in both the contact rate and the generation interval without needing to change
 the transmission model. To this end, by sequentially sampling, we provide a modular transmission model that is
-truly disentangled from the contact network and from interventions present.
+truly disentangled from the contact network and interventions present.
 
 ## Drawing ordered samples from a uniform distribution
 
@@ -157,12 +162,13 @@ Let us consider the cumulative distribution function since we are working with a
 $$\mathbb{P}\{X_{(1)} \leq x\}$$
 
 We know that if the minimum is below some value, $x$, that could mean that just the minimum is below $x$ or that
-all $n$ of our random samples are below the minimum.
+all $n$ of our random samples are below the minimum. There are too many values to enumerate, so let us consider
+the opposite instead -- that $X_{(1)}$ is greater than some value $x$.
 
 $$\mathbb{P}\{X_{(1)} \leq x\} = 1 - \mathbb{P}\{X_{(1)} > x\}$$
 
-However, we know that at least one of the sampled values is below $x$. Recall that each of the samples is independent
-and identically-distributed.
+In this case, if $X_{(1)} \leq x$, we know that at least one of the sampled values is below $x$. Recall that
+each of the samples is independent and identically-distributed.
 
 $$= 1 - \mathbb{P}\{X_i > x\}^n$$
 
@@ -176,18 +182,22 @@ Careful inspection reveals that this is a beta distribution with $alpha = 1$ and
 one can show that the distribution of the $k$th ordered value of $n$ uniform draws is $\beta(k, n - 1 + k)$.
 
 Therefore, we can draw a distribution for the timing of the first of $n$ infection attempts, the second of $n$
-infection attempts, etc. However, we cannot just independently draw from these distributions. Instead, we must
+infection attempts, etc. from a uniform distribution using the Beta distribution.
+
+However, we cannot just independently draw from the distributions for the ordered values. Instead, we must
 update our distributions to be conditioned on the previous draws to ensure that are draws are always increasing.
 In other words, if we draw from the $\beta(1, 5)$ and happen to get a large value, we need to take that into
-account when drawing the second infection attempt time.
+account when drawing the second infection attempt time. It must be greater than the value we drew, so we cannot
+just independently take a draw from $\beta(2, 6)$ but rather $\beta(2, 6) | x_{(1)}$.
 
 We can consider that our sorted infection attempt times are not independent by rephrasing the problem at hand.
 Once we have taken our first infection attempt, $x_{(1)}$, we can set this as the minimum of a new uniform
 distribution, $\mathcal{U}(x_{(1)}, 1)$ from which we need to draw an infection attempt. However, because this
-is a new distribution, we now want to draw the first of $n - 1$ infection attempts from $\mathcal{U}(0, 1)$, and
+is a new distribution, we now want to draw the first of $n - 1$ infection attempts on this distribution.
+We can do that by drawing the minimum of $n - 1$ infection attempts from $\mathcal{U}(0, 1)$, and
 then we can scale that value to be on $(x_{(1)}, 1)$. In other words, we are using a trick where we shrink the
 available uniform distribution with each infection attempt and asking what would be the _next_ infection
-attempt on that distribution rather than attempting to do all our math on $\mathcal{U}(0, 1)$.
+attempt on that distribution rather than attempting to do all the math on $\mathcal{U}(0, 1)$.
 
 ## Workflow and approach
 
@@ -204,4 +214,5 @@ of infection attempts that have happened).
 greatest value of the uniform distribution seen before) and physically represents the proportion of the generation interval
 that has occured so far.
 4. Convert the uniform value to generation interval space by passing through the inverse CDF of the generation interval.
+Wait for the time of that event to occur.
 5. Repeat from step two until $n = 0$.
