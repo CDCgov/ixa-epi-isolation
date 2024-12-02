@@ -38,7 +38,7 @@ fn create_person_from_record(
 fn load_synth_population(context: &mut Context, synth_input_file: PathBuf) -> Result<(), IxaError> {
     let mut reader = csv::Reader::from_path(synth_input_file)?;
     let mut raw_record = csv::ByteRecord::new();
-    let headers = reader.byte_headers().unwrap().clone();
+    let headers = reader.byte_headers()?.clone();
 
     //must be re-written for serde without over-generalizing
     while reader.read_byte_record(&mut raw_record)? {
