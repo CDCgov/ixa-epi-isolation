@@ -228,7 +228,9 @@ mod test {
         };
         let mut context = Context::new();
         context.init_random(p_values.seed);
-        context.set_global_property_value(Parameters, p_values);
+        context
+            .set_global_property_value(Parameters, p_values)
+            .unwrap();
         context
     }
 
