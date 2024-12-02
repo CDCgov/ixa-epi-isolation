@@ -187,17 +187,21 @@ infection attempts, etc. from a uniform distribution using the Beta distribution
 However, we cannot just independently draw from the distributions for the ordered values. Instead, we must
 update our distributions to be conditioned on the previous draws to ensure that are draws are always increasing.
 In other words, if we draw from the $\beta(1, 5)$ and happen to get a large value, we need to take that into
-account when drawing the second infection attempt time. It must be greater than the value we drew, so we cannot
+account when drawing the second infection attempt time. It must be greater than the first value we drew, so we cannot
 just independently take a draw from $\beta(2, 6)$ but rather $\beta(2, 6) | x_{(1)}$.
 
-We can consider that our sorted infection attempt times are not independent by rephrasing the problem at hand.
+We can consider that our sorted infection attempt times are not independent by rephrasing the problem.
 Once we have taken our first infection attempt, $x_{(1)}$, we can set this as the minimum of a new uniform
 distribution, $\mathcal{U}(x_{(1)}, 1)$ from which we need to draw an infection attempt. However, because this
 is a new distribution, we now want to draw the first of $n - 1$ infection attempts on this distribution.
 We can do that by drawing the minimum of $n - 1$ infection attempts from $\mathcal{U}(0, 1)$, and
 then we can scale that value to be on $(x_{(1)}, 1)$. In other words, we are using a trick where we shrink the
-available uniform distribution with each infection attempt and asking what would be the _next_ infection
-attempt on that distribution rather than attempting to do all the math on $\mathcal{U}(0, 1)$.
+available uniform distribution with each infection attempt and ask what would be the _next_ infection
+attempt on that distribution rather than attempting to do all the math on $\mathcal{U}(0, 1)$. Concretely,
+if $x_{(1)}$ is on $(0, 1)$, and $x_{(2)}$ is also on $(0, 1)$ and we want to find $x'_{(2)}$ which is $x_{(2)}$
+on $(x_{(1)}, 1)$, we use the following equation:
+
+$$x'_{(2)} = x_{(1)} + x_{(2)} * (1 - x_{(1)})$$
 
 ## Workflow and approach
 
