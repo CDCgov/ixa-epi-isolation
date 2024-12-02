@@ -1,12 +1,16 @@
+mod parameters;
+mod population_loader;
+
 use clap::Parser;
 use ixa::{
     context::Context, error::IxaError, global_properties::ContextGlobalPropertiesExt,
-    random::ContextRandomExt,
+    people::ContextPeopleExt, random::ContextRandomExt, report::ContextReportExt,
 };
 
-mod parameters;
 use parameters::Parameters;
 use std::path::PathBuf;
+
+use crate::population_loader::{Age, CensusTract};
 
 #[derive(Parser)]
 #[command(version, about, long_about = None)]
@@ -18,6 +22,9 @@ struct Args {
     /// path to the output directory
     #[arg(short, long)]
     output_directory: PathBuf,
+
+    #[arg(short, long, default_value = "false", default_missing_value = "true")]
+    force_overwrite: bool,
 }
 
 fn initialize(args: &Args) -> Result<Context, IxaError> {
@@ -30,6 +37,25 @@ fn initialize(args: &Args) -> Result<Context, IxaError> {
         .clone();
     // model tidyness -- random seed, automatic shutdown
     context.init_random(parameters.seed);
+
+    // set the output directory and overwrite the existing file
+    context
+        .report_options()
+        .directory(PathBuf::from(&args.output_directory))
+        .overwrite(args.force_overwrite);
+
+    //initialize periodic report
+    context.add_periodic_report(
+        &parameters.population_periodic_report,
+        parameters.report_period,
+        (Age, CensusTract),
+    )?;
+
+    // load the population from person record in input file
+    population_loader::init(&mut context)?;
+    context.index_property(Age);
+    context.index_property(CensusTract);
+
     context.add_plan(parameters.max_time, |context| {
         context.shutdown();
     });
