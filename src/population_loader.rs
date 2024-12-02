@@ -50,8 +50,7 @@ fn load_synth_population(context: &mut Context, synth_input_file: PathBuf) -> Re
 pub fn init(context: &mut Context) -> Result<(), IxaError> {
     let parameters = context.get_global_property_value(Parameters).unwrap();
 
-    load_synth_population(context, parameters.synth_population_file.clone())?;
-    Ok(())
+    load_synth_population(context, parameters.synth_population_file.clone())
 }
 
 #[cfg(test)]
@@ -77,12 +76,14 @@ mod test {
         load_synth_population(&mut context, synth_file).unwrap();
         let age = [43, 42];
         let tract = [36_093_033_102, 36_093_033_102];
+        let home_id = [360_930_331_020_001, 360_930_331_020_002];
 
         assert_eq!(context.get_current_population(), 2);
 
         for id in 0..1 {
             let person_id = context.get_person_id(id);
             assert_eq!(age[id], context.get_person_property(person_id, Age));
+            assert_eq!(home_id[id], context.get_person_property(person_id, HomeId));
             assert_eq!(
                 tract[id],
                 context.get_person_property(person_id, CensusTract)
