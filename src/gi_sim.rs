@@ -17,14 +17,16 @@ fn schedule_next_infection(
     // beta with alpha = 1 (k = 1, minimum value), beta = infections_remaining
     // (number of draws of uniform)
     // which is the distribution of the minimum of n draws of a uniform
-    let minimum_uniform_draw = f64::powf(
-        context.sample_range(InfectionRandomId, 0.0..1.0),
-        1.0 / infections_remaining as f64,
-    );
+    let minimum_uniform_draw = 1.0
+        - f64::powf(
+            context.sample_range(InfectionRandomId, 0.0..1.0),
+            1.0 / infections_remaining as f64,
+        );
 
     // draw the next value greater than the current by shrinking the uniform distribution
     // by "what's left"
-    let next_infection_time_unif = 1.0 - minimum_uniform_draw * (1.0 - last_infection_time_unif);
+    let next_infection_time_unif =
+        last_infection_time_unif + minimum_uniform_draw * (1.0 - last_infection_time_unif);
     // use the inverse CDF of the generation interval to get the next infection time
     let next_infection_time = generation_interval.inverse_cdf(next_infection_time_unif);
     context.add_plan(next_infection_time, move |context| {
