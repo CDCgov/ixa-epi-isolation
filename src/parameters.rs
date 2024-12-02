@@ -34,13 +34,14 @@ define_global_property!(Parameters, ParametersValues, validate_inputs);
 
 #[cfg(test)]
 mod test {
+    use ixa::error::IxaError;
+
     use super::validate_inputs;
     use std::path::PathBuf;
 
     use crate::parameters::ParametersValues;
 
     #[test]
-    #[should_panic(expected = "r_0 must be a non-negative number.")]
     fn test_validate_r_0() {
         let parameters = ParametersValues {
             max_time: 100.0,
@@ -52,11 +53,20 @@ mod test {
             synth_population_file: PathBuf::from("."),
             population_periodic_report: String::new(),
         };
-        validate_inputs(&parameters).unwrap();
+        let e = validate_inputs(&parameters).err();
+        match e {
+            Some(IxaError::IxaError(msg)) => {
+                assert_eq!(msg, "r_0 must be a non-negative number.".to_string());
+            }
+            Some(ue) => panic!(
+                "Unexpected an error that r_0 validation should fail. Instead got {:?}",
+                ue.to_string()
+            ),
+            None => panic!("Expected an error. Instead, validation passed with no errors."),
+        }
     }
 
     #[test]
-    #[should_panic(expected = "The generation interval must be positive.")]
     fn test_validate_gi() {
         let parameters = ParametersValues {
             max_time: 100.0,
@@ -68,6 +78,11 @@ mod test {
             synth_population_file: PathBuf::from("."),
             population_periodic_report: String::new(),
         };
-        validate_inputs(&parameters).unwrap();
+        let e = validate_inputs(&parameters).err();
+        match e {
+            Some(IxaError::IxaError(msg)) => assert_eq!(msg, "The generation interval must be positive.".to_string()),
+            Some(ue) => panic!("Unexpected an error that the generation interval validation should fail. Instead got {:?}", ue.to_string()),
+            None => panic!("Expected an error. Instead, validation passed with no errors."),
+        }
     }
 }
