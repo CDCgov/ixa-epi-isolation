@@ -31,85 +31,61 @@ define_person_property_with_default!(
     InfectiousStatusType::Susceptible
 );
 
-/// This function evaluates whether a transmission event is successful based on the characteristics
-/// of the transmitter and the contact. For now, we assume all transmission events are sucessful.
-/// However, in the future, the success of a transmission event may depend on person-level interventions,
-/// such as whether an agent is wearing a mask. For this reason, we pass the transmitter as well to this
-/// function. This will allow us to evaluate the success of a transmission event based on the properties of
-/// both the transmitter and the contact in the future.
-fn evaluate_transmission(context: &mut Context, contact_id: PersonId, _transmitter_id: PersonId) {
-    if context.get_person_property(contact_id, InfectiousStatus)
-        == InfectiousStatusType::Susceptible
-    {
-        context.set_person_property(
-            contact_id,
-            InfectiousStatus,
-            InfectiousStatusType::Infectious,
-        );
-    }
-}
-
-/// This function is called when an infected agent has an infection event scheduled.
-/// This function includes identifying a potential contact to infect, evaluating whether
-/// the transmission event is successful, and scheduling the next infection event.
-fn infection_attempt(
-    context: &mut Context,
-    transmitter_id: PersonId,
-    num_infection_attempts_remaining: usize,
-    infection_time_uniform: f64,
-) -> Result<(), IxaError> {
-    // This is a method from a trait extension implemented in `mod contact`.
-    // As long as the method returns a contact id, it can use any underlying sampling strategy
-    // to obtain that contact, and that strategy can be separately implemented in `mod contact`
-    // without changing the logic here.
-    let contact_id = context.get_contact(transmitter_id)?;
-
-    // If there are no contacts to infect, do nothing.
-    if let Some(contact_id) = contact_id {
-        // We evaluate transmission in its own function because there will be eventually
-        // be intervention-based logic that determines whether a transmission event is successful.
-        evaluate_transmission(context, contact_id, transmitter_id);
-    }
-
-    // Schedule the next infection attempt for this infected agent.
-    schedule_next_infection_attempt(
-        context,
-        transmitter_id,
-        num_infection_attempts_remaining - 1,
-        infection_time_uniform,
-    );
-    Ok(())
-}
-
 struct InfectionTimes {
     uniform: f64,
     gi: f64,
 }
 
-/// Calculate the next infection time. Draws an increasing value of a uniform distribution
-/// and passes it through the inverse CDF of the generation interval to get the next infection time.
-fn get_next_infection_time(
+pub fn init(context: &mut Context) {
+    // Watch for changes in the InfectiousStatusType property.
+    context.subscribe_to_event(
+        move |context, event: PersonPropertyChangeEvent<InfectiousStatus>| {
+            handle_infectious_status_change(context, event);
+        },
+    );
+    context.add_plan(0.0, |context| {
+        seed_infections(context);
+    });
+}
+
+/// This function seeds the initial infections in the population.
+fn seed_infections(context: &mut Context) {
+    // For now, we just pick a random person and make them infectious.
+    // In the future, we may pick people based on specific person properties.
+    context.set_person_property(
+        context.get_person_id(0),
+        InfectiousStatus,
+        InfectiousStatusType::Infectious,
+    );
+}
+
+fn handle_infectious_status_change(
     context: &mut Context,
-    last_infection_time_uniform: f64,
-) -> InfectionTimes {
-    // FOR NOW, we are using placeholder math to guarantee the infection times are always increasing.
-    // This is not order statistics. This will be corrected at a later time.
-    let next_infection_time_unif =
-        context.sample_range(TransmissionRng, last_infection_time_uniform..1.0);
+    event: PersonPropertyChangeEvent<InfectiousStatus>,
+) {
+    // Is the person going from S --> I?
+    // We don't care about the other transitions here, but this function will still be triggered
+    // because it watches for any change in InfectiousStatusType.
+    if event.current == InfectiousStatusType::Infectious {
+        // Get the number of infection attempts this person will have.
+        let r_0 = context.get_global_property_value(Parameters).unwrap().r_0;
+        #[allow(clippy::cast_possible_truncation)]
+        #[allow(clippy::cast_sign_loss)]
+        let num_infection_attempts =
+            context.sample_distr(TransmissionRng, Poisson::new(r_0).unwrap()) as usize;
 
-    // In the future, we will generalize the use of an exponential distribution to
-    // an arbitrary distribution with a defined inverse CDF.
-    let gi = context
-        .get_global_property_value(Parameters)
-        .unwrap()
-        .generation_interval;
-    let next_infection_time_gi = Exp::new(1.0 / gi)
-        .unwrap()
-        .inverse_cdf(next_infection_time_unif);
-
-    InfectionTimes {
-        uniform: next_infection_time_unif,
-        gi: next_infection_time_gi,
+        // Start scheduling infection attempt events for this person.
+        // People who have num_infection_attempts = 0 are still passed through this
+        // logic but don't infect anyone. This is so that so that there is only one
+        // place where we need to handle setting people to recovered.
+        schedule_next_infection_attempt(
+            context,
+            event.person_id,
+            num_infection_attempts,
+            // last_infection_time_uniform is relative to when the agent became infectious.
+            // Basically, it details the fraction of the agent's infectiousness that has passed.
+            0.0,
+        );
     }
 }
 
@@ -150,57 +126,81 @@ fn schedule_next_infection_attempt(
     }
 }
 
-#[allow(clippy::cast_possible_truncation)]
-#[allow(clippy::cast_sign_loss)]
-fn handle_infectious_status_change(
+/// Calculate the next infection time. Draws an increasing value of a uniform distribution
+/// and passes it through the inverse CDF of the generation interval to get the next infection time.
+fn get_next_infection_time(
     context: &mut Context,
-    event: PersonPropertyChangeEvent<InfectiousStatus>,
-) {
-    // Is the person going from S --> I?
-    // We don't care about the other transitions here, but this function will still be triggered
-    // because it watches for any change in InfectiousStatusType.
-    if event.current == InfectiousStatusType::Infectious {
-        // Get the number of infection attempts this person will have.
-        let r_0 = context.get_global_property_value(Parameters).unwrap().r_0;
-        let num_infection_attempts =
-            context.sample_distr(TransmissionRng, Poisson::new(r_0).unwrap()) as usize;
+    last_infection_time_uniform: f64,
+) -> InfectionTimes {
+    // FOR NOW, we are using placeholder math to guarantee the infection times are always increasing.
+    // This is not order statistics. This will be corrected at a later time.
+    let next_infection_time_unif =
+        context.sample_range(TransmissionRng, last_infection_time_uniform..1.0);
 
-        // Start scheduling infection attempt events for this person.
-        // People who have num_infection_attempts = 0 are still passed through this
-        // logic but don't infect anyone. This is so that so that there is only one
-        // place where we need to handle setting people to recovered.
-        schedule_next_infection_attempt(
-            context,
-            event.person_id,
-            num_infection_attempts,
-            // last_infection_time_uniform is relative to when the agent became infectious.
-            // Basically, it details the fraction of the agent's infectiousness that has passed.
-            0.0,
-        );
+    // In the future, we will generalize the use of an exponential distribution to
+    // an arbitrary distribution with a defined inverse CDF.
+    let gi = context
+        .get_global_property_value(Parameters)
+        .unwrap()
+        .generation_interval;
+    let next_infection_time_gi = Exp::new(1.0 / gi)
+        .unwrap()
+        .inverse_cdf(next_infection_time_unif);
+
+    InfectionTimes {
+        uniform: next_infection_time_unif,
+        gi: next_infection_time_gi,
     }
 }
 
-/// This function seeds the initial infections in the population.
-fn seed_infections(context: &mut Context) {
-    // For now, we just pick a random person and make them infectious.
-    // In the future, we may pick people based on specific person properties.
-    context.set_person_property(
-        context.get_person_id(0),
-        InfectiousStatus,
-        InfectiousStatusType::Infectious,
+/// This function is called when an infected agent has an infection event scheduled.
+/// This function includes identifying a potential contact to infect, evaluating whether
+/// the transmission event is successful, and scheduling the next infection event.
+fn infection_attempt(
+    context: &mut Context,
+    transmitter_id: PersonId,
+    num_infection_attempts_remaining: usize,
+    infection_time_uniform: f64,
+) -> Result<(), IxaError> {
+    // This is a method from a trait extension implemented in `mod contact`.
+    // As long as the method returns a contact id, it can use any underlying sampling strategy
+    // to obtain that contact, and that strategy can be separately implemented in `mod contact`
+    // without changing the logic here.
+    let contact_id = context.get_contact(transmitter_id)?;
+
+    // If there are no contacts to infect, do nothing.
+    if let Some(contact_id) = contact_id {
+        // We evaluate transmission in its own function because there will be eventually
+        // be intervention-based logic that determines whether a transmission event is successful.
+        evaluate_transmission(context, contact_id, transmitter_id);
+    }
+
+    // Schedule the next infection attempt for this infected agent.
+    schedule_next_infection_attempt(
+        context,
+        transmitter_id,
+        num_infection_attempts_remaining - 1,
+        infection_time_uniform,
     );
+    Ok(())
 }
 
-pub fn init(context: &mut Context) {
-    // Watch for changes in the InfectiousStatusType property.
-    context.subscribe_to_event(
-        move |context, event: PersonPropertyChangeEvent<InfectiousStatus>| {
-            handle_infectious_status_change(context, event);
-        },
-    );
-    context.add_plan(0.0, |context| {
-        seed_infections(context);
-    });
+/// This function evaluates whether a transmission event is successful based on the characteristics
+/// of the transmitter and the contact. For now, we assume all transmission events are sucessful.
+/// However, in the future, the success of a transmission event may depend on person-level interventions,
+/// such as whether an agent is wearing a mask. For this reason, we pass the transmitter as well to this
+/// function. This will allow us to evaluate the success of a transmission event based on the properties of
+/// both the transmitter and the contact in the future.
+fn evaluate_transmission(context: &mut Context, contact_id: PersonId, _transmitter_id: PersonId) {
+    if context.get_person_property(contact_id, InfectiousStatus)
+        == InfectiousStatusType::Susceptible
+    {
+        context.set_person_property(
+            contact_id,
+            InfectiousStatus,
+            InfectiousStatusType::Infectious,
+        );
+    }
 }
 
 #[cfg(test)]
