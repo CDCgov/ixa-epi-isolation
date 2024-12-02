@@ -41,7 +41,7 @@ fn load_synth_population(context: &mut Context, synth_input_file: PathBuf) -> Re
     let headers = reader.byte_headers().unwrap().clone();
 
     //must be re-written for serde without over-generalizing
-    while reader.read_byte_record(&mut raw_record).unwrap() {
+    while reader.read_byte_record(&mut raw_record)? {
         let record: PeopleRecord = raw_record.deserialize(Some(&headers))?;
         create_person_from_record(context, &record)?;
     }
