@@ -1,11 +1,10 @@
 mod parameters;
-mod periodic_report_population;
 mod population_loader;
 
 use clap::Parser;
 use ixa::{
     context::Context, error::IxaError, global_properties::ContextGlobalPropertiesExt,
-    people::ContextPeopleExt, random::ContextRandomExt,
+    people::ContextPeopleExt, random::ContextRandomExt, report::ContextReportExt,
 };
 
 use parameters::Parameters;
@@ -40,7 +39,11 @@ fn initialize(args: &Args) -> Result<Context, IxaError> {
     context.init_random(parameters.seed);
 
     //initialize periodic report
-    periodic_report_population::init(&mut context, &args.output_directory, args.force_overwrite)?;
+    context.add_periodic_report(
+        "person_property_count",
+        parameters.report_period,
+        (Age, CensusTract),
+    )?;
 
     // load the population from person record in input file
     population_loader::init(&mut context)?;
