@@ -38,9 +38,15 @@ fn initialize(args: &Args) -> Result<Context, IxaError> {
     // model tidyness -- random seed, automatic shutdown
     context.init_random(parameters.seed);
 
+    // set the output directory and overwrite the existing file
+    context
+        .report_options()
+        .directory(PathBuf::from(&args.output_directory))
+        .overwrite(true);
+
     //initialize periodic report
     context.add_periodic_report(
-        "person_property_count",
+        &parameters.population_periodic_report,
         parameters.report_period,
         (Age, CensusTract),
     )?;
