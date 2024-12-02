@@ -58,6 +58,7 @@ pub fn init(context: &mut Context) -> Result<(), IxaError> {
 #[cfg(test)]
 mod test {
     use super::*;
+    use ixa::people::ContextPeopleExt;
     use std::io::Write;
     use std::path::PathBuf;
     use tempfile::NamedTempFile;
@@ -78,6 +79,8 @@ mod test {
         let age = [43, 42];
         let tract = [36_093_033_102, 36_093_033_102];
 
+        assert_eq!(context.get_current_population(), 2);
+
         for id in 0..1 {
             let person_id = context.get_person_id(id);
             assert_eq!(age[id], context.get_person_property(person_id, Age));
@@ -94,6 +97,6 @@ mod test {
         let mut context = Context::new();
         let input = String::from("age,homeId\n43,360930331\n42,360930331020002");
         let synth_file = persist_tmp_csv(&input);
-        let _ = load_synth_population(&mut context, synth_file);
+        load_synth_population(&mut context, synth_file).unwrap();
     }
 }
