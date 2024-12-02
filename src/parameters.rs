@@ -30,7 +30,7 @@ fn validate_inputs(parameters: &ParametersValues) -> Result<(), IxaError> {
     Ok(())
 }
 
-define_global_property!(Parameters, ParametersValues, |p| { validate_inputs(p) });
+define_global_property!(Parameters, ParametersValues, validate_inputs);
 
 #[cfg(test)]
 mod test {

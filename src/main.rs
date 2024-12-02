@@ -1,10 +1,13 @@
+mod parameters;
+mod periodic_report_population;
+mod population_loader;
+
 use clap::Parser;
 use ixa::{
     context::Context, error::IxaError, global_properties::ContextGlobalPropertiesExt,
     people::ContextPeopleExt, random::ContextRandomExt,
 };
 
-mod parameters;
 use parameters::Parameters;
 use std::path::PathBuf;
 
@@ -24,9 +27,6 @@ struct Args {
     #[arg(short, long, default_value = "false", default_missing_value = "true")]
     force_overwrite: bool,
 }
-
-mod periodic_report_population;
-mod population_loader;
 
 fn initialize(args: &Args) -> Result<Context, IxaError> {
     let mut context = Context::new();

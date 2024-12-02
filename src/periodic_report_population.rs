@@ -9,12 +9,12 @@ use ixa::{
     people::{ContextPeopleExt, PersonCreatedEvent},
     report::{ContextReportExt, Report},
 };
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use std::path::{Path, PathBuf};
 
 use std::collections::HashSet;
 
-#[derive(Serialize, Deserialize, Clone, PartialEq)]
+#[derive(Serialize)]
 struct PopulationReportItem {
     time: f64,
     census_tract: usize,
