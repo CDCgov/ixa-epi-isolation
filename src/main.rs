@@ -42,7 +42,7 @@ fn initialize(args: &Args) -> Result<Context, IxaError> {
     context
         .report_options()
         .directory(PathBuf::from(&args.output_directory))
-        .overwrite(true);
+        .overwrite(args.force_overwrite);
 
     //initialize periodic report
     context.add_periodic_report(
