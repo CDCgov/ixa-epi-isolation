@@ -10,7 +10,7 @@ use ixa::{
 use parameters::Parameters;
 use std::path::PathBuf;
 
-use crate::population_loader::{Age, CensusTract};
+use crate::population_loader::{Age, RegionId};
 
 #[derive(Parser)]
 #[command(version, about, long_about = None)]
@@ -54,7 +54,7 @@ fn initialize(args: &Args) -> Result<Context, IxaError> {
     // load the population from person record in input file
     population_loader::init(&mut context)?;
     context.index_property(Age);
-    context.index_property(CensusTract);
+    context.index_property(RegionId);
 
     context.add_plan(parameters.max_time, |context| {
         context.shutdown();
