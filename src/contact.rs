@@ -40,7 +40,7 @@ impl ContextContactExt for Context {
                 .iter()
                 .position(|&x| x == transmitter_id)
                 .unwrap();
-            alive_people.remove(transmitter_index);
+            alive_people.swap_remove(transmitter_index);
 
             // In the future, we might like to sample people from the list by weights according
             // to some contact matrix. We would use sample_weighted instead.
