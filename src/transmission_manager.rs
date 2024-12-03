@@ -106,7 +106,11 @@ fn schedule_next_infection_attempt(
 
     // Get the next infection attempt time.
     let (next_infection_time_unif, time_until_next_infection_attempt_gi) =
-        get_next_infection_time(context, last_infection_time_uniform);
+        get_next_infection_time(
+            context,
+            num_infection_attempts_remaining,
+            last_infection_time_uniform,
+        );
 
     // Schedule the infection attempt. The function `infection_attempt` (a) grabs a contact at
     // the time of the infection event to ensure that the contacts are current and (b) evaluates
@@ -132,11 +136,23 @@ fn schedule_next_infection_attempt(
 
 /// Calculate the next infection time. Draws an increasing value of a uniform distribution
 /// and passes it through the inverse CDF of the generation interval to get the next infection time.
-fn get_next_infection_time(context: &mut Context, last_infection_time_uniform: f64) -> (f64, f64) {
-    // FOR NOW, we are using placeholder math to guarantee the infection times are always increasing.
-    // This is not order statistics. This will be corrected at a later time.
-    let next_infection_time_unif =
-        context.sample_range(TransmissionRng, last_infection_time_uniform..1.0);
+fn get_next_infection_time(
+    context: &mut Context,
+    num_infection_attempts_remaining: usize,
+    last_infection_time_uniform: f64,
+) -> (f64, f64) {
+    // Draw the next uniform infection time using order statistics.
+    // We draw the first of the n-remaining infection time on U(0, 1).
+    // We pass a uniform draw through the inverse CDF of Beta(1, n) to minimum time.
+    #[allow(clippy::cast_precision_loss)]
+    let mut next_infection_time_unif = 1.0
+        - f64::powf(
+            context.sample_range(TransmissionRng, 0.0..1.0),
+            1.0 / num_infection_attempts_remaining as f64,
+        );
+    // We scale the uniform draw to the be on the interval (last_infection_time_uniform, 1).
+    next_infection_time_unif = last_infection_time_uniform
+        + next_infection_time_unif * (1.0 - last_infection_time_uniform);
 
     // In the future, we will generalize the use of an exponential distribution to
     // an arbitrary distribution with a defined inverse CDF.
