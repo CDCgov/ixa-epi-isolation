@@ -71,7 +71,7 @@ fn initialize(args: &Args) -> Result<Context, IxaError> {
     // Print out the parameters for debugging purposes for the user.
     println!("{parameters:?}");
 
-    // Return context for exectuion
+    // Return context for execution.
     Ok(context)
 }
 

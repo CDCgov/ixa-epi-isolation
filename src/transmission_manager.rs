@@ -8,8 +8,8 @@ use ixa::{
 };
 use statrs::distribution::{ContinuousCDF, Exp, Poisson};
 
-use crate::contact::ContextContactExt;
 use crate::parameters::Parameters;
+use crate::{contact::ContextContactExt, population_loader::Alive};
 
 // Define the possible infectious statuses for a person.
 // These states refer to the person's infectiousness at a given time
@@ -52,8 +52,10 @@ pub fn init(context: &mut Context) {
 fn seed_infections(context: &mut Context) {
     // For now, we just pick a random person and make them infectious.
     // In the future, we may pick people based on specific person properties.
+    let alive_people = context.query_people((Alive, true));
+    let random_person_id = context.sample_range(TransmissionRng, 0..alive_people.len());
     context.set_person_property(
-        context.get_person_id(0),
+        alive_people[random_person_id],
         InfectiousStatus,
         InfectiousStatusType::Infectious,
     );
@@ -83,7 +85,7 @@ fn handle_infectious_status_change(
             event.person_id,
             num_infection_attempts,
             // last_infection_time_uniform is relative to when the agent became infectious.
-            // Basically, it details the fraction of the agent's infectiousness that has passed.
+            // Basically, it tells us the fraction of the agent's time spent infectious that has passed.
             0.0,
         );
     }
@@ -114,13 +116,16 @@ fn schedule_next_infection_attempt(
         context.add_plan(
             context.get_current_time() + next_infection_times.gi,
             move |context| {
-                infection_attempt(
+                infection_attempt(context, transmitter_id)
+                    .expect("Error finding contact in infection attempt");
+                // Schedule the next infection attempt for this infected agent
+                // once the last infection attempt is over.
+                schedule_next_infection_attempt(
                     context,
                     transmitter_id,
-                    num_infection_attempts_remaining,
+                    num_infection_attempts_remaining - 1,
                     next_infection_times.uniform,
-                )
-                .expect("Error finding contact in infection attempt");
+                );
             },
         );
     }
@@ -156,12 +161,7 @@ fn get_next_infection_time(
 /// This function is called when an infected agent has an infection event scheduled.
 /// This function includes identifying a potential contact to infect, evaluating whether
 /// the transmission event is successful, and scheduling the next infection event.
-fn infection_attempt(
-    context: &mut Context,
-    transmitter_id: PersonId,
-    num_infection_attempts_remaining: usize,
-    infection_time_uniform: f64,
-) -> Result<(), IxaError> {
+fn infection_attempt(context: &mut Context, transmitter_id: PersonId) -> Result<(), IxaError> {
     // This is a method from a trait extension implemented in `mod contact`.
     // As long as the method returns a contact id, it can use any underlying sampling strategy
     // to obtain that contact, and that strategy can be separately implemented in `mod contact`
@@ -175,23 +175,16 @@ fn infection_attempt(
         evaluate_transmission(context, contact_id, transmitter_id);
     }
 
-    // Schedule the next infection attempt for this infected agent.
-    schedule_next_infection_attempt(
-        context,
-        transmitter_id,
-        num_infection_attempts_remaining - 1,
-        infection_time_uniform,
-    );
     Ok(())
 }
 
-/// This function evaluates whether a transmission event is successful based on the characteristics
+/// Evaluates whether a transmission event is successful based on the characteristics
 /// of the transmitter and the contact. For now, we assume all transmission events are sucessful.
-/// However, in the future, the success of a transmission event may depend on person-level interventions,
-/// such as whether an agent is wearing a mask. For this reason, we pass the transmitter as well to this
-/// function. This will allow us to evaluate the success of a transmission event based on the properties of
-/// both the transmitter and the contact in the future.
 fn evaluate_transmission(context: &mut Context, contact_id: PersonId, _transmitter_id: PersonId) {
+    // In the future, the success of a transmission event may depend on person-level interventions,
+    // such as whether an agent is wearing a mask. For this reason, we pass the transmitter as well to this
+    // function. This will allow us to evaluate the success of a transmission event based on the properties of
+    // both the transmitter and the contact in the future.
     if context.get_person_property(contact_id, InfectiousStatus)
         == InfectiousStatusType::Susceptible
     {
@@ -207,9 +200,13 @@ fn evaluate_transmission(context: &mut Context, contact_id: PersonId, _transmitt
 mod test {
     use std::path::PathBuf;
 
-    use crate::{parameters::Parameters, parameters::ParametersValues, population_loader::Alive};
+    use crate::{
+        parameters::{Parameters, ParametersValues},
+        population_loader::Alive,
+        transmission_manager::schedule_next_infection_attempt,
+    };
 
-    use super::{infection_attempt, init, InfectiousStatus, InfectiousStatusType};
+    use super::{init, InfectiousStatus, InfectiousStatusType};
     use ixa::{
         context::Context, global_properties::ContextGlobalPropertiesExt, people::ContextPeopleExt,
         random::ContextRandomExt,
@@ -243,11 +240,6 @@ mod test {
         init(&mut context);
         let person_id = context.add_person(()).unwrap();
 
-        context.set_person_property(
-            person_id,
-            InfectiousStatus,
-            InfectiousStatusType::Infectious,
-        );
         context.execute();
 
         assert_eq!(
@@ -299,7 +291,7 @@ mod test {
         // the sum of the exponential inverse_cdf evaluated at each draw of the uniform distribution.
 
         let mut sum_end_times = 0.0;
-        // In this test, e value of r_0 used to set up context is meaningless because we manually
+        // In this test, the value of r_0 used to set up context is meaningless because we manually
         // set the number of infection attempts below.
         let context = setup(1.0);
         let params = context
@@ -313,12 +305,8 @@ mod test {
             // Create a person who will be the only contact, but have them be dead so they can't be infected.
             // Instead, `get_contact` will return None.
             let only_contact = context.add_person((Alive, false)).unwrap();
-            // Since we call infection_attempt directly, we need to add one to n_attempts. Concretely,
-            // infection_attempt finds a contact and conducts an infection immediately, not scheduling a plan to do so.
-            // Instead, the next infection attempt is scheduled on a plan. Since the goal of this test is to evaluate
-            // the timing of when infection events occur, to test the timing of n_attempts infection events, we need to
-            // call infection_attempt n_attempts + 1 times.
-            infection_attempt(&mut context, transmitter_id, n_attempts + 1, 0.0).unwrap();
+            // Schedule the infection attempts.
+            schedule_next_infection_attempt(&mut context, transmitter_id, n_attempts, 0.0);
             context.execute();
             sum_end_times += context.get_current_time();
             assert_eq!(
