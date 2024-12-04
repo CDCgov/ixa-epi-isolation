@@ -393,15 +393,15 @@ mod test {
     }
 
     #[allow(clippy::cast_precision_loss)]
-    fn variable_number_of_infection_attempts(n_attempts: usize, n_iter: i32) {
+    fn infection_attempts_end_time(n_attempts: usize, n_iter: i32) {
         // Using some math, we can test that the observed time of the end of the simulation
         // is what we expect it to be given the number of infection attempts.
-        // Concretely,
+        // Concretely, with more infection attempts, we expect the simulation to end later.
+        // In uniform space, the last infection time occurs at beta(n_attempts, 1).
+        // We can observe the end time for many iterations of n_attempts infections and compare
+        // using the KS test.
 
-        // In our current naive implementation, the expected end time of the simulation is
-        // the sum of the exponential inverse_cdf evaluated at each draw of the uniform distribution.
-
-        let mut sum_end_times = 0.0;
+        let mut end_times = Vec::<f64>::new();
         // In this test, the value of r_0 used to set up context is meaningless because we manually
         // set the number of infection attempts below.
         let context = setup(1.0);
@@ -427,7 +427,7 @@ mod test {
                 },
             );
             context.execute();
-            sum_end_times += context.get_current_time();
+            end_times.push(context.get_current_time());
             assert_eq!(
                 context.get_person_property(transmitter_id, InfectiousStatus),
                 InfectiousStatusType::Recovered
@@ -438,17 +438,34 @@ mod test {
             );
         }
 
-        // Expected time elapsed comes from the memorylessness of the exponential distribution.
-        let expected_time_elapsed =
-            params.generation_interval * (n_attempts as f64) * ((n_attempts as f64) + 1.0) / 2.0;
+        // The theoretical CDF is calculated by taking the CDF of the GI
+        // and passing that through the CDF of beta(n_attempts, 1).
+        let theoretical_cdf = |x| {
+            let gi_cdf = Exp::new(1.0 / params.generation_interval).unwrap().cdf(x);
+            // Inverse CDF of Beta(n_attempts, 1)
+            f64::powf(gi_cdf, n_attempts as f64)
+        };
+        // Sort the empirical times to make an empirical CDF.
+        end_times.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        let mut ks_stat = 0.0; // KS stat is the maximum observed CDF deviation.
+        for (i, time) in end_times.iter().enumerate() {
+            #[allow(clippy::cast_precision_loss)]
+            let empirical_cdf_value = (i as f64) / (end_times.len() as f64);
+            let theoretical_cdf_value = theoretical_cdf(*time);
+            let diff = (empirical_cdf_value - theoretical_cdf_value).abs();
+            if diff > ks_stat {
+                ks_stat = diff;
+            }
+        }
 
-        assert!(((sum_end_times / f64::from(n_iter)) - expected_time_elapsed).abs() < 0.1);
+        // For the KS test at alpha = 0.03, the critical value is ~1.44 / sqrt(n).
+        assert!(ks_stat < 1.44 / f64::sqrt(f64::from(n_iter)));
     }
 
     #[test]
     fn test_variable_number_of_infection_attempts() {
-        variable_number_of_infection_attempts(1, 1000);
-        variable_number_of_infection_attempts(2, 1000);
-        variable_number_of_infection_attempts(3, 5000);
+        infection_attempts_end_time(1, 1000);
+        infection_attempts_end_time(2, 1000);
+        infection_attempts_end_time(3, 5000);
     }
 }
