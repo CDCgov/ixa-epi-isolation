@@ -81,11 +81,14 @@ mod test {
         assert_eq!(context.get_current_population(), 2);
 
         for i in 0..1 {
-            assert_eq!(1, context.query_people_count((
-                (Age, age[i]),
-                (CensusTract, tract[i]),
-                (HomeId, home_id[i]),
-            )));
+            assert_eq!(
+                1,
+                context.query_people_count((
+                    (Age, age[i]),
+                    (CensusTract, tract[i]),
+                    (HomeId, home_id[i]),
+                ))
+            );
         }
     }
 
