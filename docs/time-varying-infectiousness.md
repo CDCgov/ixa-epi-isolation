@@ -46,18 +46,18 @@ first of these draws as $X_{(1)}$, the sorted second as $X_{(2)}$, etc. Note tha
 which is the unsorted first random draw from the distribution, unsorted. We are interested in the distribution of
 $X_{(1)}$. Let us consider the cumulative distribution function of $X_{(1)}$ since it is a continuous random variable.
 
-$$\mathbb{P}\{X_{(1)} \leq x\}$$
+$$\mathbb{P} \\{X_{(1)} \leq x \\}$$
 
 We know that if the minimum is below some value, $x$, that could mean that just the minimum is below $x$ or that
 all $n$ of our random samples are below the minimum. There are too many values to enumerate, so let us consider
 the opposite instead -- that $X_{(1)}$ is greater than some value $x$.
 
-$$\mathbb{P}\{X_{(1)} \leq x\} = 1 - \mathbb{P}\{X_{(1)} > x\}$$
+$$\mathbb{P} \\{X_{(1)} \leq x \\} = 1 - \mathbb{P} \\{X_{(1)} > x \\}$$
 
 In this case, if $X_{(1)} > x$, we know that all of sampled values are at least above $x$. Recall that
 each of the samples is independent and identically-distributed.
 
-$$= 1 - \mathbb{P}\{X_i > x\}^n$$
+$$= 1 - \mathbb{P} \\{X_i > x \\}^n$$
 
 $$= 1 - (1 - F_X(x))^n$$
 
@@ -100,9 +100,17 @@ a total of $R_i$ infection attempts.
 2. Draw the time for the first of $n$ remaining infection attempts of $\mathcal{U}(0, 1)$ by taking a random value from
 $\beta(1, m)$. $m = C_i - $ (the number of infection attempts that have occured).
 3. Scale the value on $\mathcal{U}(0, 1)$ to be on $\mathcal{U}(x_{(i)}, 1)$ where $x_{(i)}$ is the previous draw.
-4. Convert the uniform value to generation interval space by passing it through the inverse CDF of the generation interval.
-Schedule the infection attempt to occur at the modeled time, and wait to schedule the next infection attempt until the end
-of the plan at that given time.
+4. Convert the uniform value to generation interval space by passing it through the inverse CDF of the generation interval,
+and schedule the next infection attempt at the specified time. Wait until that time has occured in the simulation before
+proceeding.
+
+    The result of passing the uniform time through the GI's inverse CDF is the time _since_ the agent first become
+infectious at which the given $n$th infection attempt occurs. To determine the amount of time _elapsed_ until the next
+infection attempt, given that the agent is currently at their $n-1$th infection attempt, schedule the next infection
+attempt to occur in how much ever time remains until that infection attempt from the last attempt. In other words, subtract
+the calculated time from the time since the agent became infectious of the current infection attempt, and schedule the next
+infection attempt to occur in that much time.
+
 5. Repeat from step two until $m = 0$.
 
 ## Why do we need order statistics?
