@@ -31,11 +31,6 @@ define_person_property_with_default!(
     InfectiousStatusType::Susceptible
 );
 
-struct InfectionTimes {
-    uniform: f64,
-    gi: f64,
-}
-
 pub fn init(context: &mut Context) {
     // Watch for changes in the InfectiousStatusType property.
     context.subscribe_to_event(
@@ -84,8 +79,8 @@ fn handle_infectious_status_change(
             context,
             event.person_id,
             num_infection_attempts,
-            // last_infection_time_uniform is relative to when the agent became infectious.
-            // Basically, it tells us the fraction of the agent's time spent infectious that has passed.
+            // Since the agent has had no infection attempts yet,
+            // they have had 0.0 of their infectious time pass.
             0.0,
         );
     }
@@ -106,37 +101,37 @@ fn schedule_next_infection_attempt(
             InfectiousStatus,
             InfectiousStatusType::Recovered,
         );
-    } else {
-        // Schedule the next infection attempt.
-        // Get the next infection attempt time.
-        let next_infection_times = get_next_infection_time(context, last_infection_time_uniform);
-
-        // Schedule the infection attempt. This function (a) grabs a contact at the time of the infection event
-        // to ensure that the contacts are current and (b) evaluates whether the transmission event is successful.
-        context.add_plan(
-            context.get_current_time() + next_infection_times.gi,
-            move |context| {
-                infection_attempt(context, transmitter_id)
-                    .expect("Error finding contact in infection attempt");
-                // Schedule the next infection attempt for this infected agent
-                // once the last infection attempt is over.
-                schedule_next_infection_attempt(
-                    context,
-                    transmitter_id,
-                    num_infection_attempts_remaining - 1,
-                    next_infection_times.uniform,
-                );
-            },
-        );
+        return;
     }
+    // Schedule the next infection attempt.
+    // Get the next infection attempt time.
+    let next_infection_times = get_next_infection_time(context, last_infection_time_uniform);
+
+    // Schedule the infection attempt. The function `infection_attempt` (a) grabs a contact at
+    // the time of the infection event to ensure that the contacts are current and (b) evaluates
+    // whether the transmission event is successful.
+    // After that, schedule the next infection attempt for this infected agent with
+    // one fewer infection attempt remaining.
+    context.add_plan(
+        context.get_current_time() + next_infection_times.1,
+        move |context| {
+            infection_attempt(context, transmitter_id)
+                .expect("Error finding contact in infection attempt");
+            // Schedule the next infection attempt for this infected agent
+            // once the last infection attempt is over.
+            schedule_next_infection_attempt(
+                context,
+                transmitter_id,
+                num_infection_attempts_remaining - 1,
+                next_infection_times.0,
+            );
+        },
+    );
 }
 
 /// Calculate the next infection time. Draws an increasing value of a uniform distribution
 /// and passes it through the inverse CDF of the generation interval to get the next infection time.
-fn get_next_infection_time(
-    context: &mut Context,
-    last_infection_time_uniform: f64,
-) -> InfectionTimes {
+fn get_next_infection_time(context: &mut Context, last_infection_time_uniform: f64) -> (f64, f64) {
     // FOR NOW, we are using placeholder math to guarantee the infection times are always increasing.
     // This is not order statistics. This will be corrected at a later time.
     let next_infection_time_unif =
@@ -152,24 +147,22 @@ fn get_next_infection_time(
         .unwrap()
         .inverse_cdf(next_infection_time_unif);
 
-    InfectionTimes {
-        uniform: next_infection_time_unif,
-        gi: next_infection_time_gi,
-    }
+    (next_infection_time_unif, next_infection_time_gi)
 }
 
 /// This function is called when an infected agent has an infection event scheduled.
 /// This function includes identifying a potential contact to infect, evaluating whether
 /// the transmission event is successful, and scheduling the next infection event.
+/// The method to identify a contact is from the trait extension `ContextContactExt`,
+/// and as long as it returns a valid contact id, it can use any sampling strategy.
+/// In other words, this code does not depend on the sampling logic, but it also doesn't
+/// check any characteristics of the contact.
+/// Errors
+/// - If there is only one person in the population.
 fn infection_attempt(context: &mut Context, transmitter_id: PersonId) -> Result<(), IxaError> {
-    // This is a method from a trait extension implemented in `mod contact`.
-    // As long as the method returns a contact id, it can use any underlying sampling strategy
-    // to obtain that contact, and that strategy can be separately implemented in `mod contact`
-    // without changing the logic here.
-    let contact_id = context.get_contact(transmitter_id)?;
-
-    // If there are no contacts to infect, do nothing.
-    if let Some(contact_id) = contact_id {
+    // `get_contact`? returns Option<PersonId>. If the option is None, there are no valid
+    // contacts to infect, so do nothing.
+    if let Some(contact_id) = context.get_contact(transmitter_id)? {
         // We evaluate transmission in its own function because there will be eventually
         // be intervention-based logic that determines whether a transmission event is successful.
         evaluate_transmission(context, contact_id, transmitter_id);
@@ -180,11 +173,9 @@ fn infection_attempt(context: &mut Context, transmitter_id: PersonId) -> Result<
 
 /// Evaluates whether a transmission event is successful based on the characteristics
 /// of the transmitter and the contact. For now, we assume all transmission events are sucessful.
+/// In the future, the success of a transmission event may depend on person-level interventions,
+/// such as whether either agent is wearing a mask. For this reason, we pass the transmitter as well.
 fn evaluate_transmission(context: &mut Context, contact_id: PersonId, _transmitter_id: PersonId) {
-    // In the future, the success of a transmission event may depend on person-level interventions,
-    // such as whether an agent is wearing a mask. For this reason, we pass the transmitter as well to this
-    // function. This will allow us to evaluate the success of a transmission event based on the properties of
-    // both the transmitter and the contact in the future.
     if context.get_person_property(contact_id, InfectiousStatus)
         == InfectiousStatusType::Susceptible
     {
@@ -213,7 +204,7 @@ mod test {
     };
 
     fn setup(r_0: f64) -> Context {
-        let p_values = ParametersValues {
+        let params = ParametersValues {
             max_time: 10.0,
             seed: 42,
             r_0,
@@ -224,9 +215,9 @@ mod test {
             population_periodic_report: String::new(),
         };
         let mut context = Context::new();
-        context.init_random(p_values.seed);
+        context.init_random(params.seed);
         context
-            .set_global_property_value(Parameters, p_values)
+            .set_global_property_value(Parameters, params)
             .unwrap();
         context
     }
@@ -322,12 +313,6 @@ mod test {
         // Expected time elapsed comes from the memorylessness of the exponential distribution.
         let expected_time_elapsed =
             params.generation_interval * (n_attempts as f64) * ((n_attempts as f64) + 1.0) / 2.0;
-
-        println!(
-            "Expected time elapsed: {}, Observed time elapsed: {}",
-            expected_time_elapsed,
-            sum_end_times / f64::from(n_iter)
-        );
 
         assert!(((sum_end_times / f64::from(n_iter)) - expected_time_elapsed).abs() < 0.1);
     }
