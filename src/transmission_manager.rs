@@ -142,15 +142,16 @@ fn get_next_infection_time(
     last_infection_time_uniform: f64,
 ) -> (f64, f64) {
     // Draw the next uniform infection time using order statistics.
-    // We draw the first of the n-remaining infection time on U(0, 1).
-    // We pass a uniform draw through the inverse CDF of Beta(1, n) to minimum time.
+    // The first of n draws from U(0, 1) comes from Beta(1, n), so we pass a uniform
+    // draw through the inverse CDF of Beta(1, n) to get the minimum time.
     #[allow(clippy::cast_precision_loss)]
     let mut next_infection_time_unif = 1.0
         - f64::powf(
             context.sample_range(TransmissionRng, 0.0..1.0),
             1.0 / num_infection_attempts_remaining as f64,
         );
-    // We scale the uniform draw to the be on the interval (last_infection_time_uniform, 1).
+    // We scale the uniform draw to be on the interval (last_infection_time_uniform, 1)
+    // so that the next infection time is always greater than the last infection time.
     next_infection_time_unif = last_infection_time_uniform
         + next_infection_time_unif * (1.0 - last_infection_time_uniform);
 
@@ -388,7 +389,7 @@ mod test {
         // Using some math, we can test that the observed time of the end of the simulation
         // is what we expect it to be given the number of infection attempts.
         // Concretely, with more infection attempts, we expect the simulation to end later.
-        // In uniform space, the last infection time occurs at beta(n_attempts, 1).
+        // In uniform space, the last infection time occurs at Beta(n_attempts, 1).
         // We can observe the end time for many iterations of n_attempts infections and compare
         // using the KS test.
 
@@ -422,7 +423,7 @@ mod test {
         }
 
         // The theoretical CDF is calculated by taking the CDF of the GI
-        // and passing that through the CDF of beta(n_attempts, 1).
+        // and passing that through the CDF of Beta(n_attempts, 1).
         let theoretical_cdf = |x| {
             let gi_cdf = Exp::new(1.0 / params.generation_interval).unwrap().cdf(x);
             // Inverse CDF of Beta(n_attempts, 1)
