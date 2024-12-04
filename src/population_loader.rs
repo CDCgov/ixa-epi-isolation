@@ -80,14 +80,12 @@ mod test {
 
         assert_eq!(context.get_current_population(), 2);
 
-        for id in 0..1 {
-            let person_id = context.get_person_id(id);
-            assert_eq!(age[id], context.get_person_property(person_id, Age));
-            assert_eq!(home_id[id], context.get_person_property(person_id, HomeId));
-            assert_eq!(
-                tract[id],
-                context.get_person_property(person_id, CensusTract)
-            );
+        for i in 0..1 {
+            assert_eq!(1, context.query_people_count((
+                (Age, age[i]),
+                (CensusTract, tract[i]),
+                (HomeId, home_id[i]),
+            )));
         }
     }
 
