@@ -39,8 +39,8 @@ impl ContextContactExt for Context {
                 // In the future, we might like to sample people from the list by weights according
                 // to some contact matrix. We would use sample_weighted instead. We would calculate
                 // the weights _before_ the loop and then sample from the list of people like here.
-                let index = self.sample_range(ContactRng, 0..eligible_contacts.len());
-                contact_id = eligible_contacts[index];
+                contact_id =
+                    eligible_contacts[self.sample_range(ContactRng, 0..eligible_contacts.len())];
             }
             Ok(Some(contact_id))
         } else {
@@ -63,8 +63,8 @@ mod test {
         let e = context.get_contact(transmitter);
         match e {
             Err(IxaError::IxaError(msg)) => assert_eq!(msg, "Cannot get a contact when there is only one person in the population.".to_string()),
-            Err(ue) => panic!("Expected an error that there should be no contacts when only one person in the population. Instead got {:?}", ue.to_string()),
-            Ok(Some(contact)) => panic!("Expected an error. Instead, got {contact:?} as contact with no errors."),
+            Err(ue) => panic!("Expected an error that there should be no contacts when there is only one person in the population. Instead got {:?}", ue.to_string()),
+            Ok(Some(contact)) => panic!("Expected an error. Instead, got {contact:?} as valid contact."),
             Ok(None) => panic!("Expected an error. Instead, returned None, meaning that there are no valid contacts."),
         }
     }

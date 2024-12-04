@@ -103,7 +103,7 @@ fn schedule_next_infection_attempt(
         );
         return;
     }
-    // Schedule the next infection attempt.
+
     // Get the next infection attempt time.
     let next_infection_times = get_next_infection_time(context, last_infection_time_uniform);
 
