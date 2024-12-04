@@ -31,12 +31,6 @@ define_person_property_with_default!(
     InfectiousStatusType::Susceptible
 );
 
-#[derive(Debug, Clone, Copy)]
-struct InfectionTimes {
-    uniform: f64,
-    gi: f64,
-}
-
 pub fn init(context: &mut Context) {
     // Watch for changes in the InfectiousStatusType property.
     context.subscribe_to_event(
@@ -87,10 +81,7 @@ fn handle_infectious_status_change(
             num_infection_attempts,
             // Since the agent has had no infection attempts yet,
             // they have had 0.0 of their infectious time pass.
-            InfectionTimes {
-                uniform: 0.0,
-                gi: 0.0,
-            },
+            0.0,
         );
     }
 }
@@ -101,7 +92,7 @@ fn schedule_next_infection_attempt(
     context: &mut Context,
     transmitter_id: PersonId,
     num_infection_attempts_remaining: usize,
-    last_infection_times: InfectionTimes,
+    last_infection_time_uniform: f64,
 ) {
     // If there are no more infection attempts remaining, set the person to recovered.
     if num_infection_attempts_remaining == 0 {
@@ -116,10 +107,10 @@ fn schedule_next_infection_attempt(
     // Get the next infection attempt time.
     let (next_infection_time_unif, time_until_next_infection_attempt_gi) =
         get_next_infection_time(
-            context,
-            num_infection_attempts_remaining,
-            &last_infection_times,
-        );
+        context,
+        num_infection_attempts_remaining,
+        last_infection_time_uniform,
+    );
 
     // Schedule the infection attempt. The function `infection_attempt` (a) grabs a contact at
     // the time of the infection event to ensure that the contacts are current and (b) evaluates
@@ -159,11 +150,11 @@ fn get_next_infection_time(
             context.sample_range(TransmissionRng, 0.0..1.0),
             1.0 / num_infection_attempts_remaining as f64,
         );
-    // We scale the uniform draw to the be on the interval (last_infection_times.uniform, 1).
-    next_infection_time_unif = last_infection_times.uniform
-        + next_infection_time_unif * (1.0 - last_infection_times.uniform);
+    // We scale the uniform draw to the be on the interval (last_infection_time_uniform, 1).
+    next_infection_time_unif = last_infection_time_uniform
+        + next_infection_time_unif * (1.0 - last_infection_time_uniform);
 
-    assert!(next_infection_time_unif > last_infection_times.uniform);
+    assert!(next_infection_time_unif > last_infection_time_uniform);
 
     // In the future, we will generalize the use of an exponential distribution to
     // an arbitrary distribution with a defined inverse CDF.
@@ -173,7 +164,10 @@ fn get_next_infection_time(
         .generation_interval;
     let gi_inverse_cdf = |x| Exp::new(1.0 / gi).unwrap().inverse_cdf(x);
 
-    (next_infection_time_unif, next_infection_time_gi)
+    (
+        next_infection_time_unif,
+        gi_inverse_cdf(next_infection_time_unif) - gi_inverse_cdf(last_infection_time_uniform),
+    )
 }
 
 /// This function is called when an infected agent has an infection event scheduled.
@@ -220,9 +214,7 @@ mod test {
     use crate::{
         parameters::{Parameters, ParametersValues},
         population_loader::Alive,
-        transmission_manager::{
-            handle_infectious_status_change, schedule_next_infection_attempt, InfectionTimes,
-        },
+        transmission_manager::{handle_infectious_status_change, schedule_next_infection_attempt},
     };
 
     use super::{init, InfectiousStatus, InfectiousStatusType};
@@ -417,15 +409,7 @@ mod test {
             // Instead, `get_contact` will return None.
             let only_contact = context.add_person((Alive, false)).unwrap();
             // Schedule the infection attempts.
-            schedule_next_infection_attempt(
-                &mut context,
-                transmitter_id,
-                n_attempts,
-                InfectionTimes {
-                    uniform: 0.0,
-                    gi: 0.0,
-                },
-            );
+            schedule_next_infection_attempt(&mut context, transmitter_id, n_attempts, 0.0);
             context.execute();
             end_times.push(context.get_current_time());
             assert_eq!(
