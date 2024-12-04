@@ -82,10 +82,9 @@ we want the first of $n - 1$ infection attempt times on this distribution. We ca
 minimum of $n - 1$ infection attempts from $\mathcal{U}(0, 1)$, and scaling that value to be on $(x_{(1)}, 1)$.
 In other words, we are using a trick where we shrink the available uniform distribution with each infection
 attempt and ask what would be the _next_ infection attempt on that distribution. Concretely, if $x_{(1)}$ is
-on $(0, 1)$, and $x_{(2)}$ is also on $(0, 1)$ and we want to find $x'_{(2)}$ which is $x_{(2)}$ on $(x_{(1)}, 1)$,
-we use the following equation:
+on $(0, 1)$, and $x_{(2)}$ is also on $(0, 1)$, we use the following equation:
 
-$$x'_{(2)} = x_{(1)} + x_{(2)} * (1 - x_{(1)})$$
+$$x_{(2)} := x_{(1)} + x_{(2)} * (1 - x_{(1)})$$
 
 For further detail, the Wikipedia [page on order statistics](https://en.wikipedia.org/wiki/Order_statistic) is a
 great reference as are various notes on the subject from
