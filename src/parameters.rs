@@ -59,7 +59,7 @@ mod test {
                 assert_eq!(msg, "r_0 must be a non-negative number.".to_string());
             }
             Some(ue) => panic!(
-                "Unexpected an error that r_0 validation should fail. Instead got {:?}",
+                "Expected an error that r_0 validation should fail. Instead got {:?}",
                 ue.to_string()
             ),
             None => panic!("Expected an error. Instead, validation passed with no errors."),
@@ -81,7 +81,7 @@ mod test {
         let e = validate_inputs(&parameters).err();
         match e {
             Some(IxaError::IxaError(msg)) => assert_eq!(msg, "The generation interval must be positive.".to_string()),
-            Some(ue) => panic!("Unexpected an error that the generation interval validation should fail. Instead got {:?}", ue.to_string()),
+            Some(ue) => panic!("Expected an error that the generation interval validation should fail. Instead got {:?}", ue.to_string()),
             None => panic!("Expected an error. Instead, validation passed with no errors."),
         }
     }

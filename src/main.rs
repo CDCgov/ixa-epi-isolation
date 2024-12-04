@@ -1,15 +1,16 @@
+mod contact;
 mod parameters;
 mod population_loader;
+mod transmission_manager;
 
 use clap::Parser;
 use ixa::{
     context::Context, error::IxaError, global_properties::ContextGlobalPropertiesExt,
     people::ContextPeopleExt, random::ContextRandomExt, report::ContextReportExt,
 };
-
-use parameters::Parameters;
 use std::path::PathBuf;
 
+use crate::parameters::Parameters;
 use crate::population_loader::{Age, CensusTract};
 
 #[derive(Parser)]
@@ -23,46 +24,54 @@ struct Args {
     #[arg(short, long)]
     output_directory: PathBuf,
 
+    /// whether force overwrite of output files if they already exist
     #[arg(short, long, default_value = "false", default_missing_value = "true")]
     force_overwrite: bool,
 }
 
 fn initialize(args: &Args) -> Result<Context, IxaError> {
     let mut context = Context::new();
-    // read the global properties.
+    // Read the global properties.
     context.load_global_properties(&args.input_file)?;
     let parameters = context
         .get_global_property_value(Parameters)
         .unwrap()
         .clone();
-    // model tidyness -- random seed, automatic shutdown
+    // Set the random seed.
     context.init_random(parameters.seed);
 
-    // set the output directory and overwrite the existing file
+    // Set the output directory and whether to overwrite the existing file.
     context
         .report_options()
         .directory(PathBuf::from(&args.output_directory))
         .overwrite(args.force_overwrite);
 
-    //initialize periodic report
+    // Report the number of people by age and census tract every report_period.
     context.add_periodic_report(
-        &parameters.population_periodic_report,
+        "person_property_count",
         parameters.report_period,
         (Age, CensusTract),
     )?;
 
-    // load the population from person record in input file
+    // Load the synthetic population from the `synthetic_population_file`
+    // specified in input.json.
     population_loader::init(&mut context)?;
     context.index_property(Age);
     context.index_property(CensusTract);
 
+    // Initialize the person-to-person transmission workflow.
+    transmission_manager::init(&mut context);
+
+    // Add a plan to shut down the simulation after `max_time`, regardless of
+    // what else is happening in the model.
     context.add_plan(parameters.max_time, |context| {
         context.shutdown();
     });
-    // make it easy for the user to see what the parameters are
+
+    // Print out the parameters for debugging purposes for the user.
     println!("{parameters:?}");
-    // if we've gotten to this point, nothing failed so return
-    // context wrapped in Ok so that the user knows nothing failed
+
+    // Return context for execution.
     Ok(context)
 }
 
