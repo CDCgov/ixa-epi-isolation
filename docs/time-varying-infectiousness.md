@@ -68,7 +68,7 @@ $$= 1 - (1 - x)^n$$
 This is the CDF for a Beta distribution with $alpha = 1$ and $beta = n$. More generally, the distribution
 of the $k$th infection attempt from $n$ total infection attempts is $\beta(k, n - 1 + k)$.
 
-However, we cannot just independently sample from these beta distributions. Instead, we must update the distributions
+However, we cannot just independently sample from these Beta distributions. Instead, we must update the distributions
 to be conditioned on the previously drawn times to ensure that our infection attempt times are always increasing.
 In other words, if we draw the first infection attempt time from $\beta(1, 5)$ and happen to get a large value, we need
 to take that into account when drawing the second infection attempt time. It must be greater than the first
