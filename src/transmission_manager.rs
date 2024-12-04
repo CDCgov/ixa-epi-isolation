@@ -105,7 +105,8 @@ fn schedule_next_infection_attempt(
     }
 
     // Get the next infection attempt time.
-    let next_infection_times = get_next_infection_time(context, last_infection_time_uniform);
+    let (next_infection_time_unif, time_until_next_infection_attempt_gi) =
+        get_next_infection_time(context, last_infection_time_uniform);
 
     // Schedule the infection attempt. The function `infection_attempt` (a) grabs a contact at
     // the time of the infection event to ensure that the contacts are current and (b) evaluates
@@ -113,7 +114,7 @@ fn schedule_next_infection_attempt(
     // After that, schedule the next infection attempt for this infected agent with
     // one fewer infection attempt remaining.
     context.add_plan(
-        context.get_current_time() + next_infection_times.1,
+        context.get_current_time() + time_until_next_infection_attempt_gi,
         move |context| {
             infection_attempt(context, transmitter_id)
                 .expect("Error finding contact in infection attempt");
@@ -123,7 +124,7 @@ fn schedule_next_infection_attempt(
                 context,
                 transmitter_id,
                 num_infection_attempts_remaining - 1,
-                next_infection_times.0,
+                next_infection_time_unif,
             );
         },
     );
