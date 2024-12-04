@@ -105,8 +105,7 @@ fn schedule_next_infection_attempt(
     }
 
     // Get the next infection attempt time.
-    let (next_infection_time_unif, time_until_next_infection_attempt_gi) =
-        get_next_infection_time(
+    let (next_infection_time_unif, time_until_next_infection_attempt_gi) = get_next_infection_time(
         context,
         num_infection_attempts_remaining,
         last_infection_time_uniform,
