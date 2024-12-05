@@ -393,7 +393,7 @@ mod test {
             .clone();
         for seed in 0..n_iter {
             let mut context = setup(1.0);
-            context.init_random(seed.try_into().unwrap());
+            context.init_random(seed.into());
             let transmitter_id = context.add_person(()).unwrap();
             // Create a person who will be the only contact, but have them be dead so they can't be infected.
             // Instead, `get_contact` will return None.
@@ -439,7 +439,7 @@ mod test {
                 let theoretical_cdf_value = theoretical_cdf(*time);
                 (empirical_cdf_value - theoretical_cdf_value).abs()
             })
-            .reduce(|ks_stat, diff| ks_stat.max(diff))
+            .reduce(f64::max)
             .unwrap();
 
         // For the KS test at alpha = 0.03, the critical value is ~1.44 / sqrt(n).
