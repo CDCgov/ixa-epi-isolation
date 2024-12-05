@@ -347,16 +347,19 @@ mod test {
         let theoretical_cdf = |x| Exp::new(1.0 / gi).unwrap().cdf(x);
         // Sort the empirical times to make an empirical CDF.
         infection_times.sort_by(|a, b| a.partial_cmp(b).unwrap());
-        let mut ks_stat = 0.0; // KS stat is the maximum observed CDF deviation.
-        for (i, time) in infection_times.iter().enumerate() {
-            #[allow(clippy::cast_precision_loss)]
-            let empirical_cdf_value = (i as f64) / (infection_times.len() as f64);
-            let theoretical_cdf_value = theoretical_cdf(*time);
-            let diff = (empirical_cdf_value - theoretical_cdf_value).abs();
-            if diff > ks_stat {
-                ks_stat = diff;
-            }
-        }
+
+        // KS stat is the maximum observed CDF deviation.
+        let ks_stat = infection_times
+            .iter()
+            .enumerate()
+            .map(|(i, time)| {
+                #[allow(clippy::cast_precision_loss)]
+                let empirical_cdf_value = (i as f64) / (infection_times.len() as f64);
+                let theoretical_cdf_value = theoretical_cdf(*time);
+                (empirical_cdf_value - theoretical_cdf_value).abs()
+            })
+            .reduce(|ks_stat, diff| ks_stat.max(diff))
+            .unwrap();
 
         // For the KS test at alpha = 0.03, the critical value is ~1.44 / sqrt(n).
         assert!(ks_stat < 1.44 / f64::sqrt(f64::from(n)));
