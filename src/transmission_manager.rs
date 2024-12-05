@@ -343,22 +343,12 @@ mod test {
             .get_global_property_value(Parameters)
             .unwrap()
             .generation_interval;
-        let theoretical_cdf = |x| Exp::new(1.0 / gi).unwrap().cdf(x);
-        // Sort the empirical times to make an empirical CDF.
-        infection_times.sort_by(|a, b| a.partial_cmp(b).unwrap());
-        let mut ks_stat = 0.0; // KS stat is the maximum observed CDF deviation.
-        for (i, time) in infection_times.iter().enumerate() {
-            #[allow(clippy::cast_precision_loss)]
-            let empirical_cdf_value = (i as f64) / (infection_times.len() as f64);
-            let theoretical_cdf_value = theoretical_cdf(*time);
-            let diff = (empirical_cdf_value - theoretical_cdf_value).abs();
-            if diff > ks_stat {
-                ks_stat = diff;
-            }
-        }
 
-        // For the KS test at alpha = 0.03, the critical value is ~1.44 / sqrt(n).
-        assert!(ks_stat < 1.44 / f64::sqrt(f64::from(n)));
+        check_ks_stat(
+            &mut infection_times,
+            |x| Exp::new(1.0 / gi).unwrap().cdf(x),
+            n,
+        );
     }
 
     fn record_infection_times(
@@ -384,7 +374,7 @@ mod test {
     }
 
     #[allow(clippy::cast_precision_loss)]
-    fn infection_attempts_end_time(n_attempts: usize, n_iter: i32) {
+    fn infection_attempts_end_time(n_attempts: usize, n_iter: u32) {
         // Using some math, we can test that the observed time of the end of the simulation
         // is what we expect it to be given the number of infection attempts.
         // Concretely, with more infection attempts, we expect the simulation to end later.
@@ -402,7 +392,7 @@ mod test {
             .clone();
         for seed in 0..n_iter {
             let mut context = setup(1.0);
-            context.init_random(seed.try_into().unwrap());
+            context.init_random(seed.into());
             let transmitter_id = context.add_person(()).unwrap();
             // Create a person who will be the only contact, but have them be dead so they can't be infected.
             // Instead, `get_contact` will return None.
@@ -423,26 +413,36 @@ mod test {
 
         // The theoretical CDF is calculated by taking the CDF of the GI
         // and passing that through the CDF of Beta(n_attempts, 1).
-        let theoretical_cdf = |x| {
-            let gi_cdf = Exp::new(1.0 / params.generation_interval).unwrap().cdf(x);
-            // Inverse CDF of Beta(n_attempts, 1)
-            f64::powf(gi_cdf, n_attempts as f64)
-        };
+        check_ks_stat(
+            &mut end_times,
+            |x| {
+                let gi_cdf = Exp::new(1.0 / params.generation_interval).unwrap().cdf(x);
+                // Inverse CDF of Beta(n_attempts, 1)
+                f64::powf(gi_cdf, n_attempts as f64)
+            },
+            n_iter,
+        );
+    }
+
+    fn check_ks_stat(times: &mut [f64], theoretical_cdf: impl Fn(f64) -> f64, n: u32) {
         // Sort the empirical times to make an empirical CDF.
-        end_times.sort_by(|a, b| a.partial_cmp(b).unwrap());
-        let mut ks_stat = 0.0; // KS stat is the maximum observed CDF deviation.
-        for (i, time) in end_times.iter().enumerate() {
-            #[allow(clippy::cast_precision_loss)]
-            let empirical_cdf_value = (i as f64) / (end_times.len() as f64);
-            let theoretical_cdf_value = theoretical_cdf(*time);
-            let diff = (empirical_cdf_value - theoretical_cdf_value).abs();
-            if diff > ks_stat {
-                ks_stat = diff;
-            }
-        }
+        times.sort_by(|a, b| a.partial_cmp(b).unwrap());
+
+        // KS stat is the maximum observed CDF deviation.
+        let ks_stat = times
+            .iter()
+            .enumerate()
+            .map(|(i, time)| {
+                #[allow(clippy::cast_precision_loss)]
+                let empirical_cdf_value = (i as f64) / (times.len() as f64);
+                let theoretical_cdf_value = theoretical_cdf(*time);
+                (empirical_cdf_value - theoretical_cdf_value).abs()
+            })
+            .reduce(f64::max)
+            .unwrap();
 
         // For the KS test at alpha = 0.03, the critical value is ~1.44 / sqrt(n).
-        assert!(ks_stat < 1.44 / f64::sqrt(f64::from(n_iter)));
+        assert!(ks_stat < 1.44 / f64::sqrt(f64::from(n)));
     }
 
     #[test]
