@@ -156,18 +156,23 @@ fn get_next_infection_time(
 
     assert!(next_infection_time_unif > last_infection_time_uniform);
 
-    // In the future, we will generalize the use of an exponential distribution to
-    // an arbitrary distribution with a defined inverse CDF.
+    (
+        next_infection_time_unif,
+        gi_inverse_cdf(context, next_infection_time_unif)
+            - gi_inverse_cdf(context, last_infection_time_uniform),
+    )
+}
+
+/// The inverse CDF of the generation interval distribution.
+/// This function is used to calculate the time until the next infection attempt.
+fn gi_inverse_cdf(context: &Context, uniform_draw: f64) -> f64 {
     let gi = context
         .get_global_property_value(Parameters)
         .unwrap()
         .generation_interval;
-    let gi_inverse_cdf = |x| Exp::new(1.0 / gi).unwrap().inverse_cdf(x);
-
-    (
-        next_infection_time_unif,
-        gi_inverse_cdf(next_infection_time_unif) - gi_inverse_cdf(last_infection_time_uniform),
-    )
+    // In the future, we will generalize the use of an exponential distribution to
+    // an arbitrary distribution with a defined inverse CDF.
+    Exp::new(1.0 / gi).unwrap().inverse_cdf(uniform_draw)
 }
 
 /// This function is called when an infected agent has an infection event scheduled.
@@ -305,6 +310,10 @@ mod test {
         // (empirical) distribution and the generation interval (theoretical)
         // distribution.
 
+        // We need to get some parameters out of context for comparison in the KS test.
+        // Initialize `gi`. It will always be set by the proper value from context
+        // in the for loop below.
+        let mut gi = 0.0;
         // We want an infected person to infect others, and we want to record those
         // infection times. We need to do this multiple times with different seeds
         // to get a good estimate of the distribution of infection times.
@@ -312,6 +321,14 @@ mod test {
         let mut infection_times = Vec::<f64>::new();
         for seed in 0..n {
             let mut context = setup(5.0);
+            if seed == 0 {
+                // Get the parameters we need out of context.
+                let context = setup(5.0);
+                gi = context
+                    .get_global_property_value(Parameters)
+                    .unwrap()
+                    .generation_interval;
+            }
             context.init_random(seed.into());
             // We only need one other person because we set them back to susceptible
             // after every infection attempt (when we record the infection time).
@@ -335,14 +352,6 @@ mod test {
             context.execute();
             infection_times.append(context.get_data_container_mut(RecordedInfectionTimes));
         }
-
-        // Compare the recorded infection times to the actual generation
-        // interval distribution using the KS test.
-        let context = setup(5.0);
-        let gi = context
-            .get_global_property_value(Parameters)
-            .unwrap()
-            .generation_interval;
 
         check_ks_stat(
             &mut infection_times,
