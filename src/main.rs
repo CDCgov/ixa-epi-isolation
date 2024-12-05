@@ -9,6 +9,7 @@ use ixa::{
     people::ContextPeopleExt, random::ContextRandomExt, report::ContextReportExt,
 };
 use std::path::PathBuf;
+use transmission_manager::InfectiousStatus;
 
 use crate::parameters::Parameters;
 use crate::population_loader::{Age, CensusTract};
@@ -48,9 +49,16 @@ fn initialize(args: &Args) -> Result<Context, IxaError> {
 
     // Report the number of people by age and census tract every report_period.
     context.add_periodic_report(
-        "person_property_count",
+        "person_demographics_count",
         parameters.report_period,
         (Age, CensusTract),
+    )?;
+
+    // Report the number of people by infectious status every report_period.
+    context.add_periodic_report(
+        "person_infectious_count",
+        parameters.report_period,
+        (InfectiousStatus,),
     )?;
 
     // Load the synthetic population from the `synthetic_population_file`
