@@ -175,8 +175,9 @@ fn gi_inverse_cdf(context: &Context, uniform_draw: f64) -> f64 {
         .get_global_property_value(Parameters)
         .unwrap()
         .generation_interval;
-    // In the future, we will generalize the use of an exponential distribution to
-    // an arbitrary distribution with a defined inverse CDF.
+    // For now, we are assuming that the generation interval is given by an exponential
+    // distribution. In the future, we will switch this distribution to be specified from
+    // our isolation guidance modeling work.
     Exp::new(1.0 / gi).unwrap().inverse_cdf(uniform_draw)
 }
 
@@ -340,6 +341,9 @@ mod test {
             // This lets the transmitter repetively infect this person.
             let transmitter_id = context.add_person(()).unwrap();
             // We add the contact to the context _after_ we choose the transmitter (happens in init).
+            // By having only one person in the population when we choose the transmitter, we guarantee
+            // that that one person is the transmitter. This lets us keep the transmitter id, which we
+            // need below.
             init(&mut context);
             let infection_times_clone = Rc::clone(&infection_times);
             context.subscribe_to_event({
@@ -350,10 +354,11 @@ mod test {
             context.add_plan(0.0, move |context| {
                 context.add_person(()).unwrap();
             });
-            // Finally, we need one more helper function. The contact experiences a full infectious course.
-            // Even though we are setting their `InfectiousStatus` back to susceptible, there is an event
-            // generated when their status changes to infectious. This event triggers the rest of the infectious
-            // course, which ends in the person being labeled as recovered. If they are labeled as recovered,
+            // Finally, we need to have one more event handler to manage the contact's recovery.
+            // Even though we are setting the contact's `InfectiousStatus` back to susceptible, there is an event
+            // generated when their status changes to infectious each time. This event triggers the rest of the infectious
+            // course because in `init` we handle a person becoming infectious with `handle_person_infectious_status_change`.
+            // This chain of logic ends in the person being labeled as recovered. If they are labeled as recovered,
             // they cannot get infected and we do not record their infection time again. So, we need to revert
             // recovery.
             context.subscribe_to_event(
@@ -383,23 +388,39 @@ mod test {
         transmitter_id: PersonId,
         infection_times: &Rc<RefCell<Vec<f64>>>,
     ) {
-        // We only want to track the infection time if the agent is getting infected.
-        // We also want to make sure that we are tracking the contact, not the contact potentially
+        // We want to make sure that we are tracking the contact, not the contact potentially
         // infecting the transmitter.
-        if event.current == InfectiousStatusType::Infectious && event.person_id != transmitter_id {
-            let current_time = context.get_current_time();
-            infection_times.borrow_mut().push(current_time);
-            // However, we need to make sure this person stays a potential infectious contact.
-            // If this person becomes infectious, we cannot guarantee that they will be infected
-            // again at the next infectious time (for instance, they may have immunity).
-            // So, if we try to infect them again, nothing will happen and we won't observe the
-            // infection time. This is more likely to happen as there are more infections, so this
-            // would negatively bias our estimates of the GI.
-            context.set_person_property(
-                event.person_id,
-                InfectiousStatus,
-                InfectiousStatusType::Susceptible,
-            );
+        if event.person_id != transmitter_id {
+            // We only want to track the infection time if the agent is getting infected.
+            if event.current == InfectiousStatusType::Infectious {
+                let current_time = context.get_current_time();
+                infection_times.borrow_mut().push(current_time);
+                // However, we need to make sure this person stays a potential infectious contact.
+                // If this person becomes infectious, we cannot guarantee that they will be infected
+                // again at the next infectious time (for instance, they may have immunity).
+                // So, if we try to infect them again, nothing will happen and we won't observe the
+                // infection time. This is more likely to happen as there are more infections, so this
+                // would negatively bias our estimates of the GI.
+                context.set_person_property(
+                    event.person_id,
+                    InfectiousStatus,
+                    InfectiousStatusType::Susceptible,
+                );
+            }
+            // Finally, we need to have one more event handler to manage the contact's recovery.
+            // Even though we are setting the contact's `InfectiousStatus` back to susceptible, there is an event
+            // generated when their status changes to infectious each time. This event triggers the rest of the infectious
+            // course because in `init` we handle a person becoming infectious with `handle_person_infectious_status_change`.
+            // This chain of logic ends in the person being labeled as recovered. If they are labeled as recovered,
+            // they cannot get infected and we do not record their infection time again. So, we need to revert
+            // recovery.
+            if event.current == InfectiousStatusType::Recovered {
+                context.set_person_property(
+                    event.person_id,
+                    InfectiousStatus,
+                    InfectiousStatusType::Susceptible,
+                );
+            }
         }
     }
 
