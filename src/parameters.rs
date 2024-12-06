@@ -13,6 +13,8 @@ pub struct ParametersValues {
     pub generation_interval: f64,
     pub report_period: f64,
     pub synth_population_file: PathBuf,
+    pub tri_vl_params_file: PathBuf,
+    pub population_periodic_report: String,
 }
 
 fn validate_inputs(parameters: &ParametersValues) -> Result<(), IxaError> {
@@ -49,6 +51,7 @@ mod test {
             infection_duration: 5.0,
             generation_interval: 5.0,
             report_period: 1.0,
+            tri_vl_params_file: PathBuf::from("."),
             synth_population_file: PathBuf::from("."),
         };
         let e = validate_inputs(&parameters).err();
@@ -73,6 +76,7 @@ mod test {
             infection_duration: 5.0,
             generation_interval: 0.0,
             report_period: 1.0,
+            tri_vl_params_file: PathBuf::from("."),
             synth_population_file: PathBuf::from("."),
         };
         let e = validate_inputs(&parameters).err();

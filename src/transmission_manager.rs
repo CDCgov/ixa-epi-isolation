@@ -1,15 +1,31 @@
+use std::path::PathBuf;
+
 use ixa::{
     context::Context,
-    define_person_property, define_person_property_with_default, define_rng,
+    define_data_plugin, define_person_property, define_person_property_with_default, define_rng,
     error::IxaError,
     global_properties::ContextGlobalPropertiesExt,
     people::{ContextPeopleExt, PersonId, PersonPropertyChangeEvent},
     random::ContextRandomExt,
 };
-use statrs::distribution::{ContinuousCDF, Exp, Poisson};
+use serde::Deserialize;
+use statrs::distribution::Poisson;
 
 use crate::parameters::Parameters;
 use crate::{contact::ContextContactExt, population_loader::Alive};
+
+#[allow(dead_code)]
+#[derive(Debug, Clone, Copy, Deserialize)]
+struct TriVLParams {
+    peak_time: f64,
+    peak_magnitude: f64,
+    proliferation_time: f64,
+    clearance_time: f64,
+    symptom_improvement_time: f64,
+    symptom_onset_time: f64,
+}
+
+define_data_plugin!(TriVL, Vec<TriVLParams>, Vec::<TriVLParams>::new());
 
 // Define the possible infectious statuses for a person.
 // These states refer to the person's infectiousness at a given time
@@ -33,7 +49,7 @@ define_person_property_with_default!(
 
 /// Seeds initial infections at t = 0, and subscribes to people becoming infectious
 /// to schedule their infection attempts.
-pub fn init(context: &mut Context) {
+pub fn init(context: &mut Context, vl_params_path: PathBuf) -> Result<(), IxaError> {
     // Watch for changes in the InfectiousStatusType property.
     context.subscribe_to_event(
         move |context, event: PersonPropertyChangeEvent<InfectiousStatus>| {
@@ -43,6 +59,19 @@ pub fn init(context: &mut Context) {
     context.add_plan(0.0, |context| {
         seed_infections(context);
     });
+    load_tri_vl_params(context, vl_params_path)
+}
+
+/// Load the generation interval parameters from an external file.
+fn load_tri_vl_params(context: &mut Context, path: PathBuf) -> Result<(), IxaError> {
+    let tri_vl_params = context.get_data_container_mut(TriVL);
+    let mut reader = csv::Reader::from_path(path)?;
+    for result in reader.deserialize() {
+        let record: TriVLParams = result?;
+        tri_vl_params.push(record);
+    }
+
+    Ok(())
 }
 
 /// This function seeds the initial infections in the population.
@@ -75,6 +104,10 @@ fn handle_infectious_status_change(
         let num_infection_attempts =
             context.sample_distr(TransmissionRng, Poisson::new(r_0).unwrap()) as usize;
 
+        // Assign generation interval parameters.
+        let all_gi_params = context.get_data_container(TriVL).unwrap();
+        let gi_params =
+            all_gi_params[context.sample_range(TransmissionRng, 0..all_gi_params.len())];
         // Start scheduling infection attempt events for this person.
         // People who have num_infection_attempts = 0 are still passed through this
         // logic but don't infect anyone. This is so that so that there is only one
@@ -82,6 +115,7 @@ fn handle_infectious_status_change(
         schedule_next_infection_attempt(
             context,
             event.person_id,
+            gi_params,
             num_infection_attempts,
             // Since the agent has had no infection attempts yet,
             // they have had 0.0 of their infectious time pass.
@@ -95,6 +129,7 @@ fn handle_infectious_status_change(
 fn schedule_next_infection_attempt(
     context: &mut Context,
     transmitter_id: PersonId,
+    gi_params: TriVLParams,
     num_infection_attempts_remaining: usize,
     last_infection_time_uniform: f64,
 ) {
@@ -113,6 +148,7 @@ fn schedule_next_infection_attempt(
         context,
         num_infection_attempts_remaining,
         last_infection_time_uniform,
+        gi_params,
     );
 
     // Schedule the infection attempt. The function `infection_attempt` (a) grabs a contact at
@@ -130,6 +166,7 @@ fn schedule_next_infection_attempt(
             schedule_next_infection_attempt(
                 context,
                 transmitter_id,
+                gi_params,
                 num_infection_attempts_remaining - 1,
                 next_infection_time_unif,
             );
@@ -143,6 +180,7 @@ fn get_next_infection_time(
     context: &mut Context,
     num_infection_attempts_remaining: usize,
     last_infection_time_uniform: f64,
+    gi_params: TriVLParams,
 ) -> (f64, f64) {
     // Draw the next uniform infection time using order statistics.
     // The first of n draws from U(0, 1) comes from Beta(1, n), so we pass a uniform
@@ -160,22 +198,31 @@ fn get_next_infection_time(
 
     (
         next_infection_time_unif,
-        gi_inverse_cdf(context, next_infection_time_unif)
-            - gi_inverse_cdf(context, last_infection_time_uniform),
+        tri_vl_gi_inverse_cdf(gi_params, next_infection_time_unif)
+            - tri_vl_gi_inverse_cdf(gi_params, last_infection_time_uniform)
+            + gi_params.symptom_onset_time,
     )
 }
 
-/// The inverse CDF of the generation interval distribution.
-/// This function is used to calculate the time until the next infection attempt.
-fn gi_inverse_cdf(context: &Context, uniform_draw: f64) -> f64 {
-    let gi = context
-        .get_global_property_value(Parameters)
-        .unwrap()
-        .generation_interval;
-    // For now, we are assuming that the generation interval is given by an exponential
-    // distribution. In the future, we will switch this distribution to be specified from
-    // our isolation guidance modeling work.
-    Exp::new(1.0 / gi).unwrap().inverse_cdf(uniform_draw)
+/// The inverse CDF of the triangle VL curve.
+fn tri_vl_gi_inverse_cdf(gi_params: TriVLParams, uniform_draw: f64) -> f64 {
+    // I calculated the start and end times for infection
+    let infection_start_time = gi_params.peak_time - gi_params.proliferation_time;
+    let infection_end_time = gi_params.clearance_time - gi_params.peak_time;
+
+    let integral = 0.5 * gi_params.peak_magnitude * (infection_end_time - infection_start_time);
+    let cdf_value = uniform_draw * integral;
+    let left_half_area = 0.5 * gi_params.peak_magnitude * gi_params.proliferation_time;
+
+    if cdf_value <= left_half_area {
+        let extra_time =
+            f64::sqrt(cdf_value * 2.0 * gi_params.proliferation_time / gi_params.peak_magnitude);
+        infection_start_time + extra_time
+    } else {
+        let time_until_end =
+            f64::sqrt(cdf_value * 2.0 * gi_params.clearance_time / gi_params.peak_magnitude);
+        infection_end_time - time_until_end
+    }
 }
 
 /// This function is called when an infected agent has an infection event scheduled.
@@ -222,10 +269,10 @@ mod test {
     use crate::{
         parameters::{Parameters, ParametersValues},
         population_loader::Alive,
-        transmission_manager::schedule_next_infection_attempt,
+        transmission_manager::{schedule_next_infection_attempt, TriVLParams},
     };
 
-    use super::{init, InfectiousStatus, InfectiousStatusType};
+    use super::{init, load_tri_vl_params, InfectiousStatus, InfectiousStatusType};
     use ixa::{
         context::Context, global_properties::ContextGlobalPropertiesExt, people::ContextPeopleExt,
         random::ContextRandomExt, PersonId, PersonPropertyChangeEvent,
@@ -240,6 +287,7 @@ mod test {
             infection_duration: 0.1,
             generation_interval: 3.0,
             report_period: 1.0,
+            tri_vl_params_file: PathBuf::from("."),
             synth_population_file: PathBuf::from("."),
         };
         let mut context = Context::new();
@@ -256,7 +304,8 @@ mod test {
         // and we do not trigger the `get_contact` function -- which errors out in the case
         // of a population size of 1.
         let mut context = setup(0.000_000_000_000_000_01);
-        init(&mut context);
+        init(&mut context, PathBuf::from("./input/tri_vl_params.csv"))
+            .expect("Error reading VL parameters.");
         let person_id = context.add_person(()).unwrap();
 
         context.execute();
@@ -273,7 +322,8 @@ mod test {
         // zero secondary infections is extremely low.
         // This lets us check that the other person in the population is infected.
         let mut context = setup(50.0);
-        init(&mut context);
+        init(&mut context, PathBuf::from("./input/tri_vl_params.csv"))
+            .expect("Error reading VL parameters.");
         let person_id = context.add_person(()).unwrap();
         let contact = context.add_person(()).unwrap();
 
@@ -322,6 +372,8 @@ mod test {
         let infection_times = Rc::new(RefCell::new(Vec::<f64>::new()));
         for seed in 0..n {
             let mut context = setup(5.0);
+            load_tri_vl_params(&mut context, PathBuf::from("./input/tri_vl_params.csv"))
+                .expect("Error reading VL parameters.");
             if seed == 0 {
                 // Get the parameters we need out of context.
                 gi = context
@@ -339,7 +391,8 @@ mod test {
             // By having only one person in the population when we choose the transmitter, we guarantee
             // that that one person is the transmitter. This lets us keep the transmitter id, which we
             // need below.
-            init(&mut context);
+            init(&mut context, PathBuf::from("./input/tri_vl_params.csv"))
+                .expect("Error reading VL parameters.");
             let infection_times_clone = Rc::clone(&infection_times);
             context.subscribe_to_event({
                 move |context, event: PersonPropertyChangeEvent<InfectiousStatus>| {
@@ -394,11 +447,14 @@ mod test {
         let mut end_times = Vec::<f64>::new();
         // In this test, the value of r_0 used to set up context is meaningless because we manually
         // set the number of infection attempts below.
-        let context = setup(1.0);
-        let params = context
-            .get_global_property_value(Parameters)
-            .unwrap()
-            .clone();
+        let gi_params = TriVLParams {
+            peak_time: 1.2,
+            peak_magnitude: 8.0,
+            proliferation_time: 5.0,
+            clearance_time: 7.0,
+            symptom_improvement_time: 6.0,
+            symptom_onset_time: 2.0,
+        };
         for seed in 0..n_iter {
             let mut context = setup(1.0);
             context.init_random(seed.into());
@@ -407,7 +463,13 @@ mod test {
             // Instead, `get_contact` will return None.
             let only_contact = context.add_person((Alive, false)).unwrap();
             // Schedule the infection attempts.
-            schedule_next_infection_attempt(&mut context, transmitter_id, n_attempts, 0.0);
+            schedule_next_infection_attempt(
+                &mut context,
+                transmitter_id,
+                gi_params,
+                n_attempts,
+                0.0,
+            );
             context.execute();
             end_times.push(context.get_current_time());
             assert_eq!(
@@ -423,9 +485,22 @@ mod test {
         // The theoretical CDF is calculated by taking the CDF of the GI
         // and passing that through the CDF of Beta(n_attempts, 1).
         check_ks_stat(&mut end_times, |x| {
-            let gi_cdf = Exp::new(1.0 / params.generation_interval).unwrap().cdf(x);
+            let tri_area = 0.5
+                * gi_params.peak_magnitude
+                * (gi_params.clearance_time + gi_params.proliferation_time);
+            let gi_cdf = if x < gi_params.peak_time {
+                0.5 * x * x * gi_params.peak_magnitude / gi_params.proliferation_time
+            } else {
+                0.5 * gi_params.peak_magnitude * gi_params.proliferation_time
+                    + (x - gi_params.proliferation_time)
+                        * 0.5
+                        * (gi_params.peak_magnitude
+                            + (gi_params.peak_magnitude
+                                - (x - gi_params.proliferation_time) * gi_params.peak_magnitude
+                                    / gi_params.clearance_time))
+            };
             // Inverse CDF of Beta(n_attempts, 1)
-            f64::powf(gi_cdf, n_attempts as f64)
+            f64::powf(gi_cdf / tri_area, n_attempts as f64)
         });
     }
 
