@@ -10,7 +10,7 @@ set.seed(1234)
 
 state_synth <- "WY"
 year_synth <- 2023
-population_size <- 1000
+population_size <- 40
 
 ## =================================#
 ## Get population ---------------
@@ -43,10 +43,11 @@ synth_pop_df <- tibble()
 house_counter <- 0
 while (nrow(synth_pop_df) < population_size) {
   house_counter <- house_counter + 1
-  synth_pop_df <- bind_rows(synth_pop_df, household_pums) |>
+  house_sample <- household_pums |>
     sample_n(1, weight = WGTP) |>
     left_join(sample_pums, by = (c("SERIALNO", "WGTP", "NP"))) |>
     mutate(house_number = house_counter)
+  synth_pop_df <- bind_rows(synth_pop_df, house_sample)
 }
 
 ## =================================#
@@ -65,7 +66,7 @@ synth_pop_region_df <- synth_pop_df |>
   ) |>
   dplyr::select(-geometry) |>
   mutate(
-    region_id = sprintf("%02d%09d", as.numeric(STATE), as.numeric(PUMA)),
+    censusTractId = sprintf("%02d%09d", as.numeric(STATE), as.numeric(PUMA)),
     homeId = sprintf(
       "%02d%09d%06d",
       as.numeric(STATE), as.numeric(PUMA), house_number
@@ -83,7 +84,7 @@ people_df <- synth_pop_region_df |>
 ## Region columns: region_id, lat, lon
 region_df <- synth_pop_region_df |>
   dplyr::mutate(lat = as.numeric(INTPTLAT20), lon = as.numeric(INTPTLON20)) |>
-  dplyr::select(region_id, lat, lon)
+  dplyr::select(censusTractId, lat, lon)
 
 write_csv(
   region_df,
