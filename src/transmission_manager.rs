@@ -31,6 +31,8 @@ define_person_property_with_default!(
     InfectiousStatusType::Susceptible
 );
 
+/// Seeds initial infections at t = 0, and subscribes to people becoming infectious
+/// to schedule their infection attempts.
 pub fn init(context: &mut Context) {
     // Watch for changes in the InfectiousStatusType property.
     context.subscribe_to_event(
@@ -56,6 +58,8 @@ fn seed_infections(context: &mut Context) {
     );
 }
 
+// Called when a person's infectious status changes. Only considers people becoming infectious,
+// and starts the process of scheduling their infection attempts sequentially.
 fn handle_infectious_status_change(
     context: &mut Context,
     event: PersonPropertyChangeEvent<InfectiousStatus>,
