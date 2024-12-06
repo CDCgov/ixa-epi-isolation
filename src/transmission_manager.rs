@@ -199,28 +199,37 @@ fn get_next_infection_time(
     (
         next_infection_time_unif,
         tri_vl_gi_inverse_cdf(gi_params, next_infection_time_unif)
-            - tri_vl_gi_inverse_cdf(gi_params, last_infection_time_uniform)
-            + gi_params.symptom_onset_time,
+            - tri_vl_gi_inverse_cdf(gi_params, last_infection_time_uniform),
     )
 }
 
 /// The inverse CDF of the triangle VL curve.
 fn tri_vl_gi_inverse_cdf(gi_params: TriVLParams, uniform_draw: f64) -> f64 {
-    // I calculated the start and end times for infection
-    let infection_start_time = gi_params.peak_time - gi_params.proliferation_time;
-    let infection_end_time = gi_params.clearance_time - gi_params.peak_time;
+    // I calculated the start and end times for infection.
+    // All times are relative to when the agent first ever gets infected.
+    let infection_start_time =
+        gi_params.peak_time - gi_params.proliferation_time + gi_params.symptom_onset_time;
+    let infection_end_time =
+        gi_params.peak_time + gi_params.clearance_time + gi_params.symptom_onset_time;
 
-    let integral = 0.5 * gi_params.peak_magnitude * (infection_end_time - infection_start_time);
-    let cdf_value = uniform_draw * integral;
+    let triangle_area =
+        0.5 * gi_params.peak_magnitude * (infection_end_time - infection_start_time);
+    let cdf_absolute_space = uniform_draw * triangle_area;
     let left_half_area = 0.5 * gi_params.peak_magnitude * gi_params.proliferation_time;
-
-    if cdf_value <= left_half_area {
-        let extra_time =
-            f64::sqrt(cdf_value * 2.0 * gi_params.proliferation_time / gi_params.peak_magnitude);
-        infection_start_time + extra_time
+    assert!(cdf_absolute_space <= triangle_area);
+    if cdf_absolute_space <= left_half_area {
+        let extra_time = f64::sqrt(
+            cdf_absolute_space * 2.0 * gi_params.proliferation_time / gi_params.peak_magnitude,
+        );
+        // There's one other corner case -- imagine that an agent  has a long proliferation period. Because
+        // symptom onset is independent of viral load parameters, it's possible that the agent is infectious before
+        // they become infected. For now, we manually handle this.
+        f64::max(infection_start_time + extra_time, 0.0)
     } else {
-        let time_until_end =
-            f64::sqrt(cdf_value * 2.0 * gi_params.clearance_time / gi_params.peak_magnitude);
+        let time_until_end = f64::sqrt(
+            (triangle_area - cdf_absolute_space) * 2.0 * gi_params.clearance_time
+                / gi_params.peak_magnitude,
+        );
         infection_end_time - time_until_end
     }
 }
