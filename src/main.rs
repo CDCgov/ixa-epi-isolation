@@ -42,6 +42,7 @@ fn initialize(args: &Args) -> Result<Context, IxaError> {
         .clone();
     // Set the random seed.
     context.init_random(parameters.seed);
+    parameters::make_derived_parameters(&mut context);
 
     // Set the output directory and whether to overwrite the existing file.
     context
