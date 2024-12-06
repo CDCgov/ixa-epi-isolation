@@ -3,7 +3,7 @@ use ixa::{
     ContextGlobalPropertiesExt, ContextPeopleExt, ContextRandomExt, IxaError, PersonId,
     PersonPropertyChangeEvent,
 };
-use statrs::distribution::{ContinuousCDF, Exp, Poisson};
+use statrs::distribution::Poisson;
 
 use crate::{contact::ContextContactExt, parameters::Parameters, population_loader::Alive};
 
@@ -71,6 +71,8 @@ fn handle_infectious_status_change(
         let num_infection_attempts =
             context.sample_distr(TransmissionRng, Poisson::new(r_0).unwrap()) as usize;
 
+        // Get generation interval parameters.
+        let gi_params = context.sample_natural_history(event.person_id);
         // Start scheduling infection attempt events for this person.
         // People who have num_infection_attempts = 0 are still passed through this
         // logic but don't infect anyone. This is so that so that there is only one
@@ -78,6 +80,7 @@ fn handle_infectious_status_change(
         schedule_next_infection_attempt(
             context,
             event.person_id,
+            gi_params,
             num_infection_attempts,
             // Since the agent has had no infection attempts yet,
             // they have had 0.0 of their infectious time pass.
@@ -91,6 +94,7 @@ fn handle_infectious_status_change(
 fn schedule_next_infection_attempt(
     context: &mut Context,
     transmitter_id: PersonId,
+    gi_params: TriVLParams,
     num_infection_attempts_remaining: usize,
     last_infection_time_uniform: f64,
 ) {
@@ -109,6 +113,7 @@ fn schedule_next_infection_attempt(
         context,
         num_infection_attempts_remaining,
         last_infection_time_uniform,
+        &gi_params,
     );
 
     // Schedule the infection attempt. The function `infection_attempt` (a) grabs a contact at
@@ -126,6 +131,7 @@ fn schedule_next_infection_attempt(
             schedule_next_infection_attempt(
                 context,
                 transmitter_id,
+                gi_params,
                 num_infection_attempts_remaining - 1,
                 next_infection_time_unif,
             );
@@ -139,6 +145,7 @@ fn get_next_infection_time(
     context: &mut Context,
     num_infection_attempts_remaining: usize,
     last_infection_time_uniform: f64,
+    gi_params: &TriVLParams,
 ) -> (f64, f64) {
     // Draw the next uniform infection time using order statistics.
     // The first of n draws from U(0, 1) comes from Beta(1, n), so we pass a uniform
@@ -156,22 +163,74 @@ fn get_next_infection_time(
 
     (
         next_infection_time_unif,
-        gi_inverse_cdf(context, next_infection_time_unif)
-            - gi_inverse_cdf(context, last_infection_time_uniform),
+        tri_vl_gi_inverse_cdf(next_infection_time_unif, gi_params)
+            - tri_vl_gi_inverse_cdf(last_infection_time_uniform, gi_params),
     )
 }
 
-/// The inverse CDF of the generation interval distribution.
-/// This function is used to calculate the time until the next infection attempt.
-fn gi_inverse_cdf(context: &Context, uniform_draw: f64) -> f64 {
-    let gi = context
-        .get_global_property_value(Parameters)
-        .unwrap()
-        .generation_interval;
-    // For now, we are assuming that the generation interval is given by an exponential
-    // distribution. In the future, we will switch this distribution to be specified from
-    // our isolation guidance modeling work.
-    Exp::new(1.0 / gi).unwrap().inverse_cdf(uniform_draw)
+/// The inverse CDF of the triangle VL curve defined in Kissler et al., (2023) Nat Comms.
+/// The triangle VL curve is a piecewise linear function that increases linearly
+/// over the "proliferation time" from 0 to a peak value and then decreases linearly
+/// back to 0 over the "clearance time". The peak value occurs at a peak time
+/// relative to the time of symptom onset. Although the triangle VL curve has range
+/// from (-\infty, `peak_magnitude`], we assume that an individual has no infectiousness
+/// if the curve is below 0.
+fn tri_vl_gi_inverse_cdf(uniform_draw: f64, gi_params: &TriVLParams) -> f64 {
+    // The CDF is 0 on the interval (0, infection_start_time]. Rather than returning the
+    // infection_start_time when the uniform_draw is 0, we must return 0.0. This is because we only
+    // ever call tri_vl_gi_inverse_cdf(time + dt) - tri_vl_gi_inverse_cdf(time) since we are
+    // interested in calculating the time until the next infection attempt. But, if we returned
+    // infection_start_time for time = 0, for dt --> 0, we would return a value --> 0. This means
+    // that there is no delay to the start of the infectious period. Instead, if we return 0.0
+    // for time = 0.0, for time + dt, we will return approximately infection_start_time + d(gi).
+    // For all subsequent calls of time != 0.0, tri_vl_gi_inverse_cdf(time + dt) - tri_vl_gi_inverse_cdf(time)
+    // correctly gives the time until the next infection attempt.
+    if uniform_draw == 0.0 {
+        return 0.0;
+    }
+    // I calculate the start and end times of the infectious period based on when the triangle VL
+    // curve is above zero.
+    let iso_guid_params = &gi_params.iso_guid_params;
+    let infection_start_time = iso_guid_params.peak_time - iso_guid_params.proliferation_time
+        + gi_params.symptom_onset_time;
+    let infection_end_time =
+        iso_guid_params.peak_time + iso_guid_params.clearance_time + gi_params.symptom_onset_time;
+
+    // I calculate the CDF using geometric rules of a triangle's area because it is easier for me
+    // to visualize what is going on rather than manually calculating the integral of the triangle VL
+    // curve and then inverting it.
+    let triangle_area =
+        0.5 * iso_guid_params.peak_magnitude * (infection_end_time - infection_start_time);
+    // CDFs must have unit integral, so because we are inverting the CDF, we multiply
+    // the uniform draw by the area of the triangle that we would have used to normalize
+    // its integral into a CDF.
+    let cdf_absolute_space = uniform_draw * triangle_area;
+    // Since the triangle VL curve is piecewise linear, there are two different expressions
+    // for the area depending on whether we are on the left or right side of the peak.
+    let left_half_area = 0.5 * iso_guid_params.peak_magnitude * iso_guid_params.proliferation_time;
+    if cdf_absolute_space <= left_half_area {
+        // We calculate the base of a triangle (i.e., calculating the $t$ value that lead to the
+        // observed CDF value) with area given by the CDF value assuming that the triangle starts
+        // at the infection_start_time and extends left towards the peak. We can calculate the
+        // height of the triangle by knowing that the triangle VL curve increases linearly with
+        // slope = peak_magnitude / proliferation_time. This gives us the expression
+        // A = 0.5 * t * t * peak_magnitude / proliferation_time. We solve for t:
+        let extra_time = f64::sqrt(
+            cdf_absolute_space * 2.0 * iso_guid_params.proliferation_time
+                / iso_guid_params.peak_magnitude,
+        );
+        infection_start_time + extra_time
+    } else {
+        // To make it possible to still use our triangle area approach, we consider the area remaining
+        // in the entire triangle VL curve. We want to calculate the base of that triangle because it is the time
+        // remaining until the end of the infectious period. We use the same approach as above but know
+        // that the slope of the decrease is peak_magnitude / clearance_time.
+        let time_until_end = f64::sqrt(
+            (triangle_area - cdf_absolute_space) * 2.0 * iso_guid_params.clearance_time
+                / iso_guid_params.peak_magnitude,
+        );
+        infection_end_time - time_until_end
+    }
 }
 
 /// This function is called when an infected agent has an infection event scheduled.
@@ -216,9 +275,11 @@ mod test {
     use std::{cell::RefCell, path::PathBuf, rc::Rc};
 
     use crate::{
-        parameters::{Parameters, ParametersValues},
+        parameters::{ContextParametersExt, IsolationGuidanceParams, Parameters, ParametersValues},
         population_loader::Alive,
-        transmission_manager::schedule_next_infection_attempt,
+        transmission_manager::{
+            schedule_next_infection_attempt, tri_vl_gi_inverse_cdf, TriVLParams,
+        },
     };
 
     use super::{init, InfectiousStatus, InfectiousStatusType};
@@ -226,16 +287,17 @@ mod test {
         Context, ContextGlobalPropertiesExt, ContextPeopleExt, ContextRandomExt, PersonId,
         PersonPropertyChangeEvent,
     };
-    use statrs::distribution::{ContinuousCDF, Exp};
 
     fn setup(r_0: f64) -> Context {
         let params = ParametersValues {
             max_time: 10.0,
             seed: 42,
             r_0,
-            infection_duration: 0.1,
-            generation_interval: 3.0,
+            incubation_period_shape: 1.5,
+            incubation_period_scale: 3.6,
+            growth_rate_incubation_period: 0.15,
             report_period: 1.0,
+            tri_vl_params_file: PathBuf::from("./tests/data/tri_vl_params.csv"),
             synth_population_file: PathBuf::from("."),
         };
         let mut context = Context::new();
@@ -297,6 +359,81 @@ mod test {
         );
     }
 
+    fn tri_vl_gi_cdf(time: f64, gi_params: &TriVLParams) -> f64 {
+        let iso_guid_params = &gi_params.iso_guid_params;
+        // We use the same triangle area based approach to calculate the CDF of the GI.
+        // We calculate the total area because we must normalize the CDF to have unit integral.
+        let tri_area = 0.5
+            * iso_guid_params.peak_magnitude
+            * (iso_guid_params.clearance_time + iso_guid_params.proliferation_time);
+        // Depending on whether the time is before or after the peak, we calculate the area differently.
+        let gi_cdf = if time < iso_guid_params.peak_time + gi_params.symptom_onset_time {
+            // Calculate the time from the triangle starting point to the current time.
+            let extra_time = time - iso_guid_params.peak_time + iso_guid_params.proliferation_time
+                - gi_params.symptom_onset_time;
+            // Calculate the area of the triangle that would be formed by having a base equal to the extra time
+            // and the corresponding height along the triangle VL curve.
+            0.5 * extra_time * extra_time * iso_guid_params.peak_magnitude
+                / iso_guid_params.proliferation_time
+        } else {
+            // Calculate the time remaining to the end of the infectious period (triangle crosses below 0 again).
+            let extra_time = iso_guid_params.peak_time
+                + gi_params.symptom_onset_time
+                + iso_guid_params.clearance_time
+                - time;
+            // Calculate the residual area of a triangle with base equal to the extra time and the corresponding height.
+            tri_area
+                - 0.5 * extra_time * extra_time * iso_guid_params.peak_magnitude
+                    / iso_guid_params.clearance_time
+        };
+        gi_cdf / tri_area
+    }
+
+    #[test]
+    #[allow(clippy::float_cmp)]
+    fn test_tri_vl_inverse_cdf() {
+        let gi_params = TriVLParams {
+            iso_guid_params: IsolationGuidanceParams {
+                peak_time: 1.2,
+                peak_magnitude: 8.0,
+                proliferation_time: 1.0,
+                clearance_time: 7.0,
+                symptom_improvement_time: 6.0,
+            },
+            symptom_onset_time: 5.0,
+        };
+        let iso_guid_params = &gi_params.iso_guid_params;
+        // Let's check some times to make sure that the inverse CDF is correct.
+        assert_eq!(tri_vl_gi_inverse_cdf(0.0, &gi_params), 0.0);
+        // Small values are always greater than the infection start time.
+        assert!(
+            tri_vl_gi_inverse_cdf(1e-12, &gi_params)
+                > iso_guid_params.peak_time - iso_guid_params.proliferation_time
+                    + gi_params.symptom_onset_time
+        );
+        // Infections end at the infection end time.
+        assert_eq!(
+            tri_vl_gi_inverse_cdf(1.0, &gi_params),
+            iso_guid_params.peak_time
+                + iso_guid_params.clearance_time
+                + gi_params.symptom_onset_time
+        );
+        // Inverse CDF of the CDF should give the identity function.
+        // There seems to be some numerical error here.
+        assert!(
+            (tri_vl_gi_cdf(tri_vl_gi_inverse_cdf(0.5, &gi_params), &gi_params) - 0.5).abs()
+                < f64::EPSILON
+        );
+        assert!(
+            (tri_vl_gi_cdf(tri_vl_gi_inverse_cdf(0.25, &gi_params), &gi_params) - 0.25).abs()
+                < f64::EPSILON
+        );
+        assert!(
+            (tri_vl_gi_cdf(tri_vl_gi_inverse_cdf(0.75, &gi_params), &gi_params) - 0.75).abs()
+                < f64::EPSILON
+        );
+    }
+
     #[test]
     fn test_kolmogorov_smirnov_reproduce_gi() {
         // We would like to test that our use of order statistics
@@ -307,25 +444,14 @@ mod test {
         // (empirical) distribution and the generation interval (theoretical)
         // distribution.
 
-        // We need to get some parameters out of context for comparison in the KS test.
-        // Initialize `gi`. It will always be set by the proper value from context
-        // in the for loop below.
-        let mut gi = 0.0;
         // We want an infected person to infect others, and we want to record those
         // infection times. We need to do this multiple times with different seeds
         // to get a good estimate of the distribution of infection times.
         let n: u32 = 2000;
         let infection_times = Rc::new(RefCell::new(Vec::<f64>::new()));
+        let mut gi_params: Option<TriVLParams> = None;
         for seed in 0..n {
             let mut context = setup(5.0);
-            if seed == 0 {
-                // Get the parameters we need out of context.
-                gi = context
-                    .get_global_property_value(Parameters)
-                    .unwrap()
-                    .generation_interval;
-            }
-            context.init_random(seed.into());
             // We only need two people in the population: a transmitter and a contact.
             // This is because we set the person who becomes infected back to susceptible
             // after every infection attempt below in our record_infection_times function.
@@ -335,6 +461,15 @@ mod test {
             // By having only one person in the population when we choose the transmitter, we guarantee
             // that that one person is the transmitter. This lets us keep the transmitter id, which we
             // need below.
+
+            // Initially, we set the seed to be the same across all simulations. Later, we
+            // change the seed to be different across runs. Since symptom onset time is also randomly chosen,
+            // to ensure we can compare times across runs, we need to have the same random number generator
+            // across simulations. We manually call `context.sample_natural_history` which sets the parameters
+            // for a given person, and then we can set the seed back to vary across runs.
+            context.init_random(108);
+            gi_params = Some(context.sample_natural_history(transmitter_id));
+            context.init_random(seed.into());
             init(&mut context);
             let infection_times_clone = Rc::clone(&infection_times);
             context.subscribe_to_event({
@@ -342,14 +477,14 @@ mod test {
                     record_infection_times(context, event, transmitter_id, &infection_times_clone);
                 }
             });
-            context.add_plan(0.0, move |context| {
+            context.add_plan(0.0, |context| {
                 context.add_person(()).unwrap();
             });
             context.execute();
         }
-
-        check_ks_stat(&mut infection_times.borrow_mut(), |x| {
-            Exp::new(1.0 / gi).unwrap().cdf(x)
+        let gi_params = gi_params.unwrap();
+        check_ks_stat(&mut infection_times.borrow_mut(), |time| {
+            tri_vl_gi_cdf(time, &gi_params)
         });
     }
 
@@ -380,7 +515,7 @@ mod test {
 
     #[allow(clippy::cast_precision_loss)]
     fn infection_attempts_end_time(n_attempts: usize, n_iter: u32) {
-        // Using some math, we can test that the observed time of the end of the simulation
+        // We can test that the observed time of the end of the simulation
         // is what we expect it to be given the number of infection attempts.
         // Concretely, with more infection attempts, we expect the simulation to end later.
         // In uniform space, the last infection time occurs at Beta(n_attempts, 1).
@@ -388,14 +523,19 @@ mod test {
         // using the KS test.
 
         let mut end_times = Vec::<f64>::new();
-        // In this test, the value of r_0 used to set up context is meaningless because we manually
-        // set the number of infection attempts below.
-        let context = setup(1.0);
-        let params = context
-            .get_global_property_value(Parameters)
-            .unwrap()
-            .clone();
+        let gi_params = TriVLParams {
+            iso_guid_params: IsolationGuidanceParams {
+                peak_time: 1.2,
+                peak_magnitude: 8.0,
+                proliferation_time: 1.0,
+                clearance_time: 7.0,
+                symptom_improvement_time: 6.0,
+            },
+            symptom_onset_time: 5.0,
+        };
         for seed in 0..n_iter {
+            // In this test, the value of r_0 used to set up context is meaningless because we manually
+            // set the number of infection attempts and GI params.
             let mut context = setup(1.0);
             context.init_random(seed.into());
             let transmitter_id = context.add_person(()).unwrap();
@@ -403,7 +543,13 @@ mod test {
             // Instead, `get_contact` will return None.
             let only_contact = context.add_person((Alive, false)).unwrap();
             // Schedule the infection attempts.
-            schedule_next_infection_attempt(&mut context, transmitter_id, n_attempts, 0.0);
+            schedule_next_infection_attempt(
+                &mut context,
+                transmitter_id,
+                gi_params.clone(),
+                n_attempts,
+                0.0,
+            );
             context.execute();
             end_times.push(context.get_current_time());
             assert_eq!(
@@ -418,8 +564,8 @@ mod test {
 
         // The theoretical CDF is calculated by taking the CDF of the GI
         // and passing that through the CDF of Beta(n_attempts, 1).
-        check_ks_stat(&mut end_times, |x| {
-            let gi_cdf = Exp::new(1.0 / params.generation_interval).unwrap().cdf(x);
+        check_ks_stat(&mut end_times, |time| {
+            let gi_cdf = tri_vl_gi_cdf(time, &gi_params);
             // Inverse CDF of Beta(n_attempts, 1)
             f64::powf(gi_cdf, n_attempts as f64)
         });
