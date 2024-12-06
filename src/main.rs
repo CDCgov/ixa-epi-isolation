@@ -68,7 +68,7 @@ fn initialize(args: &Args) -> Result<Context, IxaError> {
     context.index_property(CensusTract);
 
     // Initialize the person-to-person transmission workflow.
-    transmission_manager::init(&mut context);
+    transmission_manager::init(&mut context, parameters.tri_vl_params_file.clone())?;
 
     // Add a plan to shut down the simulation after `max_time`, regardless of
     // what else is happening in the model.
