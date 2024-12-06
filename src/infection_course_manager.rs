@@ -56,6 +56,11 @@ fn handle_infection_starting(
     event: PersonPropertyChangeEvent<InfectiousStatus>,
 ) {
     // Determine whether the person stays asymptomatic.
+    context.set_person_property(
+        event.person_id,
+        HealthStatus,
+        HealthStatusType::Asymptomatic,
+    );
     if context.sample_bool(
         HealthStatusRng,
         context
@@ -63,12 +68,6 @@ fn handle_infection_starting(
             .unwrap()
             .asymptomatic_probability,
     ) {
-        context.set_person_property(
-            event.person_id,
-            HealthStatus,
-            HealthStatusType::Asymptomatic,
-        );
-    } else {
         // Schedule the person to become mildly symptomatic at some point in the future.
         // Grab a random sample from our pre-calculated incubation period times.
         let incubation_time = context.sample_incubation_period_time();
