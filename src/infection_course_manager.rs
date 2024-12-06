@@ -55,12 +55,12 @@ fn handle_infection_starting(
     context: &mut Context,
     event: PersonPropertyChangeEvent<InfectiousStatus>,
 ) {
-    // Determine whether the person stays asymptomatic.
     context.set_person_property(
         event.person_id,
         HealthStatus,
         HealthStatusType::Asymptomatic,
     );
+    // Determine whether the person stays asymptomatic.
     if context.sample_bool(
         HealthStatusRng,
         context
