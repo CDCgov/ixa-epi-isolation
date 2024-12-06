@@ -1,9 +1,11 @@
 mod contact;
+mod infection_course_manager;
 mod parameters;
 mod population_loader;
 mod transmission_manager;
 
 use clap::Parser;
+use infection_course_manager::HealthStatus;
 use ixa::{
     context::Context, error::IxaError, global_properties::ContextGlobalPropertiesExt,
     people::ContextPeopleExt, random::ContextRandomExt, report::ContextReportExt,
@@ -61,6 +63,15 @@ fn initialize(args: &Args) -> Result<Context, IxaError> {
         (InfectiousStatus,),
     )?;
 
+    // Report the number of people by health status every report_period.
+    // This is the report that provides the outputs for us to actually
+    // compare to real-world observational data.
+    context.add_periodic_report(
+        "person_health_status_count",
+        parameters.report_period,
+        (HealthStatus,),
+    )?;
+
     // Load the synthetic population from the `synthetic_population_file`
     // specified in input.json.
     population_loader::init(&mut context)?;
@@ -69,6 +80,9 @@ fn initialize(args: &Args) -> Result<Context, IxaError> {
 
     // Initialize the person-to-person transmission workflow.
     transmission_manager::init(&mut context);
+
+    // Watch for people becoming infected and update their health status.
+    infection_course_manager::init(&mut context);
 
     // Add a plan to shut down the simulation after `max_time`, regardless of
     // what else is happening in the model.
