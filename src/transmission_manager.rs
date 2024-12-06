@@ -215,7 +215,7 @@ fn evaluate_transmission(context: &mut Context, contact_id: PersonId, _transmitt
 
 #[cfg(test)]
 mod test {
-    use std::path::PathBuf;
+    use std::{cell::RefCell, path::PathBuf, rc::Rc};
 
     use crate::{
         parameters::{Parameters, ParametersValues},
@@ -319,7 +319,7 @@ mod test {
         // infection times. We need to do this multiple times with different seeds
         // to get a good estimate of the distribution of infection times.
         let n: u32 = 2000;
-        let mut infection_times = Vec::<f64>::new();
+        let infection_times = Rc::new(RefCell::new(Vec::<f64>::new()));
         for seed in 0..n {
             let mut context = setup(5.0);
             if seed == 0 {
@@ -337,11 +337,12 @@ mod test {
             let transmitter_id = context.add_person(()).unwrap();
             // We add the contact to the context _after_ we choose the transmitter (happens in init).
             init(&mut context);
-            context.subscribe_to_event(
+            let infection_times_clone = Rc::clone(&infection_times);
+            context.subscribe_to_event({
                 move |context, event: PersonPropertyChangeEvent<InfectiousStatus>| {
-                    record_infection_times(context, event, transmitter_id);
-                },
-            );
+                    record_infection_times(context, event, transmitter_id, &infection_times_clone);
+                }
+            });
             context.add_plan(0.0, move |context| {
                 context.add_person(()).unwrap();
             });
@@ -365,24 +366,25 @@ mod test {
                 },
             );
             context.execute();
-            infection_times.append(context.get_data_container_mut(RecordedInfectionTimes));
         }
 
-        check_ks_stat(&mut infection_times, |x| Exp::new(1.0 / gi).unwrap().cdf(x));
+        check_ks_stat(&mut infection_times.borrow_mut(), |x| {
+            Exp::new(1.0 / gi).unwrap().cdf(x)
+        });
     }
 
     fn record_infection_times(
         context: &mut Context,
         event: PersonPropertyChangeEvent<InfectiousStatus>,
         transmitter_id: PersonId,
+        infection_times: &Rc<RefCell<Vec<f64>>>,
     ) {
         // We only want to track the infection time if the agent is getting infected.
         // We also want to make sure that we are tracking the contact, not the contact potentially
         // infecting the transmitter.
         if event.current == InfectiousStatusType::Infectious && event.person_id != transmitter_id {
             let current_time = context.get_current_time();
-            let times = context.get_data_container_mut(RecordedInfectionTimes);
-            times.push(current_time);
+            infection_times.borrow_mut().push(current_time);
             // However, we need to make sure this person stays a potential infectious contact.
             // If this person becomes infectious, we cannot guarantee that they will be infected
             // again at the next infectious time (for instance, they may have immunity).
