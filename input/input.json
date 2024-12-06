@@ -4,7 +4,7 @@
       "seed": 123,
       "r_0": 2.5,
       "asymptomatic_probability": 0.2,
-      "incubation_period": [3.6, 1.5, 0.15],
+      "incubation_period": [1.5, 3.6, 0.15],
       "hospitalization_infection_probability": 0.01,
       "time_to_hospitalization": 5.0,
       "hospitalization_duration": 10.0,

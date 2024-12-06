@@ -11,7 +11,8 @@ an individual's underlying health status from COVID-19, which is what we are mod
 are still tracked, they are labeled as `HealthStatus::Asymptomatic` when they become infectious and
 are returned to `HealthStatus::Healthy` when they recover.
 3. The remainder develop at least mild symptoms. Mild symptoms develop at some time after the agent
-first becomes infectious based on the incubation period. We use the COVID-19 incubation period
+first becomes infectious based on the incubation period. The period before mild symptoms develop
+is referred to as the `HealthStatus::Presymptomatic` phase. We use the COVID-19 incubation period
 from Park et al., (2023).
 4. Individuals who develop mild symptoms may develop severe symptoms. Those who do not develop severe
 symptoms have symptom improvement at some time afterwards symptom onset. Symptom improvement times are

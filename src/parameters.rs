@@ -80,7 +80,7 @@ pub fn make_derived_parameters(context: &mut Context) {
     let growth_rate = parameters.incubation_period[2];
     let weibull = Weibull::new(shape, scale).unwrap();
     let mut scaled_probs_incubation_period_times: Vec<f64> = linspace(0.0, 23.0, 1000)
-        .map(|x| weibull.pdf(x) * f64::exp(growth_rate * x))
+        .map(|t| weibull.pdf(t) * f64::exp(growth_rate * t))
         .collect();
     context
         .get_data_container_mut(IncubationPeriodTimes)
@@ -92,10 +92,11 @@ pub trait ContextParametersExt {
 }
 
 impl ContextParametersExt for Context {
+    #[allow(clippy::cast_precision_loss)]
     fn sample_incubation_period_time(&self) -> f64 {
         let incubation_period_times = self.get_data_container(IncubationPeriodTimes).unwrap();
-        let index = self.sample_range(IncubationPeriodRng, 0..incubation_period_times.len());
-        incubation_period_times[index]
+        let index = self.sample_weighted(IncubationPeriodRng, incubation_period_times);
+        index as f64 / incubation_period_times.len() as f64 * 23.0
     }
 }
 
