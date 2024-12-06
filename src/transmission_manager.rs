@@ -354,26 +354,6 @@ mod test {
             context.add_plan(0.0, move |context| {
                 context.add_person(()).unwrap();
             });
-            // Finally, we need to have one more event handler to manage the contact's recovery.
-            // Even though we are setting the contact's `InfectiousStatus` back to susceptible, there is an event
-            // generated when their status changes to infectious each time. This event triggers the rest of the infectious
-            // course because in `init` we handle a person becoming infectious with `handle_person_infectious_status_change`.
-            // This chain of logic ends in the person being labeled as recovered. If they are labeled as recovered,
-            // they cannot get infected and we do not record their infection time again. So, we need to revert
-            // recovery.
-            context.subscribe_to_event(
-                move |context, event: PersonPropertyChangeEvent<InfectiousStatus>| {
-                    if event.current == InfectiousStatusType::Recovered
-                        && event.person_id != transmitter_id
-                    {
-                        context.set_person_property(
-                            event.person_id,
-                            InfectiousStatus,
-                            InfectiousStatusType::Susceptible,
-                        );
-                    }
-                },
-            );
             context.execute();
         }
 
@@ -395,26 +375,9 @@ mod test {
             if event.current == InfectiousStatusType::Infectious {
                 let current_time = context.get_current_time();
                 infection_times.borrow_mut().push(current_time);
-                // However, we need to make sure this person stays a potential infectious contact.
-                // If this person becomes infectious, we cannot guarantee that they will be infected
-                // again at the next infectious time (for instance, they may have immunity).
-                // So, if we try to infect them again, nothing will happen and we won't observe the
-                // infection time. This is more likely to happen as there are more infections, so this
-                // would negatively bias our estimates of the GI.
-                context.set_person_property(
-                    event.person_id,
-                    InfectiousStatus,
-                    InfectiousStatusType::Susceptible,
-                );
             }
-            // Finally, we need to have one more event handler to manage the contact's recovery.
-            // Even though we are setting the contact's `InfectiousStatus` back to susceptible, there is an event
-            // generated when their status changes to infectious each time. This event triggers the rest of the infectious
-            // course because in `init` we handle a person becoming infectious with `handle_person_infectious_status_change`.
-            // This chain of logic ends in the person being labeled as recovered. If they are labeled as recovered,
-            // they cannot get infected and we do not record their infection time again. So, we need to revert
-            // recovery.
-            if event.current == InfectiousStatusType::Recovered {
+            // However, we need to make sure this person stays a potential infectious contact.
+            if event.current != event.previous {
                 context.set_person_property(
                     event.person_id,
                     InfectiousStatus,
