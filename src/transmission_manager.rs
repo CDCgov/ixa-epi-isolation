@@ -64,6 +64,7 @@ fn handle_infectious_status_change(
     // We don't care about the other transitions here, but this function will still be triggered
     // because it watches for any change in InfectiousStatusType.
     if event.current == InfectiousStatusType::Infectious {
+        assert_eq!(event.previous, InfectiousStatusType::Susceptible);
         // Get the number of infection attempts this person will have.
         let r_0 = context.get_global_property_value(Parameters).unwrap().r_0;
         #[allow(clippy::cast_possible_truncation)]
@@ -219,13 +220,13 @@ mod test {
     use crate::{
         parameters::{Parameters, ParametersValues},
         population_loader::Alive,
-        transmission_manager::{handle_infectious_status_change, schedule_next_infection_attempt},
+        transmission_manager::schedule_next_infection_attempt,
     };
 
     use super::{init, InfectiousStatus, InfectiousStatusType};
     use ixa::{
         context::Context, define_data_plugin, global_properties::ContextGlobalPropertiesExt,
-        people::ContextPeopleExt, random::ContextRandomExt, PersonPropertyChangeEvent,
+        people::ContextPeopleExt, random::ContextRandomExt, PersonId, PersonPropertyChangeEvent,
     };
     use statrs::distribution::{ContinuousCDF, Exp};
 
@@ -317,63 +318,77 @@ mod test {
         // We want an infected person to infect others, and we want to record those
         // infection times. We need to do this multiple times with different seeds
         // to get a good estimate of the distribution of infection times.
-        let n: u32 = 1000;
+        let n: u32 = 2000;
         let mut infection_times = Vec::<f64>::new();
         for seed in 0..n {
             let mut context = setup(5.0);
             if seed == 0 {
                 // Get the parameters we need out of context.
-                let context = setup(5.0);
                 gi = context
                     .get_global_property_value(Parameters)
                     .unwrap()
                     .generation_interval;
             }
             context.init_random(seed.into());
-            // We only need one other person because we set them back to susceptible
-            // after every infection attempt (when we record the infection time).
-            context.add_person(()).unwrap();
-            // This will become our infectious person.
-            let infectious_id = context.add_person(()).unwrap();
-            // Manually set up the logic for when a person becomes infectious
-            // so that we can record the infection times.
-            // We also don't want to trigger secondary infections.
-            let event = PersonPropertyChangeEvent::<InfectiousStatus> {
-                person_id: infectious_id,
-                current: InfectiousStatusType::Infectious,
-                previous: InfectiousStatusType::Susceptible,
-            };
+            // We only need two people in the population: a transmitter and a contact.
+            // This is because we set the person who becomes infected back to susceptible
+            // after every infection attempt below in our record_infection_times function.
+            // This lets the transmitter repetively infect this person.
+            let transmitter_id = context.add_person(()).unwrap();
+            // We add the contact to the context _after_ we choose the transmitter (happens in init).
+            init(&mut context);
             context.subscribe_to_event(
-                |context, event: PersonPropertyChangeEvent<InfectiousStatus>| {
-                    record_infection_times(context, event);
+                move |context, event: PersonPropertyChangeEvent<InfectiousStatus>| {
+                    record_infection_times(context, event, transmitter_id);
                 },
             );
-            handle_infectious_status_change(&mut context, event);
+            context.add_plan(0.0, move |context| {
+                context.add_person(()).unwrap();
+            });
+            // Finally, we need one more helper function. The contact experiences a full infectious course.
+            // Even though we are setting their `InfectiousStatus` back to susceptible, there is an event
+            // generated when their status changes to infectious. This event triggers the rest of the infectious
+            // course, which ends in the person being labeled as recovered. If they are labeled as recovered,
+            // they cannot get infected and we do not record their infection time again. So, we need to revert
+            // recovery.
+            context.subscribe_to_event(
+                move |context, event: PersonPropertyChangeEvent<InfectiousStatus>| {
+                    if event.current == InfectiousStatusType::Recovered
+                        && event.person_id != transmitter_id
+                    {
+                        context.set_person_property(
+                            event.person_id,
+                            InfectiousStatus,
+                            InfectiousStatusType::Susceptible,
+                        );
+                    }
+                },
+            );
             context.execute();
             infection_times.append(context.get_data_container_mut(RecordedInfectionTimes));
         }
 
-        check_ks_stat(
-            &mut infection_times,
-            |x| Exp::new(1.0 / gi).unwrap().cdf(x),
-            n,
-        );
+        check_ks_stat(&mut infection_times, |x| Exp::new(1.0 / gi).unwrap().cdf(x));
     }
 
     fn record_infection_times(
         context: &mut Context,
         event: PersonPropertyChangeEvent<InfectiousStatus>,
+        transmitter_id: PersonId,
     ) {
         // We only want to track the infection time if the agent is getting infected.
-        if event.current == InfectiousStatusType::Infectious {
+        // We also want to make sure that we are tracking the contact, not the contact potentially
+        // infecting the transmitter.
+        if event.current == InfectiousStatusType::Infectious && event.person_id != transmitter_id {
             let current_time = context.get_current_time();
             let times = context.get_data_container_mut(RecordedInfectionTimes);
             times.push(current_time);
             // However, we need to make sure this person stays a potential infectious contact.
-            // Here's why: if this person becomes infectious, they cannot get re-infected.
+            // If this person becomes infectious, we cannot guarantee that they will be infected
+            // again at the next infectious time (for instance, they may have immunity).
             // So, if we try to infect them again, nothing will happen and we won't observe the
             // infection time. This is more likely to happen as there are more infections, so this
-            // results in our estimates of the GI being negatively biased.
+            // would negatively bias our estimates of the GI.
             context.set_person_property(
                 event.person_id,
                 InfectiousStatus,
@@ -422,18 +437,14 @@ mod test {
 
         // The theoretical CDF is calculated by taking the CDF of the GI
         // and passing that through the CDF of Beta(n_attempts, 1).
-        check_ks_stat(
-            &mut end_times,
-            |x| {
-                let gi_cdf = Exp::new(1.0 / params.generation_interval).unwrap().cdf(x);
-                // Inverse CDF of Beta(n_attempts, 1)
-                f64::powf(gi_cdf, n_attempts as f64)
-            },
-            n_iter,
-        );
+        check_ks_stat(&mut end_times, |x| {
+            let gi_cdf = Exp::new(1.0 / params.generation_interval).unwrap().cdf(x);
+            // Inverse CDF of Beta(n_attempts, 1)
+            f64::powf(gi_cdf, n_attempts as f64)
+        });
     }
 
-    fn check_ks_stat(times: &mut [f64], theoretical_cdf: impl Fn(f64) -> f64, n: u32) {
+    fn check_ks_stat(times: &mut [f64], theoretical_cdf: impl Fn(f64) -> f64) {
         // Sort the empirical times to make an empirical CDF.
         times.sort_by(|a, b| a.partial_cmp(b).unwrap());
 
@@ -450,14 +461,13 @@ mod test {
             .reduce(f64::max)
             .unwrap();
 
-        // For the KS test at alpha = 0.03, the critical value is ~1.44 / sqrt(n).
-        assert!(ks_stat < 1.44 / f64::sqrt(f64::from(n)));
+        assert!(ks_stat < 0.01);
     }
 
     #[test]
     fn test_variable_number_of_infection_attempts() {
-        infection_attempts_end_time(1, 1000);
-        infection_attempts_end_time(2, 1000);
-        infection_attempts_end_time(3, 5000);
+        infection_attempts_end_time(1, 10000);
+        infection_attempts_end_time(2, 10000);
+        infection_attempts_end_time(3, 10000);
     }
 }
