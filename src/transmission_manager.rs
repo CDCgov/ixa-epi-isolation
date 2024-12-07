@@ -201,8 +201,8 @@ fn get_next_infection_time(
 
     (
         next_infection_time_unif,
-        tri_vl_gi_inverse_cdf(gi_params, next_infection_time_unif)
-            - tri_vl_gi_inverse_cdf(gi_params, last_infection_time_uniform),
+        tri_vl_gi_inverse_cdf(next_infection_time_unif, gi_params)
+            - tri_vl_gi_inverse_cdf(last_infection_time_uniform, gi_params),
     )
 }
 
@@ -213,7 +213,7 @@ fn get_next_infection_time(
 /// relative to the time of symptom onset. Although the triangle VL curve has range
 /// from (-\infty, `peak_magnitude`], we assume that an individual has no infectiousness
 /// if the curve is below 0.
-fn tri_vl_gi_inverse_cdf(gi_params: TriVLParams, uniform_draw: f64) -> f64 {
+fn tri_vl_gi_inverse_cdf(uniform_draw: f64, gi_params: TriVLParams) -> f64 {
     // The CDF is 0 on the interval (0, infection_start_time]. Rather than returning the
     // infection_start_time when the uniform_draw is 0, we must return 0.0. This is because we only
     // ever call tri_vl_gi_inverse_cdf(time + dt) - tri_vl_gi_inverse_cdf(time) since we are
@@ -311,7 +311,9 @@ mod test {
     use crate::{
         parameters::{Parameters, ParametersValues},
         population_loader::Alive,
-        transmission_manager::{schedule_next_infection_attempt, TriVLParams},
+        transmission_manager::{
+            schedule_next_infection_attempt, tri_vl_gi_inverse_cdf, TriVLParams,
+        },
     };
 
     use super::{init, load_tri_vl_params, InfectiousStatus, InfectiousStatusType};
@@ -393,7 +395,7 @@ mod test {
         );
     }
 
-    fn tri_vl_gi_cdf(time: f64, gi_params: &TriVLParams) -> f64 {
+    fn tri_vl_gi_cdf(time: f64, gi_params: TriVLParams) -> f64 {
         // We use the same triangle area based approach to calculate the CDF of the GI.
         // We calculate the total area because we must normalize the CDF to have unit integral.
         let tri_area = 0.5
@@ -418,6 +420,45 @@ mod test {
                     / gi_params.clearance_time
         };
         gi_cdf / tri_area
+    }
+
+    #[test]
+    #[allow(clippy::float_cmp)]
+    fn test_tri_vl_inverse_cdf() {
+        let gi_params = TriVLParams {
+            peak_time: 1.2,
+            peak_magnitude: 8.0,
+            proliferation_time: 1.0,
+            clearance_time: 7.0,
+            symptom_improvement_time: 6.0,
+            symptom_onset_time: 5.0,
+        };
+        // Let's check some times to make sure that the inverse CDF is correct.
+        assert_eq!(tri_vl_gi_inverse_cdf(0.0, gi_params), 0.0);
+        // Small values are always greater than the infection start time.
+        assert!(
+            tri_vl_gi_inverse_cdf(1e-12, gi_params)
+                > gi_params.peak_time - gi_params.proliferation_time + gi_params.symptom_onset_time
+        );
+        // Infections end at the infection end time.
+        assert_eq!(
+            tri_vl_gi_inverse_cdf(1.0, gi_params),
+            gi_params.peak_time + gi_params.clearance_time + gi_params.symptom_onset_time
+        );
+        // Inverse CDF of the CDF should give the identity function.
+        // There seems to be some numerical error here.
+        assert!(
+            (tri_vl_gi_cdf(tri_vl_gi_inverse_cdf(0.5, gi_params), gi_params) - 0.5).abs()
+                < f64::EPSILON
+        );
+        assert!(
+            (tri_vl_gi_cdf(tri_vl_gi_inverse_cdf(0.25, gi_params), gi_params) - 0.25).abs()
+                < f64::EPSILON
+        );
+        assert!(
+            (tri_vl_gi_cdf(tri_vl_gi_inverse_cdf(0.75, gi_params), gi_params) - 0.75).abs()
+                < f64::EPSILON
+        );
     }
 
     #[test]
@@ -543,7 +584,7 @@ mod test {
         // The theoretical CDF is calculated by taking the CDF of the GI
         // and passing that through the CDF of Beta(n_attempts, 1).
         check_ks_stat(&mut end_times, |x| {
-            let gi_cdf = tri_vl_gi_cdf(x, &gi_params);
+            let gi_cdf = tri_vl_gi_cdf(x, gi_params);
             // Inverse CDF of Beta(n_attempts, 1)
             f64::powf(gi_cdf, n_attempts as f64)
         });
