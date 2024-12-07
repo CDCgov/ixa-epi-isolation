@@ -230,8 +230,8 @@ mod test {
 
     use super::{init, InfectiousStatus, InfectiousStatusType};
     use ixa::{
-        context::Context, define_data_plugin, global_properties::ContextGlobalPropertiesExt,
-        people::ContextPeopleExt, random::ContextRandomExt, PersonId, PersonPropertyChangeEvent,
+        context::Context, global_properties::ContextGlobalPropertiesExt, people::ContextPeopleExt,
+        random::ContextRandomExt, PersonId, PersonPropertyChangeEvent,
     };
     use statrs::distribution::{ContinuousCDF, Exp};
 
@@ -303,8 +303,6 @@ mod test {
             InfectiousStatusType::Recovered
         );
     }
-
-    define_data_plugin!(RecordedInfectionTimes, Vec<f64>, Vec::<f64>::new());
 
     #[test]
     fn test_kolmogorov_smirnov_reproduce_gi() {
