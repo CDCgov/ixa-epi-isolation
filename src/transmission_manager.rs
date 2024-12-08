@@ -172,10 +172,10 @@ fn get_next_infection_time(
     )
 }
 
-/// The inverse CDF of the triangle VL curve.
+/// The inverse CDF of the triangle VL curve defined in Kissler et al., (2023) Nat Comms.
 /// The triangle VL curve is a piecewise linear function that increases linearly
-/// over the proliferation time from 0 to a peak value and then decreases linearly
-/// back to 0 over the clearance time. The peak value occurs at a peak time which is
+/// over the "proliferation time" from 0 to a peak value and then decreases linearly
+/// back to 0 over the "clearance time". The peak value occurs at a peak time
 /// relative to the time of symptom onset. Although the triangle VL curve has range
 /// from (-\infty, `peak_magnitude`], we assume that an individual has no infectiousness
 /// if the curve is below 0.
@@ -295,7 +295,9 @@ mod test {
             max_time: 10.0,
             seed: 42,
             r_0,
-            incubation_period: [1.5, 3.6, 0.15],
+            incubation_period_shape: 1.5,
+            incubation_period_scale: 3.6,
+            growth_rate_incubation_period: 0.15,
             report_period: 1.0,
             tri_vl_params_file: PathBuf::from("./tests/data/tri_vl_params.csv"),
             synth_population_file: PathBuf::from("."),
