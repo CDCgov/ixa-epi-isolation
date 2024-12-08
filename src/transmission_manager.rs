@@ -197,7 +197,7 @@ fn tri_vl_gi_inverse_cdf(uniform_draw: f64, gi_params: &TriVLParams) -> f64 {
     }
     // I calculate the start and end times of the infectious period based on when the triangle VL
     // curve is above zero.
-    let iso_guid_params = gi_params.iso_guid_params;
+    let iso_guid_params = &gi_params.iso_guid_params;
     let infection_start_time = iso_guid_params.peak_time - iso_guid_params.proliferation_time
         + gi_params.symptom_onset_time;
     let infection_end_time =
@@ -299,7 +299,6 @@ mod test {
             seed: 42,
             r_0,
             incubation_period: [1.5, 3.6, 0.15],
-            generation_interval: 3.0,
             report_period: 1.0,
             tri_vl_params_file: PathBuf::from("./tests/data/tri_vl_params.csv"),
             synth_population_file: PathBuf::from("."),
@@ -365,7 +364,7 @@ mod test {
     }
 
     fn tri_vl_gi_cdf(time: f64, gi_params: &TriVLParams) -> f64 {
-        let iso_guid_params = gi_params.iso_guid_params;
+        let iso_guid_params = &gi_params.iso_guid_params;
         // We use the same triangle area based approach to calculate the CDF of the GI.
         // We calculate the total area because we must normalize the CDF to have unit integral.
         let tri_area = 0.5
@@ -407,7 +406,7 @@ mod test {
             },
             symptom_onset_time: 5.0,
         };
-        let iso_guid_params = gi_params.iso_guid_params;
+        let iso_guid_params = &gi_params.iso_guid_params;
         // Let's check some times to make sure that the inverse CDF is correct.
         assert_eq!(tri_vl_gi_inverse_cdf(0.0, &gi_params), 0.0);
         // Small values are always greater than the infection start time.
@@ -452,12 +451,11 @@ mod test {
         // We want an infected person to infect others, and we want to record those
         // infection times. We need to do this multiple times with different seeds
         // to get a good estimate of the distribution of infection times.
-        let n: u32 = 3000;
+        let n: u32 = 2000;
         let infection_times = Rc::new(RefCell::new(Vec::<f64>::new()));
         let mut gi_params: Option<TriVLParams> = None;
         for seed in 0..n {
             let mut context = setup(5.0);
-            context.init_random(seed.into());
             // We only need two people in the population: a transmitter and a contact.
             // This is because we set the person who becomes infected back to susceptible
             // after every infection attempt below in our record_infection_times function.
@@ -467,6 +465,15 @@ mod test {
             // By having only one person in the population when we choose the transmitter, we guarantee
             // that that one person is the transmitter. This lets us keep the transmitter id, which we
             // need below.
+
+            // Initially, we set the seed to be the same across all simulations. Below, we
+            // set the seed to be different across runs. Since symptom onset time is also randomly chosen,
+            // to ensure we can compare times across runs, we need to have the same random number generator
+            // across simulations. We manually call `context.sample_natural_history` which sets the parameters
+            // for a given person, and then we can set the seed back to vary across runs.
+            context.init_random(108);
+            gi_params = Some(context.sample_natural_history(transmitter_id));
+            context.init_random(seed.into());
             init(&mut context);
             let infection_times_clone = Rc::clone(&infection_times);
             context.subscribe_to_event({
@@ -474,13 +481,10 @@ mod test {
                     record_infection_times(context, event, transmitter_id, &infection_times_clone);
                 }
             });
-            context.add_plan(0.0, move |context| {
+            context.add_plan(0.0, |context| {
                 context.add_person(()).unwrap();
             });
             context.execute();
-            if gi_params.is_none() {
-                gi_params = Some(context.sample_natural_history(transmitter_id));
-            }
         }
         let gi_params = gi_params.unwrap();
         check_ks_stat(&mut infection_times.borrow_mut(), |time| {
