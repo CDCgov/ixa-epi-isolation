@@ -13,17 +13,35 @@ pub struct ParametersValues {
     pub seed: u64,
     pub r_0: f64,
     pub incubation_period: [f64; 3],
-    pub generation_interval: f64,
     pub report_period: f64,
     pub synth_population_file: PathBuf,
     pub tri_vl_params_file: PathBuf,
     pub population_periodic_report: String,
 }
 
+fn validate_inputs(parameters: &ParametersValues) -> Result<(), IxaError> {
+    if parameters.r_0 < 0.0 {
+        return Err(IxaError::IxaError(
+            "r_0 must be a non-negative number.".to_string(),
+        ));
+    }
+    if parameters.incubation_period[0] <= 0.0 {
+        return Err(IxaError::IxaError(
+            "The incubation period scale must be positive.".to_string(),
+        ));
+    }
+    if parameters.incubation_period[1] <= 0.0 {
+        return Err(IxaError::IxaError(
+            "The incubation period shape must be positive.".to_string(),
+        ));
+    }
+    Ok(())
+}
+
 define_rng!(NHParametersRng);
 
 #[allow(dead_code)]
-#[derive(Debug, Clone, Copy, Deserialize)]
+#[derive(Debug, Clone, Deserialize, PartialEq)]
 pub struct IsolationGuidanceParams {
     pub peak_time: f64,
     pub peak_magnitude: f64,
@@ -32,7 +50,7 @@ pub struct IsolationGuidanceParams {
     pub symptom_improvement_time: f64,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct TriVLParams {
     pub iso_guid_params: IsolationGuidanceParams,
     pub symptom_onset_time: f64,
@@ -80,6 +98,8 @@ fn load_isolation_guidance_params(context: &Context) -> Vec<IsolationGuidancePar
 }
 
 #[allow(clippy::cast_precision_loss)]
+#[allow(clippy::cast_possible_truncation)]
+#[allow(clippy::cast_sign_loss)]
 fn assemble_natural_history_params(
     context: &mut Context,
     iso_guid_params: Vec<IsolationGuidanceParams>,
@@ -105,13 +125,16 @@ fn assemble_natural_history_params(
         // on symptom onset times.
         let min_symptom_onset_time =
             -(iso_guid_param_set.peak_time - iso_guid_param_set.proliferation_time);
-        let mut symptom_onset_time_sampled = min_symptom_onset_time;
-        while symptom_onset_time_sampled < min_symptom_onset_time {
-            symptom_onset_time_sampled =
-                (context.sample_weighted(NHParametersRng, &prob_incubation_period_times) as f64)
-                    * 23.0
-                    / 1000.0;
-        }
+        // Truncate the distribution to only consider values greater than the minimum symptom onset time.
+        // Do this by calculating the index of the minimum symptom onset time in the distribution.
+        let min_idx = (f64::ceil(f64::max(min_symptom_onset_time * 1000.0 / 23.0, 0.0))) as usize;
+        let symptom_onset_time_sampled = (context
+            .sample_weighted(NHParametersRng, &prob_incubation_period_times[min_idx..])
+            as f64)
+            * 23.0
+            / 1000.0
+            + min_symptom_onset_time;
+        assert!(symptom_onset_time_sampled >= min_symptom_onset_time);
         context
             .get_data_container_mut(NaturalHistory)
             .push(TriVLParams {
@@ -121,30 +144,18 @@ fn assemble_natural_history_params(
     }
 }
 
-fn validate_inputs(parameters: &ParametersValues) -> Result<(), IxaError> {
-    if parameters.r_0 < 0.0 {
-        return Err(IxaError::IxaError(
-            "r_0 must be a non-negative number.".to_string(),
-        ));
-    }
-    if parameters.generation_interval <= 0.0 {
-        return Err(IxaError::IxaError(
-            "The generation interval must be positive.".to_string(),
-        ));
-    }
-    Ok(())
-}
-
 define_global_property!(Parameters, ParametersValues, validate_inputs);
 
 #[cfg(test)]
 mod test {
-    use ixa::error::IxaError;
+    use ixa::{
+        error::IxaError, Context, ContextGlobalPropertiesExt, ContextPeopleExt, ContextRandomExt,
+    };
 
-    use super::validate_inputs;
+    use super::{validate_inputs, Parameters};
     use std::path::PathBuf;
 
-    use crate::parameters::ParametersValues;
+    use crate::parameters::{ContextParametersExt, ParametersValues};
 
     #[test]
     fn test_validate_r_0() {
@@ -153,7 +164,6 @@ mod test {
             seed: 0,
             r_0: -1.0,
             incubation_period: [1.5, 3.6, 0.15],
-            generation_interval: 5.0,
             report_period: 1.0,
             tri_vl_params_file: PathBuf::from("."),
             synth_population_file: PathBuf::from("."),
@@ -172,22 +182,36 @@ mod test {
     }
 
     #[test]
-    fn test_validate_gi() {
+    fn test_assemble_nh_params() {
+        // Do we get the same value for the same person in two separate contexts?
+        let mut context1 = Context::new();
+        let mut context2 = Context::new();
         let parameters = ParametersValues {
             max_time: 100.0,
-            seed: 0,
-            r_0: 2.5,
+            seed: 108,
+            r_0: 2.0,
             incubation_period: [1.5, 3.6, 0.15],
-            generation_interval: 0.0,
             report_period: 1.0,
-            tri_vl_params_file: PathBuf::from("."),
+            tri_vl_params_file: PathBuf::from("./tests/data/tri_vl_params.csv"),
             synth_population_file: PathBuf::from("."),
         };
-        let e = validate_inputs(&parameters).err();
-        match e {
-            Some(IxaError::IxaError(msg)) => assert_eq!(msg, "The generation interval must be positive.".to_string()),
-            Some(ue) => panic!("Expected an error that the generation interval validation should fail. Instead got {:?}", ue.to_string()),
-            None => panic!("Expected an error. Instead, validation passed with no errors."),
-        }
+        context1.init_random(108);
+        context2.init_random(108);
+        context1
+            .set_global_property_value(Parameters, parameters.clone())
+            .unwrap();
+        context2
+            .set_global_property_value(Parameters, parameters.clone())
+            .unwrap();
+        let person1 = context1.add_person(()).unwrap();
+        let person2 = context2.add_person(()).unwrap();
+
+        let nh_sample1 = context1.sample_natural_history(person1);
+        let nh_sample2 = context2.sample_natural_history(person2);
+        assert_eq!(nh_sample1, nh_sample2);
+
+        // These values should not change when run again.
+        assert_eq!(nh_sample1, context1.sample_natural_history(person1));
+        assert_eq!(nh_sample2, context2.sample_natural_history(person2));
     }
 }
