@@ -11,7 +11,7 @@ ggplot2::theme_set(ggplot2::theme_classic())
 
 infectious_report <- readr::read_csv(file.path(
   "output",
-  "person_infectious_count.csv"
+  "person_property_count.csv"
 ))
 
 ## ===============================#
