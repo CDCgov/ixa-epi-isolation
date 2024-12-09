@@ -40,6 +40,8 @@ fn validate_inputs(parameters: &ParametersValues) -> Result<(), IxaError> {
     Ok(())
 }
 
+define_global_property!(Parameters, ParametersValues, validate_inputs);
+
 define_rng!(NHParametersRng);
 
 #[allow(dead_code)]
@@ -82,16 +84,8 @@ impl ContextParametersExt for Context {
             nh[usize::try_from(idx).unwrap() % nh.len()].clone()
         } else {
             // Build the natural history dataset as it has not been queried before.
-            // Read in the isolation guidance parameters from the specified input file.
-            let path = &self
-                .get_global_property_value(Parameters)
-                .unwrap()
-                .tri_vl_params_file;
-            let iso_guid_params = load_isolation_guidance_params(path)
+            make_derived_parameters(self)
                 .expect("Error reading isolation guidance parameters from specified input file.");
-            // Assemble a vector of natural history parameters by also sampling symptom onset times
-            // conditioned on the isolation guidance parameters.
-            assemble_natural_history_params(self, iso_guid_params);
             // Now actually query a natural history for this person.
             self.sample_natural_history(person_id)
         }
@@ -168,7 +162,19 @@ fn assemble_natural_history_params(
     }
 }
 
-define_global_property!(Parameters, ParametersValues, validate_inputs);
+/// Read in input natural history parameter inputs and assemble valid parameter sets.
+pub fn make_derived_parameters(context: &mut Context) -> Result<(), IxaError> {
+    // Read in the isolation guidance parameters from the specified input file.
+    let path = &context
+        .get_global_property_value(Parameters)
+        .unwrap()
+        .tri_vl_params_file;
+    let iso_guid_params = load_isolation_guidance_params(path)?;
+    // Assemble a vector of natural history parameters by also sampling symptom onset times
+    // conditioned on the isolation guidance parameters.
+    assemble_natural_history_params(context, iso_guid_params);
+    Ok(())
+}
 
 #[cfg(test)]
 mod test {
