@@ -12,7 +12,9 @@ pub struct ParametersValues {
     pub max_time: f64,
     pub seed: u64,
     pub r_0: f64,
-    pub incubation_period: [f64; 3],
+    pub incubation_period_shape: f64,
+    pub incubation_period_scale: f64,
+    pub growth_rate_incubation_period: f64,
     pub report_period: f64,
     pub synth_population_file: PathBuf,
     pub tri_vl_params_file: PathBuf,
@@ -25,12 +27,12 @@ fn validate_inputs(parameters: &ParametersValues) -> Result<(), IxaError> {
             "r_0 must be a non-negative number.".to_string(),
         ));
     }
-    if parameters.incubation_period[0] <= 0.0 {
+    if parameters.incubation_period_shape <= 0.0 {
         return Err(IxaError::IxaError(
             "The incubation period scale must be positive.".to_string(),
         ));
     }
-    if parameters.incubation_period[1] <= 0.0 {
+    if parameters.incubation_period_scale <= 0.0 {
         return Err(IxaError::IxaError(
             "The incubation period shape must be positive.".to_string(),
         ));
@@ -128,16 +130,17 @@ fn assemble_natural_history_params(
     // This function is exactly what's plotted in Fig 2b of that paper.
     // Concretely, it is a Weibull distribution times an exponential growth curve.
     let parameters = context.get_global_property_value(Parameters).unwrap();
-    let shape = parameters.incubation_period[0];
-    let scale = parameters.incubation_period[1];
-    let growth_rate = parameters.incubation_period[2];
-    let weibull = Weibull::new(shape, scale).unwrap();
+    let weibull = Weibull::new(
+        parameters.incubation_period_shape,
+        parameters.incubation_period_scale,
+    )
+    .unwrap();
     let prob_incubation_period_times: Vec<f64> = (0..1000)
         .map(|t| {
             // Rescale the t values to be on the range of incubation times.
             // Looking at the density, NNH uses a max value of 23.0.
             let t = (f64::from(t)) * 23.0 / 1000.0;
-            weibull.pdf(t) * f64::exp(growth_rate * t)
+            weibull.pdf(t) * f64::exp(parameters.growth_rate_incubation_period * t)
         })
         .collect();
     for iso_guid_param_set in iso_guid_params {
@@ -184,7 +187,9 @@ mod test {
             max_time: 100.0,
             seed: 0,
             r_0: -1.0,
-            incubation_period: [1.5, 3.6, 0.15],
+            incubation_period_shape: 1.5,
+            incubation_period_scale: 3.6,
+            growth_rate_incubation_period: 0.15,
             report_period: 1.0,
             tri_vl_params_file: PathBuf::from("."),
             synth_population_file: PathBuf::from("."),
@@ -212,7 +217,9 @@ mod test {
             max_time: 100.0,
             seed: 108,
             r_0: 2.0,
-            incubation_period: [1.5, 3.6, 0.15],
+            incubation_period_shape: 1.5,
+            incubation_period_scale: 3.6,
+            growth_rate_incubation_period: 0.15,
             report_period: 1.0,
             tri_vl_params_file: PathBuf::from("./tests/data/tri_vl_params.csv"),
             synth_population_file: PathBuf::from("."),
