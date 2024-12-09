@@ -3,17 +3,17 @@
 ## Motivation
 
 Many epidemiological studies have shown that infectiousness varies widely over the course
-of the individual's infection. Agent-based models (ABMs) are able to simulate events
-that occur from any underlying probability distribution. We detail the process for sampling
-an arbitrary number of infection attempts appropriately from an arbitrary infectiousness curve.
+of the individual's infection. We detail the process for sampling an arbitrary number of
+infection attempts appropriately from an arbitrary infectiousness curve in an agent-based model (ABM).
 We describe an approach that provides great generalizability, enabling sampling when both the
-underlying contact rate and infectiousness distribution change. We motivate our discussion with a
-simple example of an infectious person who becomes hospitalized and takes an antiviral partially
-through their infection.
+underlying contact rate and infectiousness distribution change over the course of an infection.
+We motivate our discussion with a simple example of an infectious person who takes an
+antiviral partially through their infection and is hospitalized.
 
 ## Assumptions
 
-1. We describe the approach for the uniform distribution from zero to one -- $\mathcal{U}(0, 1)$.
+1. We describe the approach for sampling from an arbitrary infectiousness dsitribution for the uniform
+distribution from zero to one -- $\mathcal{U}(0, 1)$.
     - Using [inverse transform sampling](https://en.wikipedia.org/wiki/inverse_transform_sampling), a
 uniformly-distributed random variable can be transformed to any distribution by passing samples through
 the inverse cumulative distribution function (CDF).
@@ -73,9 +73,7 @@ distribution. Consider that we draw the first infection attempt time from $\beta
 We need to take that into account when drawing the second infection attempt time. The second infection
 attempt time must be greater than the first, so we cannot just draw from $\beta(2, 6)$ but rather $\beta(2, 6) | x_{(1)}$.
 
-We can consider that the second infection time is not independent from the first, the third not independent from
-the first and the second, etc. by rephrasing the problem. Once we have taken our first infection attempt, $x_{(1)}$,
-we know that any subsequent infection attempt times must be greater. We can set $x_{(1)}$ as the minimum of a new uniform
+We can set $x_{(1)}$ as the minimum of a new uniform
 distribution, $\mathcal{U}(x_{(1)}, 1)$, from which we need to draw an infection attempt. Because this is a new distribution,
 we want the first of $n - 1$ infection attempt times on this distribution. We can do that by drawing the
 minimum of $n - 1$ infection attempts from $\mathcal{U}(0, 1)$, and scaling that value to be on $(x_{(1)}, 1)$.
@@ -103,11 +101,7 @@ and schedule the next infection attempt at the specified time. Wait until that t
 proceeding.
 
     The result of passing the uniform time through the GI's inverse CDF is the time _since_ the agent first become
-infectious at which the given $n$th infection attempt occurs. To determine the amount of time _elapsed_ until the next
-infection attempt, given that the agent is currently at their $(n - 1)$th infection attempt, schedule the next infection
-attempt to occur in how much ever time remains until that infection attempt from the last attempt. In other words, subtract
-the calculated time from the time since the agent became infectious of the current infection attempt, and schedule the next
-infection attempt to occur in that much time.
+infectious at which the given $n$th infection attempt occurs.
 
 5. Repeat from step two until $m = 0$.
 
@@ -130,14 +124,14 @@ If we had pre-scheduled all infections, we would have had to store the plan IDs 
 remove it from the vector, so that the entry for each `PersonId` tells us the plans we have _left_ for a given
 person. Then, when the agent dies, we could iterate through the remaining plans and cancel them.
 
-Clearly, this is computationally onerous and cumbersome, requiring us to store a `HashMap` and iterate
+Clearly, this is cumbersome, requiring us to store a `HashMap` and iterate
 through a vector every time an infection attempt occurs. Alternatively, if we scheduled infection events
 sequentially, we would only have to store the next infection attempt time. We could instead use a
 `HashMap<PersonId, PlanId>`, removing the need to iterate through a vector and instead enabling us to
 directly use the `.insert` method on the `HashMap`.
 
 More generally, this idea applies to any case where we need to change the number of infection attempts
-part way through an infection course. Sequentially scheduling the attempts makes it possible to accomodate
+partway through an infection course. Sequentially scheduling the attempts makes it possible to accomodate
 changes to the number of infection attempts that may happen in the middle of an infection course.
 
 Why not just check whether the agent is alive or not at the beginning of the infection attempt? If they are
@@ -161,29 +155,20 @@ the generation interval. We can use [rejection sampling](https://en.wikipedia.or
 In this case, we still sample infection attempt times from the pre-antiviral infectiousness distribution, and
 we accept those sampled times as actual infection attempts with probability $a(t) / g(t)$ where $a(t)$ is the
 post-antiviral infectiousness distribution and $g(t)$ is the underlying pre-antiviral infectiousness
-distribution. Note that $a(t)$ and $g(t)$ must be on an absolute scale in this example and not scaled to have
-a unit integral. In the case where they are scaled, $g(t)$ can be rescaled to be $Mg(t)$ where $M = \max a(t)$.
+distribution.
 
 However, rejection sampling is inherently inefficient. It requires that we draw plans at a faster rate than events
 actually happen, and then we need to evaluate at the time of the plan whether we mean for something to actually
-happen. Nevertheless, there are ways to improve efficiency. So far, we have focused on the trivial case for making
-the sampling rate faster than the event rate: sampling at the maximum event rate, so that $s(t) = 1$ and $M = \max g(t)$. If
-$g_i(t) << \max g(t)$ for nearly all $t$ (i.e., a disease where infectiousness is highly concentrated around a given time
-or a case where there is significant per-person variability in when an agent has their maximum infectiousness), this is
-particularly inefficient because we are rejecting the majority of samples. Instead, we may try making our proposal
-distribution better fit our underlying distribution. We may make $s(t)$ a similar linear approximation for $g(t)$.
+happen. Nevertheless, there are ways to improve efficiency. The trivial case of drawing plans at a faster rate
+than events actually happen is to use the maximum event rate as the sampling rate for all $t$. But, if the
+actual event rate is much smaller than the maximum for nearly all $t$, (i.e., a disease where infectiousness is highly
+concentrated around a specific time or $a(t) << g(t)$), this is particularly inefficient because we are rejecting the majority of samples. Instead, we may try making our proposal distribution better fit our underlying distribution by making it, say, a linear approximation of $a(t)$.
 
 This approach is only possible if we sequentially sample infection attempts. If we sample all
-infection attempts at the beginning of an agent's infection, we are locked into using a singular sampling rate. This
-is by definition because we have sampled all attempts at once at the beginning of the infection course. Instead, we
-want to update our sampling rate as we go throughout the infection course to best follow the generation interval
-(whether we exactly follow the generation interval and don't use rejection sampling or still use a proposal distribution
-is irrelevant). To update our sampling rate, we must sequentially sample infection attempts, calculating
-the optimal sampling rate at each infection attempt. Thus, sequential sampling enables us to most generally model a
-generation interval or infectiousness distribution that may change over the course of an agent's infection in a non
-pre-defined way.
+infection attempts at the beginning of an agent's infection, we are locked into using a singular sampling rate. Thus,
+sequential sampling enables us to most generally model a generation interval or infectiousness distribution
+that may change over the course of an agent's infection in a non pre-defined way.
 
 These examples underscore that sequentially sampling infection attempts rather than pre-scheduling enables
 the modeler to consider changes in both the contact rate and the generation interval without needing to change
-the transmission model. To this end, by sequentially sampling, we provide a modular transmission model that is
-truly disentangled from the contact network and interventions present.
+the transmission model.
