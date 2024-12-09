@@ -76,7 +76,7 @@ fn handle_infectious_status_change(
         let num_infection_attempts =
             context.sample_distr(TransmissionRng, Poisson::new(r_0).unwrap()) as usize;
 
-        // Assign generation interval parameters.
+        // Get generation interval parameters.
         let gi_params = context.sample_natural_history(event.person_id);
         // Start scheduling infection attempt events for this person.
         // People who have num_infection_attempts = 0 are still passed through this
@@ -203,33 +203,35 @@ fn tri_vl_gi_inverse_cdf(uniform_draw: f64, gi_params: &TriVLParams) -> f64 {
     let infection_end_time =
         iso_guid_params.peak_time + iso_guid_params.clearance_time + gi_params.symptom_onset_time;
 
-    // I calculate the CDF using triangle area to make it easy and obvious to visualize how
-    // we calculate the CDF rather than manually calculating the integral of the triangle VL
+    // I calculate the CDF using geometric rules of a triangle's area because it is easier for me
+    // to visualize what is going on rather than manually calculating the integral of the triangle VL
     // curve and then inverting it.
     let triangle_area =
         0.5 * iso_guid_params.peak_magnitude * (infection_end_time - infection_start_time);
     // CDFs must have unit integral, so because we are inverting the CDF, we multiply
     // the uniform draw by the area of the triangle that we would have used to normalize
-    // it into a CDF.
+    // its integral into a CDF.
     let cdf_absolute_space = uniform_draw * triangle_area;
     // Since the triangle VL curve is piecewise linear, there are two different expressions
     // for the area depending on whether we are on the left or right side of the peak.
     let left_half_area = 0.5 * iso_guid_params.peak_magnitude * iso_guid_params.proliferation_time;
     if cdf_absolute_space <= left_half_area {
-        // We calculate the base of a triangle with area given by the CDF value
-        // assuming that the triangle starts at the infection_start_time and extends
-        // towards the peak. We can calculate the height of the triangle by knowing that the
-        // triangle VL curve increases linearly with slope peak_magnitude / proliferation_time.
+        // We calculate the base of a triangle (i.e., calculating the $t$ value that lead to the
+        // observed CDF value) with area given by the CDF value assuming that the triangle starts
+        // at the infection_start_time and extends left towards the peak. We can calculate the
+        // height of the triangle by knowing that the triangle VL curve increases linearly with
+        // slope = peak_magnitude / proliferation_time. This gives us the expression
+        // A = 0.5 * t * t * peak_magnitude / proliferation_time. We solve for t:
         let extra_time = f64::sqrt(
             cdf_absolute_space * 2.0 * iso_guid_params.proliferation_time
                 / iso_guid_params.peak_magnitude,
         );
         infection_start_time + extra_time
     } else {
-        // To make the triangle area calculation easy, we consider the area remaining in the triangle.
-        // We want to calculate the base of that triangle as the time remaining until the end of the
-        // infectious period. We use the same approach as above but know that the slope of the decrease
-        // is -peak_magnitude / clearance_time.
+        // To make it possible to still use our triangle area approach, we consider the area remaining
+        // in the entire triangle VL curve. We want to calculate the base of that triangle because it is the time
+        // remaining until the end of the infectious period. We use the same approach as above but know
+        // that the slope of the decrease is peak_magnitude / clearance_time.
         let time_until_end = f64::sqrt(
             (triangle_area - cdf_absolute_space) * 2.0 * iso_guid_params.clearance_time
                 / iso_guid_params.peak_magnitude,
@@ -372,7 +374,7 @@ mod test {
         let tri_area = 0.5
             * iso_guid_params.peak_magnitude
             * (iso_guid_params.clearance_time + iso_guid_params.proliferation_time);
-        // If the time is before the peak...
+        // Depending on whether the time is before or after the peak, we calculate the area differently.
         let gi_cdf = if time < iso_guid_params.peak_time + gi_params.symptom_onset_time {
             // Calculate the time from the triangle starting point to the current time.
             let extra_time = time - iso_guid_params.peak_time + iso_guid_params.proliferation_time
@@ -468,8 +470,8 @@ mod test {
             // that that one person is the transmitter. This lets us keep the transmitter id, which we
             // need below.
 
-            // Initially, we set the seed to be the same across all simulations. Below, we
-            // set the seed to be different across runs. Since symptom onset time is also randomly chosen,
+            // Initially, we set the seed to be the same across all simulations. Later, we
+            // change the seed to be different across runs. Since symptom onset time is also randomly chosen,
             // to ensure we can compare times across runs, we need to have the same random number generator
             // across simulations. We manually call `context.sample_natural_history` which sets the parameters
             // for a given person, and then we can set the seed back to vary across runs.
@@ -529,8 +531,6 @@ mod test {
         // using the KS test.
 
         let mut end_times = Vec::<f64>::new();
-        // In this test, the value of r_0 used to set up context is meaningless because we manually
-        // set the number of infection attempts below.
         let gi_params = TriVLParams {
             iso_guid_params: IsolationGuidanceParams {
                 peak_time: 1.2,
@@ -542,6 +542,8 @@ mod test {
             symptom_onset_time: 5.0,
         };
         for seed in 0..n_iter {
+            // In this test, the value of r_0 used to set up context is meaningless because we manually
+            // set the number of infection attempts and GI params.
             let mut context = setup(1.0);
             context.init_random(seed.into());
             let transmitter_id = context.add_person(()).unwrap();

@@ -1,6 +1,8 @@
-use std::hash::{DefaultHasher, Hasher};
-use std::path::PathBuf;
-use std::{fmt::Debug, hash::Hash};
+use std::{
+    fmt::Debug,
+    hash::{DefaultHasher, Hash, Hasher},
+    path::PathBuf,
+};
 
 use ixa::{define_data_plugin, define_global_property, error::IxaError, Context, PersonId};
 use ixa::{define_rng, ContextGlobalPropertiesExt, ContextRandomExt};
@@ -29,12 +31,12 @@ fn validate_inputs(parameters: &ParametersValues) -> Result<(), IxaError> {
     }
     if parameters.incubation_period_shape <= 0.0 {
         return Err(IxaError::IxaError(
-            "The incubation period scale must be positive.".to_string(),
+            "The incubation period shape parameter must be positive.".to_string(),
         ));
     }
     if parameters.incubation_period_scale <= 0.0 {
         return Err(IxaError::IxaError(
-            "The incubation period shape must be positive.".to_string(),
+            "The incubation period scale parameter must be positive.".to_string(),
         ));
     }
     Ok(())
@@ -44,7 +46,6 @@ define_global_property!(Parameters, ParametersValues, validate_inputs);
 
 define_rng!(NHParametersRng);
 
-#[allow(dead_code)]
 #[derive(Debug, Clone, Deserialize, PartialEq)]
 pub struct IsolationGuidanceParams {
     pub peak_time: f64,
@@ -76,6 +77,14 @@ impl ContextParametersExt for Context {
         // If the natural history dataset has already been built, just query it.
         if let Some(nh) = self.get_data_container(NaturalHistory) {
             // Query a set of natural history parameters for this person.
+            // We require that we return the same natural history dataset for a given person because
+            // we need the natural history parameters multiple times in different modules, so we need
+            // to call this function multiple times for the same person. As a result, we use the hash of
+            // the person ID to pick a person-specific index from the dataframe.
+            // Note that one unintended consequence of this setup for now is that the person's natural
+            // history parameters would not change if they were to get reinfected.
+            // In the future, we could add the number of previous infections to the hash of the person ID
+            // when we get the actual parameter set.
             let mut hasher = DefaultHasher::new();
             person_id.hash(&mut hasher);
             let idx = hasher.finish();
@@ -84,6 +93,9 @@ impl ContextParametersExt for Context {
             nh[usize::try_from(idx).unwrap() % nh.len()].clone()
         } else {
             // Build the natural history dataset as it has not been queried before.
+            // This only happens in the tests for the transmission manager where
+            // we do not call `make_derived_parameters` (we cannot access this function in another module)
+            // prior to calling `sample_natural_history`.
             make_derived_parameters(self)
                 .expect("Error reading isolation guidance parameters from specified input file.");
             // Now actually query a natural history for this person.
@@ -133,6 +145,9 @@ fn assemble_natural_history_params(
         .map(|t| {
             // Rescale the t values to be on the range of incubation times.
             // Looking at the density, NNH uses a max value of 23.0.
+            // Because we place a constraint on symptom onset times to make them
+            // valid based on the siolation guidance parameters, by truncating this distribution
+            // at 23.0 days, we are automatically rejecting some potential parameter sets.
             let t = (f64::from(t)) * 23.0 / 1000.0;
             weibull.pdf(t) * f64::exp(parameters.growth_rate_incubation_period * t)
         })
@@ -142,23 +157,28 @@ fn assemble_natural_history_params(
         // on symptom onset times.
         let min_symptom_onset_time =
             -(iso_guid_param_set.peak_time - iso_guid_param_set.proliferation_time);
-        // Truncate the distribution to only consider values greater than the minimum symptom onset time.
-        // Do this by calculating the index of the minimum symptom onset time in the distribution, and then
-        // sampling from the distribution starting at that index.
-        let min_idx = (f64::ceil(f64::max(min_symptom_onset_time * 1000.0 / 23.0, 0.0))) as usize;
-        let symptom_onset_time_sampled_idx =
-            context.sample_weighted(NHParametersRng, &prob_incubation_period_times[min_idx..]);
-        // Convert the sampled index back to a time value, accounting for the truncation of the distribution which really shifted
-        // all of our indices by the minimum symptom onset time.
-        let symptom_onset_time_sampled =
-            (symptom_onset_time_sampled_idx as f64) * 23.0 / 1000.0 + min_symptom_onset_time;
-        assert!(symptom_onset_time_sampled >= min_symptom_onset_time);
-        context
-            .get_data_container_mut(NaturalHistory)
-            .push(TriVLParams {
-                iso_guid_params: iso_guid_param_set,
-                symptom_onset_time: symptom_onset_time_sampled,
-            });
+        // Because we truncate the distribution at 23.0 days, we are implicitly rejecting parameter
+        // sets that would require symptom onset times to be greater than 23 days.
+        if min_symptom_onset_time < 23.0 - (23.0 / 1000.0) {
+            // Truncate the distribution to only consider values greater than the minimum symptom onset time.
+            // Do this by calculating the index of the minimum symptom onset time in the distribution, and then
+            // sampling from the distribution starting at that index.
+            let min_idx =
+                (f64::ceil(f64::max(min_symptom_onset_time * 1000.0 / 23.0, 0.0))) as usize;
+            let symptom_onset_time_sampled_idx =
+                context.sample_weighted(NHParametersRng, &prob_incubation_period_times[min_idx..]);
+            // Convert the sampled index back to a time value, accounting for the truncation of the distribution which
+            // really shifted all of our indices by the minimum symptom onset time.
+            let symptom_onset_time_sampled =
+                (symptom_onset_time_sampled_idx as f64) * 23.0 / 1000.0 + min_symptom_onset_time;
+            assert!(symptom_onset_time_sampled >= min_symptom_onset_time);
+            context
+                .get_data_container_mut(NaturalHistory)
+                .push(TriVLParams {
+                    iso_guid_params: iso_guid_param_set,
+                    symptom_onset_time: symptom_onset_time_sampled,
+                });
+        }
     }
 }
 
