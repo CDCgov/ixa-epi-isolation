@@ -23,6 +23,6 @@ infectious_report |>
   group_by(t, InfectiousStatus) |>
   summarise(count = sum(count), .groups = "drop") |>
   ggplot(aes(x = t, y = count)) +
-  geom_line(aes(color =InfectiousStatus)) +
+  geom_line(aes(color = InfectiousStatus)) +
   xlab("Day") +
   ylab("Number of people")
