@@ -8,7 +8,6 @@
       "growth_rate_incubation_period": 0.15,
       "report_period": 1.0,
       "synth_population_file": "input/people_test.csv",
-      "tri_vl_params_file": "input/tri_vl_params.csv",
-      "population_periodic_report": "people_report.csv"
+      "tri_vl_params_file": "input/tri_vl_params.csv"
     }
 }
