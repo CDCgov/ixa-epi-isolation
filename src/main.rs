@@ -47,18 +47,12 @@ fn initialize(args: &Args) -> Result<Context, IxaError> {
         .directory(PathBuf::from(&args.output_directory))
         .overwrite(args.force_overwrite);
 
-    // Report the number of people by age and census tract every report_period.
+    // Report the number of people by age, census tract, and infectious status
+    // every report_period.
     context.add_periodic_report(
-        "person_demographics_count",
+        "person_property_count",
         parameters.report_period,
-        (Age, CensusTract),
-    )?;
-
-    // Report the number of people by infectious status every report_period.
-    context.add_periodic_report(
-        "person_infectious_count",
-        parameters.report_period,
-        (InfectiousStatus,),
+        (Age, CensusTract, InfectiousStatus),
     )?;
 
     // Load the synthetic population from the `synthetic_population_file`
