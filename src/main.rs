@@ -41,6 +41,9 @@ fn initialize(args: &Args) -> Result<Context, IxaError> {
     // Set the random seed.
     context.init_random(parameters.seed);
 
+    // Make the derived natural history parameter sets.
+    parameters::make_derived_parameters(&mut context)?;
+
     // Set the output directory and whether to overwrite the existing file.
     context
         .report_options()
