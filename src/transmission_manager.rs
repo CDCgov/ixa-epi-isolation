@@ -213,7 +213,6 @@ mod test {
             generation_interval: 3.0,
             report_period: 1.0,
             synth_population_file: PathBuf::from("."),
-            population_periodic_report: String::new(),
         };
         let mut context = Context::new();
         context.init_random(params.seed);
