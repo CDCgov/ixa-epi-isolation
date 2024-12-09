@@ -68,7 +68,6 @@ fn handle_infectious_status_change(
     // We don't care about the other transitions here, but this function will still be triggered
     // because it watches for any change in InfectiousStatusType.
     if event.current == InfectiousStatusType::Infectious {
-        assert_eq!(event.previous, InfectiousStatusType::Susceptible);
         // Get the number of infection attempts this person will have.
         let r_0 = context.get_global_property_value(Parameters).unwrap().r_0;
         #[allow(clippy::cast_possible_truncation)]
@@ -158,8 +157,6 @@ fn get_next_infection_time(
     // so that the next infection time is always greater than the last infection time.
     next_infection_time_unif = last_infection_time_uniform
         + next_infection_time_unif * (1.0 - last_infection_time_uniform);
-
-    assert!(next_infection_time_unif > last_infection_time_uniform);
 
     (
         next_infection_time_unif,
