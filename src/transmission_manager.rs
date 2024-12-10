@@ -8,9 +8,9 @@ use ixa::{
 };
 use statrs::distribution::{ContinuousCDF, Exp, Poisson};
 
+use crate::intervention_manager::ContextInterventionExt;
 use crate::parameters::Parameters;
 use crate::{contact::ContextContactExt, population_loader::Alive};
-use crate::intervention_manager::ContextInterventionExt;
 
 // Define the possible infectious statuses for a person.
 // These states refer to the person's infectiousness at a given time
@@ -185,7 +185,8 @@ fn evaluate_transmission(context: &mut Context, contact_id: PersonId, transmitte
         let relative_infectiousness = context.query_relative_transmission(transmitter_id);
         let relative_risk = context.query_relative_transmission(contact_id);
         let relative_transmission = relative_infectiousness * relative_risk;
-        let transmission_success = context.sample_range(TransmissionRng, 0.0..1.0) < relative_transmission;
+        let transmission_success =
+            context.sample_range(TransmissionRng, 0.0..1.0) < relative_transmission;
 
         // Set the contact to infectious with probability additive relative transmission.
         if transmission_success {

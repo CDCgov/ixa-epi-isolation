@@ -1,12 +1,6 @@
-use ixa::{
-    Context, 
-    define_rng
-};
+use crate::intervention_manager::{ContextInterventionExt, FacemaskStatusType};
 use crate::transmission_manager::InfectiousStatusType;
-use crate::intervention_manager::{
-    ContextInterventionExt, 
-    FacemaskStatusType
-};
+use ixa::{define_rng, Context};
 
 define_rng!(TransmissionRng);
 
