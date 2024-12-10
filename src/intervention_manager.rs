@@ -71,6 +71,7 @@ mod test {
     use ixa::{people::ContextPeopleExt, Context};
 
     #[test]
+    #[allow(clippy::float_cmp)]
     fn test_query_relative_transmission() {
         let mut context = Context::new();
         let contact_id = context.add_person(()).unwrap();

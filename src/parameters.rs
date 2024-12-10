@@ -12,6 +12,7 @@ pub struct ParametersValues {
     pub infection_duration: f64,
     pub generation_interval: f64,
     pub report_period: f64,
+    pub masking_rate: f64,
     pub synth_population_file: PathBuf,
 }
 
@@ -49,6 +50,7 @@ mod test {
             infection_duration: 5.0,
             generation_interval: 5.0,
             report_period: 1.0,
+            masking_rate: 0.0,
             synth_population_file: PathBuf::from("."),
         };
         let e = validate_inputs(&parameters).err();
@@ -73,6 +75,7 @@ mod test {
             infection_duration: 5.0,
             generation_interval: 0.0,
             report_period: 1.0,
+            masking_rate: 0.0,
             synth_population_file: PathBuf::from("."),
         };
         let e = validate_inputs(&parameters).err();
