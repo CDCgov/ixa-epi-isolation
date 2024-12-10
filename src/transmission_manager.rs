@@ -4,13 +4,9 @@ use ixa::{
 };
 use statrs::distribution::{ContinuousCDF, Exp, Poisson};
 
-<<<<<<< HEAD
-use crate::{contact::ContextContactExt, parameters::Parameters, population_loader::Alive};
-=======
 use crate::parameters::Parameters;
 use crate::{contact::ContextContactExt, population_loader::Alive};
 use crate::intervention_manager::ContextInterventionExt;
->>>>>>> 884f0bc (Added facemask mgr mod to main)
 
 // Define the possible infectious statuses for a person.
 // These states refer to the person's infectiousness at a given time

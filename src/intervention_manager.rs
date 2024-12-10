@@ -80,11 +80,7 @@ mod test {
             FacemaskStatusType::Wearing,
             0.5,
         );
-        context.set_person_property(
-            contact_id, 
-            FacemaskStatus, 
-            FacemaskStatusType::Wearing
-        );
+        context.set_person_property(contact_id, FacemaskStatus, FacemaskStatusType::Wearing);
         let relative_transmission = context.query_relative_transmission(contact_id);
 
         assert_eq!(relative_transmission, 0.5);
