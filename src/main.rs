@@ -2,6 +2,7 @@ mod contact;
 mod parameters;
 mod population_loader;
 mod transmission_manager;
+mod intervention_manager;
 
 use clap::Parser;
 use ixa::{
