@@ -31,6 +31,8 @@ define_person_property_with_default!(
     InfectiousStatusType::Susceptible
 );
 
+/// Seeds initial infections at t = 0, and subscribes to people becoming infectious
+/// to schedule their infection attempts.
 pub fn init(context: &mut Context) {
     // Watch for changes in the InfectiousStatusType property.
     context.subscribe_to_event(
@@ -56,6 +58,8 @@ fn seed_infections(context: &mut Context) {
     );
 }
 
+// Called when a person's infectious status changes. Only considers people becoming infectious,
+// and starts the process of scheduling their infection attempts sequentially.
 fn handle_infectious_status_change(
     context: &mut Context,
     event: PersonPropertyChangeEvent<InfectiousStatus>,
@@ -105,8 +109,11 @@ fn schedule_next_infection_attempt(
     }
 
     // Get the next infection attempt time.
-    let (next_infection_time_unif, time_until_next_infection_attempt_gi) =
-        get_next_infection_time(context, last_infection_time_uniform);
+    let (next_infection_time_unif, time_until_next_infection_attempt_gi) = get_next_infection_time(
+        context,
+        num_infection_attempts_remaining,
+        last_infection_time_uniform,
+    );
 
     // Schedule the infection attempt. The function `infection_attempt` (a) grabs a contact at
     // the time of the infection event to ensure that the contacts are current and (b) evaluates
@@ -132,23 +139,43 @@ fn schedule_next_infection_attempt(
 
 /// Calculate the next infection time. Draws an increasing value of a uniform distribution
 /// and passes it through the inverse CDF of the generation interval to get the next infection time.
-fn get_next_infection_time(context: &mut Context, last_infection_time_uniform: f64) -> (f64, f64) {
-    // FOR NOW, we are using placeholder math to guarantee the infection times are always increasing.
-    // This is not order statistics. This will be corrected at a later time.
-    let next_infection_time_unif =
-        context.sample_range(TransmissionRng, last_infection_time_uniform..1.0);
+fn get_next_infection_time(
+    context: &mut Context,
+    num_infection_attempts_remaining: usize,
+    last_infection_time_uniform: f64,
+) -> (f64, f64) {
+    // Draw the next uniform infection time using order statistics.
+    // The first of n draws from U(0, 1) comes from Beta(1, n), so we pass a uniform
+    // draw through the inverse CDF of Beta(1, n) to get the minimum time.
+    #[allow(clippy::cast_precision_loss)]
+    let mut next_infection_time_unif = 1.0
+        - f64::powf(
+            context.sample_range(TransmissionRng, 0.0..1.0),
+            1.0 / num_infection_attempts_remaining as f64,
+        );
+    // We scale the uniform draw to be on the interval (last_infection_time_uniform, 1)
+    // so that the next infection time is always greater than the last infection time.
+    next_infection_time_unif = last_infection_time_uniform
+        + next_infection_time_unif * (1.0 - last_infection_time_uniform);
 
-    // In the future, we will generalize the use of an exponential distribution to
-    // an arbitrary distribution with a defined inverse CDF.
+    (
+        next_infection_time_unif,
+        gi_inverse_cdf(context, next_infection_time_unif)
+            - gi_inverse_cdf(context, last_infection_time_uniform),
+    )
+}
+
+/// The inverse CDF of the generation interval distribution.
+/// This function is used to calculate the time until the next infection attempt.
+fn gi_inverse_cdf(context: &Context, uniform_draw: f64) -> f64 {
     let gi = context
         .get_global_property_value(Parameters)
         .unwrap()
         .generation_interval;
-    let next_infection_time_gi = Exp::new(1.0 / gi)
-        .unwrap()
-        .inverse_cdf(next_infection_time_unif);
-
-    (next_infection_time_unif, next_infection_time_gi)
+    // For now, we are assuming that the generation interval is given by an exponential
+    // distribution. In the future, we will switch this distribution to be specified from
+    // our isolation guidance modeling work.
+    Exp::new(1.0 / gi).unwrap().inverse_cdf(uniform_draw)
 }
 
 /// This function is called when an infected agent has an infection event scheduled.
@@ -190,7 +217,7 @@ fn evaluate_transmission(context: &mut Context, contact_id: PersonId, _transmitt
 
 #[cfg(test)]
 mod test {
-    use std::path::PathBuf;
+    use std::{cell::RefCell, path::PathBuf, rc::Rc};
 
     use crate::{
         parameters::{Parameters, ParametersValues},
@@ -201,8 +228,9 @@ mod test {
     use super::{init, InfectiousStatus, InfectiousStatusType};
     use ixa::{
         context::Context, global_properties::ContextGlobalPropertiesExt, people::ContextPeopleExt,
-        random::ContextRandomExt,
+        random::ContextRandomExt, PersonId, PersonPropertyChangeEvent,
     };
+    use statrs::distribution::{ContinuousCDF, Exp};
 
     fn setup(r_0: f64) -> Context {
         let params = ParametersValues {
@@ -273,15 +301,97 @@ mod test {
         );
     }
 
+    #[test]
+    fn test_kolmogorov_smirnov_reproduce_gi() {
+        // We would like to test that our use of order statistics
+        // has not changed the distribution of the generation interval.
+        // We do this by recording the infection times and then comparing to
+        // the generation interval distribution. We use the Kolmogorov-Smirnov
+        // test (KS test) to compare the two distributions the infection times
+        // (empirical) distribution and the generation interval (theoretical)
+        // distribution.
+
+        // We need to get some parameters out of context for comparison in the KS test.
+        // Initialize `gi`. It will always be set by the proper value from context
+        // in the for loop below.
+        let mut gi = 0.0;
+        // We want an infected person to infect others, and we want to record those
+        // infection times. We need to do this multiple times with different seeds
+        // to get a good estimate of the distribution of infection times.
+        let n: u32 = 2000;
+        let infection_times = Rc::new(RefCell::new(Vec::<f64>::new()));
+        for seed in 0..n {
+            let mut context = setup(5.0);
+            if seed == 0 {
+                // Get the parameters we need out of context.
+                gi = context
+                    .get_global_property_value(Parameters)
+                    .unwrap()
+                    .generation_interval;
+            }
+            context.init_random(seed.into());
+            // We only need two people in the population: a transmitter and a contact.
+            // This is because we set the person who becomes infected back to susceptible
+            // after every infection attempt below in our record_infection_times function.
+            // This lets the transmitter repetively infect this person.
+            let transmitter_id = context.add_person(()).unwrap();
+            // We add the contact to the context _after_ we choose the transmitter (happens in init).
+            // By having only one person in the population when we choose the transmitter, we guarantee
+            // that that one person is the transmitter. This lets us keep the transmitter id, which we
+            // need below.
+            init(&mut context);
+            let infection_times_clone = Rc::clone(&infection_times);
+            context.subscribe_to_event({
+                move |context, event: PersonPropertyChangeEvent<InfectiousStatus>| {
+                    record_infection_times(context, event, transmitter_id, &infection_times_clone);
+                }
+            });
+            context.add_plan(0.0, move |context| {
+                context.add_person(()).unwrap();
+            });
+            context.execute();
+        }
+
+        check_ks_stat(&mut infection_times.borrow_mut(), |x| {
+            Exp::new(1.0 / gi).unwrap().cdf(x)
+        });
+    }
+
+    fn record_infection_times(
+        context: &mut Context,
+        event: PersonPropertyChangeEvent<InfectiousStatus>,
+        transmitter_id: PersonId,
+        infection_times: &Rc<RefCell<Vec<f64>>>,
+    ) {
+        // We want to make sure that we are tracking the contact, not the contact potentially
+        // infecting the transmitter.
+        if event.person_id != transmitter_id {
+            // We only want to track the infection time if the agent is getting infected.
+            if event.current == InfectiousStatusType::Infectious {
+                let current_time = context.get_current_time();
+                infection_times.borrow_mut().push(current_time);
+            }
+            // However, we need to make sure this person stays a potential infectious contact.
+            if event.current != event.previous {
+                context.set_person_property(
+                    event.person_id,
+                    InfectiousStatus,
+                    InfectiousStatusType::Susceptible,
+                );
+            }
+        }
+    }
+
     #[allow(clippy::cast_precision_loss)]
-    fn variable_number_of_infection_attempts(n_attempts: usize, n_iter: i32) {
+    fn infection_attempts_end_time(n_attempts: usize, n_iter: u32) {
         // Using some math, we can test that the observed time of the end of the simulation
         // is what we expect it to be given the number of infection attempts.
+        // Concretely, with more infection attempts, we expect the simulation to end later.
+        // In uniform space, the last infection time occurs at Beta(n_attempts, 1).
+        // We can observe the end time for many iterations of n_attempts infections and compare
+        // using the KS test.
 
-        // In our current naive implementation, the expected end time of the simulation is
-        // the sum of the exponential inverse_cdf evaluated at each draw of the uniform distribution.
-
-        let mut sum_end_times = 0.0;
+        let mut end_times = Vec::<f64>::new();
         // In this test, the value of r_0 used to set up context is meaningless because we manually
         // set the number of infection attempts below.
         let context = setup(1.0);
@@ -291,7 +401,7 @@ mod test {
             .clone();
         for seed in 0..n_iter {
             let mut context = setup(1.0);
-            context.init_random(seed.try_into().unwrap());
+            context.init_random(seed.into());
             let transmitter_id = context.add_person(()).unwrap();
             // Create a person who will be the only contact, but have them be dead so they can't be infected.
             // Instead, `get_contact` will return None.
@@ -299,7 +409,7 @@ mod test {
             // Schedule the infection attempts.
             schedule_next_infection_attempt(&mut context, transmitter_id, n_attempts, 0.0);
             context.execute();
-            sum_end_times += context.get_current_time();
+            end_times.push(context.get_current_time());
             assert_eq!(
                 context.get_person_property(transmitter_id, InfectiousStatus),
                 InfectiousStatusType::Recovered
@@ -310,17 +420,39 @@ mod test {
             );
         }
 
-        // Expected time elapsed comes from the memorylessness of the exponential distribution.
-        let expected_time_elapsed =
-            params.generation_interval * (n_attempts as f64) * ((n_attempts as f64) + 1.0) / 2.0;
+        // The theoretical CDF is calculated by taking the CDF of the GI
+        // and passing that through the CDF of Beta(n_attempts, 1).
+        check_ks_stat(&mut end_times, |x| {
+            let gi_cdf = Exp::new(1.0 / params.generation_interval).unwrap().cdf(x);
+            // Inverse CDF of Beta(n_attempts, 1)
+            f64::powf(gi_cdf, n_attempts as f64)
+        });
+    }
 
-        assert!(((sum_end_times / f64::from(n_iter)) - expected_time_elapsed).abs() < 0.1);
+    fn check_ks_stat(times: &mut [f64], theoretical_cdf: impl Fn(f64) -> f64) {
+        // Sort the empirical times to make an empirical CDF.
+        times.sort_by(|a, b| a.partial_cmp(b).unwrap());
+
+        // KS stat is the maximum observed CDF deviation.
+        let ks_stat = times
+            .iter()
+            .enumerate()
+            .map(|(i, time)| {
+                #[allow(clippy::cast_precision_loss)]
+                let empirical_cdf_value = (i as f64) / (times.len() as f64);
+                let theoretical_cdf_value = theoretical_cdf(*time);
+                (empirical_cdf_value - theoretical_cdf_value).abs()
+            })
+            .reduce(f64::max)
+            .unwrap();
+
+        assert!(ks_stat < 0.01);
     }
 
     #[test]
     fn test_variable_number_of_infection_attempts() {
-        variable_number_of_infection_attempts(1, 1000);
-        variable_number_of_infection_attempts(2, 1000);
-        variable_number_of_infection_attempts(3, 5000);
+        infection_attempts_end_time(1, 10000);
+        infection_attempts_end_time(2, 10000);
+        infection_attempts_end_time(3, 10000);
     }
 }
