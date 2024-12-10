@@ -40,6 +40,7 @@
 !input/people_test.csv
 !input/tri_vl_params.csv
 !tests/data/tri_vl_params.csv
+!tests/data/tri_vl_params_bad.csv
 
 #####
 # Python

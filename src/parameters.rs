@@ -95,8 +95,9 @@ impl ContextParametersExt for Context {
             // This only happens in the tests for the transmission manager where
             // we do not call `make_derived_parameters` (we cannot access this function in another module)
             // prior to calling `sample_natural_history`.
-            make_derived_parameters(self)
-                .expect("Error reading isolation guidance parameters from specified input file.");
+            make_derived_parameters(self).expect(
+                "Error assembling isolation guidance parameters from specified input file.",
+            );
             // Now actually query a natural history for this person.
             self.sample_natural_history(person_id)
         }
@@ -129,7 +130,7 @@ fn load_isolation_guidance_params(
 fn assemble_natural_history_params(
     context: &mut Context,
     iso_guid_params: Vec<IsolationGuidanceParams>,
-) {
+) -> Result<(), IxaError> {
     // We also need the incubation period distribution.
     // We use the COVID-19 incubation distribution from Park et al. (2023) PNAS.
     // This function is exactly what's plotted in Fig 2b of that paper.
@@ -179,6 +180,12 @@ fn assemble_natural_history_params(
                 });
         }
     }
+    if context.get_data_container(NaturalHistory).is_none() {
+        return Err(IxaError::IxaError(
+            "No valid natural history parameter sets could be generated.".to_string(),
+        ));
+    }
+    Ok(())
 }
 
 /// Read in input natural history parameter inputs and assemble valid parameter sets.
@@ -191,7 +198,7 @@ pub fn make_derived_parameters(context: &mut Context) -> Result<(), IxaError> {
     let iso_guid_params = load_isolation_guidance_params(path)?;
     // Assemble a vector of natural history parameters by also sampling symptom onset times
     // conditioned on the isolation guidance parameters.
-    assemble_natural_history_params(context, iso_guid_params);
+    assemble_natural_history_params(context, iso_guid_params)?;
     Ok(())
 }
 
@@ -204,7 +211,7 @@ mod test {
     use super::{validate_inputs, Parameters};
     use std::path::PathBuf;
 
-    use crate::parameters::{ContextParametersExt, ParametersValues};
+    use crate::parameters::{make_derived_parameters, ContextParametersExt, ParametersValues};
 
     #[test]
     fn test_validate_r_0() {
@@ -266,5 +273,41 @@ mod test {
         // These values should not change when run again.
         assert_eq!(nh_sample1, context1.sample_natural_history(person1));
         assert_eq!(nh_sample2, context2.sample_natural_history(person2));
+    }
+
+    #[test]
+    fn test_reject_bad_params() {
+        // Do we get the same value for the same person in two separate contexts?
+        let mut context = Context::new();
+        let parameters = ParametersValues {
+            max_time: 100.0,
+            seed: 108,
+            r_0: 2.0,
+            incubation_period_shape: 1.5,
+            incubation_period_scale: 3.6,
+            growth_rate_incubation_period: 0.15,
+            report_period: 1.0,
+            tri_vl_params_file: PathBuf::from("./tests/data/tri_vl_params_bad.csv"),
+            synth_population_file: PathBuf::from("."),
+        };
+        context
+            .set_global_property_value(Parameters, parameters)
+            .unwrap();
+        context.init_random(108);
+        let e = make_derived_parameters(&mut context).err();
+
+        match e {
+            Some(IxaError::IxaError(msg)) => {
+                assert_eq!(
+                    msg,
+                    "No valid natural history parameter sets could be generated.".to_string()
+                );
+            }
+            Some(ue) => panic!(
+                "Expected an error that parameter set assembly should fail. Instead got {:?}",
+                ue.to_string()
+            ),
+            None => panic!("Expected an error. Instead, assembled parameter sets with no errors."),
+        }
     }
 }
