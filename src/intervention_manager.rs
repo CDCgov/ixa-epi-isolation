@@ -1,16 +1,9 @@
+use crate::transmission_manager::{InfectiousStatus, InfectiousStatusType};
 use ixa::{
-    define_data_plugin,  
-    define_person_property, 
-    define_person_property_with_default,
-     Context, 
-     people::ContextPeopleExt, 
-     PersonId, 
+    define_data_plugin, define_person_property, define_person_property_with_default,
+    people::ContextPeopleExt, Context, PersonId,
 };
 use std::collections::HashMap;
-use crate::transmission_manager::{
-    InfectiousStatusType, 
-    InfectiousStatus
-};
 
 #[derive(Debug, PartialEq, Clone, Copy, Eq, Hash)]
 pub enum FacemaskStatusType {
@@ -33,7 +26,12 @@ define_person_property_with_default!(FacemaskStatus, FacemaskStatusType, Facemas
 
 pub trait ContextInterventionExt {
     fn query_relative_transmission(&self, person_id: PersonId) -> f64;
-    fn register_intervention(&mut self, infectious_status: InfectiousStatusType, facemask_status: FacemaskStatusType, relative_transmission: f64);
+    fn register_intervention(
+        &mut self,
+        infectious_status: InfectiousStatusType,
+        facemask_status: FacemaskStatusType,
+        relative_transmission: f64,
+    );
 }
 
 impl ContextInterventionExt for Context {
@@ -41,7 +39,8 @@ impl ContextInterventionExt for Context {
         let facemask_status = self.get_person_property(person_id, FacemaskStatus);
         let infectious_status = self.get_person_property(person_id, InfectiousStatus);
 
-        *self.get_data_container(InterventionPlugin)
+        *self
+            .get_data_container(InterventionPlugin)
             .unwrap()
             .intervention_map
             .get(&infectious_status)
@@ -50,7 +49,12 @@ impl ContextInterventionExt for Context {
             .unwrap()
     }
 
-    fn register_intervention(&mut self, infectious_status: InfectiousStatusType, facemask_status: FacemaskStatusType, relative_transmission: f64) {
+    fn register_intervention(
+        &mut self,
+        infectious_status: InfectiousStatusType,
+        facemask_status: FacemaskStatusType,
+        relative_transmission: f64,
+    ) {
         let mut facemask_map = HashMap::new();
 
         facemask_map.insert(facemask_status, relative_transmission);
@@ -71,10 +75,18 @@ mod test {
         let mut context = Context::new();
         let contact_id = context.add_person(()).unwrap();
 
-        context.register_intervention(InfectiousStatusType::Susceptible, FacemaskStatusType::Wearing, 0.5);
-        context.set_person_property(contact_id, FacemaskStatus, FacemaskStatusType::Wearing);
-
+        context.register_intervention(
+            InfectiousStatusType::Susceptible,
+            FacemaskStatusType::Wearing,
+            0.5,
+        );
+        context.set_person_property(
+            contact_id, 
+            FacemaskStatus, 
+            FacemaskStatusType::Wearing
+        );
         let relative_transmission = context.query_relative_transmission(contact_id);
+
         assert_eq!(relative_transmission, 0.5);
     }
 }

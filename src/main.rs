@@ -1,8 +1,9 @@
 mod contact;
+mod facemask_manager;
+mod intervention_manager;
 mod parameters;
 mod population_loader;
 mod transmission_manager;
-mod intervention_manager;
 
 use clap::Parser;
 use ixa::{
@@ -69,6 +70,7 @@ fn initialize(args: &Args) -> Result<Context, IxaError> {
     context.index_property(CensusTract);
 
     // Initialize the person-to-person transmission workflow.
+    facemask_manager::init(&mut context);
     transmission_manager::init(&mut context);
 
     // Add a plan to shut down the simulation after `max_time`, regardless of
