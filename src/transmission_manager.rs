@@ -223,6 +223,7 @@ mod test {
             infection_duration: 0.1,
             generation_interval: 3.0,
             report_period: 1.0,
+            masking_rate: 0.0,
             synth_population_file: PathBuf::from("."),
             population_periodic_report: String::new(),
         };
