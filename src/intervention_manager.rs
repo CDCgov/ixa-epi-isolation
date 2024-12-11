@@ -39,14 +39,19 @@ impl ContextInterventionExt for Context {
         let facemask_status = self.get_person_property(person_id, FacemaskStatus);
         let infectious_status = self.get_person_property(person_id, InfectiousStatus);
 
-        *self
-            .get_data_container(InterventionPlugin)
-            .unwrap()
-            .intervention_map
-            .get(&infectious_status)
-            .unwrap()
-            .get(&facemask_status)
-            .unwrap_or(&1.0)
+        //Relative transmission rate for facemask status, default is 1.0
+        //Option two match can be later changed to wildcard but default unwrap_or should be removed
+        match facemask_status {
+            FacemaskStatusType::None => 1.0,
+            FacemaskStatusType::Wearing => *self
+                .get_data_container(InterventionPlugin)
+                .unwrap()
+                .intervention_map
+                .get(&infectious_status)
+                .unwrap()
+                .get(&facemask_status)
+                .unwrap_or(&1.0),
+        }
     }
 
     fn register_facemask(
@@ -85,5 +90,16 @@ mod test {
         let relative_transmission = context.query_relative_transmission(contact_id);
 
         assert_eq!(relative_transmission, 0.5);
+    }
+
+    #[test]
+    #[allow(clippy::float_cmp)]
+    fn test_query_relative_transmission_default() {
+        let mut context = Context::new();
+        let contact_id = context.add_person(()).unwrap();
+
+        context.set_person_property(contact_id, FacemaskStatus, FacemaskStatusType::None);
+        let relative_transmission = context.query_relative_transmission(contact_id);
+        assert_eq!(relative_transmission, 1.0);
     }
 }
