@@ -22,7 +22,7 @@ pub fn init(context: &mut Context) {
     context.register_intervention(
         InfectiousStatusType::Infectious,
         FacemaskStatusType::None,
-        1.0,
+        1.0,//make 1 default?
     );
     context.register_intervention(
         InfectiousStatusType::Infectious,
