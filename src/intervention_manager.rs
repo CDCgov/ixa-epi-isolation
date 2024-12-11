@@ -26,7 +26,7 @@ define_person_property_with_default!(FacemaskStatus, FacemaskStatusType, Facemas
 
 pub trait ContextInterventionExt {
     fn query_relative_transmission(&self, person_id: PersonId) -> f64;
-    fn register_intervention(//register_facemask?
+    fn register_facemask(
         &mut self,
         infectious_status: InfectiousStatusType,
         facemask_status: FacemaskStatusType,
@@ -46,10 +46,10 @@ impl ContextInterventionExt for Context {
             .get(&infectious_status)
             .unwrap()
             .get(&facemask_status)
-            .unwrap()
+            .unwrap_or(&1.0)
     }
 
-    fn register_intervention(
+    fn register_facemask(
         &mut self,
         infectious_status: InfectiousStatusType,
         facemask_status: FacemaskStatusType,
@@ -76,7 +76,7 @@ mod test {
         let mut context = Context::new();
         let contact_id = context.add_person(()).unwrap();
 
-        context.register_intervention(
+        context.register_facemask(
             InfectiousStatusType::Susceptible,
             FacemaskStatusType::Wearing,
             0.5,

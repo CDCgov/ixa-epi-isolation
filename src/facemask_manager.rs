@@ -9,22 +9,12 @@ use ixa::{
 define_rng!(FacemaskRng);
 
 pub fn init(context: &mut Context) {
-    context.register_intervention(
-        InfectiousStatusType::Susceptible,
-        FacemaskStatusType::None,
-        1.0,
-    );
-    context.register_intervention(
+    context.register_facemask(
         InfectiousStatusType::Susceptible,
         FacemaskStatusType::Wearing,
         0.5,
     );
-    context.register_intervention(
-        InfectiousStatusType::Infectious,
-        FacemaskStatusType::None,
-        1.0,//make 1 default?
-    );
-    context.register_intervention(
+    context.register_facemask(
         InfectiousStatusType::Infectious,
         FacemaskStatusType::Wearing,
         0.25,
