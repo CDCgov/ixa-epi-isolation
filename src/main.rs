@@ -62,6 +62,7 @@ fn initialize(args: &Args) -> Result<Context, IxaError> {
     context.index_property(CensusTract);
 
     // Initialize the person-to-person transmission workflow.
+    intervention_manager::init(&mut context);
     facemask_manager::init(&mut context);
     transmission_manager::init(&mut context);
 
