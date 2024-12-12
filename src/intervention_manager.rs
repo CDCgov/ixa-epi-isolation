@@ -24,6 +24,10 @@ define_data_plugin!(
 
 define_person_property_with_default!(FacemaskStatus, FacemaskStatusType, FacemaskStatusType::None);
 
+pub fn init(context: &mut Context) {
+    let _ = context.get_data_container_mut(InterventionPlugin);
+}
+
 pub trait ContextInterventionExt {
     fn query_relative_transmission(&self, person_id: PersonId) -> f64;
     fn register_facemask(
@@ -97,6 +101,7 @@ mod test {
     fn test_query_relative_transmission_default() {
         let mut context = Context::new();
         let contact_id = context.add_person(()).unwrap();
+        init(&mut context);
 
         context.set_person_property(contact_id, FacemaskStatus, FacemaskStatusType::None);
         let relative_transmission = context.query_relative_transmission(contact_id);
