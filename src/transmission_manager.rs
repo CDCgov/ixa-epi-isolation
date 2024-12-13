@@ -4,6 +4,11 @@ use ixa::{
 };
 use statrs::distribution::{ContinuousCDF, Exp, Poisson};
 
+<<<<<<< HEAD
+=======
+use crate::facemask_manager::FacemaskStatus;
+use crate::intervention_manager::ContextInterventionExt;
+>>>>>>> e63ddaa (Fully abstracted facemask from intervention mgr)
 use crate::parameters::Parameters;
 use crate::{contact::ContextContactExt, population_loader::Alive};
 use crate::intervention_manager::ContextInterventionExt;

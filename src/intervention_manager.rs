@@ -1,15 +1,7 @@
 use crate::transmission_manager::{InfectiousStatus, InfectiousStatusType};
-use ixa::{
-    define_data_plugin, define_person_property, define_person_property_with_default,
-    people::ContextPeopleExt, Context, PersonId, PersonProperty,
-};
-use std::{collections::HashMap, hash::Hash};
+use ixa::{define_data_plugin, people::ContextPeopleExt, Context, PersonId, PersonProperty};
+use std::collections::HashMap;
 
-#[derive(Debug, PartialEq, Clone, Copy, Eq, Hash)]
-pub enum FacemaskStatusType {
-    None,
-    Wearing,
-}
 struct InterventionContainer {
     intervention_map: HashMap<InfectiousStatusType, HashMap<String, f64>>,
 }
@@ -22,8 +14,6 @@ define_data_plugin!(
     }
 );
 
-define_person_property_with_default!(FacemaskStatus, FacemaskStatusType, FacemaskStatusType::None);
-
 pub fn init(context: &mut Context) {
     let _ = context.get_data_container_mut(InterventionPlugin);
 }
@@ -34,10 +24,10 @@ pub trait ContextInterventionExt {
         person_id: PersonId,
         intervention_type: T,
     ) -> f64;
-    fn register_facemask(
+    fn register_intervention<T: std::fmt::Debug>(
         &mut self,
         infectious_status: InfectiousStatusType,
-        facemask_status: FacemaskStatusType,
+        intervention_status: T,
         relative_transmission: f64,
     );
 }
@@ -62,25 +52,26 @@ impl ContextInterventionExt for Context {
             .unwrap_or(&1.0)
     }
 
-    fn register_facemask(
+    fn register_intervention<T: std::fmt::Debug>(
         &mut self,
         infectious_status: InfectiousStatusType,
-        facemask_status: FacemaskStatusType,
+        intervention_status: T,
         relative_transmission: f64,
     ) {
-        let mut facemask_map = HashMap::new();
+        let mut transmission_map = HashMap::new();
 
-        facemask_map.insert(format!("{facemask_status:?}"), relative_transmission);
+        transmission_map.insert(format!("{intervention_status:?}"), relative_transmission);
 
         self.get_data_container_mut(InterventionPlugin)
             .intervention_map
-            .insert(infectious_status, facemask_map);
+            .insert(infectious_status, transmission_map);
     }
 }
 
 #[cfg(test)]
 mod test {
     use super::*;
+    use crate::facemask_manager::{FacemaskStatus, FacemaskStatusType};
     use ixa::{people::ContextPeopleExt, Context};
 
     #[test]
@@ -89,7 +80,7 @@ mod test {
         let mut context = Context::new();
         let contact_id = context.add_person(()).unwrap();
 
-        context.register_facemask(
+        context.register_intervention(
             InfectiousStatusType::Susceptible,
             FacemaskStatusType::Wearing,
             0.5,
