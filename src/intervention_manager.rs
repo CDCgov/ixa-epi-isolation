@@ -72,20 +72,22 @@ impl ContextInterventionExt for Context {
 mod test {
     use super::*;
     use crate::facemask_manager::{FacemaskStatus, FacemaskStatusType};
-    use ixa::{people::ContextPeopleExt, Context};
+    use ixa::{define_person_property, people::ContextPeopleExt, Context};
 
     #[test]
     #[allow(clippy::float_cmp)]
     fn test_query_relative_transmission() {
         let mut context = Context::new();
-        let contact_id = context.add_person(()).unwrap();
+        let contact_id = context
+            .add_person((FacemaskStatus, FacemaskStatusType::Wearing))
+            .unwrap();
 
         context.register_intervention(
             InfectiousStatusType::Susceptible,
             FacemaskStatusType::Wearing,
             0.5,
         );
-        context.set_person_property(contact_id, FacemaskStatus, FacemaskStatusType::Wearing);
+
         let relative_transmission = context.query_relative_transmission(contact_id, FacemaskStatus);
 
         assert_eq!(relative_transmission, 0.5);
@@ -95,11 +97,34 @@ mod test {
     #[allow(clippy::float_cmp)]
     fn test_query_relative_transmission_default() {
         let mut context = Context::new();
-        let contact_id = context.add_person(()).unwrap();
+        let contact_id = context
+            .add_person((FacemaskStatus, FacemaskStatusType::None))
+            .unwrap();
         init(&mut context);
 
-        context.set_person_property(contact_id, FacemaskStatus, FacemaskStatusType::None);
         let relative_transmission = context.query_relative_transmission(contact_id, FacemaskStatus);
         assert_eq!(relative_transmission, 1.0);
+    }
+
+    #[test]
+    #[allow(clippy::float_cmp)]
+    fn test_arbitrary_intervention() {
+        #[derive(Debug, Hash, PartialEq, Eq, Clone, Copy)]
+        pub enum FooIntervention {
+            Bar,
+        }
+
+        define_person_property!(FooInterventionProperty, FooIntervention);
+
+        let mut context = Context::new();
+        let contact_id = context
+            .add_person((FooInterventionProperty, FooIntervention::Bar))
+            .unwrap();
+
+        context.register_intervention(InfectiousStatusType::Susceptible, FooIntervention::Bar, 0.5);
+        let relative_transmission =
+            context.query_relative_transmission(contact_id, FooInterventionProperty);
+
+        assert_eq!(relative_transmission, 0.5);
     }
 }
