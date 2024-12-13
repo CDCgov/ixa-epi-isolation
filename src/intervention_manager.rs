@@ -71,24 +71,25 @@ impl ContextInterventionExt for Context {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::facemask_manager::{FacemaskStatus, FacemaskStatusType};
     use ixa::{define_person_property, people::ContextPeopleExt, Context};
+    use std::hash::Hash;
+
+    #[derive(Debug, Hash, PartialEq, Eq, Clone, Copy)]
+    pub enum FooStatusType {
+        Bar,
+    }
+
+    define_person_property!(FooStatus, FooStatusType);
 
     #[test]
     #[allow(clippy::float_cmp)]
     fn test_query_relative_transmission() {
         let mut context = Context::new();
-        let contact_id = context
-            .add_person((FacemaskStatus, FacemaskStatusType::Wearing))
-            .unwrap();
+        let contact_id = context.add_person((FooStatus, FooStatusType::Bar)).unwrap();
 
-        context.register_intervention(
-            InfectiousStatusType::Susceptible,
-            FacemaskStatusType::Wearing,
-            0.5,
-        );
+        context.register_intervention(InfectiousStatusType::Susceptible, FooStatusType::Bar, 0.5);
 
-        let relative_transmission = context.query_relative_transmission(contact_id, FacemaskStatus);
+        let relative_transmission = context.query_relative_transmission(contact_id, FooStatus);
 
         assert_eq!(relative_transmission, 0.5);
     }
@@ -97,34 +98,10 @@ mod test {
     #[allow(clippy::float_cmp)]
     fn test_query_relative_transmission_default() {
         let mut context = Context::new();
-        let contact_id = context
-            .add_person((FacemaskStatus, FacemaskStatusType::None))
-            .unwrap();
+        let contact_id = context.add_person((FooStatus, FooStatusType::Bar)).unwrap();
         init(&mut context);
 
-        let relative_transmission = context.query_relative_transmission(contact_id, FacemaskStatus);
+        let relative_transmission = context.query_relative_transmission(contact_id, FooStatus);
         assert_eq!(relative_transmission, 1.0);
-    }
-
-    #[test]
-    #[allow(clippy::float_cmp)]
-    fn test_arbitrary_intervention() {
-        #[derive(Debug, Hash, PartialEq, Eq, Clone, Copy)]
-        pub enum FooIntervention {
-            Bar,
-        }
-
-        define_person_property!(FooInterventionProperty, FooIntervention);
-
-        let mut context = Context::new();
-        let contact_id = context
-            .add_person((FooInterventionProperty, FooIntervention::Bar))
-            .unwrap();
-
-        context.register_intervention(InfectiousStatusType::Susceptible, FooIntervention::Bar, 0.5);
-        let relative_transmission =
-            context.query_relative_transmission(contact_id, FooInterventionProperty);
-
-        assert_eq!(relative_transmission, 0.5);
     }
 }
