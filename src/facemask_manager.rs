@@ -1,20 +1,30 @@
-use crate::intervention_manager::{ContextInterventionExt, FacemaskStatus, FacemaskStatusType};
+use crate::intervention_manager::ContextInterventionExt;
 use crate::parameters::Parameters;
 use crate::population_loader::Alive;
 use crate::transmission_manager::InfectiousStatusType;
 use ixa::{
-    define_rng, Context, ContextGlobalPropertiesExt, ContextPeopleExt, ContextRandomExt, PersonId,
+    define_person_property, define_person_property_with_default, define_rng, Context,
+    ContextGlobalPropertiesExt, ContextPeopleExt, ContextRandomExt, PersonId,
 };
+use std::hash::Hash;
+
+#[derive(Debug, PartialEq, Clone, Copy, Eq, Hash)]
+pub enum FacemaskStatusType {
+    None,
+    Wearing,
+}
+
+define_person_property_with_default!(FacemaskStatus, FacemaskStatusType, FacemaskStatusType::None);
 
 define_rng!(FacemaskRng);
 
 pub fn init(context: &mut Context) {
-    context.register_facemask(
+    context.register_intervention(
         InfectiousStatusType::Susceptible,
         FacemaskStatusType::Wearing,
         0.5,
     );
-    context.register_facemask(
+    context.register_intervention(
         InfectiousStatusType::Infectious,
         FacemaskStatusType::Wearing,
         0.25,

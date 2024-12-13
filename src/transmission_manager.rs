@@ -8,7 +8,8 @@ use ixa::{
 };
 use statrs::distribution::{ContinuousCDF, Exp, Poisson};
 
-use crate::intervention_manager::{ContextInterventionExt, FacemaskStatus};
+use crate::facemask_manager::FacemaskStatus;
+use crate::intervention_manager::ContextInterventionExt;
 use crate::parameters::Parameters;
 use crate::{contact::ContextContactExt, population_loader::Alive};
 
