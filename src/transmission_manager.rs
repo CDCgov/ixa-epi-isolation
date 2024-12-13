@@ -8,7 +8,7 @@ use ixa::{
 };
 use statrs::distribution::{ContinuousCDF, Exp, Poisson};
 
-use crate::intervention_manager::ContextInterventionExt;
+use crate::intervention_manager::{ContextInterventionExt, FacemaskStatus};
 use crate::parameters::Parameters;
 use crate::{contact::ContextContactExt, population_loader::Alive};
 
@@ -182,8 +182,8 @@ fn evaluate_transmission(context: &mut Context, contact_id: PersonId, transmitte
         == InfectiousStatusType::Susceptible
     {
         //Query relative transmission for the transmitter.
-        let relative_infectiousness = context.query_relative_transmission(transmitter_id);
-        let relative_risk = context.query_relative_transmission(contact_id);
+        let relative_infectiousness = context.query_relative_transmission(transmitter_id, FacemaskStatus);
+        let relative_risk = context.query_relative_transmission(contact_id, FacemaskStatus);
         let relative_transmission = relative_infectiousness * relative_risk;
         let transmission_success =
             context.sample_range(TransmissionRng, 0.0..1.0) < relative_transmission;
