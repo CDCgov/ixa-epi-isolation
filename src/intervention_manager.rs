@@ -29,7 +29,11 @@ pub fn init(context: &mut Context) {
 }
 
 pub trait ContextInterventionExt {
-    fn query_relative_transmission<T: PersonProperty + 'static>(&self, person_id: PersonId, intervention_type: T) -> f64;
+    fn query_relative_transmission<T: PersonProperty + 'static>(
+        &self,
+        person_id: PersonId,
+        intervention_type: T,
+    ) -> f64;
     fn register_facemask(
         &mut self,
         infectious_status: InfectiousStatusType,
@@ -39,8 +43,12 @@ pub trait ContextInterventionExt {
 }
 
 impl ContextInterventionExt for Context {
-    fn query_relative_transmission<T: PersonProperty + 'static>(&self, person_id: PersonId, intervention_type: T) -> f64 {
-        let intervention_status = format!("{:?}", self.get_person_property(person_id, intervention_type));
+    fn query_relative_transmission<T: PersonProperty + 'static>(
+        &self,
+        person_id: PersonId,
+        intervention_type: T,
+    ) -> f64 {
+        let intervention_status = self.get_person_property(person_id, intervention_type);
         let infectious_status = self.get_person_property(person_id, InfectiousStatus);
 
         //Relative transmission rate for facemask status, default is 1.0
@@ -50,7 +58,7 @@ impl ContextInterventionExt for Context {
             .intervention_map
             .get(&infectious_status)
             .unwrap_or(&HashMap::new())
-            .get(&intervention_status)
+            .get(&format!("{intervention_status:?}"))
             .unwrap_or(&1.0)
     }
 
@@ -62,7 +70,7 @@ impl ContextInterventionExt for Context {
     ) {
         let mut facemask_map = HashMap::new();
 
-        facemask_map.insert(format!("{:?}",facemask_status), relative_transmission);
+        facemask_map.insert(format!("{facemask_status:?}"), relative_transmission);
 
         self.get_data_container_mut(InterventionPlugin)
             .intervention_map
