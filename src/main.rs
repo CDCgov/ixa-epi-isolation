@@ -1,7 +1,9 @@
 mod contact;
+mod natural_history_manager;
 mod parameters;
 mod population_loader;
 mod transmission_manager;
+mod utils;
 
 use clap::Parser;
 use ixa::{
@@ -41,8 +43,10 @@ fn initialize(args: &Args) -> Result<Context, IxaError> {
     // Set the random seed.
     context.init_random(parameters.seed);
 
-    // Make the derived natural history parameter sets.
-    parameters::make_derived_parameters(&mut context)?;
+    // Read the generation interval trajectories from a CSV.
+    // Eventually, also read the symptom onset/improvement times,
+    // and any other disease parameters (like viral load over time) from CSVs.
+    natural_history_manager::init(&mut context)?;
 
     // Set the output directory and whether to overwrite the existing file.
     context
