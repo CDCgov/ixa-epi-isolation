@@ -5,8 +5,10 @@ use ixa::{
 };
 use statrs::distribution::Poisson;
 
-use crate::{contact::ContextContactExt, parameters::Parameters, population_loader::Alive,
-    natural_history_manager::ContextNaturalHistoryExt, parameters::Parameters};
+use crate::{
+    contact::ContextContactExt, natural_history_manager::ContextNaturalHistoryExt,
+    parameters::Parameters, population_loader::Alive,
+};
 
 // Define the possible infectious statuses for a person.
 // These states refer to the person's infectiousness at a given time
@@ -110,9 +112,9 @@ fn schedule_next_infection_attempt(
     // Get the next infection attempt time.
     let (next_infection_time_unif, time_until_next_infection_attempt_gi) = get_next_infection_time(
         context,
+        transmitter_id,
         num_infection_attempts_remaining,
         last_infection_time_unif,
-        transmitter_id,
     );
 
     // Schedule the infection attempt. The function `infection_attempt` (a) grabs a contact at
@@ -141,9 +143,9 @@ fn schedule_next_infection_attempt(
 /// and passes it through the inverse CDF of the generation interval to get the next infection time.
 fn get_next_infection_time(
     context: &mut Context,
+    transmitter_id: PersonId,
     num_infection_attempts_remaining: usize,
     last_infection_time_unif: f64,
-    transmitter_id: PersonId,
 ) -> (f64, f64) {
     // Draw the next uniform infection time using order statistics.
     // The first of n draws from U(0, 1) comes from Beta(1, n), so we pass a uniform
@@ -158,7 +160,6 @@ fn get_next_infection_time(
     // so that the next infection time is always greater than the last infection time.
     next_infection_time_unif =
         last_infection_time_unif + next_infection_time_unif * (1.0 - last_infection_time_unif);
-    assert!(next_infection_time_unif > last_infection_time_unif);
 
     let delta_time = context
         .evaluate_inverse_generation_interval(transmitter_id, next_infection_time_unif)
@@ -377,6 +378,9 @@ mod test {
             let mut context = setup(1.0);
             context.init_random(seed.into());
             let transmitter_id = context.add_person(()).unwrap();
+            // Since we manually trigger the `schedule_next_infection_attempt` chain,
+            // we need to assign a natural history index to the transmitter -- this would have been
+            // done in the `handle_infectious_status_change` function, but we do not call it explicitly here.
             context.set_natural_history_idx(transmitter_id);
             // Create a person who will be the only contact, but have them be dead so they can't be infected.
             // Instead, `get_contact` will return None.

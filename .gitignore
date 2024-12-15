@@ -40,6 +40,8 @@
 !input/people_test.csv
 !input/gi_trajectories.csv
 !tests/data/gi_trajectory.csv
+!tests/data/three_columns.csv
+!tests/data/empty.csv
 
 #####
 # Python
