@@ -4,7 +4,7 @@ use crate::population_loader::Alive;
 use crate::transmission_manager::InfectiousStatusType;
 use ixa::{
     define_person_property, define_person_property_with_default, define_rng, Context,
-    ContextGlobalPropertiesExt, ContextPeopleExt, ContextRandomExt, PersonId,
+    ContextGlobalPropertiesExt, ContextPeopleExt, ContextRandomExt, IxaError, PersonId,
 };
 use std::hash::Hash;
 
@@ -18,24 +18,29 @@ define_person_property_with_default!(FacemaskStatus, FacemaskStatusType, Facemas
 
 define_rng!(FacemaskRng);
 
-pub fn init(context: &mut Context) {
+/// Initialize the facemask intervention.
+/// Assign facemask status to all people in the population and register the `FacemaskStatus` to relative transmission effects.
+pub fn init(context: &mut Context) -> Result<(), IxaError> {
     context.register_intervention(
         InfectiousStatusType::Susceptible,
         FacemaskStatusType::Wearing,
         0.5,
-    );
+    )?;
     context.register_intervention(
         InfectiousStatusType::Infectious,
         FacemaskStatusType::Wearing,
         0.25,
-    );
+    )?;
 
     let population = context.query_people((Alive, true));
     for i in population {
         assign_facemask_status(context, i);
     }
+
+    Ok(())
 }
 
+/// Assign facemask status to a person based on the global masking rate.
 fn assign_facemask_status(context: &mut Context, person_id: PersonId) {
     let masking_rate = context
         .get_global_property_value(Parameters)
@@ -139,7 +144,7 @@ mod test {
             let _person_id = context.add_person(()).unwrap();
         }
 
-        init(&mut context);
+        init(&mut context).unwrap();
 
         let wearing_count =
             context.query_people_count((FacemaskStatus, FacemaskStatusType::Wearing));

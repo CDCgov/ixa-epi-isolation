@@ -61,9 +61,11 @@ fn initialize(args: &Args) -> Result<Context, IxaError> {
     context.index_property(Age);
     context.index_property(CensusTract);
 
-    // Initialize the person-to-person transmission workflow.
+    // Initialize interventions
     intervention_manager::init(&mut context);
-    facemask_manager::init(&mut context);
+    facemask_manager::init(&mut context)?;
+
+    // Initialize the person-to-person transmission workflow.
     transmission_manager::init(&mut context);
 
     // Add a plan to shut down the simulation after `max_time`, regardless of
