@@ -2,6 +2,7 @@ mod contact;
 mod parameters;
 mod population_loader;
 mod transmission_manager;
+mod individual_report;
 
 use clap::Parser;
 use ixa::{
@@ -63,6 +64,9 @@ fn initialize(args: &Args) -> Result<Context, IxaError> {
 
     // Initialize the person-to-person transmission workflow.
     transmission_manager::init(&mut context);
+
+    // Initialize individual report
+    individual_report::init(&mut context, PathBuf::from(&args.output_directory))?;
 
     // Add a plan to shut down the simulation after `max_time`, regardless of
     // what else is happening in the model.

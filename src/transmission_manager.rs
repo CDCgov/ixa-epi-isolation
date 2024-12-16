@@ -6,6 +6,7 @@ use ixa::{
     people::{ContextPeopleExt, PersonId, PersonPropertyChangeEvent},
     random::ContextRandomExt,
 };
+use serde::{Deserialize, Serialize};
 use statrs::distribution::{ContinuousCDF, Exp, Poisson};
 
 use crate::parameters::Parameters;
@@ -16,7 +17,7 @@ use crate::{contact::ContextContactExt, population_loader::Alive};
 // and are not related to the person's health status. How long an agent
 // spends in the infectious compartment is determined entirely from their
 // number of infection attempts and draws from the generation interval.
-#[derive(Debug, Hash, Eq, PartialEq, Clone, Copy)]
+#[derive(Debug, Hash, Eq, PartialEq, Clone, Copy, Deserialize, Serialize)]
 pub enum InfectiousStatusType {
     Susceptible,
     Infectious,
