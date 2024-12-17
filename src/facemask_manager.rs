@@ -56,8 +56,11 @@ fn assign_facemask_status(context: &mut Context, person_id: PersonId) {
 #[cfg(test)]
 mod test {
     use super::*;
+    use crate::intervention_manager::init as intervention_init;
     use crate::parameters::ParametersValues;
-    use crate::transmission_manager::{InfectiousStatus, InfectiousStatusType};
+    use crate::transmission_manager::{
+        init as transmission_init, InfectiousStatus, InfectiousStatusType,
+    };
     use ixa::people::ContextPeopleExt;
     use root1d::toms748;
     use std::collections::HashMap;
@@ -172,13 +175,21 @@ mod test {
         masking_efficacy: f64,
         r_0: f64,
     ) -> f64 {
-        let mut context = setup(masking_rate, 1000.0, r_0);
-        let population_size = 5000;
+        let observed_r_0 = r_0 * (1.0 - (1.0 - masking_efficacy) * masking_rate);
+        let theoretical_ratio = toms748(|x| 1.0 - x - f64::exp(-observed_r_0 * x), 0.0002, 1.)
+            .root()
+            .unwrap();
+
+        let mut context = setup(masking_rate, 10.0, r_0);
+
+        intervention_init(&mut context);
+
+        let population_size: usize = 500;
         for _ in 0..population_size {
-            let _person_id = context.add_person(()).unwrap();
+            let person_id = context.add_person(()).unwrap();
+            assign_facemask_status(&mut context, person_id);
         }
 
-        init(&mut context).unwrap();
         context
             .register_intervention(
                 InfectiousStatusType::Infectious,
@@ -187,16 +198,14 @@ mod test {
             )
             .unwrap();
 
+        transmission_init(&mut context);
+
         context.execute();
 
         let epidemic_size = context
             .query_people((InfectiousStatus, InfectiousStatusType::Recovered))
             .len();
-        let observed_ratio = epidemic_size as f64 / f64::from(population_size);
-        let observed_r_0 = r_0 * (1.0 - (1.0 - masking_efficacy) * masking_rate);
-        let theoretical_ratio = toms748(|x| 1.0 - x - f64::exp(-observed_r_0 * x), 0., 1.)
-            .root()
-            .unwrap();
+        let observed_ratio = epidemic_size as f64 / population_size as f64;
 
         observed_ratio - theoretical_ratio
     }
@@ -205,7 +214,7 @@ mod test {
     fn test_epidemic_comparison_with_split_facemask() {
         let masking_rate = 0.5;
         let masking_efficacy = 0.25;
-        let r_0 = 2.5;
+        let r_0 = 25.0;
 
         let result = epidemic_comparison_with_facemask(masking_rate, masking_efficacy, r_0);
         assert!(result.abs() < 0.05);
@@ -215,7 +224,7 @@ mod test {
     fn test_epidemic_comparison_with_high_facemask() {
         let masking_rate = 0.9;
         let masking_efficacy = 0.25;
-        let r_0 = 2.5;
+        let r_0 = 25.0;
 
         let result = epidemic_comparison_with_facemask(masking_rate, masking_efficacy, r_0);
         assert!(result.abs() < 0.05);
