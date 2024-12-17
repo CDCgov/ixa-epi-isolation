@@ -170,13 +170,124 @@ mod test {
     }
 
     #[allow(clippy::cast_precision_loss)]
+    fn two_person_epidemic_trial(
+        relative_risk: f64,
+        relative_infectiousness: f64,
+        transmitter_mask: FacemaskStatusType,
+        contact_mask: FacemaskStatusType,
+    ) -> bool {
+        // Setting R0 to 50 for guaranteed infection attempt
+        let mut context = setup(0.5, 10.0, 50.0);
+        intervention_init(&mut context);
+
+        let _transmitter_id = context
+            .add_person((
+                (InfectiousStatus, InfectiousStatusType::Infectious),
+                (FacemaskStatus, transmitter_mask),
+            ))
+            .unwrap();
+        let contact_id = context
+            .add_person((
+                (InfectiousStatus, InfectiousStatusType::Susceptible),
+                (FacemaskStatus, contact_mask),
+            ))
+            .unwrap();
+
+        context
+            .register_intervention(
+                InfectiousStatusType::Infectious,
+                FacemaskStatusType::Wearing,
+                relative_infectiousness,
+            )
+            .unwrap();
+        context
+            .register_intervention(
+                InfectiousStatusType::Susceptible,
+                FacemaskStatusType::Wearing,
+                relative_risk,
+            )
+            .unwrap();
+
+        transmission_init(&mut context);
+        context.execute();
+
+        context.get_person_property(contact_id, InfectiousStatus)
+            != InfectiousStatusType::Susceptible
+    }
+
+    #[allow(clippy::cast_precision_loss)]
+    fn call_n_transmission_trials(
+        n: usize,
+        relative_risk: f64,
+        relative_infectiousness: f64,
+        transmitter_mask: FacemaskStatusType,
+        contact_mask: FacemaskStatusType,
+    ) {
+        let infectiousness = match transmitter_mask {
+            FacemaskStatusType::None => 1.0,
+            FacemaskStatusType::Wearing => relative_infectiousness,
+        };
+        let risk = match contact_mask {
+            FacemaskStatusType::None => 1.0,
+            FacemaskStatusType::Wearing => relative_risk,
+        };
+
+        let mut successes: usize = 0;
+        for _ in 0..n {
+            if two_person_epidemic_trial(
+                relative_risk,
+                relative_infectiousness,
+                transmitter_mask,
+                contact_mask,
+            ) {
+                successes += 1;
+            }
+        }
+        let observed_rate = successes as f64 / n as f64;
+        let theory_rate = risk * infectiousness;
+        assert!(theory_rate - observed_rate < 0.01);
+    }
+
+    #[test]
+    fn test_two_person_epidemic_trial() {
+        call_n_transmission_trials(
+            1000,
+            0.25,
+            0.75,
+            FacemaskStatusType::Wearing,
+            FacemaskStatusType::Wearing,
+        );
+        call_n_transmission_trials(
+            1000,
+            0.25,
+            0.75,
+            FacemaskStatusType::None,
+            FacemaskStatusType::Wearing,
+        );
+        call_n_transmission_trials(
+            1000,
+            0.25,
+            0.75,
+            FacemaskStatusType::Wearing,
+            FacemaskStatusType::None,
+        );
+        call_n_transmission_trials(
+            1000,
+            0.25,
+            0.75,
+            FacemaskStatusType::None,
+            FacemaskStatusType::None,
+        );
+    }
+
+    #[allow(clippy::cast_precision_loss)]
     fn epidemic_comparison_with_facemask(
         masking_rate: f64,
         masking_efficacy: f64,
         r_0: f64,
     ) -> f64 {
         let observed_r_0 = r_0 * (1.0 - masking_efficacy * masking_rate);
-        let theoretical_ratio = toms748(|x| 1.0 - x - f64::exp(-observed_r_0 * x), 0.0002, 1.)
+        let theoretical_ratio = toms748(|x| 1.0 - x - f64::exp(-observed_r_0 * x), 0.0002, 1.0)
             .root()
             .unwrap();
 
@@ -217,7 +328,7 @@ mod test {
         let r_0 = 10.0;
 
         let result = epidemic_comparison_with_facemask(masking_rate, masking_efficacy, r_0);
-        assert!(result.abs() < 0.05);
+        assert!(result.abs() < 0.025);
     }
 
     #[test]
