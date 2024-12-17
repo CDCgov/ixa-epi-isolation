@@ -42,6 +42,8 @@
 !tests/data/gi_trajectory.csv
 !tests/data/three_columns.csv
 !tests/data/empty.csv
+!tests/data/one_column.csv
+!tests/data/column_size_changes.csv
 
 #####
 # Python

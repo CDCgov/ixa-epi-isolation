@@ -220,14 +220,17 @@ mod test {
         Context, ContextGlobalPropertiesExt, ContextPeopleExt, ContextRandomExt, PersonId,
         PersonPropertyChangeEvent,
     };
-    use statrs::distribution::{ContinuousCDF, Exp};
+    use statrs::{
+        assert_almost_eq,
+        distribution::{ContinuousCDF, Exp},
+    };
 
     fn setup(r_0: f64) -> Context {
         let params = ParametersValues {
             max_time: 10.0,
             seed: 42,
             r_0,
-            gi_trajectories_dt: 0.02,
+            gi_trajectories_dt: 0.2,
             report_period: 1.0,
             synth_population_file: PathBuf::from("."),
             gi_trajectories_file: PathBuf::from("./tests/data/gi_trajectory.csv"),
@@ -425,7 +428,7 @@ mod test {
             })
             .reduce(f64::max)
             .unwrap();
-        assert!(ks_stat < 0.01);
+        assert_almost_eq!(ks_stat, 0.0, 0.01);
     }
 
     #[test]

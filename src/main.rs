@@ -3,7 +3,6 @@ mod natural_history_manager;
 mod parameters;
 mod population_loader;
 mod transmission_manager;
-mod utils;
 
 use clap::Args;
 use ixa::runner::run_with_custom_args;
