@@ -60,12 +60,14 @@ mod test {
     use ixa::people::ContextPeopleExt;
     use std::collections::HashMap;
     use std::path::PathBuf;
+    use root1d::toms748;
+    use crate::transmission_manager::{InfectiousStatus, InfectiousStatusType};
 
-    fn setup(masking: f64) -> Context {
+    fn setup(masking: f64, tmax: f64, reproduction_number: f64) -> Context {
         let params = ParametersValues {
-            max_time: 10.0,
+            max_time: tmax,
             seed: 42,
-            r_0: 2.0,
+            r_0: reproduction_number,
             infection_duration: 0.1,
             generation_interval: 3.0,
             report_period: 1.0,
@@ -83,7 +85,7 @@ mod test {
 
     #[test]
     fn test_assign_facemask_status_guaranteed() {
-        let mut context = setup(1.0);
+        let mut context = setup(1.0, 0.0, 2.0);
         let person_id = context.add_person(()).unwrap();
 
         assign_facemask_status(&mut context, person_id);
@@ -94,7 +96,7 @@ mod test {
 
     #[test]
     fn test_assign_facemask_status_zero() {
-        let mut context = setup(0.0);
+        let mut context = setup(0.0, 0.0, 2.0);
         let person_id = context.add_person(()).unwrap();
 
         assign_facemask_status(&mut context, person_id);
@@ -106,7 +108,7 @@ mod test {
     #[test]
     #[allow(clippy::cast_precision_loss)]
     fn test_assign_facemask_status_largepop() {
-        let mut context = setup(0.5);
+        let mut context = setup(0.5, 0.0, 2.0);
         let mut facemask_counts = HashMap::new();
         let population_size = 5000;
 
@@ -138,7 +140,7 @@ mod test {
     #[test]
     #[allow(clippy::cast_precision_loss)]
     fn test_init() {
-        let mut context = setup(0.5);
+        let mut context = setup(0.5, 0.0, 2.0);
         let population_size = 5000;
         for _ in 0..population_size {
             let _person_id = context.add_person(()).unwrap();
@@ -162,5 +164,50 @@ mod test {
                 .abs()
                 < 0.05
         );
+    }
+
+    fn epidemic_comparison_with_facemask(masking_rate: f64, masking_efficacy: f64, r_0: f64) -> f64 {
+        let mut context = setup(masking_rate, 1000.0, r_0);
+        let population_size = 5000;
+        for _ in 0..population_size {
+            let _person_id = context.add_person(()).unwrap();
+        }
+
+        init(&mut context).unwrap();
+        context.register_intervention(
+            InfectiousStatusType::Infectious, 
+            FacemaskStatusType::Wearing,
+            masking_efficacy
+        ).unwrap();
+
+        context.execute();
+
+
+        let epidemic_size = context.query_people((InfectiousStatus, InfectiousStatusType::Recovered)).len();
+        let observed_ratio = epidemic_size as f64 / population_size as f64;
+        let observed_r_0 = r_0 * (1.0 - (1.0 - masking_efficacy) * masking_rate);
+        let theoretical_ratio = toms748(|x| 1.0 - x - f64::exp(-observed_r_0 * x), 0., 1.).root().unwrap();
+
+        observed_ratio - theoretical_ratio
+    }
+
+    #[test]
+    fn test_epidemic_comparison_with_split_facemask() {
+        let masking_rate = 0.5;
+        let masking_efficacy = 0.25;
+        let r_0 = 2.5;
+
+        let result = epidemic_comparison_with_facemask(masking_rate, masking_efficacy, r_0);
+        assert!(result.abs() < 0.05);
+    }
+
+    #[test]
+    fn test_epidemic_comparison_with_high_facemask() {
+        let masking_rate = 0.9;
+        let masking_efficacy = 0.25;
+        let r_0 = 2.5;
+
+        let result = epidemic_comparison_with_facemask(masking_rate, masking_efficacy, r_0);
+        assert!(result.abs() < 0.05);
     }
 }
