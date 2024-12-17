@@ -57,11 +57,11 @@ fn assign_facemask_status(context: &mut Context, person_id: PersonId) {
 mod test {
     use super::*;
     use crate::parameters::ParametersValues;
+    use crate::transmission_manager::{InfectiousStatus, InfectiousStatusType};
     use ixa::people::ContextPeopleExt;
+    use root1d::toms748;
     use std::collections::HashMap;
     use std::path::PathBuf;
-    use root1d::toms748;
-    use crate::transmission_manager::{InfectiousStatus, InfectiousStatusType};
 
     fn setup(masking: f64, tmax: f64, reproduction_number: f64) -> Context {
         let params = ParametersValues {
@@ -166,7 +166,12 @@ mod test {
         );
     }
 
-    fn epidemic_comparison_with_facemask(masking_rate: f64, masking_efficacy: f64, r_0: f64) -> f64 {
+    #[allow(clippy::cast_precision_loss)]
+    fn epidemic_comparison_with_facemask(
+        masking_rate: f64,
+        masking_efficacy: f64,
+        r_0: f64,
+    ) -> f64 {
         let mut context = setup(masking_rate, 1000.0, r_0);
         let population_size = 5000;
         for _ in 0..population_size {
@@ -174,19 +179,24 @@ mod test {
         }
 
         init(&mut context).unwrap();
-        context.register_intervention(
-            InfectiousStatusType::Infectious, 
-            FacemaskStatusType::Wearing,
-            masking_efficacy
-        ).unwrap();
+        context
+            .register_intervention(
+                InfectiousStatusType::Infectious,
+                FacemaskStatusType::Wearing,
+                masking_efficacy,
+            )
+            .unwrap();
 
         context.execute();
 
-
-        let epidemic_size = context.query_people((InfectiousStatus, InfectiousStatusType::Recovered)).len();
-        let observed_ratio = epidemic_size as f64 / population_size as f64;
+        let epidemic_size = context
+            .query_people((InfectiousStatus, InfectiousStatusType::Recovered))
+            .len();
+        let observed_ratio = epidemic_size as f64 / f64::from(population_size);
         let observed_r_0 = r_0 * (1.0 - (1.0 - masking_efficacy) * masking_rate);
-        let theoretical_ratio = toms748(|x| 1.0 - x - f64::exp(-observed_r_0 * x), 0., 1.).root().unwrap();
+        let theoretical_ratio = toms748(|x| 1.0 - x - f64::exp(-observed_r_0 * x), 0., 1.)
+            .root()
+            .unwrap();
 
         observed_ratio - theoretical_ratio
     }
