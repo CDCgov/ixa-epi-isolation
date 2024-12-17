@@ -1,8 +1,8 @@
 mod contact;
+mod individual_report;
 mod parameters;
 mod population_loader;
 mod transmission_manager;
-mod individual_report;
 
 use clap::Parser;
 use ixa::{

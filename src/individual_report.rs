@@ -1,18 +1,14 @@
 use ixa::context::Context;
 use ixa::error::IxaError;
-use ixa::global_properties::ContextGlobalPropertiesExt;
 use ixa::people::{ContextPeopleExt, PersonPropertyChangeEvent};
 use ixa::report::ContextReportExt;
 use ixa::{create_report_trait, report::Report};
-use std::path::Path;
 use std::path::PathBuf;
 
-use crate::transmission_manager::{InfectiousStatusType, InfectiousStatus};
 use crate::population_loader::Age;
+use crate::transmission_manager::{InfectiousStatus, InfectiousStatusType};
 
 use serde::{Deserialize, Serialize};
-
-use crate::Parameters;
 
 #[derive(Serialize, Deserialize, Clone)]
 struct ReportItem {
@@ -20,7 +16,7 @@ struct ReportItem {
     person_id: String,
     age: u8,
     updated_status: InfectiousStatusType,
-    previous_status: InfectiousStatusType
+    previous_status: InfectiousStatusType,
 }
 
 create_report_trait!(ReportItem);
@@ -40,9 +36,7 @@ fn handle_infection_status_change(
 }
 
 pub fn init(context: &mut Context, output_path: PathBuf) -> Result<(), IxaError> {
-    context
-        .report_options()
-        .directory(output_path);
+    context.report_options().directory(output_path);
 
     context.add_report::<ReportItem>("individual_report")?;
     context.subscribe_to_event(
