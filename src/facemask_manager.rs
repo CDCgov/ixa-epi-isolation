@@ -175,7 +175,7 @@ mod test {
         masking_efficacy: f64,
         r_0: f64,
     ) -> f64 {
-        let observed_r_0 = r_0 * (1.0 - (1.0 - masking_efficacy) * masking_rate);
+        let observed_r_0 = r_0 * (1.0 - masking_efficacy * masking_rate);
         let theoretical_ratio = toms748(|x| 1.0 - x - f64::exp(-observed_r_0 * x), 0.0002, 1.)
             .root()
             .unwrap();
@@ -194,7 +194,7 @@ mod test {
             .register_intervention(
                 InfectiousStatusType::Infectious,
                 FacemaskStatusType::Wearing,
-                masking_efficacy,
+                1.0 - masking_efficacy,
             )
             .unwrap();
 
@@ -211,20 +211,20 @@ mod test {
     }
 
     #[test]
-    fn test_epidemic_comparison_with_split_facemask() {
-        let masking_rate = 0.5;
-        let masking_efficacy = 0.25;
-        let r_0 = 25.0;
+    fn test_epidemic_comparison_with_effective_facemask() {
+        let masking_rate = 0.8;
+        let masking_efficacy = 0.9;
+        let r_0 = 10.0;
 
         let result = epidemic_comparison_with_facemask(masking_rate, masking_efficacy, r_0);
         assert!(result.abs() < 0.05);
     }
 
     #[test]
-    fn test_epidemic_comparison_with_high_facemask() {
-        let masking_rate = 0.9;
-        let masking_efficacy = 0.25;
-        let r_0 = 25.0;
+    fn test_epidemic_comparison_with_no_facemask() {
+        let masking_rate = 0.0;
+        let masking_efficacy = 0.9;
+        let r_0 = 2.8;
 
         let result = epidemic_comparison_with_facemask(masking_rate, masking_efficacy, r_0);
         assert!(result.abs() < 0.05);
