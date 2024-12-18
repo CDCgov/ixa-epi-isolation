@@ -1,10 +1,4 @@
-use ixa::{
-    Context,
-    define_rng,
-    IxaError,
-    ContextPeopleExt, PersonId,
-    ContextRandomExt,
-};
+use ixa::{define_rng, Context, ContextPeopleExt, ContextRandomExt, IxaError, PersonId};
 
 use crate::population_loader::Alive;
 

@@ -1,8 +1,7 @@
 use crate::parameters::Parameters;
 use ixa::{
-    Context, define_person_property, define_person_property_with_default,
-    IxaError,
-    ContextGlobalPropertiesExt, ContextPeopleExt,
+    define_person_property, define_person_property_with_default, Context,
+    ContextGlobalPropertiesExt, ContextPeopleExt, IxaError,
 };
 
 use serde::Deserialize;

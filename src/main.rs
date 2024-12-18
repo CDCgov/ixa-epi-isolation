@@ -3,11 +3,11 @@ mod parameters;
 mod population_loader;
 mod transmission_manager;
 
-use ixa::runner::run_with_custom_args;
 use clap::Args;
+use ixa::runner::run_with_custom_args;
 use ixa::{
-    Context, IxaError, ContextGlobalPropertiesExt,
-    ContextPeopleExt, ContextRandomExt, ContextReportExt,
+    Context, ContextGlobalPropertiesExt, ContextPeopleExt, ContextRandomExt, ContextReportExt,
+    IxaError,
 };
 use std::path::PathBuf;
 use transmission_manager::InfectiousStatus;
@@ -26,29 +26,21 @@ fn initialize() -> Result<Context, IxaError> {
     let mut context = run_with_custom_args(|context, args, custom_args: Option<CustomArgs>| {
         println!("Setting Overwrite parameter");
         // Read the global properties.
-        if let Some(custom_args)  = custom_args {            
-            // Set the output directory and whether to overwrite the existing file.
-            context
-                .report_options()
-                .directory(PathBuf::from(&args.output_dir))
-                .overwrite(custom_args.force_overwrite);
-        } else {
-            // If overwrite not specified, set to false (default)
-            context
-                .report_options()
-                .directory(PathBuf::from(&args.output_dir));
-        }
-        
+        let custom_args = custom_args.unwrap();
+        // Set the output directory and whether to overwrite the existing file.
+        context
+            .report_options()
+            .directory(PathBuf::from(&args.output_dir))
+            .overwrite(custom_args.force_overwrite);
         Ok(())
     })
     .unwrap();
 
-        
     let parameters = context
         .get_global_property_value(Parameters)
         .unwrap()
         .clone();
-        
+
     // Set the random seed.
     context.init_random(parameters.seed);
 
@@ -67,7 +59,7 @@ fn initialize() -> Result<Context, IxaError> {
     context.index_property(CensusTract);
 
     // Initialize the person-to-person transmission workflow.
-    transmission_manager::init(&mut context)?;
+    transmission_manager::init(&mut context);
 
     // Add a plan to shut down the simulation after `max_time`, regardless of
     // what else is happening in the model.
