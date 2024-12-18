@@ -1,7 +1,7 @@
 use std::fmt::Debug;
 use std::path::PathBuf;
 
-use ixa::{define_global_property, error::IxaError};
+use ixa::{define_global_property, IxaError};
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -33,7 +33,7 @@ define_global_property!(Parameters, ParametersValues, validate_inputs);
 
 #[cfg(test)]
 mod test {
-    use ixa::error::IxaError;
+    use ixa::IxaError;
 
     use super::validate_inputs;
     use std::path::PathBuf;

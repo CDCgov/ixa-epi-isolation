@@ -1,15 +1,15 @@
 use ixa::{
-    context::Context,
+    Context,
     define_person_property, define_person_property_with_default, define_rng,
-    error::IxaError,
-    global_properties::ContextGlobalPropertiesExt,
-    people::{ContextPeopleExt, PersonId, PersonPropertyChangeEvent},
-    random::ContextRandomExt,
+    IxaError,
+    ContextGlobalPropertiesExt,
+    ContextPeopleExt, PersonId, PersonPropertyChangeEvent,
+    ContextRandomExt,
 };
 use statrs::distribution::{ContinuousCDF, Exp, Poisson};
 
 use crate::parameters::Parameters;
-use crate::{contact::ContextContactExt, population_loader::Alive};
+use crate::contact::ContextContactExt;
 
 // Define the possible infectious statuses for a person.
 // These states refer to the person's infectiousness at a given time
@@ -31,9 +31,9 @@ define_person_property_with_default!(
     InfectiousStatusType::Susceptible
 );
 
-/// Seeds initial infections at t = 0, and subscribes to people becoming infectious
-/// to schedule their infection attempts.
-pub fn init(context: &mut Context) {
+/// Seeds initial infections at t = 0, and subscribes to
+/// people becoming infectious to schedule their infection attempts.
+pub fn init(context: &mut Context) -> Result<(), IxaError> {
     // Watch for changes in the InfectiousStatusType property.
     context.subscribe_to_event(
         move |context, event: PersonPropertyChangeEvent<InfectiousStatus>| {
@@ -41,21 +41,22 @@ pub fn init(context: &mut Context) {
         },
     );
     context.add_plan(0.0, |context| {
-        seed_infections(context);
+        seed_infections(context).expect("Unable to seed infections");
     });
+    Ok(())
 }
 
 /// This function seeds the initial infections in the population.
-fn seed_infections(context: &mut Context) {
+fn seed_infections(context: &mut Context) -> Result<(), IxaError> {
     // For now, we just pick a random person and make them infectious.
     // In the future, we may pick people based on specific person properties.
-    let alive_people = context.query_people((Alive, true));
-    let random_person_id = context.sample_range(TransmissionRng, 0..alive_people.len());
+    let random_person_id = context.sample_person(TransmissionRng)?;
     context.set_person_property(
-        alive_people[random_person_id],
+        random_person_id,
         InfectiousStatus,
         InfectiousStatusType::Infectious,
     );
+    Ok(())
 }
 
 // Called when a person's infectious status changes. Only considers people becoming infectious,
@@ -227,8 +228,8 @@ mod test {
 
     use super::{init, InfectiousStatus, InfectiousStatusType};
     use ixa::{
-        context::Context, global_properties::ContextGlobalPropertiesExt, people::ContextPeopleExt,
-        random::ContextRandomExt, PersonId, PersonPropertyChangeEvent,
+        Context, ContextGlobalPropertiesExt, ContextPeopleExt,
+        ContextRandomExt, PersonId, PersonPropertyChangeEvent,
     };
     use statrs::distribution::{ContinuousCDF, Exp};
 
@@ -256,7 +257,7 @@ mod test {
         // and we do not trigger the `get_contact` function -- which errors out in the case
         // of a population size of 1.
         let mut context = setup(0.000_000_000_000_000_01);
-        init(&mut context);
+        init(&mut context).expect("could not initialize");
         let person_id = context.add_person(()).unwrap();
 
         context.execute();
@@ -273,7 +274,7 @@ mod test {
         // zero secondary infections is extremely low.
         // This lets us check that the other person in the population is infected.
         let mut context = setup(50.0);
-        init(&mut context);
+        init(&mut context).expect("could not initialize");
         let person_id = context.add_person(()).unwrap();
         let contact = context.add_person(()).unwrap();
 
@@ -339,7 +340,7 @@ mod test {
             // By having only one person in the population when we choose the transmitter, we guarantee
             // that that one person is the transmitter. This lets us keep the transmitter id, which we
             // need below.
-            init(&mut context);
+            init(&mut context).expect("could not initialize");
             let infection_times_clone = Rc::clone(&infection_times);
             context.subscribe_to_event({
                 move |context, event: PersonPropertyChangeEvent<InfectiousStatus>| {
