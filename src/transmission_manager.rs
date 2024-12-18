@@ -230,17 +230,16 @@ mod test {
             max_time: 10.0,
             seed: 42,
             r_0,
-            gi_trajectories_dt: 0.2,
             report_period: 1.0,
             synth_population_file: PathBuf::from("."),
-            gi_trajectories_file: PathBuf::from("./tests/data/gi_trajectory.csv"),
+            natural_history_inputs: PathBuf::from("./tests/data/natural_history.csv"),
         };
         let mut context = Context::new();
         context.init_random(params.seed);
         context
             .set_global_property_value(Parameters, params)
             .unwrap();
-        nh_init(&mut context).expect("Error reading natural history parameters from file.");
+        nh_init(&mut context).expect("Error reading natural history parameters from file");
         context
     }
 

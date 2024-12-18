@@ -44,9 +44,10 @@ fn initialize() -> Result<Context, IxaError> {
     // Set the random seed.
     context.init_random(parameters.seed);
 
-    // Read the generation interval trajectories from a CSV.
-    // Eventually, also read the symptom onset/improvement times,
-    // and any other disease parameters (like viral load over time) from CSVs.
+    // Read the natural history parameters from a CSV.
+    // For now, this includes just the generation interval over time since infection.
+    // Eventually, this will include the viral load, incubation period/symptom onset time,
+    // and symptom improvement/hospitalization time.
     natural_history_manager::init(&mut context)?;
 
     // Set the output directory and whether to overwrite the existing file.

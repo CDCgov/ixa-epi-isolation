@@ -3,7 +3,7 @@
 1. Synthetic population
 2. [Transmission](transmission.md)
     - [Time-varying infectiousness](time-varying-infectiousness.md)
-    - Estimating infectiousness from viral load
+    - [Natural history inputs](natural-history-inputs.md)
 3. Contact
 4. Natural immunity
 5. Interventions

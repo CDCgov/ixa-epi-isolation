@@ -3,9 +3,8 @@
       "max_time": 200.0,
       "seed": 123,
       "r_0": 2.5,
-      "gi_trajectories_dt": 0.02,
       "report_period": 1.0,
       "synth_population_file": "input/people_test.csv",
-      "gi_trajectories_file": "input/gi_trajectories.csv"
+      "natural_history_inputs": "input/natural_history.csv"
     }
 }
