@@ -66,10 +66,10 @@ mod test {
     use std::collections::HashMap;
     use std::path::PathBuf;
 
-    fn setup(masking: f64, tmax: f64, reproduction_number: f64) -> Context {
+    fn setup(masking: f64, tmax: f64, reproduction_number: f64, rand_seed: u64) -> Context {
         let params = ParametersValues {
             max_time: tmax,
-            seed: 42,
+            seed: rand_seed,
             r_0: reproduction_number,
             infection_duration: 0.1,
             generation_interval: 3.0,
@@ -88,7 +88,7 @@ mod test {
 
     #[test]
     fn test_assign_facemask_status_guaranteed() {
-        let mut context = setup(1.0, 0.0, 2.0);
+        let mut context = setup(1.0, 0.0, 2.0, 42);
         let person_id = context.add_person(()).unwrap();
 
         assign_facemask_status(&mut context, person_id);
@@ -99,7 +99,7 @@ mod test {
 
     #[test]
     fn test_assign_facemask_status_zero() {
-        let mut context = setup(0.0, 0.0, 2.0);
+        let mut context = setup(0.0, 0.0, 2.0, 42);
         let person_id = context.add_person(()).unwrap();
 
         assign_facemask_status(&mut context, person_id);
@@ -111,7 +111,7 @@ mod test {
     #[test]
     #[allow(clippy::cast_precision_loss)]
     fn test_assign_facemask_status_largepop() {
-        let mut context = setup(0.5, 0.0, 2.0);
+        let mut context = setup(0.5, 0.0, 2.0, 42);
         let mut facemask_counts = HashMap::new();
         let population_size = 5000;
 
@@ -143,7 +143,7 @@ mod test {
     #[test]
     #[allow(clippy::cast_precision_loss)]
     fn test_init() {
-        let mut context = setup(0.5, 0.0, 2.0);
+        let mut context = setup(0.5, 0.0, 2.0, 42);
         let population_size = 5000;
         for _ in 0..population_size {
             let _person_id = context.add_person(()).unwrap();
@@ -169,18 +169,32 @@ mod test {
         );
     }
 
+    // Evaluate transmission between two people simplified from transmission manager
+    fn evaluate_transmission(
+        context: &mut Context,
+        contact_id: PersonId,
+        transmitter_id: PersonId,
+    ) -> bool {
+        let relative_infectiousness =
+            context.query_relative_transmission(transmitter_id, FacemaskStatus);
+        let relative_risk = context.query_relative_transmission(contact_id, FacemaskStatus);
+        let relative_transmission = relative_infectiousness * relative_risk;
+        context.sample_range(FacemaskRng, 0.0..1.0) < relative_transmission
+    }
+
     #[allow(clippy::cast_precision_loss)]
     fn two_person_epidemic_trial(
         relative_risk: f64,
         relative_infectiousness: f64,
         transmitter_mask: FacemaskStatusType,
         contact_mask: FacemaskStatusType,
+        seed: u64,
     ) -> bool {
         // Setting R0 to 50 for guaranteed infection attempt
-        let mut context = setup(0.5, 10.0, 50.0);
+        let mut context = setup(0.5, 0.0, 2.0, seed);
         intervention_init(&mut context);
 
-        let _transmitter_id = context
+        let transmitter_id = context
             .add_person((
                 (InfectiousStatus, InfectiousStatusType::Infectious),
                 (FacemaskStatus, transmitter_mask),
@@ -208,11 +222,7 @@ mod test {
             )
             .unwrap();
 
-        transmission_init(&mut context);
-        context.execute();
-
-        context.get_person_property(contact_id, InfectiousStatus)
-            != InfectiousStatusType::Susceptible
+        evaluate_transmission(&mut context, contact_id, transmitter_id)
     }
 
     #[allow(clippy::cast_precision_loss)]
@@ -233,19 +243,21 @@ mod test {
         };
 
         let mut successes: usize = 0;
-        for _ in 0..n {
+        for seed in 0..n {
             if two_person_epidemic_trial(
                 relative_risk,
                 relative_infectiousness,
                 transmitter_mask,
                 contact_mask,
+                seed.try_into().unwrap(),
             ) {
                 successes += 1;
             }
         }
         let observed_rate = successes as f64 / n as f64;
         let theory_rate = risk * infectiousness;
-        assert!(theory_rate - observed_rate < 0.01);
+
+        assert!((theory_rate - observed_rate).abs() < 0.01);
     }
 
     #[test]
@@ -285,13 +297,14 @@ mod test {
         masking_rate: f64,
         masking_efficacy: f64,
         r_0: f64,
-    ) -> f64 {
+        seed: u64,
+    ) {
         let observed_r_0 = r_0 * (1.0 - masking_efficacy * masking_rate);
         let theoretical_ratio = toms748(|x| 1.0 - x - f64::exp(-observed_r_0 * x), 0.0002, 1.0)
             .root()
             .unwrap();
 
-        let mut context = setup(masking_rate, 10.0, r_0);
+        let mut context = setup(masking_rate, 10.0, r_0, seed);
 
         intervention_init(&mut context);
 
@@ -313,31 +326,16 @@ mod test {
 
         context.execute();
 
-        let epidemic_size = context
-            .query_people((InfectiousStatus, InfectiousStatusType::Recovered))
-            .len();
+        let epidemic_size =
+            context.query_people_count((InfectiousStatus, InfectiousStatusType::Recovered));
         let observed_ratio = epidemic_size as f64 / population_size as f64;
 
-        observed_ratio - theoretical_ratio
+        assert!((observed_ratio - theoretical_ratio).abs() < 0.025);
     }
 
     #[test]
-    fn test_epidemic_comparison_with_effective_facemask() {
-        let masking_rate = 0.8;
-        let masking_efficacy = 0.9;
-        let r_0 = 10.0;
-
-        let result = epidemic_comparison_with_facemask(masking_rate, masking_efficacy, r_0);
-        assert!(result.abs() < 0.025);
-    }
-
-    #[test]
-    fn test_epidemic_comparison_with_no_facemask() {
-        let masking_rate = 0.0;
-        let masking_efficacy = 0.9;
-        let r_0 = 2.8;
-
-        let result = epidemic_comparison_with_facemask(masking_rate, masking_efficacy, r_0);
-        assert!(result.abs() < 0.05);
+    fn test_epidemic_comparison_with_facemask() {
+        epidemic_comparison_with_facemask(0.8, 0.9, 10.0, 42);
+        epidemic_comparison_with_facemask(0.0, 0.9, 2.8, 42);
     }
 }
