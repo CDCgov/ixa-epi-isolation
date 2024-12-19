@@ -1,17 +1,17 @@
 # A central natural history manager
 
 ## Overview
-We provide a way for reading in user-specified natural history parameters (infectiousness over time/the
-generation interval, viral load over time, etc.) and parameterizing transmission based on these parameters.
+We provide a way to read in user-specified natural history parameters (infectiousness over time/the
+generation interval, viral load over time, etc.) and parametrizing transmission based on these parameters.
 In the future, the input CSV can be expanded to also include symptom onset and improvement times as part of
 the natural history parameter set.
 
-A natural history parameter set consists of a set of values of all the natural history parameters -- the
+A natural history parameter set consists of a set of values of all the natural history parameters: the
 generation interval over time, the viral load, the symptom onset and improvement times, the time to
 hospitalization, etc. There may be correlations between these parameters -- so that higher viral loads
 are associated with longer times to symptom improvement -- or there may not be. By having the user specify
 a CSV file which contains all of these parameter sets, not only does this mean that the user determines
-the distribution of each of these parameters outside of Rust, but the user is also able to impose any
+the distribution of each of these parameters outside of Ixa, but the user is also able to impose any
 meaningful correlations between parameters.
 
 ## Data input format
@@ -31,7 +31,7 @@ such:
 
 The `id` is an identifier that marks a distinct sample from the natural history parameters at a given `time`
 since the person was first infected. The `gi_cdf` describes the fraction of infectiousness that has occured
-in this parameter set a given time. Additional columns like `viral_load` and other time-varying quantities
+in this parameter set at time t. Additional columns like `viral_load` and other time-varying quantities
 can easily be added in this input schema.
 
 In the future, we may also add variables like `symptom_onset_time` and `symptom_improvement_time`. These
