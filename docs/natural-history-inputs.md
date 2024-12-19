@@ -2,7 +2,7 @@
 
 ## Overview
 We provide a way to read in user-specified natural history parameters (infectiousness over time/the
-generation interval, viral load over time, etc.) and parameterizing transmission based on these parameters.
+generation interval, viral load over time, etc.) and parametrizing transmission based on these parameters.
 In the future, the input CSV can be expanded to also include symptom onset and improvement times as part of
 the natural history parameter set.
 
