@@ -17,14 +17,13 @@ use crate::population_loader::{Age, CensusTract};
 
 #[derive(Args, Debug)]
 struct CustomArgs {
-    /// whether force overwrite of output files if they already exist
+    ///Whether force overwrite of output files if they already exist
     #[arg(short = 'f', long)]
     force_overwrite: bool,
 }
 
 fn initialize() -> Result<Context, IxaError> {
     let mut context = run_with_custom_args(|context, args, custom_args: Option<CustomArgs>| {
-        println!("Setting Overwrite parameter");
         // Read the global properties.
         let custom_args = custom_args.unwrap();
         // Set the output directory and whether to overwrite the existing file.
