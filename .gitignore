@@ -38,6 +38,10 @@
 # !your_data_file.csv
 # !your_data_directory/
 !input/people_test.csv
+!input/natural_history.csv
+!tests/data/natural_history.csv
+!tests/data/empty.csv
+!tests/data/column_size_changes.csv
 
 #####
 # Python
