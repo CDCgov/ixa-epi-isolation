@@ -1,7 +1,7 @@
 use crate::parameters::Parameters;
 use ixa::{
-    context::Context, define_person_property, define_person_property_with_default, error::IxaError,
-    global_properties::ContextGlobalPropertiesExt, people::ContextPeopleExt,
+    define_person_property, define_person_property_with_default, Context,
+    ContextGlobalPropertiesExt, ContextPeopleExt, IxaError,
 };
 
 use serde::Deserialize;
@@ -56,7 +56,7 @@ pub fn init(context: &mut Context) -> Result<(), IxaError> {
 #[cfg(test)]
 mod test {
     use super::*;
-    use ixa::people::ContextPeopleExt;
+    use ixa::ContextPeopleExt;
     use std::io::Write;
     use std::path::PathBuf;
     use tempfile::NamedTempFile;

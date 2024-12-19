@@ -1,10 +1,4 @@
-use ixa::{
-    context::Context,
-    define_rng,
-    error::IxaError,
-    people::{ContextPeopleExt, PersonId},
-    random::ContextRandomExt,
-};
+use ixa::{define_rng, Context, ContextPeopleExt, ContextRandomExt, IxaError, PersonId};
 
 use crate::population_loader::Alive;
 
@@ -54,7 +48,7 @@ impl ContextContactExt for Context {
 mod test {
     use super::ContextContactExt;
     use crate::population_loader::Alive;
-    use ixa::{context::Context, people::ContextPeopleExt, random::ContextRandomExt, IxaError};
+    use ixa::{Context, ContextPeopleExt, ContextRandomExt, IxaError};
 
     #[test]
     fn test_cant_get_contact_in_pop_of_one() {
