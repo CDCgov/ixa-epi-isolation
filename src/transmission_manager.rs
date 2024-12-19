@@ -5,11 +5,7 @@ use ixa::{
 };
 use statrs::distribution::{ContinuousCDF, Exp, Poisson};
 
-use crate::{
-    contact::ContextContactExt,
-    parameters::Parameters,
-    population_loader::Alive
-};
+use crate::{contact::ContextContactExt, parameters::Parameters, population_loader::Alive};
 
 // Define the possible infectious statuses for a person.
 // These states refer to the person's infectiousness at a given time
