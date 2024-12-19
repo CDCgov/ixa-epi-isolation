@@ -7,6 +7,7 @@ use statrs::distribution::{ContinuousCDF, Exp, Poisson};
 
 use crate::contact::ContextContactExt;
 use crate::parameters::Parameters;
+use crate::population_loader::Alive;
 
 // Define the possible infectious statuses for a person.
 // These states refer to the person's infectiousness at a given time
@@ -46,7 +47,7 @@ pub fn init(context: &mut Context) {
 fn seed_infections(context: &mut Context) -> Result<(), IxaError> {
     // For now, we just pick a random person and make them infectious.
     // In the future, we may pick people based on specific person properties.
-    let random_person_id = context.sample_person(TransmissionRng)?;
+    let random_person_id = context.sample_person(TransmissionRng, (Alive, true))?;
     context.set_person_property(
         random_person_id,
         InfectiousStatus,
