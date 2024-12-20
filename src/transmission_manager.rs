@@ -3,9 +3,12 @@ use ixa::{
     ContextGlobalPropertiesExt, ContextPeopleExt, ContextRandomExt, IxaError, PersonId,
     PersonPropertyChangeEvent,
 };
-use statrs::distribution::{ContinuousCDF, Exp, Poisson};
+use statrs::distribution::Poisson;
 
-use crate::{contact::ContextContactExt, parameters::Parameters, population_loader::Alive};
+use crate::{
+    contact::ContextContactExt, natural_history_manager::ContextNaturalHistoryExt,
+    parameters::Parameters, population_loader::Alive,
+};
 
 // Define the possible infectious statuses for a person.
 // These states refer to the person's infectiousness at a given time
@@ -92,7 +95,7 @@ fn schedule_next_infection_attempt(
     context: &mut Context,
     transmitter_id: PersonId,
     num_infection_attempts_remaining: usize,
-    last_infection_time_uniform: f64,
+    last_infection_time_unif: f64,
 ) {
     // If there are no more infection attempts remaining, set the person to recovered.
     if num_infection_attempts_remaining == 0 {
@@ -107,8 +110,9 @@ fn schedule_next_infection_attempt(
     // Get the next infection attempt time.
     let (next_infection_time_unif, time_until_next_infection_attempt_gi) = get_next_infection_time(
         context,
+        transmitter_id,
         num_infection_attempts_remaining,
-        last_infection_time_uniform,
+        last_infection_time_unif,
     );
 
     // Schedule the infection attempt. The function `infection_attempt` (a) grabs a contact at
@@ -137,8 +141,9 @@ fn schedule_next_infection_attempt(
 /// and passes it through the inverse CDF of the generation interval to get the next infection time.
 fn get_next_infection_time(
     context: &mut Context,
+    transmitter_id: PersonId,
     num_infection_attempts_remaining: usize,
-    last_infection_time_uniform: f64,
+    last_infection_time_unif: f64,
 ) -> (f64, f64) {
     // Draw the next uniform infection time using order statistics.
     // The first of n draws from U(0, 1) comes from Beta(1, n), so we pass a uniform
@@ -151,27 +156,13 @@ fn get_next_infection_time(
         );
     // We scale the uniform draw to be on the interval (last_infection_time_uniform, 1)
     // so that the next infection time is always greater than the last infection time.
-    next_infection_time_unif = last_infection_time_uniform
-        + next_infection_time_unif * (1.0 - last_infection_time_uniform);
+    next_infection_time_unif =
+        last_infection_time_unif + next_infection_time_unif * (1.0 - last_infection_time_unif);
 
-    (
-        next_infection_time_unif,
-        gi_inverse_cdf(context, next_infection_time_unif)
-            - gi_inverse_cdf(context, last_infection_time_uniform),
-    )
-}
-
-/// The inverse CDF of the generation interval distribution.
-/// This function is used to calculate the time until the next infection attempt.
-fn gi_inverse_cdf(context: &Context, uniform_draw: f64) -> f64 {
-    let gi = context
-        .get_global_property_value(Parameters)
-        .unwrap()
-        .generation_interval;
-    // For now, we are assuming that the generation interval is given by an exponential
-    // distribution. In the future, we will switch this distribution to be specified from
-    // our isolation guidance modeling work.
-    Exp::new(1.0 / gi).unwrap().inverse_cdf(uniform_draw)
+    let delta_time = context
+        .evaluate_inverse_generation_interval(transmitter_id, next_infection_time_unif)
+        - context.evaluate_inverse_generation_interval(transmitter_id, last_infection_time_unif);
+    (next_infection_time_unif, delta_time)
 }
 
 /// This function is called when an infected agent has an infection event scheduled.
@@ -216,6 +207,7 @@ mod test {
     use std::{cell::RefCell, path::PathBuf, rc::Rc};
 
     use crate::{
+        natural_history_manager::init as nh_init,
         parameters::{Parameters, ParametersValues},
         population_loader::Alive,
         transmission_manager::schedule_next_infection_attempt,
@@ -226,23 +218,26 @@ mod test {
         Context, ContextGlobalPropertiesExt, ContextPeopleExt, ContextRandomExt, PersonId,
         PersonPropertyChangeEvent,
     };
-    use statrs::distribution::{ContinuousCDF, Exp};
+    use statrs::{
+        assert_almost_eq,
+        distribution::{ContinuousCDF, Exp},
+    };
 
     fn setup(r_0: f64) -> Context {
         let params = ParametersValues {
             max_time: 10.0,
             seed: 42,
             r_0,
-            infection_duration: 0.1,
-            generation_interval: 3.0,
             report_period: 1.0,
             synth_population_file: PathBuf::from("."),
+            natural_history_inputs: PathBuf::from("./tests/data/natural_history.csv"),
         };
         let mut context = Context::new();
         context.init_random(params.seed);
         context
             .set_global_property_value(Parameters, params)
             .unwrap();
+        nh_init(&mut context).expect("Error reading natural history parameters from file");
         context
     }
 
@@ -307,10 +302,6 @@ mod test {
         // (empirical) distribution and the generation interval (theoretical)
         // distribution.
 
-        // We need to get some parameters out of context for comparison in the KS test.
-        // Initialize `gi`. It will always be set by the proper value from context
-        // in the for loop below.
-        let mut gi = 0.0;
         // We want an infected person to infect others, and we want to record those
         // infection times. We need to do this multiple times with different seeds
         // to get a good estimate of the distribution of infection times.
@@ -318,13 +309,6 @@ mod test {
         let infection_times = Rc::new(RefCell::new(Vec::<f64>::new()));
         for seed in 0..n {
             let mut context = setup(5.0);
-            if seed == 0 {
-                // Get the parameters we need out of context.
-                gi = context
-                    .get_global_property_value(Parameters)
-                    .unwrap()
-                    .generation_interval;
-            }
             context.init_random(seed.into());
             // We only need two people in the population: a transmitter and a contact.
             // This is because we set the person who becomes infected back to susceptible
@@ -342,14 +326,14 @@ mod test {
                     record_infection_times(context, event, transmitter_id, &infection_times_clone);
                 }
             });
-            context.add_plan(0.0, move |context| {
+            context.add_plan(0.0, |context| {
                 context.add_person(()).unwrap();
             });
             context.execute();
         }
-
-        check_ks_stat(&mut infection_times.borrow_mut(), |x| {
-            Exp::new(1.0 / gi).unwrap().cdf(x)
+        check_ks_stat(&mut infection_times.borrow_mut(), |time| {
+            // The test GI CDF is that of an exponential distribution with rate 1.
+            Exp::new(1.0).unwrap().cdf(time)
         });
     }
 
@@ -380,7 +364,7 @@ mod test {
 
     #[allow(clippy::cast_precision_loss)]
     fn infection_attempts_end_time(n_attempts: usize, n_iter: u32) {
-        // Using some math, we can test that the observed time of the end of the simulation
+        // We can test that the observed time of the end of the simulation
         // is what we expect it to be given the number of infection attempts.
         // Concretely, with more infection attempts, we expect the simulation to end later.
         // In uniform space, the last infection time occurs at Beta(n_attempts, 1).
@@ -388,14 +372,9 @@ mod test {
         // using the KS test.
 
         let mut end_times = Vec::<f64>::new();
-        // In this test, the value of r_0 used to set up context is meaningless because we manually
-        // set the number of infection attempts below.
-        let context = setup(1.0);
-        let params = context
-            .get_global_property_value(Parameters)
-            .unwrap()
-            .clone();
         for seed in 0..n_iter {
+            // In this test, the value of r_0 used to set up context is meaningless because we manually
+            // set the number of infection attempts and GI params.
             let mut context = setup(1.0);
             context.init_random(seed.into());
             let transmitter_id = context.add_person(()).unwrap();
@@ -418,8 +397,9 @@ mod test {
 
         // The theoretical CDF is calculated by taking the CDF of the GI
         // and passing that through the CDF of Beta(n_attempts, 1).
-        check_ks_stat(&mut end_times, |x| {
-            let gi_cdf = Exp::new(1.0 / params.generation_interval).unwrap().cdf(x);
+        check_ks_stat(&mut end_times, |time| {
+            // The test GI CDF is that of an exponential distribution with rate 1.
+            let gi_cdf = Exp::new(1.0).unwrap().cdf(time);
             // Inverse CDF of Beta(n_attempts, 1)
             f64::powf(gi_cdf, n_attempts as f64)
         });
@@ -441,8 +421,7 @@ mod test {
             })
             .reduce(f64::max)
             .unwrap();
-
-        assert!(ks_stat < 0.01);
+        assert_almost_eq!(ks_stat, 0.0, 0.01);
     }
 
     #[test]
