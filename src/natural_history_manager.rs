@@ -236,41 +236,38 @@ fn assign_natural_history_idx(context: &mut Context, person_id: PersonId) {
 /// when there are at least two samples above and below `xp`. Otherwise, it uses linear extrapolation at the tails.
 /// Assumes that function samples are sorted so that the `xs` are in ascending order.
 fn interpolate(xs: &[f64], ys: &[f64], xp: f64) -> f64 {
-    let upper_window_index_option = xs.iter().position(|&x| x > xp);
-    // We need to check whether a point was found. If it wasn't, it means that all values
-    // in `xs` are less than `xp`. We have to use an alternative extrapolation strategy.
-    let upper_window_index = match upper_window_index_option {
+    let window_right_edge_option = xs.iter().position(|&x| x > xp);
+    // We need to check whether a point was found and if so what the index was to determine what
+    // type of interpolation we can use.
+    match window_right_edge_option {
         None => {
             // We are above the range of the `xs` samples, so we must extrapolate. We default to
             // linear extrapolation using the last two values in `xs`.
             let traj_len = xs.len();
-            return linear_interpolation(
+            linear_interpolation(
                 xs[traj_len - 2],
                 xs[traj_len - 1],
                 ys[traj_len - 2],
                 ys[traj_len - 1],
                 xp,
-            );
+            )
         }
-        Some(i) => match i {
-            // We only have one point in `xs` below `xp`, so we must also default to linear extrapolation.
-            1 => return linear_interpolation(xs[0], xs[1], ys[0], ys[1], xp),
-            // Else, we use cubic spline interpolation.
-            // The index can never return 0 because we handle that case at the beginning of the function.
-            _ => i,
-        },
-    };
-    // If our interpolation point is in the range of the `xs` samples, we can use cubic spline interpolation.
-    cubic_spline_interpolation(
-        xs[(upper_window_index - 2)..=(upper_window_index + 1)]
-            .try_into()
-            .unwrap(),
-        // Since `upper_window_index` is the third index in the trajectory, we need to subtract 2 to get the first index.
-        ys[(upper_window_index - 2)..=(upper_window_index + 1)]
-            .try_into()
-            .unwrap(),
-        xp,
-    )
+        Some(1) => {
+            // We only have one point in `xs` below `xp`, so we must default to linear extrapolation.
+            linear_interpolation(xs[0], xs[1], ys[0], ys[1], xp)
+        }
+        // Otherwise, we have at least two points above and below `xp`, so we can use cubic
+        // spline interpolation.
+        Some(i) =>
+        // Since `i` is the third index in the trajectory, we need to subtract 2 to get the first index.
+        {
+            cubic_spline_interpolation(
+                xs[(i - 2)..=(i + 1)].try_into().unwrap(),
+                ys[(i - 2)..=(i + 1)].try_into().unwrap(),
+                xp,
+            )
+        }
+    }
 }
 
 /// Fits a line between two points and returns the value of the line at a given x-value `xp`.
