@@ -25,24 +25,25 @@ long input format:
 
 | id | weight | time | parameter | value |
 | --- | --- | --- | --- | --- |
-| 0 | 0.5 | 0.0 | GenerationIntervalCDF | 0.0 |
-| 0 | 0.5 | 1.0 | GenerationIntervalCDF | 0.5 |
-| 0 | 0.5 | 2.0 | GenerationIntervalCDF | 1.0 |
-| 0 | 0.5 | NA | IncubationPeriod | 6 |
-| 0 | 0.5 | NA | TimeToSymptomImprovement | 7 |
-| 1 | 0.5 | 0.0 | GenerationIntervalCDF | 0.0 |
-| 1 | 0.5 | 1.0 | GenerationIntervalCDF | 0.8 |
-| 1 | 0.5 | 2.0 | GenerationIntervalCDF | 1.0 |
+| 0 | 0.45 | 0.0 | GenerationIntervalCDF | 0.0 |
+| 0 | 0.45 | 1.0 | GenerationIntervalCDF | 0.5 |
+| 0 | 0.45 | 2.0 | GenerationIntervalCDF | 1.0 |
+| 0 | 0.45 | NA | IncubationPeriod | 6 |
+| 0 | 0.45 | NA | TimeToSymptomImprovement | 7 |
+| 1 | 0.4 | 0.0 | GenerationIntervalCDF | 0.0 |
+| 1 | 0.4 | 1.0 | GenerationIntervalCDF | 0.8 |
+| 1 | 0.4 | 2.0 | GenerationIntervalCDF | 1.0 |
+| 2 | 0.15 | 0.0 | GenerationIntervalCDF | 0.1 |
 | ... | ... | ... | ... | ... |
 
 The `id` is a unique identifier that marks a distinct sample of the natural history parameters. In
 this example, `id = 0` describes the infection of an individual who has a symptomatic infection
 because they have an incubation period and time to symptom improvement whereas `id = 1` describes
-the infection of an individual who is asymptomatic. This schema allows for the user to describe
-different types of infections in a single input file. The `weight` column describes the weight
-with which to sample that particular infection archetype in the model. A user can add new parameters
--- for instance, the viral load -- by adding a row (or rows if the parameter varies in time) to the
-input CSV.
+the infection of an individual who is asymptomatic because symptom-associated parameters are not
+present in this natural history praameter set. This schema allows for the user to describe different
+types of infections in a single input file. The `weight` column describes the weight with which to
+sample that particular infection archetype in the model. A user can add new parameters -- for instance,
+the viral load -- by adding a row (or rows if the parameter varies in time) to the input CSV.
 
 This input structure has two implications for time-varying parameters. First, there may be multiple
 parameters that vary over time, but they do not need to have values at the same time (for instance,
