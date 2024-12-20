@@ -1,15 +1,11 @@
 use ixa::{
-    context::Context,
-    define_person_property, define_person_property_with_default, define_rng,
-    error::IxaError,
-    global_properties::ContextGlobalPropertiesExt,
-    people::{ContextPeopleExt, PersonId, PersonPropertyChangeEvent},
-    random::ContextRandomExt,
+    define_person_property, define_person_property_with_default, define_rng, Context,
+    ContextGlobalPropertiesExt, ContextPeopleExt, ContextRandomExt, IxaError, PersonId,
+    PersonPropertyChangeEvent,
 };
 use statrs::distribution::{ContinuousCDF, Exp, Poisson};
 
-use crate::parameters::Parameters;
-use crate::{contact::ContextContactExt, population_loader::Alive};
+use crate::{contact::ContextContactExt, parameters::Parameters, population_loader::Alive};
 
 // Define the possible infectious statuses for a person.
 // These states refer to the person's infectiousness at a given time
@@ -31,8 +27,8 @@ define_person_property_with_default!(
     InfectiousStatusType::Susceptible
 );
 
-/// Seeds initial infections at t = 0, and subscribes to people becoming infectious
-/// to schedule their infection attempts.
+/// Seeds initial infections at t = 0, and subscribes to
+/// people becoming infectious to schedule their infection attempts.
 pub fn init(context: &mut Context) {
     // Watch for changes in the InfectiousStatusType property.
     context.subscribe_to_event(
@@ -41,21 +37,21 @@ pub fn init(context: &mut Context) {
         },
     );
     context.add_plan(0.0, |context| {
-        seed_infections(context);
+        seed_infections(context).expect("Unable to seed infections");
     });
 }
 
 /// This function seeds the initial infections in the population.
-fn seed_infections(context: &mut Context) {
+fn seed_infections(context: &mut Context) -> Result<(), IxaError> {
     // For now, we just pick a random person and make them infectious.
     // In the future, we may pick people based on specific person properties.
-    let alive_people = context.query_people((Alive, true));
-    let random_person_id = context.sample_range(TransmissionRng, 0..alive_people.len());
+    let random_person_id = context.sample_person(TransmissionRng, (Alive, true))?;
     context.set_person_property(
-        alive_people[random_person_id],
+        random_person_id,
         InfectiousStatus,
         InfectiousStatusType::Infectious,
     );
+    Ok(())
 }
 
 // Called when a person's infectious status changes. Only considers people becoming infectious,
@@ -227,8 +223,8 @@ mod test {
 
     use super::{init, InfectiousStatus, InfectiousStatusType};
     use ixa::{
-        context::Context, global_properties::ContextGlobalPropertiesExt, people::ContextPeopleExt,
-        random::ContextRandomExt, PersonId, PersonPropertyChangeEvent,
+        Context, ContextGlobalPropertiesExt, ContextPeopleExt, ContextRandomExt, PersonId,
+        PersonPropertyChangeEvent,
     };
     use statrs::distribution::{ContinuousCDF, Exp};
 

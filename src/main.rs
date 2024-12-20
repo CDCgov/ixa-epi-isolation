@@ -3,10 +3,11 @@ mod parameters;
 mod population_loader;
 mod transmission_manager;
 
-use clap::Parser;
+use clap::Args;
+use ixa::runner::run_with_custom_args;
 use ixa::{
-    context::Context, error::IxaError, global_properties::ContextGlobalPropertiesExt,
-    people::ContextPeopleExt, random::ContextRandomExt, report::ContextReportExt,
+    Context, ContextGlobalPropertiesExt, ContextPeopleExt, ContextRandomExt, ContextReportExt,
+    IxaError,
 };
 use std::path::PathBuf;
 use transmission_manager::InfectiousStatus;
@@ -14,38 +15,33 @@ use transmission_manager::InfectiousStatus;
 use crate::parameters::Parameters;
 use crate::population_loader::{Age, CensusTract};
 
-#[derive(Parser)]
-#[command(version, about, long_about = None)]
-struct Args {
-    /// path to the input file
-    #[arg(short, long)]
-    input_file: PathBuf,
-
-    /// path to the output directory
-    #[arg(short, long)]
-    output_directory: PathBuf,
-
-    /// whether force overwrite of output files if they already exist
-    #[arg(short, long, default_value = "false", default_missing_value = "true")]
+#[derive(Args, Debug)]
+struct CustomArgs {
+    ///Whether force overwrite of output files if they already exist
+    #[arg(short = 'f', long)]
     force_overwrite: bool,
 }
 
-fn initialize(args: &Args) -> Result<Context, IxaError> {
-    let mut context = Context::new();
-    // Read the global properties.
-    context.load_global_properties(&args.input_file)?;
+fn initialize() -> Result<Context, IxaError> {
+    let mut context = run_with_custom_args(|context, args, custom_args: Option<CustomArgs>| {
+        // Read the global properties.
+        let custom_args = custom_args.unwrap();
+        // Set the output directory and whether to overwrite the existing file.
+        context
+            .report_options()
+            .directory(PathBuf::from(&args.output_dir))
+            .overwrite(custom_args.force_overwrite);
+        Ok(())
+    })
+    .unwrap();
+
     let parameters = context
         .get_global_property_value(Parameters)
         .unwrap()
         .clone();
+
     // Set the random seed.
     context.init_random(parameters.seed);
-
-    // Set the output directory and whether to overwrite the existing file.
-    context
-        .report_options()
-        .directory(PathBuf::from(&args.output_directory))
-        .overwrite(args.force_overwrite);
 
     // Report the number of people by age, census tract, and infectious status
     // every report_period.
@@ -78,7 +74,6 @@ fn initialize(args: &Args) -> Result<Context, IxaError> {
 }
 
 fn main() {
-    let args = Args::parse();
-    let mut context = initialize(&args).expect("Error initializing.");
+    let mut context = initialize().expect("Error initializing.");
     context.execute();
 }

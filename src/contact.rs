@@ -1,10 +1,4 @@
-use ixa::{
-    context::Context,
-    define_rng,
-    error::IxaError,
-    people::{ContextPeopleExt, PersonId},
-    random::ContextRandomExt,
-};
+use ixa::{define_rng, Context, ContextPeopleExt, IxaError, PersonId};
 
 use crate::population_loader::Alive;
 
@@ -32,15 +26,13 @@ impl ContextContactExt for Context {
         // Get list of eligible people (for now, all alive people). May be expanded in the future
         // to instead be list of alive people in the transmitter's contact setting or household.
         // We sample a random person from this list.
-        let eligible_contacts = self.query_people((Alive, true));
-        if eligible_contacts.len() > 1 {
+        if self.query_people((Alive, true)).len() > 1 {
             let mut contact_id = transmitter_id;
             while contact_id == transmitter_id {
                 // In the future, we might like to sample people from the list by weights according
                 // to some contact matrix. We would use sample_weighted instead. We would calculate
                 // the weights _before_ the loop and then sample from the list of people like here.
-                contact_id =
-                    eligible_contacts[self.sample_range(ContactRng, 0..eligible_contacts.len())];
+                contact_id = self.sample_person(ContactRng, (Alive, true))?;
             }
             Ok(Some(contact_id))
         } else {
@@ -54,7 +46,7 @@ impl ContextContactExt for Context {
 mod test {
     use super::ContextContactExt;
     use crate::population_loader::Alive;
-    use ixa::{context::Context, people::ContextPeopleExt, random::ContextRandomExt, IxaError};
+    use ixa::{Context, ContextPeopleExt, ContextRandomExt, IxaError};
 
     #[test]
     fn test_cant_get_contact_in_pop_of_one() {
