@@ -50,12 +50,6 @@ fn initialize() -> Result<Context, IxaError> {
     // and symptom improvement/hospitalization time.
     natural_history_manager::init(&mut context)?;
 
-    // Set the output directory and whether to overwrite the existing file.
-    context
-        .report_options()
-        .directory(PathBuf::from(&args.output_directory))
-        .overwrite(args.force_overwrite);
-
     // Report the number of people by age, census tract, and infectious status
     // every report_period.
     context.add_periodic_report(
