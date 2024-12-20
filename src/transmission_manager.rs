@@ -74,8 +74,6 @@ fn handle_infectious_status_change(
         let num_infection_attempts =
             context.sample_distr(TransmissionRng, Poisson::new(r_0).unwrap()) as usize;
 
-        // Set natural history parameters.
-        context.set_natural_history_idx(event.person_id);
         // Start scheduling infection attempt events for this person.
         // People who have num_infection_attempts = 0 are still passed through this
         // logic but don't infect anyone. This is so that so that there is only one
@@ -209,7 +207,7 @@ mod test {
     use std::{cell::RefCell, path::PathBuf, rc::Rc};
 
     use crate::{
-        natural_history_manager::{init as nh_init, ContextNaturalHistoryExt},
+        natural_history_manager::init as nh_init,
         parameters::{Parameters, ParametersValues},
         population_loader::Alive,
         transmission_manager::schedule_next_infection_attempt,
@@ -380,10 +378,6 @@ mod test {
             let mut context = setup(1.0);
             context.init_random(seed.into());
             let transmitter_id = context.add_person(()).unwrap();
-            // Since we manually trigger the `schedule_next_infection_attempt` chain,
-            // we need to assign a natural history index to the transmitter -- this would have been
-            // done in the `handle_infectious_status_change` function, but we do not call it explicitly here.
-            context.set_natural_history_idx(transmitter_id);
             // Create a person who will be the only contact, but have them be dead so they can't be infected.
             // Instead, `get_contact` will return None.
             let only_contact = context.add_person((Alive, false)).unwrap();

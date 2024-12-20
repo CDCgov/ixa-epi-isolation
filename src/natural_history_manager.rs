@@ -4,6 +4,7 @@ use ixa::{
     define_data_plugin, define_person_property, define_person_property_with_default, define_rng,
     Context, ContextGlobalPropertiesExt, ContextPeopleExt, ContextRandomExt, IxaError, PersonId,
 };
+use ordered_float::NotNan;
 use serde::Deserialize;
 use splines::{Interpolation, Key, Spline};
 
@@ -149,44 +150,37 @@ fn check_valid_cdf(trajectories: &[Vec<f64>], debug_parameter_name: &str) -> Res
         })
 }
 
-define_person_property_with_default!(NaturalHistoryIdx, Option<usize>, None);
+#[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
+pub struct NaturalHistoryIdxValue {
+    pub idx: usize,
+    pub time: NotNan<f64>,
+}
+
+define_person_property_with_default!(NaturalHistoryIdx, Option<NaturalHistoryIdxValue>, None);
 
 /// Provides a way to interact with natural history parameters. This includes setting a natural history
 /// index for a person at the beginning of their infection and querying their natural history parameters
 /// (ex., generation interval) throughout their infection.
 pub trait ContextNaturalHistoryExt {
-    /// Set the person property `NaturalHistoryIdx` that refers to the index of a natural history parameter set
-    /// (generation interval, symptom onset time, symptom improvement time, viral load, etc.) that will be used
-    /// throughout this person's infection. Indeces are chosen uniformly and randomly but with replacement.
-    fn set_natural_history_idx(&mut self, person_id: PersonId);
-
     /// Estimate the value of the inverse generation interval (i.e., time since infection at which an infection
     /// attempt happens) from a CDF value (i.e., a value on 0 to 1 that represents the fraction of an individual's
     /// infectiousness that has passed) for a given person based on their set generation interval trajectory. Uses
     /// linear interpolation to estimate a continuous time from the discrete CDF samples.
     fn evaluate_inverse_generation_interval(
-        &self,
+        &mut self,
         person_id: PersonId,
         gi_cdf_value_unif: f64,
     ) -> f64;
 }
 
 impl ContextNaturalHistoryExt for Context {
-    fn set_natural_history_idx(&mut self, person_id: PersonId) {
-        let num_trajectories = self
-            .get_data_container(NaturalHistory)
-            .expect("Natural history manager not initialized.")
-            .gi_trajectories
-            .len();
-        let index = self.sample_range(NaturalHistorySamplerRng, 0..num_trajectories);
-        self.set_person_property(person_id, NaturalHistoryIdx, Some(index));
-    }
-
     fn evaluate_inverse_generation_interval(
-        &self,
+        &mut self,
         person_id: PersonId,
         gi_cdf_value_unif: f64,
     ) -> f64 {
+        // Let's assign a natural history index if one does not exist yet.
+        assign_natural_history_idx(self, person_id);
         // Let's first deal with the corner case -- the person is experiencing their first infection attempt.
         // In this case, gi_cdf_value_unif will be 0.0. There are no points below 0.0 in a CDF, so interpolation
         // will fail. Instead, we return 0.0. This is the obvious value because it means that the person
@@ -197,17 +191,44 @@ impl ContextNaturalHistoryExt for Context {
             return 0.0;
         }
         // Grab the set GI trajectory for this person.
-        let gi_index = self
+        let natural_history_idx = self
             .get_person_property(person_id, NaturalHistoryIdx)
-            .expect("No GI index set. Has this person been infected?");
+            .expect("No GI index set. Has this person been infected?")
+            .idx;
         let natural_history_container = self
             .get_data_container(NaturalHistory)
             .expect("Natural history data container not initialized.");
-        let times = &natural_history_container.times[gi_index];
-        let gi_trajectory = &natural_history_container.gi_trajectories[gi_index];
+        let times = &natural_history_container.times[natural_history_idx];
+        let gi_trajectory = &natural_history_container.gi_trajectories[natural_history_idx];
         // Because we want to interpolate the *inverse* CDF, the CDF values are "x" and the time values are "y".
         interpolate(gi_trajectory, times, gi_cdf_value_unif)
     }
+}
+
+fn assign_natural_history_idx(context: &mut Context, person_id: PersonId) {
+    if let Some(NaturalHistoryIdxValue { time, .. }) =
+        context.get_person_property(person_id, NaturalHistoryIdx)
+    {
+        // We've already assigned a natural history index for this person at this time.
+        if time == context.get_current_time() {
+            return;
+        }
+    }
+    let natural_history_len = context
+        .get_data_container(NaturalHistory)
+        .unwrap()
+        .gi_trajectories
+        .len();
+    let natural_history_idx =
+        context.sample_range(NaturalHistorySamplerRng, 0..natural_history_len);
+    context.set_person_property(
+        person_id,
+        NaturalHistoryIdx,
+        Some(NaturalHistoryIdxValue {
+            idx: natural_history_idx,
+            time: NotNan::new(context.get_current_time()).unwrap(),
+        }),
+    );
 }
 
 /// An interpolation routine that expects a paired set of values `xs` and `ys` that represent samples
@@ -290,6 +311,7 @@ mod test {
     use std::path::PathBuf;
 
     use ixa::{Context, ContextGlobalPropertiesExt, ContextPeopleExt, ContextRandomExt, IxaError};
+    use ordered_float::NotNan;
     use statrs::{
         assert_almost_eq,
         distribution::{ContinuousCDF, Exp},
@@ -303,8 +325,8 @@ mod test {
     };
 
     use super::{
-        check_valid_times, interpolate, read_natural_history_inputs, ContextNaturalHistoryExt,
-        NaturalHistory, NaturalHistoryIdx,
+        assign_natural_history_idx, check_valid_times, interpolate, read_natural_history_inputs,
+        ContextNaturalHistoryExt, NaturalHistory, NaturalHistoryIdx, NaturalHistoryIdxValue,
     };
 
     fn setup() -> Context {
@@ -456,16 +478,82 @@ mod test {
     }
 
     #[test]
-    fn test_set_natural_history_idx() {
+    fn test_set_and_reset_natural_history_idx() {
         let mut context = setup();
         init(&mut context).unwrap();
         let person_id = context.add_person(()).unwrap();
-        context.set_natural_history_idx(person_id);
-        let gi_index = context.get_person_property(person_id, NaturalHistoryIdx);
-        match gi_index {
-            Some(0) => (),
-            Some(idx) => panic!("Wrong GI index set. Should be 0, but is {idx}."),
-            None => panic!("Should not panic. NH index should be set."),
+        assign_natural_history_idx(&mut context, person_id);
+        let nh_idx = context.get_person_property(person_id, NaturalHistoryIdx);
+        match nh_idx {
+            Some(idx) => {
+                assert!(
+                    idx.idx == 0 && idx.time == 0.0,
+                    "Wrong GI index set. Should be an index of 0 with a time of 0.0 but is {idx:?}"
+                );
+            }
+            None => panic!("No NH index found. NH index should be set."),
+        }
+        // Manually change the natural history index to `None` to ensure that it is reset at a new
+        // time.
+        context.add_plan(1.0, move |context| {
+            context.set_person_property(person_id, NaturalHistoryIdx, None);
+            assign_natural_history_idx(context, person_id);
+        });
+        context.execute();
+        let nh_idx = context.get_person_property(person_id, NaturalHistoryIdx);
+        match nh_idx {
+            Some(idx) => {
+                assert!(
+                    idx.idx == 0 && idx.time == 1.0,
+                    "Wrong GI index set. Should be an index of 0 with a time of 1.0 but is {idx:?}"
+                );
+            }
+            None => panic!("No NH index found. NH index should be set."),
+        }
+        // Manually change the natural history index to `Some(new)` to ensure that it is reset at a
+        // new time.
+        context.add_plan(2.0, move |context| {
+            context.set_person_property(
+                person_id,
+                NaturalHistoryIdx,
+                Some(NaturalHistoryIdxValue {
+                    idx: 42,
+                    time: NotNan::new(1.0).unwrap(),
+                }),
+            );
+            assign_natural_history_idx(context, person_id);
+        });
+        context.execute();
+        let nh_idx = context.get_person_property(person_id, NaturalHistoryIdx);
+        match nh_idx {
+            Some(idx) => {
+                assert!(
+                    idx.idx == 0 && idx.time == 2.0,
+                    "Wrong GI index set. Should be an index of 0 with a time of 2.0 but is {idx:?}"
+                );
+            }
+            None => panic!("No NH index found. NH index should be set."),
+        }
+        // Check that repeated calls to the assign natural history index function at the same time
+        // do not change the index.
+        // Set the index to be something that the random generator could not produce.
+        context.set_person_property(
+            person_id,
+            NaturalHistoryIdx,
+            Some(NaturalHistoryIdxValue {
+                idx: 42,
+                time: NotNan::new(2.0).unwrap(),
+            }),
+        );
+        assign_natural_history_idx(&mut context, person_id);
+        // Check that the index is still the same.
+        let nh_idx = context.get_person_property(person_id, NaturalHistoryIdx);
+        match nh_idx {
+            Some(idx) => {
+                assert!(idx.idx == 42 && idx.time == 2.0,
+                    "Wrong GI index set. Should be an index of 42 with a time of 2.0 but is {idx:?}");
+            }
+            None => panic!("No NH index found. NH index should be set."),
         }
     }
 
@@ -552,7 +640,6 @@ mod test {
         let mut context = setup();
         init(&mut context).unwrap();
         let person_id = context.add_person(()).unwrap();
-        context.set_natural_history_idx(person_id);
         // Check that a CDF value of 0.0 returns a time of 0.0.
         assert_eq!(
             context.evaluate_inverse_generation_interval(person_id, 0.0),
@@ -562,7 +649,7 @@ mod test {
         let cdf = |x| Exp::new(1.0).unwrap().cdf(x);
         // No interpolation required because we pick an integer increment of dt.
         // But, because the interpolation routine still runs, we can't check for exact equality.
-        let times = &context.get_data_container(NaturalHistory).unwrap().times[0];
+        let times = context.get_data_container(NaturalHistory).unwrap().times[0].clone();
         assert_almost_eq!(
             context.evaluate_inverse_generation_interval(person_id, cdf(times[10])),
             times[10],
