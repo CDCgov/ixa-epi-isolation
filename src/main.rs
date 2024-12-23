@@ -1,4 +1,5 @@
 mod contact;
+mod natural_history_manager;
 mod parameters;
 mod population_loader;
 mod transmission_manager;
@@ -42,6 +43,12 @@ fn initialize() -> Result<Context, IxaError> {
 
     // Set the random seed.
     context.init_random(parameters.seed);
+
+    // Read the natural history parameters from a CSV.
+    // For now, this includes just the generation interval over time since infection.
+    // Eventually, this will include the viral load, incubation period/symptom onset time,
+    // and symptom improvement/hospitalization time.
+    natural_history_manager::init(&mut context)?;
 
     // Report the number of people by age, census tract, and infectious status
     // every report_period.
