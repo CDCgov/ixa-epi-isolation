@@ -4,17 +4,13 @@ mod population_loader;
 mod transmission_manager;
 
 use ixa::runner::run_with_args;
-use ixa::{
-    ContextGlobalPropertiesExt, ContextPeopleExt, ContextRandomExt,
-    ContextReportExt,
-};
+use ixa::{ContextGlobalPropertiesExt, ContextPeopleExt, ContextRandomExt, ContextReportExt};
 use transmission_manager::InfectiousStatus;
 
 use crate::parameters::Parameters;
 use crate::population_loader::{Age, CensusTract};
 
 fn main() {
-    
     run_with_args(|context, args, _| {
         // Read the global properties.
         // Set the output directory and whether to overwrite the existing file.
@@ -57,6 +53,6 @@ fn main() {
         // Print out the parameters for debugging purposes for the user.
         println!("{parameters:?}");
         Ok(())
-    }).unwrap();
+    })
+    .unwrap();
 }
-
