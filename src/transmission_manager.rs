@@ -1,7 +1,6 @@
 use ixa::{
-    define_person_property, define_person_property_with_default, define_rng, Context,
-    ContextGlobalPropertiesExt, ContextPeopleExt, ContextRandomExt, IxaError, PersonId,
-    PersonPropertyChangeEvent,
+    define_person_property_with_default, define_rng, Context, ContextGlobalPropertiesExt,
+    ContextPeopleExt, ContextRandomExt, IxaError, PersonId, PersonPropertyChangeEvent,
 };
 use statrs::distribution::{ContinuousCDF, Exp, Poisson};
 
