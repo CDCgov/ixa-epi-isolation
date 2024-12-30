@@ -90,6 +90,61 @@ fn assign_natural_history(context: &mut Context, person_id: PersonId) {
 }
 ```
 
+The transmission manager would use the method as follows:
+
+```rust
+fn handle_infectious_status_change(
+    context: &mut Context,
+    event: PersonPropertyChangeEvent<InfectiousStatus>,
+) {
+    // Is the person going from S --> I?
+    // We don't care about the other transitions here, but this function will still be triggered
+    // because it watches for any change in InfectiousStatusType.
+    if event.current == InfectiousStatusType::Infectious {
+        schedule_next_infection_attempt(
+            context,
+            event.person_id,
+        );
+    }
+}
+
+fn schedule_next_infection_attempt(
+    context: &mut Context,
+    transmitter_id: PersonId,
+) {
+    if let Some(delta_time) = context.get_time_to_next_infection_attempt(event.person_id) {
+        // Schedule the infection attempt. The function `infection_attempt` (a) grabs a contact at
+        // the time of the infection event to ensure that the contacts are current and (b) evaluates
+        // whether the transmission event is successful.
+        // After that, schedule the next infection attempt for this infected agent who will have
+        // one fewer infection attempt remaining (infection attempts are tracked as a person property
+        // and updated in the `get_time_to_next_infection_attempt` method).
+        context.add_plan(
+            context.get_current_time() + delta_time,
+            move |context| {
+                infection_attempt(context, transmitter_id)
+                    .expect("Error finding contact in infection attempt");
+                // Schedule the next infection attempt for this infected agent
+                // once the last infection attempt is over.
+                schedule_next_infection_attempt(
+                    context,
+                    transmitter_id,
+                );
+            },
+        );
+    }
+}
+```
+
+This structure is simpler than the current syntax for the transmission manager. Specifically, by
+abstracting the computation for getting the next infection attempt time into the natural history
+manager, the transmission manager's syntax is focused entirely on the person-to-person transmission
+workflow, independent of the mathematical calculations required to obtain the times. The
+transmission manager no longer has to store `last_infection_time_unif` -- the quantile of the last
+infection attempt time in the generation interval distribution, which is an uninterpretable
+quantity -- or separately manage the number of infection attempts and the time to an infection
+attempt.
+
 ### Querying clinical-relevant natural history parameters
 
 Most ABMs are calibrated to counts from clinical data, such as the number of people who are
