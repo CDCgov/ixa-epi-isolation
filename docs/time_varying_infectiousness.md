@@ -12,12 +12,12 @@ antiviral partially through their infection and is hospitalized.
 
 ## Assumptions
 
-1. We describe the approach for sampling from an arbitrary infectiousness dsitribution for the uniform
+1. We describe the approach for sampling from an arbitrary infectiousness distribution for the uniform
 distribution from zero to one -- $\mathcal{U}(0, 1)$.
     - Using [inverse transform sampling](https://en.wikipedia.org/wiki/inverse_transform_sampling), a
 uniformly-distributed random variable can be transformed to any distribution by passing samples through
 the inverse cumulative distribution function (CDF).
-    - This requires that the infectiousness over time distribution has an inverse CDF or we are
+    - This requires that the infectiousness over time distribution has an inverse CDF, or we are
     able to approximate it (i.e., from empirical data).
 2. Infectiousness over time is a relative quantity, so it is completely separate from the absolute degree
 to which someone is infectious, represented by the total number of secondary infection attempts they have.
@@ -94,10 +94,10 @@ are from the generation interval exactly, or $C_i$ can be greater than $R_i$ if 
 [proposal distribution](#rejection-sampling-from-an-arbitrary-generation-interval) and rejecting some attempts to leave
 a total of $R_i$ infection attempts.
 2. Draw the time for the first of $n$ remaining infection attempts of $\mathcal{U}(0, 1)$ by taking a random value from
-$\beta(1, m)$. $m = C_i - $ (the number of infection attempts that have occured).
+$\beta(1, m)$. $m = C_i - $ (the number of infection attempts that have occurred).
 3. Scale the value on $\mathcal{U}(0, 1)$ to be on $\mathcal{U}(x_{(i)}, 1)$ where $x_{(i)}$ is the previous draw.
 4. Convert the uniform value to generation interval space by passing it through the inverse CDF of the generation interval,
-and schedule the next infection attempt at the specified time. Wait until that time has occured in the simulation before
+and schedule the next infection attempt at the specified time. Wait until that time has occurred in the simulation before
 proceeding.
 
     The result of passing the uniform time through the GI's inverse CDF is the time _since_ the agent first become
