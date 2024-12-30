@@ -2,29 +2,19 @@
 
 ## Overview
 
-The natural history manager holds the quantities that define an agent's infection. To achieve this,
-the manager provides a data plugin that stores infection-relevant parameter values and distributions
-and a trait extension for querying the modeling-relevant quantities derived from these parameters.
-Natural history parameters are defined broadly to include, for example, the number of secondary
-infection attempts by an infectious agent over their entire duration of infectiousness, the agent's
-relative probability of transmission over time/their generation interval distribution, and when they
-develop symptoms. The trait extension provides methods for querying quantities derived from these
-parameters relevant to parametrizing an infectious disease model, such as a method that returns the
-time to the next infection attempt calculated from the generation interval distribution (which the
-transmission manager calls when scheduling infection attempts). By using a trait extension to expose
-methods that other modules call, a user can modularly switch between natural history managers that
-make different assumptions about the relationship between natural history parameters and modeling-
-relevant quantities as long as the function signatures do not change.
+The natural history manager holds the quantities that define an agent's infection. These quantities
+include the number of secondary infection attempts made by an infectious agent over their entire
+duration of infectiousness, the agent's relative probability of transmission over time/their
+generation interval distribution, and time of symptom development. The natural history manager
+connects with other modules in the model by providing methods relevant to determine transmission
+dynamics at the individual level. For instance, it determines the time to the next infection
+attempt, which is required by the transmission manager.
 
-Here we describe the methods in the natural history trait extension -- including their function
-signatures and pseudocode -- and the format of an input CSV that specifies the natural history
-parameters. Ultimately, the most generic natural history manager randomly draws an agent's natural
-history parameters from an input CSV that contains samples of the natural history parameters,
-thereby not making assumptions about the underlying distribution of the parameters or their
-relationship to each other. However, if the user can make distributional assumptions about the
-natural history parameters, such as the generation interval being constant and the infectious period
-being exponentially-distributed, they could write their own natural history manager that encodes
-those distributions into their Rust code.
+Here we describe the methods in the natural history manager -- including their function signatures
+and pseudocode -- and the format of an input CSV that specifies the natural history parameters. The
+natural history manager randomly draws an agent's natural history parameters from an input CSV that
+contains samples of the natural history parameters, thereby not making assumptions about the
+underlying distribution of the parameters or their relationship to each other.
 
 ## Trait extension methods
 
