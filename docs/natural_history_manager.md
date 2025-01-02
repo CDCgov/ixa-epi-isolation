@@ -18,29 +18,50 @@ underlying distribution of the parameters or their relationship to each other.
 
 ## Trait extension methods
 
-### Querying transmission-relevant natural history parameters
-
 The natural history manager trait extension provides methods for querying interpretable modeling-
-relevant parameters. At the most basic level, the natural history trait extension must provide only
-one method: `time_to_next_infection_attempt`. This method uses the disease generation interval (GI)
-and [order statistics](./time-varying-infectiousness.md) to calculate the time to the next infection
-attempt. We adopt the convention that the method returns `None` if there are no more infection
-attempts, so the transmission manager only needs to call this one method to control the entire
-transmission workflow.
+relevant parameters and quantities needed for transmission. When an individual is infected and can
+infect others, the transmission manager will schedule their next infection attempt using the trait
+extension `time_to_next_infection_attempt`, provided by the natural history module. This method uses
+the disease generation interval (GI) and [order statistics](./time-varying-infectiousness.md) to
+calculate the time to the next infection attempt. If there are no more infection attempts, this
+method returns `None`. 
 
-Determining the time to the next infection attempt requires the following:
-1. Knowing the number of infection attempts remaining for this agent.
-2. Knowing the timing of their last infection attempt.
-3. Knowing the agent's disease generation interval distribution.
-4. Using order statistics to calculate the time to the next infection attempt based on the above
-quantities.
+```rs:transmission.md
+fn schedule_next_infection_attempt(
+    context: &mut Context,
+    transmitter_id: PersonId,
+) {
+    if let Some(delta_time) = context.get_time_to_next_infection_attempt(event.person_id) {
+        context.add_plan(
+            context.get_current_time() + delta_time,
+            move |context| {
+                infection_attempt(context, transmitter_id)
+                    .expect("Error finding contact in infection attempt");
+                schedule_next_infection_attempt(
+                    context,
+                    transmitter_id,
+                );
+            },
+        );
+    }
+}
+```
 
-When the `time_to_next_infection_attempt` method is called for the first time, it needs to set the
-agent's natural history parameters. For the `time_to_next_infection_attempt` method, the relevant
-parameters are the number of secondary infection attempts and generation interval distribution (or
-an index that can be used to query the generation interval and any other natural history parameters
-from an input CSV; more on this below). We set these parameters as person properties in the
-`assign_natural_history(&mut Context, PersonId)` function.
+### Determining time to next infection attempt
+
+The natural history manager calculates the time to next infection attempt using order statistics,
+which requires the following quantities:
+
+ 1. The number of infection attempts remaining for this agent
+ 2. The timing of their last infection attempt
+ 3. The agent's disease generation interval distribution
+
+
+For the `time_to_next_infection_attempt` method, the relevant parameters are the number of secondary
+infection attempts and generation interval distribution (or an index that can be used to query the
+generation interval and any other natural history parameters from an input CSV; more on this below).
+We set these parameters as person properties in the `assign_natural_history(&mut Context, PersonId)`
+function.
 
 ```rust
 pub trait ContextNaturalHistoryExt {
@@ -50,15 +71,11 @@ pub trait ContextNaturalHistoryExt {
         if infection_attempts_remaining == 0 {
             return None;
         }
-        // Calculate the next infection attempt time.
-        // First, get the last infection attempt times.
-        let (last_infection_attempt_unif, last_infection_attempt_time) = self.get_person_property(person_id,
-                                                                                                  LastInfectionAttemptTime);
-        // Order statistics math to get the next infection attempt time.
+        let (last_infection_attempt_unif, last_infection_attempt_time) =
+        self.get_person_property(person_id, LastInfectionAttemptTime);
         let next_infection_attempt_unif = get_next_infection_attempt_unif(infection_attempts_remaining,
-                                                                          last_infection_attempt_unif);
-        // Convert from uniform space to real time.
-        // Takes the person id to query this person's assigned natural history parameter set.
+            last_infection_attempt_unif);
+
         let next_infection_attempt_time = next_infection_attempt_gi(next_infection_attempt_unif, person_id);
         self.set_person_property(person_id, LastInfectionAttemptTime, (next_infection_attempt_unif, next_infection_attempt_time));
         next_infection_attempt_time - last_infection_attempt_time
@@ -80,6 +97,11 @@ fn assign_natural_history(context: &mut Context, person_id: PersonId) {
 }
 ```
 
+## Initializing natural history parameters for an infected individual
+
+When the `time_to_next_infection_attempt` method is called for the first time, it needs to set the
+agent's natural history parameters. 
+
 The transmission manager would use the method as follows:
 
 ```rust
@@ -87,9 +109,6 @@ fn handle_infectious_status_change(
     context: &mut Context,
     event: PersonPropertyChangeEvent<InfectiousStatus>,
 ) {
-    // Is the person going from S --> I?
-    // We don't care about the other transitions here, but this function will still be triggered
-    // because it watches for any change in InfectiousStatusType.
     if event.current == InfectiousStatusType::Infectious {
         schedule_next_infection_attempt(
             context,
@@ -103,12 +122,6 @@ fn schedule_next_infection_attempt(
     transmitter_id: PersonId,
 ) {
     if let Some(delta_time) = context.get_time_to_next_infection_attempt(event.person_id) {
-        // Schedule the infection attempt. The function `infection_attempt` (a) grabs a contact at
-        // the time of the infection event to ensure that the contacts are current and (b) evaluates
-        // whether the transmission event is successful.
-        // After that, schedule the next infection attempt for this infected agent who will have
-        // one fewer infection attempt remaining (infection attempts are tracked as a person property
-        // and updated in the `get_time_to_next_infection_attempt` method).
         context.add_plan(
             context.get_current_time() + delta_time,
             move |context| {
@@ -126,26 +139,18 @@ fn schedule_next_infection_attempt(
 }
 ```
 
-This structure is simpler than the current syntax for the transmission manager. Specifically, by
-abstracting the computation for getting the next infection attempt time into the natural history
+By abstracting the computation for getting the next infection attempt time into the natural history
 manager, the transmission manager's syntax is focused entirely on the person-to-person transmission
-workflow, independent of the mathematical calculations required to obtain the times. The
-transmission manager no longer has to store `last_infection_time_unif` -- the quantile of the last
-infection attempt time in the generation interval distribution, which is an uninterpretable
-quantity -- or separately manage the number of infection attempts and the time to an infection
-attempt.
+workflow, independent of the mathematical calculations required to obtain the times.
 
 ### Querying clinical-relevant natural history parameters
 
-Most ABMs are calibrated to counts from clinical data, such as the number of people who are
-hospitalized or presenting with symptoms. This requires knowing what an agent's clinical disease
-manifestations are at a given time. The natural history trait extension provides methods to query an
-individual's time to symptom onset, improvement, hospitalization, or even symptoms experienced at a
-given time! By having one trait extension manage both transmission-relevant natural history
-parameters (ex., number of secondary infection attempts) and clinical-relevant natural history
-parameters (incubation period), we can allow for correlations between the two (for instance, that an
-agent's duration of symptoms and number of secondary infection attempts are positively related; more
-on this below).
+The natural history trait extension provides methods to query an individual's time to symptom onset,
+improvement, hospitalization, or even symptoms experienced at a given time. By having one trait
+extension manage both transmission-relevant natural history parameters (e.g., number of secondary
+infection attempts) and clinical-relevant natural history parameters (incubation period), we can
+allow for correlations between the two. For instance, positive relationship between an agent's
+duration of symptoms and number of secondary infection attempts.
 
 These methods also need to call `assign_natural_history()` to ensure that the natural history
 parameters relevant to these methods, namely the incubation period and time to symptom onset, are
@@ -169,12 +174,10 @@ their `NaturalHistoryIndex` can be reset to `None`.
 ```rust
 pub trait ContextNaturalHistoryExt {
     fn time_to_symptom_onset(&mut self, person_id: PersonId) -> f64 {
-        // Assign natural history parameter set if they don't exist already.
         assign_natural_history(self, person_id);
         sample_incubation_time(self, person_id)
     }
-    fn time_to_symptom_improvement(&mut self, person_id: PersonId) -> f64 {
-        // Assign natural history parameter set if they don't exist already.
+    fn time_to_symptom_improvement(&mut self, person_id: PersonId) -> 
         assign_natural_history_idx(self, person_id);
         sample_symptom_recovery_time(self, person_id)
     }
