@@ -24,7 +24,7 @@ infect others, the transmission manager will schedule their next infection attem
 extension `time_to_next_infection_attempt`, provided by the natural history module. This method uses
 the disease generation interval (GI) and [order statistics](./time-varying-infectiousness.md) to
 calculate the time to the next infection attempt. If there are no more infection attempts, this
-method returns `None`. 
+method returns `None`.
 
 ```rs:transmission.md
 fn schedule_next_infection_attempt(
@@ -100,7 +100,7 @@ fn assign_natural_history(context: &mut Context, person_id: PersonId) {
 ## Initializing natural history parameters for an infected individual
 
 When the `time_to_next_infection_attempt` method is called for the first time, it needs to set the
-agent's natural history parameters. 
+agent's natural history parameters.
 
 The transmission manager would use the method as follows:
 
@@ -177,7 +177,7 @@ pub trait ContextNaturalHistoryExt {
         assign_natural_history(self, person_id);
         sample_incubation_time(self, person_id)
     }
-    fn time_to_symptom_improvement(&mut self, person_id: PersonId) -> 
+    fn time_to_symptom_improvement(&mut self, person_id: PersonId) ->
         assign_natural_history_idx(self, person_id);
         sample_symptom_recovery_time(self, person_id)
     }
