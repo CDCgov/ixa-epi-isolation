@@ -26,9 +26,9 @@ Individuals wear facemasks (of any form) at some base rate or wear masks accordi
 
 
 # Steps
-Define some intervention and then actually implement the intervention trait for some object. To do this, we'll need to (1) register the intervention and (2) grab the associated value of the transmissiveness, as in the original API. 
+Define some intervention and then actually implement the intervention trait for some object. To do this, we'll need to (1) register the intervention and (2) grab the associated value of the transmissiveness, as in the original API.
 
-What is the intervention trait and where does the context trait extension appear? Three plugins (Transmission, intervention, contact), which interact through context. 
+What is the intervention trait and where does the context trait extension appear? Three plugins (Transmission, intervention, contact), which interact through context.
 
 ## Identifying transmission modifiers
 Relative transmission modifiers have elements that can either be affected by the innate transmissiveness or contact modules or can belong exclusively to those other modules. For example, facemasks modify the relative transmission potential of an infection attempt, but the decision to wear a facemask based on a person's risk category or symptom category is an intervention-level behavior that does not directly modify transmissiveness. However, symptoms may modify the efficacy of wearing a facemask, and this may need to be included in the registration. Therefore, in this module we have to understand how all potential modifiers interact with one another and extract only the explicit ways that they modify transmissiveness.

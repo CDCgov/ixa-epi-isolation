@@ -22,11 +22,11 @@ fn evaluate_transmission(context: &mut Context, contact_id: PersonId, transmitte
 }
 ```
 
-The API hook to `evaluate_transmission` is independent of innate transmissiveness, which determines the number and timing of infection attempts made by infecitous individual I. 
+The API hook to `evaluate_transmission` is independent of innate transmissiveness, which determines the number and timing of infection attempts made by infecitous individual I.
 
 ## Modifier scope
 In this module, we ignore behaviors and modifications not directly relevant to changing the transmission potential of an infection attempt. The separation of contact selection and contact rates is apparent, but other distinctions may be less clear.
-For example, facemasks modify the relative transmission potential of an infection attempt. The decision to wear a facemask based on a person's risk category or symptom category is an intervention-level behavior that does not directly modify relative transmission potential, meaning that such choices are excluded from this module. In contrast, symptoms may also modify the efficacy of wearing a facemask, which is a higher order modification that would need to be accounted for in the changes to relative transmission potential caused by facemasks. 
+For example, facemasks modify the relative transmission potential of an infection attempt. The decision to wear a facemask based on a person's risk category or symptom category is an intervention-level behavior that does not directly modify relative transmission potential, meaning that such choices are excluded from this module. In contrast, symptoms may also modify the efficacy of wearing a facemask, which is a higher order modification that would need to be accounted for in the changes to relative transmission potential caused by facemasks.
 Compare this higher order modification to the instance in which an individual may be less likely to wear a mask at home, or may wear it for less time. This is a modifier created by the location of the infection attempt, and is thus separate from the relative transmission modifiers module.
 
 # API
@@ -40,7 +40,7 @@ struct InterventionContainer {
 }
 ```
 
-`InterventionFn` and `AggregateFn` are types defined in the module that return the `float` from a single modification effect and from the total effect across modifications, respectively. 
+`InterventionFn` and `AggregateFn` are types defined in the module that return the `float` from a single modification effect and from the total effect across modifications, respectively.
 
 ```rust
 type InterventionFn = dyn Fn(&Context, PersonId) -> f64;
@@ -62,11 +62,11 @@ impl InterventionContainer {
     fn default_aggregator() -> Box<AggregatorFn> {
         Box::new(|interventions: &Vec<(TypeId, f64)>| -> f64 {
             let mut aggregate_effects = 1.0;
-    
+
             for (_, effect) in interventions {
                 aggregate_effects *= effect;
             }
-    
+
             aggregate_effects
         })
     }
@@ -94,12 +94,12 @@ fn register_intervention<T: PersonProperty + 'static + std::cmp::Eq + std::hash:
     let mut instance_map = HashMap::new();
     instance_map.insert(TypeId::of::<T>(), move |context: &mut Context, person_id| -> f64 {
         let property_val = context.get_person_property(person_id, person_property);
-        
+
         for item in instance_dict {
             if property_val == item.0 {
                 return item.1;
             }
-        } 
+        }
         // Return a default 1.0 (no relative change if unregistered)
         return 1.0;
     });
@@ -114,7 +114,7 @@ fn register_intervention<T: PersonProperty + 'static + std::cmp::Eq + std::hash:
 }
 ```
 
-To register the `aggregator` functions, because we only can only have as many aggregators as there are `InfectiousStatusType` values, the user provides a `Vec` of all aggregator functions desired to the register function. 
+To register the `aggregator` functions, because we only can only have as many aggregators as there are `InfectiousStatusType` values, the user provides a `Vec` of all aggregator functions desired to the register function.
 
 ```rust
 fn register_aggregator(&mut self, agg_functions: Vec<(InfectiousStatusType, Box<AggregatorFn>)>) {
@@ -128,7 +128,7 @@ fn register_aggregator(&mut self, agg_functions: Vec<(InfectiousStatusType, Box<
 }
 ```
 
-We already defined the default aggregator through `impl InterventionContainer` so that the user does not need to specify all or even any aggregators in order to `run_aggregator` in `compute_intervention`. 
+We already defined the default aggregator through `impl InterventionContainer` so that the user does not need to specify all or even any aggregators in order to `run_aggregator` in `compute_intervention`.
 
 To calculate the total relative trasnmission potential change for an individual during an infection attempt, `Context` and the `PersonId` are supplied to `compute_intervention`, which is agnostic of the `InfectiousStatus` of the `PersonId` supplied.
 
@@ -157,7 +157,7 @@ We provide the simple public function to query all the relative transmission mod
 
 ```rust
 
-pub fn query_modifers(context: &Context, transmitter_id: PersonId, contact_id: PersonId) -> f64 {
+pub fn query_modifers(context: &mut Context, transmitter_id: PersonId, contact_id: PersonId) -> f64 {
     context.compute_intervention(transmitter_id) * context.compute_intervention(contact_id)
 }
 ```

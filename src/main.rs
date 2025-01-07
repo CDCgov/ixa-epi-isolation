@@ -1,9 +1,8 @@
 mod contact;
-mod facemask_manager;
-mod transmission_modifiers;
 mod parameters;
 mod population_loader;
 mod transmission_manager;
+mod transmission_modifiers;
 
 use ixa::runner::run_with_args;
 use ixa::{ContextGlobalPropertiesExt, ContextPeopleExt, ContextRandomExt, ContextReportExt};
