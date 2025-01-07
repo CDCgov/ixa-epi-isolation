@@ -11,8 +11,6 @@ use transmission_manager::InfectiousStatus;
 use crate::parameters::Parameters;
 use crate::population_loader::{Age, CensusTract};
 
-<<<<<<< HEAD
-=======
 #[derive(Parser)]
 #[command(version, about, long_about = None)]
 struct Args {
@@ -79,7 +77,6 @@ fn initialize(args: &Args) -> Result<Context, IxaError> {
     Ok(context)
 }
 
->>>>>>> 884f0bc (Added facemask mgr mod to main)
 fn main() {
     run_with_args(|context, _, _| {
         // Read the global properties.
