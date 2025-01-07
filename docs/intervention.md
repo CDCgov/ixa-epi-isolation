@@ -23,3 +23,56 @@ Calculating the effect of nested intervention combinations on transmission shoul
 
 ## Facemasks
 Individuals wear facemasks (of any form) at some base rate or wear masks according to markers of disease progression with probabilities that follow qualitative guidance. We therefore want to assign masking in a way that is user-specified, as a single function or through some policy manager.
+
+
+# Steps
+Define some intervention and then actually implement the intervention trait for some object. To do this, we'll need to (1) register the intervention and (2) grab the associated value of the transmissiveness, as in the original API. 
+
+What is the intervention trait and where does the context trait extension appear? Three plugins (Transmission, intervention, contact), which interact through context. 
+
+## Identifying transmission modifiers
+Relative transmission modifiers have elements that can either be affected by the innate transmissiveness or contact modules or can belong exclusively to those other modules. For example, facemasks modify the relative transmission potential of an infection attempt, but the decision to wear a facemask based on a person's risk category or symptom category is an intervention-level behavior that does not directly modify transmissiveness. However, symptoms may modify the efficacy of wearing a facemask, and this may need to be included in the registration. Therefore, in this module we have to understand how all potential modifiers interact with one another and extract only the explicit ways that they modify transmissiveness.
+
+Per the respiratory disease isolation guidance, prevention entails staying up to date on vaccination, practicing good hygiene, and taking steps for cleaner air. The guidance targets mitigation of community spread, the prevention of further transmission, by recommending isolation at home and medication to reduce symptoms followed by more steps for cleaner air, enhanced hygiene practices, wearing a facemask, maintaining distance, and testing. The guidance states that such practices are more important for those 65 or older and those with weakened immune systems.
+
+Comprehensive list of person property modifiers that are outlined in the isolation guidance:
+<!-- In the final documentation focus on immediate proposed implementation -->
+- Vaccination status
+    (Person property that is registered to a function for vaccine efficacy)
+- Vaccine efficacy
+    (Function of person properties and time since vaccination to return modifier on immunity function)
+- Anti-virals
+    (Function of person properties to return modifier of symptom function)
+- Covering coughs and sneezes
+    (returns a float interacting with the symptoms function)
+- Handwashing (might be distinct cdependning on interpretation of communicability)
+- Maintaining distance
+    (Returns a float)
+- Wearing facemasks (adherence heterogeneity)
+    (Person property that returns a float interacting with the symptoms function)
+- Facemask efficacy
+    (Registered float)
+
+Elements related to these that are orthogonal to relative transmissiveness
+- Uptake and adherence rates (policy/intervention manager)
+- Testing (affect downstream behavior of individuals)
+- Cleaning surfaces (different mechanism of spread)
+- Isolation (changes contact rates)
+
+Although some of these features may also affect compliance, symptoms, or other behaviors, we only consider here their direct effects on risk, infectiousness, and secondary modifier changes. Such secondary modifiers may include person properties, such as:
+- Age (alters risk and interacts with vaccine/medication efficacy)
+- Cross-protective immunity, either innate or acquired through vaccine or infection (alters risk)
+- Symptoms (alters infectiousness, interacts with covering coughs, medication efficay, features of interaction location such as distance and outdoors, and facemask efficacy)
+- Whether an individual is susceptible or infectious (determines whether risk or infectiousness is targeted for modification)
+
+Or characteristics of the location of the interaction, such as:
+- Home, work, school (location/type of interactions would alter the efficacy of air purification, facemask efficacy through time spent unmasked, maintaining distance)
+- between random or known persons (this may only be a modifier of contact rate but could also modify facemaks adherence or maintaining distance)
+- Purifying indoor air (HVAC filters or air purifiers)
+- Opening windows for fresh air
+- Gathering outdoors
+- Outside and inside are properties of the location of interaction (these may be included indirectly by reducing transmissiveness by some amount due to time spent outdoors)
+
+There are therefore three categories of infection risk modifiers - those that are dependent on a `pub enum` that defines the values of a `PersonProperty`, those that are functions of a `PersonId` and `context` state, and those that depend on where the interaction occurs. The third modifier could also alter the mapping or function of the other two, such as whether a person shows lower masking adherence at home.
+
+The third may be better implemented in concert with get_contact, so that the location of interaction is tied with its effect on transmission probability.
