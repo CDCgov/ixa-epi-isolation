@@ -4,14 +4,7 @@ use ixa::{
 };
 use statrs::distribution::{ContinuousCDF, Exp, Poisson};
 
-<<<<<<< HEAD
-=======
-use crate::facemask_manager::FacemaskStatus;
-use crate::intervention_manager::ContextInterventionExt;
->>>>>>> e63ddaa (Fully abstracted facemask from intervention mgr)
-use crate::parameters::Parameters;
-use crate::{contact::ContextContactExt, population_loader::Alive};
-use crate::intervention_manager::ContextInterventionExt;
+use crate::{contact::ContextContactExt, parameters::Parameters, population_loader::Alive};
 
 // Define the possible infectious statuses for a person.
 // These states refer to the person's infectiousness at a given time
@@ -205,25 +198,15 @@ fn infection_attempt(context: &mut Context, transmitter_id: PersonId) -> Result<
 /// of the transmitter and the contact. For now, we assume all transmission events are sucessful.
 /// In the future, the success of a transmission event may depend on person-level interventions,
 /// such as whether either agent is wearing a mask. For this reason, we pass the transmitter as well.
-fn evaluate_transmission(context: &mut Context, contact_id: PersonId, transmitter_id: PersonId) {
+fn evaluate_transmission(context: &mut Context, contact_id: PersonId, _transmitter_id: PersonId) {
     if context.get_person_property(contact_id, InfectiousStatus)
         == InfectiousStatusType::Susceptible
     {
-        //Query relative transmission for the transmitter.
-        let relative_infectiousness =
-            context.query_relative_transmission(transmitter_id, FacemaskStatus);
-        let relative_risk = context.query_relative_transmission(contact_id, FacemaskStatus);
-        let relative_transmission = relative_infectiousness * relative_risk;
-        let transmission_success = context.sample_range(TransmissionRng, 0.0..1.0) < relative_transmission;
-
-        // Set the contact to infectious with probability additive relative transmission.
-        if transmission_success {
-            context.set_person_property(
-                contact_id,
-                InfectiousStatus,
-                InfectiousStatusType::Infectious,
-            );
-        }
+        context.set_person_property(
+            contact_id,
+            InfectiousStatus,
+            InfectiousStatusType::Infectious,
+        );
     }
 }
 
@@ -252,7 +235,6 @@ mod test {
             infection_duration: 0.1,
             generation_interval: 3.0,
             report_period: 1.0,
-            masking_rate: 0.0,
             synth_population_file: PathBuf::from("."),
         };
         let mut context = Context::new();
