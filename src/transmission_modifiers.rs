@@ -64,20 +64,20 @@ impl ContextTransmissionModifierExt for Context {
         person_property: T,
         instance_dict: Vec<(T::Value, f64)>,
     ) {
-        let mut instance_map = HashMap::new();
+        let mut instance_map = HashMap::<TypeId, Box<InterventionFn>>::new();
         instance_map.insert(
             TypeId::of::<T>(),
-            move |context: &mut Context, person_id| -> f64 {
+            Box::new(move |context: &Context, person_id| -> f64 {
                 let property_val = context.get_person_property(person_id, person_property);
 
-                for item in instance_dict {
+                for item in &instance_dict {
                     if property_val == item.0 {
                         return item.1;
                     }
                 }
                 // Return a default 1.0 (no relative change if unregistered)
                 return 1.0;
-            },
+            }),
         );
 
         let intervention_container = self.get_data_container_mut(InterventionPlugin);
@@ -116,6 +116,10 @@ impl ContextTransmissionModifierExt for Context {
     }
 }
 
-pub fn query_modifers(context: &mut Context, transmitter_id: PersonId, contact_id: PersonId) -> f64 {
+pub fn query_modifers(
+    context: &mut Context,
+    transmitter_id: PersonId,
+    contact_id: PersonId,
+) -> f64 {
     context.compute_intervention(transmitter_id) * context.compute_intervention(contact_id)
 }
