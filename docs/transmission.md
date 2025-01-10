@@ -20,10 +20,10 @@ or the distribution of the number of contacts an individual has based on their n
 There is also an option for each infection attempt to have a probability of transmission. This serves to
 scale the contact distribution to a potential $R_i$ distribution.
 3. Draw an infection time for the agent. This consists of taking an ordered draw from the generation
-interval. The math for this is abstracted away under a generic `get_next_infection_time` method.
+interval. The math for this is abstracted away under a generic `time_to_next_infection_attempt()` method.
 4. Draw a susceptible contact from the agent's contact group. Contacts could be drawn uniformly
 from the contact group or with weight based on person characteristics. The actual
-drawing of a contact can be abstracted into a `get_contact` method. Evaluate whether
+drawing of a contact can be abstracted into a `get_contact()` method. Evaluate whether
 the infection attempt is successful. Success is based on:
     - a potential probability of transmission in the case where we are drawing the
     number of contacts from a contact distribution,
@@ -37,13 +37,19 @@ infection attempts remaining.
 6. Label the agent as recovered. Doing so will trigger the immunity manager to set the
 agent's natural level of immunity.
 
+From an implementation perspective, since estimating the time to the next infection attempt requires
+knowing the number of secondary infection attempts remaining, it makes sense to bundle tracking that
+quantity with estimating the time. Therefore, the `time_to_next_infection_attempt()` really takes
+care of steps #2, #3, and #5 because we adopt the convention that the method returns `None` if there
+are no infection attempts remaining.
+
 ## Relationship to other managers/out of scope for the transmission manager
 
 - The transmission manager does not implement interventions. It does not keep track
 of interventions present or how they impact transmission.
 
 - The transmission manager does not track an individual's contacts. Instead, the transmission
-manager calls a generic method called `get_contact` which is in the `mod contact_manager` to obtain
+manager calls a generic method called `get_contact()` which is in the `mod contact_manager` to obtain
 the individual's contacts.
 
 - The transmission manager does not track an individual's health status.
@@ -60,8 +66,8 @@ Diagram of workflow:
 
 ```mermaid
 graph TB
-A[watch for becoming I]-->B[draw number of infection attempts]-->C[draw ordered transmission time from generation interval]-->D[Evaluate whether there are more infection attempts left]-->E[Repeat]-->C
-D-->F[agent's infectious period is over and gets relabeled as S]
+A[Watch for agent transitioning to infectious]-->B[Draw number of infection attempts]-->C[Draw ordered transmission time from generation interval]-->D[Evaluate whether there are more infection attempts left]-->E[Repeat]-->C
+D-->F[Agent's infectious period is over and gets moved to recovered]
 
 ```
 
@@ -73,5 +79,6 @@ graph TB
 A[transmission]-->B[contact manager]
 A[transmission]-->C[intervention plugin]
 A[transmission]-->D[immunity manager]
+A[transmission]-->E[natural history manager]
 
 ```
