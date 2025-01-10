@@ -1,131 +1,117 @@
-# A central disease natural history manager
+# Modeling with individual-level natural history parameters
 
 ## Overview
 
-The natural history manager holds the quantities that define an agent's infection. To achieve this,
-the manager provides a data plugin that stores infection-relevant parameter values and distributions
-and a trait extension for querying the modeling-relevant quantities derived from these parameters.
-Natural history parameters are defined broadly to include, for example, the number of secondary
-infection attempts by an infectious agent over their entire duration of infectiousness, the agent's
-relative probability of transmission over time/their generation interval distribution, and when they
-develop symptoms. The trait extension provides methods for querying quantities derived from these
-parameters relevant to parametrizing an infectious disease model, such as a method that returns the
-time to the next infection attempt calculated from the generation interval distribution (which the
-transmission manager calls when scheduling infection attempts). By using a trait extension to expose
-methods that other modules call, a user can modularly switch between natural history managers that
-make different assumptions about the relationship between natural history parameters and modeling-
-relevant quantities as long as the function signatures do not change.
+The natural history manager provides a way for interfacing with natural history parameters. The
+module stores the natural history parameters -- parameters that define an agent's infection -- and
+provides methods accessible to other modules to query the value of a specified parameter. Natural
+history parameters are defined broadly to include the number of secondary infection attempts by an
+infectious agent over their entire duration of infectiousness, the agent's probability of
+transmission over time/their generation interval distribution, and when they develop symptoms. The
+natural history manager provides methods that both return these raw parameter values and quantities
+based on these parameters relevant to modeling disease at the individual-level. For instance, the
+transmission manager calls the natural history manager's `time_to_next_infection_attempt` method
+which uses the infected individual's generation interval and number of secondary infection attempts
+remaining to calculate the time at which the transmission manager should schedule the individual's
+next infection attempt.
 
-Here we describe the methods in the natural history trait extension -- including their function
+Here, we describe the methods in the natural history trait extension -- including their function
 signatures and pseudocode -- and the format of an input CSV that specifies the natural history
-parameters. Ultimately, the most generic natural history manager randomly draws an agent's natural
-history parameters from an input CSV that contains samples of the natural history parameters,
-thereby not making assumptions about the underlying distribution of the parameters or their
-relationship to each other. However, if the user can make distributional assumptions about the
-natural history parameters, such as the generation interval being constant and the infectious period
-being exponentially-distributed, they could write their own natural history manager that encodes
-those distributions into their Rust code.
+parameters. The most generic natural history manager randomly draws an agent's natural history
+parameters from an input CSV containing random variate samples of the parameters. However, if a user
+can make distributional assumptions about the natural history parameters (such as a generation
+interval distribution with exponentially-distributed duration and constant probability of
+transmission over that time), they could write their own natural history manager that enforces those
+constraints and expose the same methods in the trait extension to the rest of the model.
 
-## Trait extension methods
+## Using natural history parameter values in other modules
 
-### Querying transmission-relevant natural history parameters
+The natural history manager provides the `ContextNaturalHistoryExt` trait extension. This trait
+includes a general method for querying any natural history parameter: `get_parameter_value()`. This
+method takes the natural history parameter to query as an input, and their names are set through an
+enum type defined by the user:
 
-The natural history manager trait extension provides methods for querying interpretable modeling-
-relevant parameters. At the most basic level, the natural history trait extension must provide only
-one method: `time_to_next_infection_attempt`. This method uses the disease generation interval (GI)
-and [order statistics](./time-varying-infectiousness.md) to calculate the time to the next infection
-attempt. We adopt the convention that the method returns `None` if there are no more infection
-attempts, so the transmission manager only needs to call this one method to control the entire
-transmission workflow.
-
-Determining the time to the next infection attempt requires the following:
-1. Knowing the number of infection attempts remaining for this agent.
-2. Knowing the timing of their last infection attempt.
-3. Knowing the agent's disease generation interval distribution.
-4. Using order statistics to calculate the time to the next infection attempt based on the above
-quantities.
-
-When the `time_to_next_infection_attempt` method is called for the first time, it needs to set the
-agent's natural history parameters. For the `time_to_next_infection_attempt` method, the relevant
-parameters are the number of secondary infection attempts and generation interval distribution (or
-an index that can be used to query the generation interval and any other natural history parameters
-from an input CSV; more on this below). We set these parameters as person properties in the
-`assign_natural_history(&mut Context, PersonId)` function.
-
-```rust
-pub trait ContextNaturalHistoryExt {
-    fn time_to_next_infection_attempt(&mut self, person_id: PersonId) -> Option<f64> {
-        assign_natural_history(self, person_id);
-        let infection_attempts_remaining = self.get_person_property(person_id, NumInfectionAttemptsRemaining).unwrap();
-        if infection_attempts_remaining == 0 {
-            return None;
-        }
-        // Calculate the next infection attempt time.
-        // First, get the last infection attempt times.
-        let (last_infection_attempt_unif, last_infection_attempt_time) = self.get_person_property(person_id,
-                                                                                                  LastInfectionAttemptTime);
-        // Order statistics math to get the next infection attempt time.
-        let next_infection_attempt_unif = get_next_infection_attempt_unif(infection_attempts_remaining,
-                                                                          last_infection_attempt_unif);
-        // Convert from uniform space to real time.
-        // Takes the person id to query this person's assigned natural history parameter set.
-        let next_infection_attempt_time = next_infection_attempt_gi(next_infection_attempt_unif, person_id);
-        self.set_person_property(person_id, LastInfectionAttemptTime, (next_infection_attempt_unif, next_infection_attempt_time));
-        next_infection_attempt_time - last_infection_attempt_time
-    }
-}
-
-fn assign_natural_history(context: &mut Context, person_id: PersonId) {
-    if context.get_person_property(NaturalHistoryIndex).is_some() {
-        // Natural history index has already been set -- this is a repeat query of this function
-        // just to check that the natural history parameters have been set, so the parameters should
-        // not be reset. More on this below.
-        return;
-    }
-    context.set_person_property(NumInfectionAttemptsRemaining, Some(sample_infection_attempts(context, person_id)));
-    // LastInfectionAttemptTime is a tuple because it stores the last infection attempt time in both uniform
-    // and generation interval/real time space.
-    context.set_person_property(LastInfectionAttemptTime, (NotNan::new(0.0), NotNan::new(0.0)));
-    context.set_person_property(NaturalHistoryIndex, Some(sample_natural_history_parameter_sets(context, person_id)));
+```rs:natural_history_manager.rs
+pub enum NaturalHistoryParameter {
+    GenerationIntervalCDF,
+    InfectionAttempts,
+    AntigenPositivity,
+    IncubationPeriod,
+    TimeToSymptomImprovement,
 }
 ```
 
-The transmission manager would use the method as follows:
+To promote modularity, `get_parameter_value()` returns a type that implements the trait
+`NaturalHistoryParameterValue`. This is because (a) `get_parameter_value()` may return different
+types depending on the parameter being queried (ex., the incubation period is a float while the
+probability of testing antigen positive is a vector of probabilities over time) and (b) there are
+common operations that we need to do with parameter values, so having those methods in a trait
+improves ergonomics for the user. This also allows the user to expand the natural history parameter
+types for their purposes (or even write their own natural history manager that makes distributional
+assumptions about parameters as long as the return types implement the trait), or make an additional
+trait extension that does new methods on the parameter values that the user requires (for instance,
+cubic interpolation instead of linear interpolation).
 
-```rust
+Usually, calculations on the natural history parameter value for use in the model are trivial, so
+the user can handle them in the calling module. However, there is one exception: calculating the
+time to the next infection attempt. This calculation is fundamental to all disease models while
+remaining non-trivial, so the natural history manager also provides a specific method to calculate
+this time for a given person.
+
+```rs:natural_history_manager.rs
+pub trait ContextNaturalHistoryExt {
+    fn get_parameter_value(
+        &mut self,
+        person_id: PersonId,
+        parameter: NaturalHistoryParameter
+    ) -> impl NaturalHistoryParameterValue;
+
+    fn time_to_next_infection_attempt(&mut self, person_id: PersonId) -> Option<f64>;
+}
+
+pub trait NaturalHistoryParameterValue {
+    fn get_value(&self) -> f64;
+    fn estimate_at_point(&self, x: f64, invert: bool, start: f64) -> f64;
+}
+```
+
+We implement the `NaturalHistoryParameterValue` trait for the common return types of natural history
+parameter values (details below). At a high level, these methods provide the post-processing needed
+to use natural history parameter values in an individual-level model.
+
+### Querying transmission-relevant quantities
+
+The natural history manager provides a method for querying the time to the next infection attempt
+called by the transmission manager. Since our
+[algorithm for calculating the time to the next infection attempt](./time_varying_infectiousness.md)
+relies on an individual's natural history parameters, we want the `time_to_next_infection_attempt`
+method to be in the `ContextNaturalHistoryExt` trait extension. This structure also simplifies the
+code in the transmission manager, improving modularity. Adopting the convention that the method
+returns `None` if there are no more infection attempts, the transmission manager would call the
+method as follows:
+
+```rs:transmission_manager.rs
 fn handle_infectious_status_change(
     context: &mut Context,
     event: PersonPropertyChangeEvent<InfectiousStatus>,
-) {
-    // Is the person going from S --> I?
-    // We don't care about the other transitions here, but this function will still be triggered
-    // because it watches for any change in InfectiousStatusType.
+   ) {
     if event.current == InfectiousStatusType::Infectious {
         schedule_next_infection_attempt(
             context,
-            event.person_id,
-        );
+            event.person_id);
     }
 }
 
 fn schedule_next_infection_attempt(
     context: &mut Context,
     transmitter_id: PersonId,
-) {
-    if let Some(delta_time) = context.get_time_to_next_infection_attempt(event.person_id) {
-        // Schedule the infection attempt. The function `infection_attempt` (a) grabs a contact at
-        // the time of the infection event to ensure that the contacts are current and (b) evaluates
-        // whether the transmission event is successful.
-        // After that, schedule the next infection attempt for this infected agent who will have
-        // one fewer infection attempt remaining (infection attempts are tracked as a person property
-        // and updated in the `get_time_to_next_infection_attempt` method).
+   ) {
+    if let Some(delta_time) = context.time_to_next_infection_attempt(event.person_id) {
         context.add_plan(
             context.get_current_time() + delta_time,
             move |context| {
                 infection_attempt(context, transmitter_id)
                     .expect("Error finding contact in infection attempt");
-                // Schedule the next infection attempt for this infected agent
-                // once the last infection attempt is over.
                 schedule_next_infection_attempt(
                     context,
                     transmitter_id,
@@ -136,87 +122,332 @@ fn schedule_next_infection_attempt(
 }
 ```
 
-This structure is simpler than the current syntax for the transmission manager. Specifically, by
-abstracting the computation for getting the next infection attempt time into the natural history
+By abstracting the computation for getting the next infection attempt time into the natural history
 manager, the transmission manager's syntax is focused entirely on the person-to-person transmission
-workflow, independent of the mathematical calculations required to obtain the times. The
-transmission manager no longer has to store `last_infection_time_unif` -- the quantile of the last
-infection attempt time in the generation interval distribution, which is an uninterpretable
-quantity -- or separately manage the number of infection attempts and the time to an infection
-attempt.
+workflow, independent of the mathematical calculations to obtain the times. This helps improve
+modularity, even giving the user the option to use their own `time_to_next_infection_attempt` that
+uses a custom sampling strategy.
 
-### Querying clinical-relevant natural history parameters
+We use the [order statistics](./time_varying_infectiousness.md) sampling strategy to calculate the
+time to the next infection attempt. This means that the `time_to_next_infection_attempt` method
+requires the following:
+1. The individual's disease generation interval,
+2. The number of secondary infection attempts remaining, and
+3. The time of the last infection attempt.
 
-Most ABMs are calibrated to counts from clinical data, such as the number of people who are
-hospitalized or presenting with symptoms. This requires knowing what an agent's clinical disease
-manifestations are at a given time. The natural history trait extension provides methods to query an
-individual's time to symptom onset, improvement, hospitalization, or even symptoms experienced at a
-given time! By having one trait extension manage both transmission-relevant natural history
-parameters (ex., number of secondary infection attempts) and clinical-relevant natural history
-parameters (incubation period), we can allow for correlations between the two (for instance, that an
-agent's duration of symptoms and number of secondary infection attempts are positively related; more
-on this below).
+We discuss the details of querying an agent's natural history parameters below when introducing the
+format of the input CSV that contains these parameters. For now, know that the method
+`get_parameter_value()` can return the person-specific parameter value. We need to call this method
+twice in `time_to_next_infection_attempt()`: once to get the number of secondary infection attempts
+(if not set for the person already, so called only on the first time
+`time_to_next_infection_attempt()` is called), and once to get the person's disease generation
+interval.
 
-These methods also need to call `assign_natural_history()` to ensure that the natural history
-parameters relevant to these methods, namely the incubation period and time to symptom onset, are
-set. Since `assign_natural_history()` does not know its calling function, it should set all the
-natural history parameters (or an index that can be used to query them as mentioned above), and
-each natural history querying method should call it so to ensure that all natural history parameters
-are set. If, for example, the `time_to_symptom_onset` method below does not call the
-`assign_natural_history` method, that would require that the natural history had already been
-assigned and that the `time_to_next_infection_attempt` method had been called prior to the
-`time_to_symptom_onset` method. This would require that the transmission manager's event listeners
-were triggered prior to the clinical symptoms event manager's. That structure introduces subtle
-dependencies between modules, making them loss modular and prone to bugs.
+In the two cases, the return type of the parameter value is different. The number of secondary
+infection attempts is a positive integer (but more generally a scalar) while the generation interval
+CDF is a function (or samples of a function) that varies over time since infection. We also need to
+use the two parameters differently. While we just want the value of the number of secondary
+infection attempts for the person as a scalar, we need to use inverse transform sampling on the
+generation interval CDF to convert an ordered uniform draw (i.e., the quantile by which a given
+amount of infectiousness has passed) to a time. This entails inverting the generation interval CDF,
+estimating the time at which the infectiousness quantile is reached, and returning a float.
+
+```rs:natural_history_manager.rs
+define_person_property_with_default!(NumInfectionAttemptsRemaining, Option<usize>, None);
+define_person_property_with_default!(LastInfectionAttemptTime,
+                                     (NotNan<f64>, NotNan<f64>),
+                                     (NotNan::new(0.0), NotNan::new(0.0)));
+
+impl ContextNaturalHistoryExt for Context {
+    fn time_to_next_infection_attempt(&mut self, person_id: PersonId) -> Option<f64> {
+        let infection_attempts_remaining = match self.get_person_property(person_id,
+                                                                    NumInfectionAttemptsRemaining) {
+            None => {
+                context.set_person_property(
+                    person_id,
+                    NumInfectionAttemptsRemaining,
+                    Some(context.get_parameter_value(
+                            person_id,
+                            NaturalHistoryParameter::InfectionAttempts)
+                         .get_value())
+                );
+                self.get_person_property(person_id, NumInfectionAttemptsRemaining).unwrap()
+            },
+            Some(0) => return None,
+            Some(n) => n,
+        };
+        let (last_infection_attempt_quantile,
+             last_infection_attempt_time) = self.get_person_property(
+                                                    person_id,
+                                                    LastInfectionAttemptTime
+                                            );
+        let next_infection_attempt_quantile = ordered_draw_uniform_distribution(
+                                                    infection_attempts_remaining,
+                                                    last_infection_attempt_quantile
+                                              );
+        let  next_infection_attempt_time = self.get_parameter_value(
+                                                person_id,
+                                                NaturalHistoryParameter::GenerationIntervalCDF)
+                                           .estimate_at_point(next_infection_attempt_quantile,
+                                                              true,
+                                                              last_infection_attempt_quantile);
+        self.set_person_property(
+            person_id,
+            LastInfectionAttemptTime,
+            (NotNan::new(next_infection_attempt_quantile), NotNan::new(next_infection_attempt_time))
+        );
+        Some(next_infection_attempt_time - last_infection_attempt_time)
+    }
+}
+```
+
+We use the `get_value()` method for directly getting the value of a scalar parameter, and we use the
+`estimate_at_point()` method for estimating the value of a time-varying parameter at a given point.
+The `estimate_at_point()` method takes three arguments: the value at which we want to be doing the
+estimation, whether we want to actually be estimating the _inverse_ of the function (in this case,
+that is `true`), and a starting point. The starting point argument is useful because we often need
+to get the value of a time-varying parameter over the course of an infection. Time since being
+infected only ever increases, so we know that we will be querying the function at larger times.
+Depending on the underlying type for which the trait is being implemented, knowing the starting
+point for doing our estimation routine can help improve computational efficiency. We will explain
+the details of implementing this trait below, but the abstractness of being able to tailor the
+implementation of the trait to the type helps improve modularity.
+
+### A general pattern for getting parameter values
+
+The pattern used in the `time_to_next_infection_attempt()` method is a specific example of a more
+general pattern: getting the parameter value with the `get_parameter_value()` method, and then using
+the methods available in the `NaturalHistoryParameterValue` trait to extract the quantity relevant
+for modeling disease spread at the individual level.
+
+Similar to the use case described with the time to the next infection attempt, consider that a
+person who is experiencing symptoms may test and quarantine if they test positive. If probability of
+testing positive over time is specified as a natural history parameter, it can be queried at a given
+time in `mod testing_manager`:
+
+```rs:testing_manager.rs
+fn handle_health_status_change(
+    context: &mut Context,
+    event: PersonPropertyChangeEvent<HealthStatus>,
+   ) {
+    if event.current == HealthStatusType::Symptomatic {
+        let time_since_infected = context.get_current_time() - context.get_person_property(
+                                                                    event.person_id,
+                                                                    InfectionTime)
+                                                                .unwrap();
+        let antigen_positivity = context.get_parameter_value(
+                                    event.person_id,
+                                    NaturalHistoryParameter::AntigenPositivity)
+                                 .estimate_at_point(time_since_infected, false, 0.0);
+
+        if context.sample_bool(TestingRng, prob_test_positive) {
+            context.set_person_property(
+                event.person_id,
+                QuarantineStatus,
+                QuarantineStatusType::HouseholdQuarantine
+            );
+        }
+    }
+}
+```
+
+On the other hand, consider that `mod health_status_manager` wants to know when the agent starts
+showing symptoms and change their clinical health status accordingly (imagine all agent present with
+symptoms at some point for the purposes of this example):
+
+```rs:health_status_manager.rs
+fn handle_infectious_status_change(
+    context: &mut Context,
+    event: PersonPropertyChangeEvent<InfectiousStatus>,
+   ) {
+    if event.current == InfectiousStatusType::Infectious {
+        context.set_person_property(
+            event.person_id,
+            HealthStatus,
+            HealthStatusType::Presymptomatic);
+
+        let incubation_time = context.get_parameter_value(
+            event.person_id,
+            NaturalHistoryParameter::IncubationPeriod)
+            .get_value();
+        context.add_plan(
+            context.get_current_time() + incubation_time,
+            move |context| {
+                context.set_person_property(
+                    event.person_id,
+                    HealthStatus,
+                    HealthStatusType::Symptomatic);
+            },
+        );
+    }
+}
+```
+
+These two examples underscore our observations from the `time_to_next_infection_attempt()` use:
+we must implement the `NaturalHistoryParameterValue` for a scalar return type and a type that lets
+us estimate the value of a function at different times.
+
+### Implementing the `NaturalHistoryParameterValue` trait for common return types
+
+We have been purposely vague about the specific types for which we may implement the trait because
+there are multiple possibilities depending on the use case. Consider the more specific natural
+history manager described above where the user makes assumptions about the distributional form of
+their parameters (ex., the incubation period is exponentially-distributed with a rate parameter
+specified in the input file) and encodes those assumptions into their Rust implementation of the
+natural history manager. They could implement the `NaturalHistoryParameterValue` trait for the
+function type that enables them to randomly draw samples from their specified parameter
+distributions. Then, the `get_value()` method would return a random sample from that distribution,
+and the `estimate_at_point()` method could estimate the CDF at the specified value.
+
+However, we are interested in the most general case where the user specifies samples of the natural
+history parameters in an input CSV. In that case, for the natural history parameter types that do
+not change over the course of the infection (like the incubation period or the number of secondary
+infection attempts), the user provides in a scalar, and the `NaturalHistoryParameterValue` should be
+implemented for that scalar type:
+
+```rs:natural_history_manager.rs
+impl NaturalHistoryParameterValue for f64 {
+    fn get_value(&self) -> f64 {
+        self
+    }
+    fn estimate_at_point(&self, x: f64, invert: bool, start: f64) -> f64 {
+        unimplemented!();
+    }
+}
+```
+
+Since the `estimate_at_point()` method is only used for time-varying parameters, it does not make
+sense in this case, so we do not implement it.
+
+Comparatively, the most general way of storing values of a function that varies over time, such as
+the generation interval CDF, is as a vector of times and a corresponding vector of function values:
+`(times: Vec<f64>, values: Vec<f64>)`. We would implement the `NaturalHistoryParameterValue` trait
+as follows:
+
+```rs:natural_history_manager.rs
+impl NaturalHistoryParameterValue for (Vec<f64>, Vec<f64>) {
+    fn get_value(&self) -> f64 {
+        unimplemented!();
+    }
+    fn estimate_at_point(&self, x: f64, invert: bool, start: f64) -> f64 {
+        let (ts, vals) = self;
+        // 1. Since the vectors are sorted, use binary search to get the indeces of the values in
+        // the first vector that refer to the closest values less than and greater than the x value.
+        // 2. Use linear interpolation to estimate the value at the given point based on the samples
+        // in the second vector.
+        if invert {
+            let indeces: Range = find_window_indeces(vals, x, start);
+            return linear_interpolation(vals[indeces], ts[indeces], x);
+        }
+        else {
+            let indeces: Range = find_window_indeces(ts, x, start);
+            return linear_interpolation(ts[indeces], cals[indeces], x);
+        }
+    }
+}
+```
+
+## Storing natural history parameter values
+
+We have motivated the `NaturalHistoryParameterValue` trait's utility from the perspective of having
+parameters that take on different types but wanting consistent features across types to improve
+modularity. However, the same challenge occurs when we think about wanting to consistently store
+natural history parameter values, and the same solution is applicable. In particular, the trait
+`NaturalHistoryParameterValue` is object safe, so we can store parameter values in a vector and
+store that vector in a hash map entry referring to its parameter value:
+`HashMap<NaturalHistoryParameter, Vec<Box<dyn NaturalHistoryParameterValue>>>`. The
+`get_parameter_value()` method just queries this hash map, returning the value of the specified
+natural history parameter for the specified person.
+
+Although `get_parameter_value()` takes the person ID as an input, how does the method know which
+parameter value should be returned for the person in question? We adopt the convention that each
+person is assigned an index, the `NaturalHistoryIndex`. This index is used when taking a value from
+the vector in the hash map for a specified natural history parameter. Indeces are assigned based on
+weights. Together, this tells us the two features of the natural history data container that stores
+the parameter values:
+
+```rs:natural_history_manager.rs
+#[derive(Default)]
+struct NaturalHistoryContainer {
+    weights: Vec<f64>,
+    parameters: HashMap<NaturalHistoryParameter, Vec<Box<dyn NaturalHistoryParameterValue>>>
+}
+
+define_data_plugin!(NaturalHistory, NaturalHistoryContainer, NaturalHistoryContainer::default());
+```
+
+Index assignment is lazy, so the `get_parameter_value()` method always calls the
+`assign_natural_history` function as its first step. This function checks if an agent's natural
+history index has been set already, and if not assigns one.
+
+```rs:natural_history_manager.rs
+define_person_property_with_default!(NaturalHistoryIndex, Option<usize>, None);
+
+fn assign_natural_history(context: &mut Context, person_id: PersonId) -> usize {
+    if let Some(idx) = context.get_person_property(person_id, NaturalHistoryIndex) {
+        return idx;
+    }
+
+    let weights = context.get_data_container(NaturalHistoryParameters).unwrap().weights;
+    let idx = context.sample_weighted(NaturalHistoryRng, weights);
+
+    context.set_person_property(
+        person_id,
+        NaturalHistoryIndex,
+        Some(idx)
+    );
+    idx
+}
+```
+
+Lazy assignment of indeces improves modularity: imagine that we pick one method that explicitly sets
+the natural history index, or even if it is done by the user in one of the modules (natural history
+index is a person property and directly modifiable in any module). Let us say that method is the
+`time_to_next_infection_attempt()` method though it can be any method. Since all natural history
+parameters are queried based on the index, this structure would require that the
+`time_to_next_infection_attempt()` method is called _before_ any other methods that require the
+person's natural history parameter index. Even if the natural history parameter index is only
+required once an agent becomes infectious, this requires that the transmission manager's event
+listeners for the `Susceptible --> Infectious` transition occur before any other module's. Not only
+does this reduce modularity, but it makes the model structure prone to bugs and dependency issues.
 
 To ensure that an agent's natural history parameters are not being changed in the middle of their
-infection (i.e., a subsequent call to `assign_natural_history()` does not change the natural history
-parameters if they have already been set for this agent's infection), the method only sets the
-properties if they have not been set before. This choice allows for resetting the parameters prior
-to re-infection: in a future immunity manager, when an individual is returned to being susceptible,
-their `NaturalHistoryIndex` can be reset to `None`.
+infection (i.e., a subsequent call to `get_parameter_value` and therefore `assign_natural_history()`
+does not change the natural history parameters if they have already been set for this agent's
+infection), the method only sets the properties if they are `None` -- in other words, not set
+previously. In a future immunity manager, when an individual is returned to being susceptible, their
+parameters can be reset: the `NaturalHistoryIndex` can be set to back to `None`, the
+`LastInfectionAttemptTime` to `(NotNan::new(0.0), NotNan::new(0.0))`, and `NumInfectionAttempts` to
+`None`.
 
-```rust
-pub trait ContextNaturalHistoryExt {
-    fn time_to_symptom_onset(&mut self, person_id: PersonId) -> f64 {
-        // Assign natural history parameter set if they don't exist already.
-        assign_natural_history(self, person_id);
-        sample_incubation_time(self, person_id)
-    }
-    fn time_to_symptom_improvement(&mut self, person_id: PersonId) -> f64 {
-        // Assign natural history parameter set if they don't exist already.
-        assign_natural_history_idx(self, person_id);
-        sample_symptom_recovery_time(self, person_id)
-    }
+This gives us the following structure for the `get_parameter_value()` method:
+
+```rs:natural_history_manager.rs
+impl ContextNaturalHistoryExt for Context {
+    fn get_parameter_value(
+        &mut self,
+        person_id: PersonId,
+        parameter: NaturalHistoryParameter
+       ) -> impl NaturalHistoryParameterValue {
+        let index = assign_natural_history(self, person_id);
+        let container = self.get_data_container(NaturalHistory).unwrap();
+        container.get(&parameter)[index]
+       }
 }
 ```
 
-### Querying biomarker-relevant natural history parameters
+`get_parameter_value()` requires a mutable reference to `Context` because it calls
+`assign_natural_history()`, which potentially sets a person property.
 
-ABMs are often used to model the impact of disease testing programs where the probability of an
-individual testing positive is a function of their viral load. Therefore, it is necessary to have a
-method to query the viral load at a given time.
-
-```rust
-pub trait ContextNaturalHistoryExt {
-    fn viral_load(&mut self, person_id: PersonId, time: f64) -> f64 {
-        // Assign natural history parameter set if they don't exist already.
-        assign_natural_history(self, person_id);
-        sample_viral_load(person_id, time)
-    }
-}
-```
-
-## Input data
+## Input format for natural history parameters
 
 The natural history manager must know the values and distributions of the natural history
 parameters. The most general natural history manager takes an input CSV of samples of the natural
-history parameters. The `sample_{parameter}` functions referenced above sample from the values in
-the CSV for a given parameter, assigning parameter indeces with a given `weight` and then sampling
-from the values present for the person's assigned natural history index at a given time.
+history parameters. It reads in this CSV, stores it in the `NaturalHistory` data plugin, and then
+queries the relevant values for a given person on demand.
 
-The input CSV is in long format and contains all the natural history parameters relevant to the
-model.
+We expect the input CSV to take on the following long format easily conducive to adding new natural
+history parameters:
 
 | index | weight | time | parameter | value |
 | --- | --- | --- | --- | --- |
@@ -231,44 +462,51 @@ model.
 | 2 | 0.15 | 0.0 | GenerationIntervalCDF | 0.1 |
 | ... | ... | ... | ... | ... |
 
-The `index` is a unique identifier that marks a distinct sample of the natural history parameters.
-Agents are assigned an index when infectious, and this is stored in the person property
-`NaturalHistoryIndex`. In this example, `index = 0` describes the infection of an individual who has
-a symptomatic infection because they have incubation period and time to symptom improvement values
-in their parameter set whereas `index = 1` describes the infection of an individual who is
-asymptomatic because symptom-associated parameters are not present in their natural history
-parameter set. This schema allows for describing different types of infections in a single input
-file. The `weight` column describes the weight with which to sample that particular infection
-archetype in the model. To add new parameters -- for instance, the viral load -- add a row (or rows
-if the parameter varies in time) for each `index` value for which this parameter is relevant to the
-input CSV.
+This CSV contains the values of all natural history parameters that the natural history manager
+knows about. Parameters are specified by an index, the same index that an agent is assigned
+(proportional to the specified weight) when their natural history parameters are queried. Grouping
+parameters by indeces allows for implicit correlations and dependencies between parameters. For
+instance, in this example `index = 0` describes the infection of an individual who has a symptomatic
+infection because they have an incubation period and time to symptom improvement. Both are required
+to specify a symptomatic infection. Likewise, the generation interval CDF for this person can be
+specific to them being a symptomatic individual. Implicitly, all values of a parameter for a given
+index represent a joint sample from the data generation process for the natural history of
+infectious agents. On the other hand, the agent who is assigned `index = 1` has an asymptomatic
+infection because these parameters are not present in their parameter set. Therefore, this input
+schema allows for describing different types of infections in a single file. Simultaneously, the
+`weight` column allows for each of the different infection types to be sampled proportional to their
+occurrence in observational data (or even for this quantity to be calibrated). To add new parameters
+-- for instance, the viral load -- add a row (or rows if the parameter varies in time) for each
+`index` value for which this parameter is relevant (i.e., infection type) to the input CSV.
 
 This input structure has two implications for time-varying parameters. First, there may be multiple
 parameters that vary over time, but they do not need to have values at the same time (for instance,
 the viral load and generation interval CDF for the same `index` could have samples at different
 time). Second, a time-varying parameter may have different time values across different `index`s.
-We use linear interpolation to estimate the value of a time-varying parameter at a continuous time
-value in the model from the samples provided at discrete times in the input CSV.
+Despite this variety in types of inputs, all parameters can be stored and queried the same
+through the natural history manager and by using the `NaturalHistoryParameterValue` trait.
 
-## Application to isolation guidance
+## Application to isolation guidance at the community level
 
-To model isolation guidance at the community level, we need to:
+For our model of isolation guidance, we apply the natural history manager and the functionality
+provided by it as follows:
 
-1. Read natural history parameters for symptomatic agents including the generation interval
-distribution, symptom onset time, symptom improvement time, and viral load over time.
-2. When an agent becomes infected, assign a natural history parameter set that consists of a
-generation interval, symptom onset time, symptom improvement time, and viral load. This parameter
-set should be a joint posterior sample from the Stan model, so that all parameters are related,
-meaning that the generation interval distribution is associated with particular values of the
-symptom onset time and improvement time.
-3. We tested different generation intervals in our isolation guidance modeling, so we should be able
-to easily swap between generation intervals in our ABM to examine how assumptions about
-infectiousness over time change our results.
-3. (For the current guidance) Label individuals as isolating while they are experiencing symptoms,
-and have their infectiousness and contacts changed accordingly. Label individuals as in
-post-isolation precautions for five days after their symptoms improve, and have their infectiousness
-and contacts changed accordingly.
-4. (For the previous guidance) Simulate individuals getting a COVID test when they first start
-experiencing symptoms with test positivity as a function of their viral load.
+1. We have samples of an agent's generation interval over time, an associated symptom improvement
+time, viral load over time, and antigen positivity over time. We can use values from the literature
+to produce consistent estimates of an individual's incubation period given their other natural
+history parameters. We want to read all of these parameters in, maintaining their correlations to
+each other, so that when an agent becomes infected, they are assigned a natural history parameter
+set that specifies all of these values.
+    - We tested various different assumptions about the functional form of the generation interval
+    in our modeling, and we would like to do the same in our agent-based model. We only have to
+    change the parameter values in the input CSV to achieve this.
+2. We need to use the values of the natural history parameters for an agent in not only scheduling
+their infectious attempts but changing their clinical symptoms. We query their incubation period
+and symptom improvement time natural history parameters and get their values for use in the model
+module that manages clinical symptoms.
+3. For modeling the previous guidance, we need to query an agent's probability of testing positive
+at the time when their symptoms appear.
 
-The structure described in this natural history manager enables each of these requirements.
+The generic nature of how we manage, store, and query natural history parameters both through the
+`ContextNaturalHistoryExt` trait extension on `Context` and the `NaturalHistoryParameterValue` trait
+directly enable these required features.
