@@ -2,61 +2,171 @@
 
 ## Overview
 
-The natural history manager provides a way for interfacing with natural history parameters. The
-module stores the natural history parameters -- parameters that define an agent's infection -- and
-provides methods accessible to other modules to query the value of a specified parameter. Natural
-history parameters are defined broadly to include the number of secondary infection attempts by an
-infectious agent over their entire duration of infectiousness, the agent's probability of
-transmission over time/their generation interval distribution, and when they develop symptoms. The
-natural history manager provides methods that both return these raw parameter values and quantities
-based on these parameters relevant to modeling disease at the individual-level. For instance, the
-transmission manager calls the natural history manager's `time_to_next_infection_attempt` method
-which uses the infected individual's generation interval and number of secondary infection attempts
-remaining to calculate the time at which the transmission manager should schedule the individual's
-next infection attempt.
+An agent-based model (ABM) of human-to-human disease transmission requires natural history
+parameters. For instance, the transmission module requires the disease generation interval to
+schedule when an infected agent has their infection attempts; the clinical health status module
+requires the incubation period to schedule when an infected agent becomes symptomatic; and the
+testing module requires the respiratory viral load at a given time since infection to evaluate
+whether an agent may test positive at a given time. Here, we introduce the `natural_history_manager`
+module which provides an interface for easily specifying natural history parameters and methods
+that enable computing derived quantities relevant to modeling disease at the individual-level from
+these parameters.
 
-Here, we describe the methods in the natural history trait extension -- including their function
-signatures and pseudocode -- and the format of an input CSV that specifies the natural history
-parameters. The most generic natural history manager randomly draws an agent's natural history
-parameters from an input CSV containing random variate samples of the parameters. However, if a user
-can make distributional assumptions about the natural history parameters (such as a generation
-interval distribution with exponentially-distributed duration and constant probability of
-transmission over that time), they could write their own natural history manager that enforces those
-constraints and expose the same methods in the trait extension to the rest of the model.
+## Types and traits provided by the natural history manager
 
-## Using natural history parameter values in other modules
+Unlike most managers that provide a trait extension on `Context` with methods that other modules
+call, this manager's main contribution is different natural history parameter types on which traits
+have been implemented that enable computing quantities relevant to modeling disease at the
+individual-level. This manager also provides a trait extension on `Context` called the
+`ContextNaturalHistoryExt` that contains convenience methods for common multistep calculations on
+natural history parameters. The custom types defined in this module are all deserializable, so the
+user can specify natural history parameters in an input JSON file, taking advantage of the existing
+global properties plugin's infrastructure. We focus on having these types be as generic as possible,
+so that the user can change the value (for instance, changing an exponential distribution to a gamma
+distribution) without impacting the parameter type or the way it is used in the code.
 
-The natural history manager provides the `ContextNaturalHistoryExt` trait extension. This trait
-includes a general method for querying any natural history parameter: `get_parameter_value()`. This
-method takes the natural history parameter to query as an input, and their names are set through an
-enum type defined by the user:
+### Time-invariant parameters: An example from specifying the disease incubation period
+
+The first type we define is `ProbabilityDistribution`. At the most general level, any natural
+history parameter that does not vary over time (i.e., there is one value of that parameter drawn for
+the entirety of an agent's infection) is a sample from a probability distribution. We want a type
+that allows the user to specify the distributional shape for a parameter as a variant of an
+overarching type:
 
 ```rs:natural_history_manager.rs
-pub enum NaturalHistoryParameter {
-    GenerationIntervalCDF,
-    InfectionAttempts,
-    AntigenPositivity,
-    IncubationPeriod,
-    TimeToSymptomImprovement,
+#[derive(Deserialize)]
+pub enum ProbabilityDistribution {
+    Exp(f64),
+    Gamma(f64, f64),
+    Empirical(Vec<f64>),
+    // ... Because this is an enum, users can add any other distribution variants.
 }
 ```
 
-To promote modularity, `get_parameter_value()` returns a type that implements the trait
-`NaturalHistoryParameterValue`. This is because (a) `get_parameter_value()` may return different
-types depending on the parameter being queried (ex., the incubation period is a float while the
-probability of testing antigen positive is a vector of probabilities over time) and (b) there are
-common operations that we need to do with parameter values, so having those methods in a trait
-improves ergonomics for the user. This also allows the user to expand the natural history parameter
-types for their purposes (or even write their own natural history manager that makes distributional
-assumptions about parameters as long as the return types implement the trait), or make an additional
-trait extension that does new methods on the parameter values that the user requires (for instance,
-cubic interpolation instead of linear interpolation).
+A user may specify time-invariant natural history parameters in the input JSON as follows:
 
-Usually, calculations on the natural history parameter value for use in the model are trivial, so
-the user can handle them in the calling module. However, there is one exception: calculating the
-time to the next infection attempt. This calculation is fundamental to all disease models while
-remaining non-trivial, so the natural history manager also provides a specific method to calculate
-this time for a given person.
+```json
+{
+    "epi_isolation.Parameters": {
+        "incubation_period": "Gamma(1.0, 3.0)",
+        "time_to_symptom_improvement": "Empirical([1.0, 2.0])",
+        "R_0": "Empirical([3.0])"
+    }
+}
+```
+
+In the case of the distribution for $R_0$, we are saying that all agents have the same value of
+$R_0$ -- there is no stochasticity or person-to-person variation in $R_0$. Nevertheless, because we
+have defined the `Distribution` type broadly, we can consider this special case. For the type, we
+implement a getter method that returns a type that implements Rust's `statrs`'s `Distribution`
+trait. This enables us to draw random samples from the distribution and treat it like we natively
+defined the distribution type in Rust without going through our enum first. To reduce confusion, we
+adopt that the meaning of parameters in our custom `ProbabilityDistribution` type is the same as in
+the associated `statrs` type.
+
+```rs:natural_history_manager.rs
+use statrs::distribution::{Exp, Gamma, Empirical};
+
+impl ProbabilityDistribution {
+    pub fn get(&self) -> impl Distribution<f64> {
+        match self {
+            ProbabilityDistribution::Exp(lambda) => Exp::new(lambda).unwrap(),
+            ProbabilityDistribution::Gamma(a, b) => Gamma::new(a, b).unwrap(),
+            ProbabilityDistribution::Empirical(vals) => Empirical::from_iter(vals).unwrap()
+        }
+    }
+}
+```
+
+If a user wanted to use this type to draw a random sample in a module, say to draw the time at which
+to set the person's health status to symptomatic once the agent becomes infected, and the incubation
+period distribution were specified in the input JSON file as described above, they would do the
+following:
+
+```rs:health_status_manager.rs
+fn handle_infectious_status_change(
+    context: &mut Context,
+    event: PersonPropertyChangeEvent<InfectiousStatus>,
+   ) {
+    if event.current == InfectiousStatusType::Infectious {
+        context.set_person_property(
+            event.person_id,
+            HealthStatus,
+            HealthStatusType::Presymptomatic);
+
+        let incubation_per = context.get_global_property_value(Parameters).unwrap()
+                                .incubation_period.get()
+        let incubation_time = context.sample_distr(HealthStatusRng, incubation_per);
+        context.add_plan(
+            context.get_current_time() + incubation_time,
+            move |context| {
+                context.set_person_property(
+                    event.person_id,
+                    HealthStatus,
+                    HealthStatusType::Symptomatic);
+            },
+        );
+    }
+}
+```
+
+The modular structure lends itself to the user being able to easily change the underlying
+distribution type (i.e., switching out a gamma for, say, a lognormal) in the input JSON with no
+change to the code and only needing to make sure their new distribution can be coerced into a Rust
+type that implements the `Distribution` trait. Our `ProbabilityDistribution` type handles many cases
+of natural history parameters and more broadly being able to specify and sample from arbitrary
+distributions in our ABMs. This type also serves as the building block for the next natural history
+parameter type we define: time-varying parameters.
+
+### Time-varying parameters: An example from specifying the respiratory viral load
+
+Time-varying parameters are those where the value of a natural history parameter changes
+over time, such as the respiratory viral load which changes over time since infection. In the most
+general sense, a time-varying parameter is a set of distributions each associated with a time:
+
+```rs:natural_history_manager.rs
+#[derive(Deserialize)]
+pub struct TimeVaryingParameter (
+    pub Vec<f64>,
+    pub Vec<ProbabilityDistribution>
+)
+```
+
+Concretely, a user may specify a time-varying parameter like so in their input JSON.
+
+```json
+{
+    "epi_isolation.Parameters": {
+        "respiratory_viral_load": "TimeVaryingParameter([0.0, 1.0, 2.0], [Empirical[3.0], Gamma(2.0, 5.0), Exp(1.0)])"
+    }
+}
+```
+
+Because our custom `TimeVaryingParameter` type builds off our existing infrastructure for the
+`ProbabilityDistribution` type, we hold a more general idea of a time-varying parameter than is
+implemented in most ABMs: concretely, we argue that the value of a time-varying parameter at a given
+time may itself be a random distribution rather than being a fixed value. However, based on what we
+have introduced so far, this type does not allow for the user to specify viral load _trajectories_
+(i.e., one agent is assigned an entire set of deterministic viral loads and another agent has a
+different specified set). While a user could effectively hijack this current type to do that by
+implementing their own sampling method that provides the desired behavior, we devise a general
+solution to this problem below exploiting infrastructure we have to build to allow for correlated
+parameter values.
+
+With a time-varying parameter, we want a method to get the value of the parameter at a given time.
+This process requires more steps, so we define a convenience method in a trait extension on
+context that helps us do this.
+
+### Implementing new methods on subtypes: An example from using the disease generation interval
+
+
+
+## Allowing for correlation between parameter values
+
+
+
+
+
 
 ```rs:natural_history_manager.rs
 pub trait ContextNaturalHistoryExt {
@@ -106,7 +216,7 @@ fn schedule_next_infection_attempt(
     context: &mut Context,
     transmitter_id: PersonId,
    ) {
-    if let Some(delta_time) = context.time_to_next_infection_attempt(event.person_id) {
+    if let Some(delta_time) = context.time_to_next_infection_attempt(event.transmitter_id) {
         context.add_plan(
             context.get_current_time() + delta_time,
             move |context| {
@@ -163,10 +273,10 @@ impl ContextNaturalHistoryExt for Context {
         let infection_attempts_remaining = match self.get_person_property(person_id,
                                                                     NumInfectionAttemptsRemaining) {
             None => {
-                context.set_person_property(
+                self.set_person_property(
                     person_id,
                     NumInfectionAttemptsRemaining,
-                    Some(context.get_parameter_value(
+                    Some(self.get_parameter_value(
                             person_id,
                             NaturalHistoryParameter::InfectionAttempts)
                          .get_value())
