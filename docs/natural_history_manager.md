@@ -21,9 +21,10 @@ individual-level. This manager also provides a trait extension on `Context` call
 `ContextNaturalHistoryExt` that contains convenience methods for common multi-step calculations on
 natural history parameters. The custom types defined in this module are all deserializable, so the
 user can specify natural history parameters in an input JSON file, taking advantage of the existing
-global properties plugin's infrastructure. We focus on having these types be as generic as possible,
-so that the user can change the value (for instance, changing an exponential distribution to a gamma
-distribution) without impacting the parameter type or the way it is used in the code.
+global properties plugin's infrastructure (in particular, parameter validation at read-in time). We
+focus on having these types be as generic as possible, so that the user can change the value (for
+instance, changing an exponential distribution to a gamma distribution) without impacting the
+parameter type or the way it is used in the code.
 
 ### Time-invariant parameters: An example from specifying the disease incubation period
 
@@ -39,7 +40,7 @@ pub enum ProbabilityDistribution {
     Exp(f64),
     Gamma(f64, f64),
     Empirical(Vec<f64>),
-    // ... Because this is an enum, users can add any other distribution variants.
+    // ... Because this is an enum, users can add other distribution variants.
 }
 ```
 
@@ -53,20 +54,21 @@ A user may specify time-invariant natural history parameters in the input JSON a
     "epi_isolation.Parameters": {
         "incubation_period": "Gamma(1.0, 3.0)",
         "time_to_symptom_improvement": "Empirical([1.0, 2.0])",
-        "R_0": "Empirical([3.0])"
+        "R_0": "Empirical([3])"
     }
 }
 ```
 
 In the case of the distribution for $R_0$, we are saying that all agents have the same value of
 $R_0$ -- there is no stochasticity or person-to-person variation in $R_0$. Nevertheless, because we
-have defined the `Distribution` type broadly, we can consider this special case. For our
-`ProbabilityDistribution` type, we implement Rust's `rand` crate's `Distribution` trait. This
-enables us to draw random samples from the distribution using Ixa's built-in `ContextRandomExt` that
-expects a type that implements `Distribution<T>` for sampling. This lets us treat our custom enum
-like we natively defined the distribution type in Rust without going through our enum first. To
-reduce confusion, we adopt that the meaning of parameters in our custom `ProbabilityDistribution`
-type is the same as in the `statrs` distribution of the same name.
+have defined the `ProbabilityDistributionDiscrete` type broadly, we can consider this special case
+within our defined parameter types. For our `ProbabilityDistribution` type, we implement Rust's
+`rand` crate's `Distribution` trait. This enables us to draw random samples from the distribution
+using Ixa's built-in `ContextRandomExt` that expects a type that implements `Distribution<T>` for
+sampling. This lets us treat our custom enum like we natively defined the distribution type in Rust
+without going through our enum first. To reduce confusion, we adopt that the meaning of parameters
+in our custom `ProbabilityDistribution` type is the same as in the `statrs` distribution of the same
+name.
 
 ```rs:natural_history_manager.rs
 use rand::distribution::Distribution
@@ -84,8 +86,7 @@ impl Distribution<f64> for ProbabilityDistribution {
 ```
 
 The user can also implement their own traits on the `ProbabilityDistribution` type if they needed
-to extract the raw `statrs` type (i.e., what they would have gotten if they called `Exp::new(1.0)`,
-for instance) or to do other computations like getting the mean or variance of the distribution.
+to do other computations like getting the mean or variance of the distribution.
 
 To draw a random sample in a module with this type, say to draw the time at which to set the
 person's health status to symptomatic once the agent becomes infected based on the incubation period
@@ -122,11 +123,11 @@ fn handle_infectious_status_change(
 The modular structure lends itself to being able to easily change the underlying distribution type
 (i.e., switching out a gamma for, say, a lognormal) in the input JSON with no change to the code and
 only needing to make sure the new distribution can be coerced into a Rust type that implements the
-`Distribution` trait. The incubation period parameters could even be updated in the middle of the
-simulation! Our `ProbabilityDistribution` type handles many use cases for natural history parameters
-and more broadly being able to specify and sample from arbitrary distributions in our ABMs. This
-type also serves as the building block for the next natural history parameter type we define:
-time-varying parameters.
+`Distribution` trait. The incubation period distribution could even be updated in the middle of the
+simulation by just changing the global properties! Our `ProbabilityDistribution` type handles many
+use cases for natural history parameters and more broadly being able to specify and sample from
+arbitrary distributions in our ABMs. This type also serves as the building block for the next
+natural history parameter type we define: time-varying parameters.
 
 ### Time-varying parameters: An example from specifying the respiratory viral load
 
@@ -142,7 +143,7 @@ pub struct TimeVaryingParameter (
 )
 ```
 
-Concretely, a user may specify a time-varying parameter like so in their input JSON.
+Concretely, a user may specify a time-varying parameter in their input JSON as follows:
 
 ```json
 {
@@ -194,14 +195,16 @@ can allow for correlations between parameter values.
 
 At a high-level, this method finds the nearest times and indeces both less than and greater than the
 provided `time` from the time vector in the time-varying parameter (implemented as part of the
-`LinearInterpolation` trait), draws samples from the corresponding distributions at those times, and
-takes the weighted average of the sampled values on their time's distance to the given time. These
-implementation details are abstracted from the calling module. However, there is one implementation
-detail we expose to the user. In many cases, we estimate the value of a time-varying parameter at
-always increasing times (i.e., when we require an agent's viral load and their time since infection
-is always increasing). If we store the index of the last value at which the time-varying parameter
-was queried, we know that our current value of that parameter must be at a greater index. We can use
-this trick to speed up the process of searching for indeces.
+`LinearInterpolation` trait), draws samples from the corresponding distributions at those times
+(leveraging our existing infrastructure for the `ProbabilityDistribution` type), and takes the
+average of the sampled values weighted by distance from the samples' times to the given time. These
+implementation details are abstracted from the calling module by being wrapped up into the two
+estimation methods presented above. However, there is one implementation detail we expose to the
+user. In many cases, we estimate the value of a time-varying parameter at always increasing times
+(i.e., when we require an agent's viral load and their time since infection is always increasing).
+If we store the index of the last value at which the time-varying parameter was queried, we know
+that our current value of that parameter must be at a greater index. We can use this trick to speed
+up the process of searching for indeces.
 
 There is a special case of a time-varying parameter: one that is invertible, meaning that we can
 instead run an estimation routine on the inverse of the parameter, such as estimating the time at
@@ -218,8 +221,9 @@ pub struct InvertibleTimeVaryingParameter (
 )
 ```
 
-For this type, we implement the `LinearInterpolation` trait that enables us to grab the indeces of
-the values that window a particular value, and we implement a method that returns the inverse tuple.
+For this type, we implement the `LinearInterpolation` trait described above that contains the same
+functions to enable us to grab the indeces of the values in the first vector in the tuple that
+window a provided value, and we implement a new method that returns the inverse tuple.
 
 ```rs:natural_history_manager.rs
 impl InvertibleTimeVaryingParameter {
@@ -243,10 +247,10 @@ different variants to represent the multiple ways a user may specify the generat
 ```rs:natural_history_manager.rs
 #[derive(Deserialize)]
 pub enum GenerationInterval {
-    Distribution(ProbabilityDistribution, ProbabilityDistribution),
-    LengthAndMagnitude(ProbabilityDistribution, ProbabilityDistribution, ProbabilityDistribution),
-    Cdf(InvertibleTimeVaryingParameter, ProbabilityDistribution),
-    NormalizedHazard(InvertibleTimeVaryingParameter, ProbabilityDistribution),
+    Distribution(ProbabilityDistribution, ProbabilityDistributionDiscrete),
+    LengthAndMagnitude(ProbabilityDistribution, ProbabilityDistribution, ProbabilityDistributionDiscrete),
+    Cdf(InvertibleTimeVaryingParameter, ProbabilityDistributionDiscrete),
+    NormalizedHazard(InvertibleTimeVaryingParameter, ProbabilityDistributionDiscrete),
     AbsoluteHazard(InvertibleTimeVaryingParameter)
 }
 ```
@@ -256,28 +260,31 @@ generation interval _length_ is exponential and the magnitude over time is const
 same shorthand (the first enum variant listed above) and then a more complete option that allows the
 user to separately specify the length and magnitude separately (the second option). In both cases,
 the distribution for $R_0$ must also be specified, and that is the final parameter in each of these
-variants. By tethering these two parameters together, we are ensuring that if the variant value
-picked by the user requires a distribution for $R_0$, they actually must provide it otherwise the
-model will not compile. If we were to separately specify the $R_0$ distribution, we would have to
-check for the existence of that parameter (assuming a consistent name for it) when the model is
-validating its parameters, deferring the error to later and making assumptions about code structure.
+variants (a discrete distribution). By tethering the generation interval and $R_0$ to be specified
+together, we are ensuring that if the `GenerationInterval` variant mode picked by the user requires
+a distribution for $R_0$, they actually must provide it. If we were to separately specify the $R_0$
+distribution as its own optional natural history parameter, we would have to check for the existence
+of that parameter (assuming a consistent name for it) when the model is validating its parameters,
+deferring the error to later and making assumptions about code structure.
 
 When the user cannot confine the generation interval to an analytical distribution (i.e., they have
 empirical samples of the distribution over time), we allow multiple ways to specify the generation
 interval -- as a CDF (requiring an invertible time varying parameter and a distribution of $R_0$),
 a normalized hazard function which requires the same inputs, an absolute hazard function which does
 not require a separate distribution of $R_0$ because it quantifies _absolute_ hazard, etc.
-Regardless of the form of the generation interval, we use the generation interval to estimate the
-time to the next infection attempt. Because there are multiple steps in this process, we define a
-method in the `ContextNaturalHistoryExt` called `time_to_next_infection_attempt` that conducts this
-routine according to our algorithm for calculating the
+Regardless of the form of the generation interval, we use it to estimate the time to the next
+infection attempt. We implement the methods required to conduct this calculation in the trait
+`GenerationIntervalComputations` and we provide an implementation of this trait on the
+`GenerationInterval` type. Because there are multiple steps in this process, we define a method in
+the `ContextNaturalHistoryExt` called `time_to_next_infection_attempt` that conducts this routine
+according to our algorithm for calculating the
 [time to the next infection attempt](./time_varying_infectiousness.md).
 
 ```rs:natural_history_manager.rs
 pub trait ContextNaturalHistoryExt {
     fn time_to_next_infection_attempt(
         &mut self,
-        gi: GenerationInterval,
+        gi: &impl GenerationIntervalComputations,
         person: PersonId) -> Option<f64>;
 }
 ```
@@ -331,14 +338,15 @@ to calculate the time to the next infection attempt. The method:
 1. Returns `None` if there are no infection attempts remaining.
 2. Draws the next ordered uniform value based on the number of infection attempts remaining.
 3. Estimates the time at which the next infection attempt occurs by passing the uniform value
-through the inverse CDF.
+through the inverse generation interval CDF.
 
 Internally, this method keeps track of:
 1. The agent's remaining number of secondary infection attempts (or, if the absolute hazard function
 was specified, remaining absolute infectiousness). Because our structure for the generation interval
 is coupled to the number of secondary infection attempts, the calling code does not need to worry
 about this quantity, and all calculations -- which depend on the variant value -- are abstracted
-away from the transmission manager into the `time_to_next_infection_attempt` method.
+away from the transmission manager into the `time_to_next_infection_attempt` method which checks for
+the variant value of the `GenerationInterval` type and computes quantites accordingly.
 2. The time of the last infection attempt, both as a uniform number and in absolute space, which is
 kept track of as a person property. This also means that the `ContextNaturalHistoryExt` provides a
 convenience method for resetting these internal parameters at the end of an infection to allow for
@@ -350,256 +358,73 @@ pub trait ContextNaturalHistoryExt {
 }
 ```
 
+Finally, there are two implications of this structure we have outlined. First, since the generation
+interval is required as an input to the `time_to_next_infection_attempt` method, a modeler can have
+the generation interval switch based on the infection setting or other model properties. In other
+words, the specification of parameters and computation done with them are modular. Secondly, this
+structure also lends itself to generalizability to modeling multiple co-circulating pathogens: the
+modeler chooses the relevant generation interval based on the infecting pathogen rather than their
+being one global generation interval.
+
 ## Allowing for correlation between parameter values
 
+Natural history parameters can be correlated. For instance, a specific generation interval may be
+associated with a particular number of secondary infection attempts, or a given value of the
+generation interval may be associated with a particular time to symptom improvement. We want to
+allow for an input format that lets us include paired natural history parameter values. First, let
+us describe what the input format for such a parameter may be. Returning to the idea of there being
+different possible respiratory viral load trajectories for each agent, it makes sense to specify
+these as a vector. If we want each trajectory to be associated with a particular incubation period
+distribution, we would also specify those values as a vector.
 
-
-
-
-We discuss the details of querying an agent's natural history parameters below when introducing the
-format of the input CSV that contains these parameters. For now, know that the method
-`get_parameter_value()` can return the person-specific parameter value. We need to call this method
-twice in `time_to_next_infection_attempt()`: once to get the number of secondary infection attempts
-(if not set for the person already, so called only on the first time
-`time_to_next_infection_attempt()` is called), and once to get the person's disease generation
-interval.
-
-In the two cases, the return type of the parameter value is different. The number of secondary
-infection attempts is a positive integer (but more generally a scalar) while the generation interval
-CDF is a function (or samples of a function) that varies over time since infection. We also need to
-use the two parameters differently. While we just want the value of the number of secondary
-infection attempts for the person as a scalar, we need to use inverse transform sampling on the
-generation interval CDF to convert an ordered uniform draw (i.e., the quantile by which a given
-amount of infectiousness has passed) to a time. This entails inverting the generation interval CDF,
-estimating the time at which the infectiousness quantile is reached, and returning a float.
-
-```rs:natural_history_manager.rs
-define_person_property_with_default!(NumInfectionAttemptsRemaining, Option<usize>, None);
-define_person_property_with_default!(LastInfectionAttemptTime,
-                                     (NotNan<f64>, NotNan<f64>),
-                                     (NotNan::new(0.0), NotNan::new(0.0)));
-
-impl ContextNaturalHistoryExt for Context {
-    fn time_to_next_infection_attempt(&mut self, person_id: PersonId) -> Option<f64> {
-        let infection_attempts_remaining = match self.get_person_property(person_id,
-                                                                    NumInfectionAttemptsRemaining) {
-            None => {
-                self.set_person_property(
-                    person_id,
-                    NumInfectionAttemptsRemaining,
-                    Some(self.get_parameter_value(
-                            person_id,
-                            NaturalHistoryParameter::InfectionAttempts)
-                         .get_value())
-                );
-                self.get_person_property(person_id, NumInfectionAttemptsRemaining).unwrap()
-            },
-            Some(0) => return None,
-            Some(n) => n,
-        };
-        let (last_infection_attempt_quantile,
-             last_infection_attempt_time) = self.get_person_property(
-                                                    person_id,
-                                                    LastInfectionAttemptTime
-                                            );
-        let next_infection_attempt_quantile = ordered_draw_uniform_distribution(
-                                                    infection_attempts_remaining,
-                                                    last_infection_attempt_quantile
-                                              );
-        let  next_infection_attempt_time = self.get_parameter_value(
-                                                person_id,
-                                                NaturalHistoryParameter::GenerationIntervalCDF)
-                                           .estimate_at_point(next_infection_attempt_quantile,
-                                                              true,
-                                                              last_infection_attempt_quantile);
-        self.set_person_property(
-            person_id,
-            LastInfectionAttemptTime,
-            (NotNan::new(next_infection_attempt_quantile), NotNan::new(next_infection_attempt_time))
-        );
-        Some(next_infection_attempt_time - last_infection_attempt_time)
+```json
+{
+    "epi_isolation.Parameters": {
+        "respiratory_viral_load": [
+            "TimeVaryingParameter([0.0, 1.0], [Empirical[1.0], Empirical[2.0])",
+            "TimeVaryingParameter([0.0, 1.0], [Empirical[1.5], Empirical[2.5])",
+            "TimeVaryingParameter([1.0, 2.0], [Empirical[1.0], Empirical[2.0])"],
+        "incubation_period": [
+            "Empirical[3.0]",
+            "Empirical[2.5]",
+            "Empirical[4.2]"],
     }
 }
 ```
 
-We use the `get_value()` method for directly getting the value of a scalar parameter, and we use the
-`estimate_at_point()` method for estimating the value of a time-varying parameter at a given point.
-The `estimate_at_point()` method takes three arguments: the value at which we want to be doing the
-estimation, whether we want to actually be estimating the _inverse_ of the function (in this case,
-that is `true`), and a starting point. The starting point argument is useful because we often need
-to get the value of a time-varying parameter over the course of an infection. Time since being
-infected only ever increases, so we know that we will be querying the function at larger times.
-Depending on the underlying type for which the trait is being implemented, knowing the starting
-point for doing our estimation routine can help improve computational efficiency. We will explain
-the details of implementing this trait below, but the abstractness of being able to tailor the
-implementation of the trait to the type helps improve modularity.
+By itself, this input structure suggests a noteworthy feature: different trajectories of a
+time-varying parameter can have different time values. This is a helpful feature for most closely
+mimicking real-world data that may have measurements of a time-varying parameter at different times
+per person. By ensuring that the input format can allow for the complexities of real-world data, we
+remove the need for spurious pre-processing, which in this case would be standardizing all samples
+to have values at the same time. On the other hand, this input structure also has a potential
+downside: at the current time, it does not allow for samples in the vector to be weighted. In other
+words, we cannot provide a weight that tells the sampler "take the first value 40% of the time and
+the second and the third each 20%". However, a user could implement the necessary traits on a new
+type that also contained weighting information if their use case required that.
 
-### A general pattern for getting parameter values
+This changes the type of the respiratory viral load natural history parameter to now be
+`Vec<TimeVaryingParameter>` and the type of the incubation period natural history parameter to be
+`Vec<ProbabilityDistribution>`. So far, we have implemented all the traits we need to compute
+quantites from the parameter values on the raw types, not vectors of the types. However, we want to
+modularly allow the user to modify their input file to have vectors of these types without needing
+to change the way their code is structured, so we implement these traits for the vectors of the
+types as well. Because the methods that use these times just require that they implement specific
+traits (i.e., the methods are not tied to particular types), this enables the modularity we desire.
 
-The pattern used in the `time_to_next_infection_attempt()` method is a specific example of a more
-general pattern: getting the parameter value with the `get_parameter_value()` method, and then using
-the methods available in the `NaturalHistoryParameterValue` trait to extract the quantity relevant
-for modeling disease spread at the individual level.
-
-Similar to the use case described with the time to the next infection attempt, consider that a
-person who is experiencing symptoms may test and quarantine if they test positive. If probability of
-testing positive over time is specified as a natural history parameter, it can be queried at a given
-time in `mod testing_manager`:
-
-```rs:testing_manager.rs
-fn handle_health_status_change(
-    context: &mut Context,
-    event: PersonPropertyChangeEvent<HealthStatus>,
-   ) {
-    if event.current == HealthStatusType::Symptomatic {
-        let time_since_infected = context.get_current_time() - context.get_person_property(
-                                                                    event.person_id,
-                                                                    InfectionTime)
-                                                                .unwrap();
-        let antigen_positivity = context.get_parameter_value(
-                                    event.person_id,
-                                    NaturalHistoryParameter::AntigenPositivity)
-                                 .estimate_at_point(time_since_infected, false, 0.0);
-
-        if context.sample_bool(TestingRng, prob_test_positive) {
-            context.set_person_property(
-                event.person_id,
-                QuarantineStatus,
-                QuarantineStatusType::HouseholdQuarantine
-            );
-        }
-    }
-}
-```
-
-On the other hand, consider that `mod health_status_manager` wants to know when the agent starts
-showing symptoms and change their clinical health status accordingly (imagine all agent present with
-symptoms at some point for the purposes of this example):
-
-```rs:health_status_manager.rs
-fn handle_infectious_status_change(
-    context: &mut Context,
-    event: PersonPropertyChangeEvent<InfectiousStatus>,
-   ) {
-    if event.current == InfectiousStatusType::Infectious {
-        context.set_person_property(
-            event.person_id,
-            HealthStatus,
-            HealthStatusType::Presymptomatic);
-
-        let incubation_time = context.get_parameter_value(
-            event.person_id,
-            NaturalHistoryParameter::IncubationPeriod)
-            .get_value();
-        context.add_plan(
-            context.get_current_time() + incubation_time,
-            move |context| {
-                context.set_person_property(
-                    event.person_id,
-                    HealthStatus,
-                    HealthStatusType::Symptomatic);
-            },
-        );
-    }
-}
-```
-
-These two examples underscore our observations from the `time_to_next_infection_attempt()` use:
-we must implement the `NaturalHistoryParameterValue` for a scalar return type and a type that lets
-us estimate the value of a function at different times.
-
-### Implementing the `NaturalHistoryParameterValue` trait for common return types
-
-We have been purposely vague about the specific types for which we may implement the trait because
-there are multiple possibilities depending on the use case. Consider the more specific natural
-history manager described above where the user makes assumptions about the distributional form of
-their parameters (ex., the incubation period is exponentially-distributed with a rate parameter
-specified in the input file) and encodes those assumptions into their Rust implementation of the
-natural history manager. They could implement the `NaturalHistoryParameterValue` trait for the
-function type that enables them to randomly draw samples from their specified parameter
-distributions. Then, the `get_value()` method would return a random sample from that distribution,
-and the `estimate_at_point()` method could estimate the CDF at the specified value.
-
-However, we are interested in the most general case where the user specifies samples of the natural
-history parameters in an input CSV. In that case, for the natural history parameter types that do
-not change over the course of the infection (like the incubation period or the number of secondary
-infection attempts), the user provides in a scalar, and the `NaturalHistoryParameterValue` should be
-implemented for that scalar type:
-
-```rs:natural_history_manager.rs
-impl NaturalHistoryParameterValue for f64 {
-    fn get_value(&self) -> f64 {
-        self
-    }
-    fn estimate_at_point(&self, x: f64, invert: bool, start: f64) -> f64 {
-        unimplemented!();
-    }
-}
-```
-
-Since the `estimate_at_point()` method is only used for time-varying parameters, it does not make
-sense in this case, so we do not implement it.
-
-Comparatively, the most general way of storing values of a function that varies over time, such as
-the generation interval CDF, is as a vector of times and a corresponding vector of function values:
-`(times: Vec<f64>, values: Vec<f64>)`. We would implement the `NaturalHistoryParameterValue` trait
-as follows:
-
-```rs:natural_history_manager.rs
-impl NaturalHistoryParameterValue for (Vec<f64>, Vec<f64>) {
-    fn get_value(&self) -> f64 {
-        unimplemented!();
-    }
-    fn estimate_at_point(&self, x: f64, invert: bool, start: f64) -> f64 {
-        let (ts, vals) = self;
-        // 1. Since the vectors are sorted, use binary search to get the indeces of the values in
-        // the first vector that refer to the closest values less than and greater than the x value.
-        // 2. Use linear interpolation to estimate the value at the given point based on the samples
-        // in the second vector.
-        if invert {
-            let indeces: Range = find_window_indeces(vals, x, start);
-            return linear_interpolation(vals[indeces], ts[indeces], x);
-        }
-        else {
-            let indeces: Range = find_window_indeces(ts, x, start);
-            return linear_interpolation(ts[indeces], cals[indeces], x);
-        }
-    }
-}
-```
-
-## Storing natural history parameter values
-
-We have motivated the `NaturalHistoryParameterValue` trait's utility from the perspective of having
-parameters that take on different types but wanting consistent features across types to improve
-modularity. However, the same challenge occurs when we think about wanting to consistently store
-natural history parameter values, and the same solution is applicable. In particular, the trait
-`NaturalHistoryParameterValue` is object safe, so we can store parameter values in a vector and
-store that vector in a hash map entry referring to its parameter value:
-`HashMap<NaturalHistoryParameter, Vec<Box<dyn NaturalHistoryParameterValue>>>`. The
-`get_parameter_value()` method just queries this hash map, returning the value of the specified
-natural history parameter for the specified person.
-
-Although `get_parameter_value()` takes the person ID as an input, how does the method know which
-parameter value should be returned for the person in question? We adopt the convention that each
-person is assigned an index, the `NaturalHistoryIndex`. This index is used when taking a value from
-the vector in the hash map for a specified natural history parameter. Indeces are assigned based on
-weights. Together, this tells us the two features of the natural history data container that stores
-the parameter values:
-
-```rs:natural_history_manager.rs
-#[derive(Default)]
-struct NaturalHistoryContainer {
-    weights: Vec<f64>,
-    parameters: HashMap<NaturalHistoryParameter, Vec<Box<dyn NaturalHistoryParameterValue>>>
-}
-
-define_data_plugin!(NaturalHistory, NaturalHistoryContainer, NaturalHistoryContainer::default());
-```
-
-Index assignment is lazy, so the `get_parameter_value()` method always calls the
-`assign_natural_history` function as its first step. This function checks if an agent's natural
-history index has been set already, and if not assigns one.
+Concretely, we implement the `Distribution` trait for `Vec<ProbabilityDistribution`, the
+`LinearInterpolation` trait for `Vec<TimeVaryingParameter>` and
+`Vec<InvertibleTimeVaryingParameter>`, and we implement `GenerationIntervalComputation` on
+`Vec<GenerationInterval>`. These traits still need to act on a particular instance of the underlying
+type, so we introduce a new concept -- a person property called the `NaturalHistoryIndex`. In brief,
+this index tells us which item in the vector to use as that person's particular value of a natural
+history parameter. This index is used consistently across all natural history parameters for which a
+vector of values is specified, thereby allowing for paired/joint natural history parameter values.
+Indeces are assigned lazily when any one of the methods in `ContextNaturalHistoryExt` is called, so
+this technical detail is entirely abstracted from the calling code. This is why all the methods
+in the `ContextNaturalHistoryExt` require the person as an input: they use the value of the person's
+`NaturalHistoryIndex` to conduct the computations in the traits we've defined on the particular
+value at the associated index.
 
 ```rs:natural_history_manager.rs
 define_person_property_with_default!(NaturalHistoryIndex, Option<usize>, None);
@@ -609,8 +434,9 @@ fn assign_natural_history(context: &mut Context, person_id: PersonId) -> usize {
         return idx;
     }
 
-    let weights = context.get_data_container(NaturalHistoryParameters).unwrap().weights;
-    let idx = context.sample_weighted(NaturalHistoryRng, weights);
+    // Assign index based on the length of the vectors of the natural history parameters defined in
+    // this module.
+    let idx = ...;
 
     context.set_person_property(
         person_id,
@@ -621,68 +447,29 @@ fn assign_natural_history(context: &mut Context, person_id: PersonId) -> usize {
 }
 ```
 
-Lazy assignment of indeces improves modularity: imagine that we pick one method that explicitly sets
-the natural history index, or even if it is done by the user in one of the modules (natural history
-index is a person property and directly modifiable in any module). Let us say that method is the
-`time_to_next_infection_attempt()` method though it can be any method. Since all natural history
-parameters are queried based on the index, this structure would require that the
-`time_to_next_infection_attempt()` method is called _before_ any other methods that require the
-person's natural history parameter index. Even if the natural history parameter index is only
-required once an agent becomes infectious, this requires that the transmission manager's event
-listeners for the `Susceptible --> Infectious` transition occur before any other module's. Not only
-does this reduce modularity, but it makes the model structure prone to bugs and dependency issues.
+Lazy assignment of indeces (i.e., assignment on demand by the natural history manager) improves
+modularity: imagine that we pick one method that explicitly sets the natural history index, or even
+if it is done by the user in one of the modules (natural history index is a person property and
+directly modifiable in any module). Let us say that method is the `time_to_next_infection_attempt()`
+method though it can be any method. Since all natural history parameters are queried based on the
+index, this structure would require that the `time_to_next_infection_attempt()` method is called
+_before_ any other methods that require the person's natural history parameter index. Even if the
+natural history parameter index is only required once an agent becomes infectious, this requires
+that the transmission manager's event listeners for the `Susceptible --> Infectious` transition
+occur before any other module's. Not only does this reduce modularity, but it makes the model
+structure prone to bugs and dependency issues.
 
 To ensure that an agent's natural history parameters are not being changed in the middle of their
-infection (i.e., a subsequent call to `get_parameter_value` and therefore `assign_natural_history()`
-does not change the natural history parameters if they have already been set for this agent's
-infection), the method only sets the properties if they are `None` -- in other words, not set
-previously. In a future immunity manager, when an individual is returned to being susceptible, their
-parameters can be reset: the `NaturalHistoryIndex` can be set to back to `None`, the
-`LastInfectionAttemptTime` to `(NotNan::new(0.0), NotNan::new(0.0))`, and `NumInfectionAttempts` to
-`None`.
+infection (i.e., a subsequent call to any of the methods in the `ContextNaturalHistoryExt` that then
+call `assign_natural_history()` does not change the natural history parameters if they have already
+been set for this agent's infection), the method only sets the properties if they are `None` -- in
+other words, not set previously. In a future immunity manager, when an individual is returned to
+being susceptible, their natural history parameters can be reset: the `NaturalHistoryIndex` can be
+set to back to `None` and any other person properties the natural history manager controls/sets for
+the `time_to_next_infection_attempt` method can be reset. This is done in the
+`reset_to_susceptible(&mut self, person: PersonId)` method in the `ContextNaturalHistoryExt`
+referenced [above](#implementing-new-methods-on-subtypes-an-example-from-using-the-disease-generation-interval).
 
-This gives us the following structure for the `get_parameter_value()` method:
-
-```rs:natural_history_manager.rs
-impl ContextNaturalHistoryExt for Context {
-    fn get_parameter_value(
-        &mut self,
-        person_id: PersonId,
-        parameter: NaturalHistoryParameter
-       ) -> impl NaturalHistoryParameterValue {
-        let index = assign_natural_history(self, person_id);
-        let container = self.get_data_container(NaturalHistory).unwrap();
-        container.get(&parameter)[index]
-       }
-}
-```
-
-`get_parameter_value()` requires a mutable reference to `Context` because it calls
-`assign_natural_history()`, which potentially sets a person property.
-
-
-
-## Application to isolation guidance at the community level
-
-For our model of isolation guidance, we apply the natural history manager and the functionality
-provided by it as follows:
-
-1. We have samples of an agent's generation interval over time, an associated symptom improvement
-time, viral load over time, and antigen positivity over time. We can use values from the literature
-to produce consistent estimates of an individual's incubation period given their other natural
-history parameters. We want to read all of these parameters in, maintaining their correlations to
-each other, so that when an agent becomes infected, they are assigned a natural history parameter
-set that specifies all of these values.
-    - We tested various different assumptions about the functional form of the generation interval
-    in our modeling, and we would like to do the same in our agent-based model. We only have to
-    change the parameter values in the input CSV to achieve this.
-2. We need to use the values of the natural history parameters for an agent in not only scheduling
-their infectious attempts but changing their clinical symptoms. We query their incubation period
-and symptom improvement time natural history parameters and get their values for use in the model
-module that manages clinical symptoms.
-3. For modeling the previous guidance, we need to query an agent's probability of testing positive
-at the time when their symptoms appear.
-
-The generic nature of how we manage, store, and query natural history parameters both through the
-`ContextNaturalHistoryExt` trait extension on `Context` and the `NaturalHistoryParameterValue` trait
-directly enable these required features.
+Finally, because assigning a natural history index changes a person property, all methods that do
+so require a mutable reference to `Context`. This explains why all the methods described above in
+`ContextNaturalHistoryExt` take a mutable reference to `Context`.
