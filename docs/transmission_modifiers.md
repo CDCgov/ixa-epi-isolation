@@ -1,15 +1,15 @@
 # Overview
-Infection attempts are not always successful (i.e. result in transmission) and many factors modify
-the probability of infection attempt success. These "transmission modifiers" can originate from the
-natural history of infection or from interventions, which are measures that are aimed to reduce
-the overall probability of transmission. For example, both cross-protective immunity, in the case
-of a natural modifiers, or wearing a facemask, in the case of intervention-based transmission
-modifiers, can lower the relative transmission potential of an infection attempt interaction.
-Transmission modifiers are not strictly independent, nor is it convenient to repeatedly define
-their specific use cases, which would require independent querying that is repetitive and
-error-prone. To avoid these pitfalls, this module provides a framework to incorporate transmission
-modifiers in a flexible and generalized manner, such that all modifiers are detected and aggregated
-when assessing the relative transmission potential of an infection attempt.
+Many factors modify the probability of success of an infection attempt of an infectious individual.
+These "transmission modifiers" can originate from the natural history of disease (cross-protection
+from previous infection or vaccine) or from interventions aimed to reduce the overall probability of
+transmission (facemasks). These modifiers can reduce the probability of infection given a reduction
+in the transmissibility of the infectious individual, or the susceptibility of the individual being
+exposed. Combined, these factors may modify the probability of infection. Transmission modifiers are
+not strictly independent, nor is it convenient to repeatedly define their specific use cases, which
+would require independent querying that is repetitive and error-prone. This module provides a
+framework to incorporate transmission modifiers in a flexible and generalized manner, such that all
+modifiers are detected and aggregated when assessing the relative transmission potential of an
+infection attempt.
 
 ## Hook to transmission manager
 In this module, we assume that an interaction between an infectious transmitter (I) and a
@@ -25,25 +25,21 @@ fn query_infection_modifers(&mut self, transmitter_id: PersonId, contact_id: Per
 }
 ```
 
-We assume that the infectiousness of transmitter I is independent of, and therefore additive
-to, the risk of infection of contact S.
+We assume that the infectiousness of transmitter I is independent of, and therefore additive to, the
+risk of infection of contact S.
 
 The API hook to `evaluate_transmission` is independent of innate transmissiveness, which determines
-the number and timing of infection attempts made by infectious individual I. We only account for
-the `relative_transmission` change that alters probability of `transmission_success` given the
-attempt as follows:
+the number and timing of infection attempts made by infectious individual I. We only account for the
+`relative_transmission` change that alters probability of `transmission_success` given the attempt
+as follows:
 
 ```rust
 fn evaluate_transmission(context: &mut Context, contact_id: PersonId, transmitter_id: PersonId) {
     if context.get_person_property(contact_id, InfectiousStatus)
         == InfectiousStatusType::Susceptible
     {
-        let relative_transmission = context.query_infection_modifiers(transmitter_id, contact_id)
-        let transmission_success =
-            context.sample_range(TransmissionRng, 0.0..1.0) < relative_transmission;
-
         // Set the contact to infectious with probability additive relative transmission.
-        if transmission_success {
+        if context.sample_bool(TransmissionRng, relative_transmission) {
             context.set_person_property(
                 contact_id,
                 InfectiousStatus,
@@ -55,12 +51,11 @@ fn evaluate_transmission(context: &mut Context, contact_id: PersonId, transmitte
 ```
 
 # API
-## Data plugin and Context trait exension
-Before obtaining the total effect of all transmission modifiers acting on the relative transmission
-potential between I and S during an infection attempt, we need to register relative infectiousness
-and risk, respectively, of each modifier. We therefore use a `HashMap` to relate
-`InfectiousStatusType` to transmission modifiers with `TypeId`. These `TypeId` values then map to
-supplied relative transmission function that takes in `Context` and a `PersonId`.
+## Data plugin and Context trait extension
+Transmission modifiers need to register their relative reduction on infectiousness (I) and risk (S).
+We use a `HashMap` to relate `InfectiousStatusType` to transmission modifiers with `TypeId`. These
+`TypeId` values then map to supplied relative transmission function that takes in `Context` and a
+`PersonId`.
 
 To relate multiple modifier functions to one another, we also map `InfectiousStatusType` to a
 modifier aggregator function that determines how the transmission modifiers of a particular
@@ -142,7 +137,7 @@ including the effect of risk cateogry on susceptiblity. Because we adhere to usi
 mapping, and because we don't want to conflate multiple instances of abstract types, we must define
 a public `enum` and associate it with a `PersonProperty`. We then register this function by
 providing a vector of values from the `enum` and their associated change effect on relative
-transmission.  We only do so for the `InfectiousStatusType::Susceptible` case, as `RiskCategory`
+transmission. We only do so for the `InfectiousStatusType::Susceptible` case, as `RiskCategory`
 would only apply to risk, not infecitousness, in such a module.
 
 ```rust
@@ -165,12 +160,12 @@ context.register_transmission_modifier(
 
 The `RiskCategoryType::High` does not need to be registered if innate transmissiveness is
 parameterized to the susceptibility of the high risk group. The default for the closure reading the
-`modifier_key` is one, meaning there is no change in the relative risk for unregistered types. This
+`modifier_key` is 1.0, meaning there is no change in the relative risk for unregistered types. This
 functional format is acceptable because we `define_person_property_with_default!`, and don't allow
 `PersonId`s without a `RiskCategory` to also default to one. Without a default for the
-`PersonProperty`, all individuals would be effectively in the `RiskCateogryType::High` group in
-this example. Analogous cases without a default `PersonProperty` value will need to consider this
-effect by either treating unregistered cases as a default or by registering all values.
+`PersonProperty`, all individuals would be effectively in the `RiskCateogryType::High` group in this
+example. Analogous cases without a default `PersonProperty` value will need to consider this effect
+by either treating unregistered cases as a default or by registering all values.
 
 ## Computation
 ### Aggregator functions
