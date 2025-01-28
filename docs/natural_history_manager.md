@@ -278,7 +278,7 @@ a normalized hazard function which requires the same inputs, an absolute hazard 
 not require a separate distribution of $R_0$ because it quantifies _absolute_ hazard, etc.
 Regardless of the form of the generation interval, we use it to estimate the time to the next
 infection attempt. We implement the methods required to conduct this calculation in the trait
-`GenerationIntervalComputations` and we provide an implementation of this trait on the
+`GenerationIntervalComputations`, and we provide an implementation of this trait on the
 `GenerationInterval` type. Because there are multiple steps in this process, we define a method in
 the `ContextNaturalHistoryExt` called `time_to_next_infection_attempt` that conducts this routine
 according to our algorithm for calculating the
