@@ -7,6 +7,4 @@
 3. Contact
 4. Natural immunity
 5. Interventions
-    - Mask wearing
-    - Isolation
-    - Vaccines
+    - [Transmission modifiers](infection.md)
