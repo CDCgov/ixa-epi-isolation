@@ -410,7 +410,7 @@ type that also contained weighting information if their use case required that.
 This changes the type of the respiratory viral load natural history parameter to now be
 `Vec<TimeVaryingParameter>` and the type of the incubation period natural history parameter to be
 `Vec<ProbabilityDistribution>`. So far, we have implemented all the traits we need to compute
-quantites from the parameter values on the raw types, not vectors of the types. However, we want to
+quantities from the parameter values on the raw types, not vectors of the types. However, we want to
 modularly allow the user to modify their input file to have vectors of these types without needing
 to change the way their code is structured, so we implement these traits for the vectors of the
 types as well. Because the methods that use these types just require that they implement specific
@@ -422,7 +422,7 @@ Concretely, we implement the `Distribution` trait for `Vec<ProbabilityDistributi
 `Vec<GenerationInterval>`. This lets us change our parameter types to the vectored versions without
 changing their use in our code. These traits still do their computations on a particular instance of
 the underlying type in the vector (i.e., not the whole vector), so we introduce a new concept -- a
-erson property called the `NaturalHistoryIndex` that is of type `usize`. This index tells us which
+person property called the `NaturalHistoryIndex` that is of type `usize`. This index tells us which
 item in the vector to use as that person's particular value of a natural history parameter. That
 index value is used consistently across all natural history parameters for which a vector of values
 is specified, thereby allowing for paired/joint natural history parameter values. This also allows
