@@ -79,7 +79,7 @@ mod test {
         let mut context = Context::new();
         context.init_random(108);
         let transmitter = context.add_person((HouseholdSettingId, 1)).unwrap();
-        let _ = context.add_person((Alive, false)).unwrap();
+        let _ = context.add_person(((Alive, false), (HouseholdSettingId, 1))).unwrap();
         let observed_contact = context.get_contact(transmitter, 1);
         assert!(observed_contact.is_none());
     }
