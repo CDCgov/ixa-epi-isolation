@@ -1,0 +1,9 @@
+{
+  "ixa_epi_isolation_sketch.SynthPopulationFile": ".",
+  "ixa_epi_isolation_sketch.InitialInfections": 1,
+  "ixa_epi_isolation_sketch.HouseholdSize": 3,
+  "ixa_epi_isolation_sketch.PopulationSize": 10,
+  "ixa_epi_isolation_sketch.RecoveryTime": 2.0,
+  "ixa_epi_isolation_sketch.GlobalTransmissibility": 1.0,
+  "ixa_epi_isolation_sketch.Alpha": 1.0
+}

@@ -1,6 +1,9 @@
-use ixa::{define_rng, Context, ContextPeopleExt, IxaError, PersonId};
+use ixa::{define_rng, Context, ContextPeopleExt, PersonId};
 
-use crate::population_loader::Alive;
+use crate::{
+    infection_propagation_loop::{InfectionStatus, InfectionStatusValue},
+    population_loader::{Alive, HouseholdSettingId},
+};
 
 define_rng!(ContactRng);
 
@@ -13,31 +16,46 @@ pub trait ContextContactExt {
     ///
     /// Errors
     /// - If there is only one person in the population.
-    fn get_contact(&mut self, transmitter_id: PersonId) -> Result<Option<PersonId>, IxaError>;
+    fn get_contact(
+        &mut self,
+        transmitter_id: PersonId,
+        household_id: usize,
+    ) -> Option<PersonId>;
 }
 
 impl ContextContactExt for Context {
-    fn get_contact(&mut self, transmitter_id: PersonId) -> Result<Option<PersonId>, IxaError> {
-        if self.get_current_population() == 1 {
-            return Err(IxaError::IxaError(
-                "Cannot get a contact when there is only one person in the population.".to_string(),
-            ));
-        };
+    fn get_contact(
+        &mut self,
+        transmitter_id: PersonId,
+        household_id: usize,
+    ) -> Option<PersonId> {
         // Get list of eligible people (for now, all alive people). May be expanded in the future
         // to instead be list of alive people in the transmitter's contact setting or household.
         // We sample a random person from this list.
-        if self.query_people((Alive, true)).len() > 1 {
+        let people = self.query_people((Alive, true));
+
+        if people.len() > 1 {
             let mut contact_id = transmitter_id;
+            // Continue sampling until we get a contact_id that's not the transmitter_id.
             while contact_id == transmitter_id {
-                // In the future, we might like to sample people from the list by weights according
-                // to some contact matrix. We would use sample_weighted instead. We would calculate
-                // the weights _before_ the loop and then sample from the list of people like here.
-                contact_id = self.sample_person(ContactRng, (Alive, true))?;
+                contact_id = match self.sample_person(
+                    ContactRng,
+                    (
+                        (Alive, true),
+                        // I'm not thrilled about directly referencing an internal person property
+                        (HouseholdSettingId, household_id),
+                        (InfectionStatus, InfectionStatusValue::Susceptible),
+                    ),
+                ) {
+                    Ok(id) => id,
+                    // If sample_person errors, return None immediately.
+                    Err(_) => return None,
+                };
             }
-            Ok(Some(contact_id))
+            Some(contact_id)
         } else {
-            // This means that there are no eligible contacts in the population besides the transmitter.
-            Ok(None)
+            // There are no eligible contacts in the population besides the transmitter.
+            None
         }
     }
 }
@@ -45,29 +63,24 @@ impl ContextContactExt for Context {
 #[cfg(test)]
 mod test {
     use super::ContextContactExt;
-    use crate::population_loader::Alive;
+    use crate::population_loader::{Alive, HouseholdSettingId};
     use ixa::{Context, ContextPeopleExt, ContextRandomExt, IxaError};
 
     #[test]
     fn test_cant_get_contact_in_pop_of_one() {
         let mut context = Context::new();
-        let transmitter = context.add_person(()).unwrap();
-        let e = context.get_contact(transmitter);
-        match e {
-            Err(IxaError::IxaError(msg)) => assert_eq!(msg, "Cannot get a contact when there is only one person in the population.".to_string()),
-            Err(ue) => panic!("Expected an error that there should be no contacts when there is only one person in the population. Instead got {:?}", ue.to_string()),
-            Ok(Some(contact)) => panic!("Expected an error. Instead, got {contact:?} as valid contact."),
-            Ok(None) => panic!("Expected an error. Instead, returned None, meaning that there are no valid contacts."),
-        }
+        let transmitter = context.add_person((HouseholdSettingId, 1)).unwrap();
+        let result = context.get_contact(transmitter, 1);
+        assert!(result.is_none());
     }
 
     #[test]
     fn test_return_none() {
         let mut context = Context::new();
         context.init_random(108);
-        let transmitter = context.add_person(()).unwrap();
+        let transmitter = context.add_person((HouseholdSettingId, 1)).unwrap();
         let _ = context.add_person((Alive, false)).unwrap();
-        let observed_contact = context.get_contact(transmitter).unwrap();
+        let observed_contact = context.get_contact(transmitter, 1);
         assert!(observed_contact.is_none());
     }
 
@@ -75,10 +88,10 @@ mod test {
     fn test_return_remaining_alive_person() {
         let mut context = Context::new();
         context.init_random(108);
-        let transmitter = context.add_person(()).unwrap();
-        let _ = context.add_person((Alive, false)).unwrap();
-        let presumed_contact = context.add_person(()).unwrap();
-        let observed_contact = context.get_contact(transmitter).unwrap();
-        assert_eq!(observed_contact.unwrap(), presumed_contact);
+        let transmitter = context.add_person((HouseholdSettingId, 1)).unwrap();
+        let _ = context.add_person(((Alive, false), (HouseholdSettingId, 1))).unwrap();
+        let presumed_contact = context.add_person((HouseholdSettingId, 1)).unwrap();
+        let observed_contact = context.get_contact(transmitter, 1).unwrap();
+        assert_eq!(observed_contact, presumed_contact);
     }
 }
