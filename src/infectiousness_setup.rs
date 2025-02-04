@@ -22,8 +22,10 @@ pub fn calc_total_infectiousness(
     person: PersonId,
 ) -> f64 {
     let household_id = context.get_person_setting_id(person, Household);
-    let household_size = context.get_settings_members(Household, household_id).len();
-    intrinsic * (household_size as f64) * context.get_global_property_value(Alpha).unwrap()
+    let household_members = context.get_settings_members(Household, household_id).len();
+    let max_contacts = (household_members - 1) as f64;
+    let alpha = *context.get_global_property_value(Alpha).unwrap();
+    intrinsic *  max_contacts.powf(alpha)
 }
 
 pub struct Forecast {
