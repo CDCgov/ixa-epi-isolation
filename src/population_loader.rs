@@ -36,7 +36,6 @@ fn create_person_from_record(
         (Age, person_record.age),
         (HouseholdSettingId, home_id.parse()?),
         (CensusTract, tract.parse()?),
-
     ))?;
 
     Ok(())

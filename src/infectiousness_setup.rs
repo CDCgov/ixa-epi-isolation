@@ -5,7 +5,7 @@ use statrs::distribution::Exp;
 
 use crate::{
     infectiousness_rate::{
-        InfectiousnessRate, InfectiousnessRateId, InfectiousnessRateExt, TimeOfInfection,
+        InfectiousnessRate, InfectiousnessRateExt, InfectiousnessRateId, TimeOfInfection,
     },
     population_loader::Household,
     settings::ContextSettingExt,
@@ -16,16 +16,12 @@ define_rng!(InfectionTimeRng);
 
 /// Given intrinsic infectiousness at t, calculate the total infectiousness of a person
 /// given other factors related to their setting etc.
-pub fn calc_total_infectiousness(
-    context: &Context,
-    intrinsic: f64,
-    person: PersonId,
-) -> f64 {
+pub fn calc_total_infectiousness(context: &Context, intrinsic: f64, person: PersonId) -> f64 {
     let household_id = context.get_person_setting_id(person, Household);
     let household_members = context.get_settings_members(Household, household_id).len();
     let max_contacts = (household_members - 1) as f64;
     let alpha = *context.get_global_property_value(Alpha).unwrap();
-    intrinsic *  max_contacts.powf(alpha)
+    intrinsic * max_contacts.powf(alpha)
 }
 
 pub struct Forecast {
@@ -33,6 +29,8 @@ pub struct Forecast {
     pub expected_rate: f64,
 }
 
+/// Gets a forecast of the next expected infection time, and the
+/// expected rate of infection at that time.
 pub fn get_forecast(context: &Context, current_time: f64, person_id: PersonId) -> Option<Forecast> {
     let index = context
         .get_person_property(person_id, InfectiousnessRateId)
@@ -41,11 +39,10 @@ pub fn get_forecast(context: &Context, current_time: f64, person_id: PersonId) -
     let intrinsic_rate = context.get_max_infection_rate(index);
     let max_time = context.get_max_infection_time(index);
 
-    let rate = calc_total_infectiousness(context, intrinsic_rate, person_id);
-
     // Because we are using a constant rate for the forecast (max rate), we use
     // an exponential. If we wanted a more sophisticated time-varying forecast,
     // we'd need to use some function of the InfectiousnessRate
+    let rate = calc_total_infectiousness(context, intrinsic_rate, person_id);
     let exp = Exp::new(1.0).unwrap();
     let next_time = current_time + context.sample_distr(InfectionTimeRng, exp) / rate;
 
