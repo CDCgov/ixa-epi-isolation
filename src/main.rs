@@ -20,7 +20,7 @@ define_global_property!(Alpha, f64);
 fn main() {
     run_with_args(|context: &mut Context, args, _| {
         if args.config.is_none() {
-            panic!("You need to run the model with a config file, for example `cargo run -- --config src/params.json`");
+            panic!("You need to run the model with a config file, for example `cargo run -- --config input/input.json`");
         }
         population_loader::init(context)?;
         infectiousness_setup::init(context);

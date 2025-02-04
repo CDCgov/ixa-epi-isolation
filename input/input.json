@@ -1,11 +1,9 @@
 {
-  "epi_isolation.Parameters": {
-      "max_time": 200.0,
-      "seed": 123,
-      "r_0": 2.5,
-      "infection_duration": 5.0,
-      "generation_interval": 5.0,
-      "report_period": 1.0,
-      "synth_population_file": "input/people_test.csv"
-    }
+  "epi_isolation.SynthPopulationFile": "input/people_test.csv",
+  "epi_isolation.InitialInfections": 1,
+  "epi_isolation.HouseholdSize": 3,
+  "epi_isolation.PopulationSize": 10,
+  "epi_isolation.RecoveryTime": 2.0,
+  "epi_isolation.GlobalTransmissibility": 1.0,
+  "epi_isolation.Alpha": 1.0
 }
