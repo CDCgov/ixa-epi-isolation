@@ -50,10 +50,11 @@ fn evaluate_forecast(
 ) {
     let current_time = context.get_current_time();
 
-    let dist = context
+    let rate_id = context
         .get_person_property(person, InfectiousnessRateId)
         .unwrap();
-    let intrinsic = context.get_infection_rate(dist, current_time);
+
+    let intrinsic = context.get_infection_rate(rate_id, current_time);
     let current_infectiousness =
         calc_total_infectiousness(context, intrinsic, person, current_time);
 
