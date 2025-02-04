@@ -20,7 +20,6 @@ pub fn calc_total_infectiousness(
     context: &Context,
     intrinsic: f64,
     person: PersonId,
-    _t: f64,
 ) -> f64 {
     let household_id = context.get_person_setting_id(person, Household);
     let household_size = context.get_settings_members(Household, household_id).len();
@@ -40,7 +39,7 @@ pub fn get_forecast(context: &Context, current_time: f64, person_id: PersonId) -
     let intrinsic_rate = context.get_max_infection_rate(index);
     let max_time = context.get_max_infection_time(index);
 
-    let rate = calc_total_infectiousness(context, intrinsic_rate, person_id, current_time);
+    let rate = calc_total_infectiousness(context, intrinsic_rate, person_id);
 
     // Because we are using a constant rate for the forecast (max rate), we use
     // an exponential. If we wanted a more sophisticated time-varying forecast,
@@ -51,7 +50,8 @@ pub fn get_forecast(context: &Context, current_time: f64, person_id: PersonId) -
     // This should be the forecasted rate at next_time.
     // If the forecast was time-varying this would be different, but
     // because we're using max rate, it's the same
-    let expected_rate = rate;
+    let intrinsic_at_t = context.get_infection_rate(index, next_time);
+    let expected_rate = calc_total_infectiousness(context, intrinsic_at_t, person_id);
 
     let day_0 = context
         .get_person_property(person_id, TimeOfInfection)

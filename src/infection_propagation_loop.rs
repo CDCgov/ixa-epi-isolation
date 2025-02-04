@@ -56,7 +56,7 @@ fn evaluate_forecast(
 
     let intrinsic = context.get_infection_rate(rate_id, current_time);
     let current_infectiousness =
-        calc_total_infectiousness(context, intrinsic, person, current_time);
+        calc_total_infectiousness(context, intrinsic, person);
 
     // If they are less infectious as we expected...
     if current_infectiousness < forecasted_total_infectiousness {
