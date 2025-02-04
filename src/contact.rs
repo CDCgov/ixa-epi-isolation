@@ -64,7 +64,7 @@ impl ContextContactExt for Context {
 mod test {
     use super::ContextContactExt;
     use crate::population_loader::{Alive, HouseholdSettingId};
-    use ixa::{Context, ContextPeopleExt, ContextRandomExt, IxaError};
+    use ixa::{Context, ContextPeopleExt, ContextRandomExt};
 
     #[test]
     fn test_cant_get_contact_in_pop_of_one() {
