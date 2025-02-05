@@ -1,9 +1,8 @@
-use crate::contact::ContextContactExt;
 use crate::infectiousness_rate::InfectiousnessRateExt;
 use crate::infectiousness_setup::{
     assign_infection_properties, calc_total_infectiousness, get_forecast, Forecast,
 };
-use crate::population_loader::Household;
+use crate::population_loader::{Alive, Household};
 use crate::settings::ContextSettingExt;
 use crate::InitialInfections;
 use ixa::{
@@ -42,6 +41,7 @@ fn schedule_next_forecasted_infection(context: &mut Context, person: PersonId) {
     });
 }
 
+// Do rejection sampling to determine if the infection should be accepted
 fn evaluate_forecast(
     context: &mut Context,
     person: PersonId,
@@ -51,20 +51,28 @@ fn evaluate_forecast(
     let rate_fn = context.get_person_rate_fn(person);
 
     let intrinsic = rate_fn.get_rate(current_time);
-    let current_infectiousness = calc_total_infectiousness(context, intrinsic, person);
+    // TODO<ryl8@cdc.gov>: choose a random setting
+    let current_infectiousness = calc_total_infectiousness(context, intrinsic, person, Household);
 
     // If they are less infectious as we expected...
     if current_infectiousness < forecasted_total_infectiousness {
         // Reject with the ratio of current vs the forecasted
-        let r = context.sample_range(InfectionRng, 0.0..1.0);
-        if r > current_infectiousness / forecasted_total_infectiousness {
+        if !context.sample_bool(
+            InfectionRng,
+            current_infectiousness / forecasted_total_infectiousness,
+        ) {
             return;
         }
     }
 
-    // Accept the infection
-    let household_id = context.get_person_setting_id(person, Household);
-    let contact = context.get_contact(person, household_id);
+    let contact = context.get_contact(
+        person,
+        Household,
+        (
+            (Alive, true),
+            (InfectionStatus, InfectionStatusValue::Susceptible),
+        ),
+    );
     if contact.is_none() {
         // No more people to infect; exit the loop
         return;

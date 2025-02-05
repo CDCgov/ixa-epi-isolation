@@ -8,7 +8,7 @@ use statrs::distribution::Exp;
 use crate::{
     infectiousness_rate::{ConstantRate, InfectiousnessRateExt},
     population_loader::Household,
-    settings::ContextSettingExt,
+    settings::{ContextSettingExt, Setting},
     Alpha, RecoveryTime, TransmissibilityFactor,
 };
 
@@ -17,11 +17,20 @@ define_person_property_with_default!(TimeOfInfection, Option<OrderedFloat<f64>>,
 /// Given some intrinsic infectiousness rate, calculate the total rate of infectiousness
 /// given other factors related to their setting. This implementation is not
 /// time-dependent.
-pub fn calc_total_infectiousness(context: &Context, intrinsic: f64, person: PersonId) -> f64 {
-    let household_id = context.get_person_setting_id(person, Household);
-    let household_members = context.get_setting_members(Household, household_id).len();
+///
+pub fn calc_total_infectiousness<S>(
+    context: &Context,
+    intrinsic: f64,
+    person: PersonId,
+    s: S,
+) -> f64
+where
+    S: Setting + Copy,
+{
+    let id = context.get_person_setting_id(person, s);
+    let members = context.get_setting_members(s, id).len();
     #[allow(clippy::cast_precision_loss)]
-    let max_contacts = (household_members - 1) as f64;
+    let max_contacts = (members - 1) as f64;
     let alpha = *context.get_global_property_value(Alpha).unwrap();
     intrinsic * max_contacts.powf(alpha)
 }
@@ -36,36 +45,37 @@ pub struct Forecast {
 /// Forecast of the next expected infection time, and the expected rate of
 /// infection at that time.
 pub fn get_forecast(context: &Context, current_time: f64, person_id: PersonId) -> Option<Forecast> {
+    // Get the person's individual infectiousness rate function
     let rate_fn = context.get_person_rate_fn(person_id);
 
+    // In order to forecast the person's next infection time, we
+    // we use the *maximum possible* (fastest) rate, and then when
+    // we evaluate the forecast, we reject with probability relative
+    // to the ratio of the forecasted infectiousness to the actual
     let intrinsic_max = rate_fn.max_rate();
-    let max_time = rate_fn.max_time();
 
     // Because we are using a constant rate for the forecast (max rate), we use
     // an exponential. If we wanted a more sophisticated time-varying forecast,
     // we'd need to use some function of the InfectiousnessRate
-    let rate = calc_total_infectiousness(context, intrinsic_max, person_id);
+    let total_max_infectiousness =
+        calc_total_infectiousness(context, intrinsic_max, person_id, Household);
     let exp = Exp::new(1.0).unwrap();
-    let next_time = current_time + context.sample_distr(ForecastRng, exp) / rate;
-
-    // This should be the forecasted rate at next_time.
-    // If the forecast was time-varying this would be different, but
-    // because we're using max rate, it's the same
-    let forecasted_at_t = rate_fn.max_rate();
-    let expected_rate = calc_total_infectiousness(context, forecasted_at_t, person_id);
+    let next_time =
+        current_time + context.sample_distr(ForecastRng, exp) / total_max_infectiousness;
 
     // If the next time is past the max infection time for the person,
     // we should not schedule a forecast
+    let max_time = rate_fn.max_time();
     let day_0 = context
         .get_person_property(person_id, TimeOfInfection)
         .unwrap()
         .0;
-    if day_0 + next_time >= max_time {
+    if next_time - day_0 >= max_time {
         None
     } else {
         Some(Forecast {
             next_time,
-            expected_rate,
+            expected_rate: total_max_infectiousness,
         })
     }
 }

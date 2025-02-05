@@ -15,6 +15,7 @@ pub trait InfectiousnessRateFn {
     fn max_rate(&self) -> f64;
     /// Returns the time at which a person is no longer infectious
     fn max_time(&self) -> f64;
+
     // fn inverse_cdf(&self, p: f64) -> f64;
 }
 

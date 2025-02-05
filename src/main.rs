@@ -2,7 +2,6 @@ use std::path::PathBuf;
 
 use ixa::{define_global_property, run_with_args, Context};
 
-pub mod contact;
 mod infection_propagation_loop;
 pub mod infectiousness_rate;
 mod infectiousness_setup;
