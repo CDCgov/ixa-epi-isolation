@@ -19,7 +19,7 @@ define_person_property_with_default!(TimeOfInfection, Option<OrderedFloat<f64>>,
 /// time-dependent.
 pub fn calc_total_infectiousness(context: &Context, intrinsic: f64, person: PersonId) -> f64 {
     let household_id = context.get_person_setting_id(person, Household);
-    let household_members = context.get_settings_members(Household, household_id).len();
+    let household_members = context.get_setting_members(Household, household_id).len();
     #[allow(clippy::cast_precision_loss)]
     let max_contacts = (household_members - 1) as f64;
     let alpha = *context.get_global_property_value(Alpha).unwrap();

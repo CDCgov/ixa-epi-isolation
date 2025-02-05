@@ -40,7 +40,7 @@ pub trait ContextSettingExt {
         setting: T,
         setting_id: usize,
     );
-    fn get_settings_members<T: Setting>(&self, setting: T, setting_id: usize) -> Vec<PersonId>;
+    fn get_setting_members<T: Setting>(&self, setting: T, setting_id: usize) -> Vec<PersonId>;
 }
 
 impl ContextSettingExt for Context {
@@ -55,7 +55,49 @@ impl ContextSettingExt for Context {
     ) {
         setting.set_person_setting_id(self, person_id, setting_id);
     }
-    fn get_settings_members<T: Setting>(&self, setting: T, setting_id: usize) -> Vec<PersonId> {
+    fn get_setting_members<T: Setting>(&self, setting: T, setting_id: usize) -> Vec<PersonId> {
         setting.get_members(self, setting_id)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ixa::Context;
+    use ixa::ContextPeopleExt;
+
+    define_setting!(Group);
+
+    #[test]
+    fn test_get_name() {
+        let group = Group;
+        assert_eq!(group.get_name(), "Group");
+    }
+
+    #[test]
+    fn test_person_get_set_setting() {
+        let mut ctx = ixa::Context::new();
+        let p = ctx.add_person((GroupSettingId, 1)).unwrap();
+
+        // Trait extension
+        assert_eq!(ctx.get_person_setting_id(p, Group), 1);
+
+        // Set person 1’s group setting to 10 and verify it.
+        ctx.set_person_setting_id(p, Group, 10);
+        assert_eq!(ctx.get_person_setting_id(p, Group), 10);
+    }
+
+    #[test]
+    fn test_get_members() {
+        let mut ctx = ixa::Context::new();
+        let p1 = ctx.add_person((GroupSettingId, 5)).unwrap();
+        let p2 = ctx.add_person((GroupSettingId, 5)).unwrap();
+        ctx.add_person((GroupSettingId, 10)).unwrap();
+
+        // Query for members of group 5.
+        let members = ctx.get_setting_members(Group, 5);
+        assert_eq!(members.len(), 2);
+        assert!(members.contains(&p1));
+        assert!(members.contains(&p2));
     }
 }
