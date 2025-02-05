@@ -12,8 +12,6 @@ use crate::{
     Alpha, GlobalTransmissibility, RecoveryTime,
 };
 
-define_rng!(InfectionTimeRng);
-
 define_person_property_with_default!(TimeOfInfection, Option<OrderedFloat<f64>>, None);
 
 /// Given some intrinsic infectiousness rate, calculate the total rate of infectiousness
@@ -27,6 +25,8 @@ pub fn calc_total_infectiousness(context: &Context, intrinsic: f64, person: Pers
     let alpha = *context.get_global_property_value(Alpha).unwrap();
     intrinsic * max_contacts.powf(alpha)
 }
+
+define_rng!(ForecastRng);
 
 pub struct Forecast {
     pub next_time: f64,
@@ -46,13 +46,13 @@ pub fn get_forecast(context: &Context, current_time: f64, person_id: PersonId) -
     // we'd need to use some function of the InfectiousnessRate
     let rate = calc_total_infectiousness(context, intrinsic_max, person_id);
     let exp = Exp::new(1.0).unwrap();
-    let next_time = current_time + context.sample_distr(InfectionTimeRng, exp) / rate;
+    let next_time = current_time + context.sample_distr(ForecastRng, exp) / rate;
 
     // This should be the forecasted rate at next_time.
     // If the forecast was time-varying this would be different, but
     // because we're using max rate, it's the same
-    let intrinsic_at_t = rate_fn.max_rate();
-    let expected_rate = calc_total_infectiousness(context, intrinsic_at_t, person_id);
+    let forecasted_at_t = rate_fn.max_rate();
+    let expected_rate = calc_total_infectiousness(context, forecasted_at_t, person_id);
 
     // If the next time is past the max infection time for the person,
     // we should not schedule a forecast
