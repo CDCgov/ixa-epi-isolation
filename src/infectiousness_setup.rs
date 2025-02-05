@@ -6,7 +6,7 @@ use ordered_float::OrderedFloat;
 use statrs::distribution::Exp;
 
 use crate::{
-    infectiousness_rate::{InfectiousnessRate, InfectiousnessRateExt},
+    infectiousness_rate::{ConstantRate, InfectiousnessRateExt},
     population_loader::Household,
     settings::ContextSettingExt,
     Alpha, GlobalTransmissibility, RecoveryTime,
@@ -78,38 +78,14 @@ pub fn assign_infection_properties(context: &mut Context, person_id: PersonId) {
     context.assign_random_rate_fn(person_id);
 }
 
-struct ConstantRate {
-    rate: f64,
-    global_transmissibility: f64,
-    max_time: f64,
-}
-
-impl InfectiousnessRate for ConstantRate {
-    fn get_rate(&self, _t: f64) -> f64 {
-        self.rate * self.global_transmissibility
-    }
-    fn max_rate(&self) -> f64 {
-        self.get_rate(0.0)
-    }
-    fn max_time(&self) -> f64 {
-        self.max_time
-    }
-}
-
 // Eventually, we're actually going to load these in from a file
 pub fn init(context: &mut Context) {
     let global_transmissibility = *context
         .get_global_property_value(GlobalTransmissibility)
         .unwrap();
     let max_time = *context.get_global_property_value(RecoveryTime).unwrap();
-    context.add_rate_fn(Box::new(ConstantRate {
-        rate: 1.0,
-        global_transmissibility,
-        max_time,
-    }));
-    context.add_rate_fn(Box::new(ConstantRate {
-        rate: 2.0,
-        global_transmissibility,
-        max_time,
-    }));
+    let create_rate_fn =
+        |rate: f64| Box::new(ConstantRate::new(rate * global_transmissibility, max_time));
+    context.add_rate_fn(create_rate_fn(1.0));
+    context.add_rate_fn(create_rate_fn(2.0));
 }
