@@ -17,12 +17,12 @@ pub struct PeopleRecord<'a> {
 
 define_person_property!(Age, u8);
 define_person_property_with_default!(Alive, bool, true);
-define_person_property!(CensusTract, usize);
 
 // This defines a person property called HouseholdSettingId
 // ideally I wanted to keep this an internal implementation detail,
 // but there's no way to initialize it without exposing it
 define_setting!(Household);
+define_setting!(CensusTract);
 
 fn create_person_from_record(
     context: &mut Context,
@@ -34,7 +34,7 @@ fn create_person_from_record(
     let _person_id = context.add_person((
         (Age, person_record.age),
         (HouseholdSettingId, home_id.parse()?),
-        (CensusTract, tract.parse()?),
+        (CensusTractSettingId, tract.parse()?),
     ))?;
 
     Ok(())
@@ -92,7 +92,7 @@ mod test {
                 1,
                 context.query_people_count((
                     (Age, age[i]),
-                    (CensusTract, tract[i]),
+                    (CensusTractSettingId, tract[i]),
                     (HouseholdSettingId, home_id[i]),
                 ))
             );
