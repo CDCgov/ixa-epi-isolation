@@ -11,7 +11,6 @@ pub mod settings;
 define_global_property!(SynthPopulationFile, PathBuf);
 define_global_property!(InitialInfections, usize);
 define_global_property!(PopulationSize, usize);
-define_global_property!(HouseholdSize, usize);
 define_global_property!(RecoveryTime, f64);
 // This is an example of some global parameter you'd use when
 // setting up the infectiousness rate functions for individuals
