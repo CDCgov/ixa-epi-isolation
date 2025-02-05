@@ -16,19 +16,11 @@ pub trait ContextContactExt {
     ///
     /// Errors
     /// - If there is only one person in the population.
-    fn get_contact(
-        &mut self,
-        transmitter_id: PersonId,
-        household_id: usize,
-    ) -> Option<PersonId>;
+    fn get_contact(&mut self, transmitter_id: PersonId, household_id: usize) -> Option<PersonId>;
 }
 
 impl ContextContactExt for Context {
-    fn get_contact(
-        &mut self,
-        transmitter_id: PersonId,
-        household_id: usize,
-    ) -> Option<PersonId> {
+    fn get_contact(&mut self, transmitter_id: PersonId, household_id: usize) -> Option<PersonId> {
         // Get list of eligible people (for now, all alive people). May be expanded in the future
         // to instead be list of alive people in the transmitter's contact setting or household.
         // We sample a random person from this list.
@@ -79,7 +71,9 @@ mod test {
         let mut context = Context::new();
         context.init_random(108);
         let transmitter = context.add_person((HouseholdSettingId, 1)).unwrap();
-        let _ = context.add_person(((Alive, false), (HouseholdSettingId, 1))).unwrap();
+        let _ = context
+            .add_person(((Alive, false), (HouseholdSettingId, 1)))
+            .unwrap();
         let observed_contact = context.get_contact(transmitter, 1);
         assert!(observed_contact.is_none());
     }
@@ -89,7 +83,9 @@ mod test {
         let mut context = Context::new();
         context.init_random(108);
         let transmitter = context.add_person((HouseholdSettingId, 1)).unwrap();
-        let _ = context.add_person(((Alive, false), (HouseholdSettingId, 1))).unwrap();
+        let _ = context
+            .add_person(((Alive, false), (HouseholdSettingId, 1)))
+            .unwrap();
         let presumed_contact = context.add_person((HouseholdSettingId, 1)).unwrap();
         let observed_contact = context.get_contact(transmitter, 1).unwrap();
         assert_eq!(observed_contact, presumed_contact);

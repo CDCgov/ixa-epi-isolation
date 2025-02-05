@@ -3,7 +3,7 @@
   "epi_isolation.InitialInfections": 1,
   "epi_isolation.HouseholdSize": 3,
   "epi_isolation.PopulationSize": 10,
-  "epi_isolation.RecoveryTime": 2.0,
+  "epi_isolation.RecoveryTime": 10.0,
   "epi_isolation.GlobalTransmissibility": 1.0,
   "epi_isolation.Alpha": 1.0
 }

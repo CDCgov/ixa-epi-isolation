@@ -1,9 +1,11 @@
-use crate::infectiousness_rate::{InfectiousnessRateId, InfectiousnessRateExt};
-use crate::infectiousness_setup::{calc_total_infectiousness, get_forecast, Forecast};
+use crate::contact::ContextContactExt;
+use crate::infectiousness_rate::InfectiousnessRateExt;
+use crate::infectiousness_setup::{
+    assign_infection_properties, calc_total_infectiousness, get_forecast, Forecast,
+};
 use crate::population_loader::Household;
 use crate::settings::ContextSettingExt;
 use crate::InitialInfections;
-use crate::contact::ContextContactExt;
 use ixa::{
     define_person_property_with_default, define_rng, Context, ContextGlobalPropertiesExt,
     ContextPeopleExt, ContextRandomExt, PersonId, PersonPropertyChangeEvent,
@@ -30,7 +32,7 @@ fn schedule_next_forecasted_infection(
 ) {
     let forecast = get_forecast(context, reference_time, person);
     if forecast.is_none() {
-        println!("Person {} has recovered at {}", person, reference_time);
+        println!("Person {person} has recovered at {reference_time}");
         context.set_person_property(person, InfectionStatus, InfectionStatusValue::Recovered);
         return;
     }
@@ -49,14 +51,10 @@ fn evaluate_forecast(
     forecasted_total_infectiousness: f64,
 ) {
     let current_time = context.get_current_time();
+    let rate_fn = context.get_person_rate_fn(person);
 
-    let rate_id = context
-        .get_person_property(person, InfectiousnessRateId)
-        .unwrap();
-
-    let intrinsic = context.get_infection_rate(rate_id, current_time);
-    let current_infectiousness =
-        calc_total_infectiousness(context, intrinsic, person);
+    let intrinsic = rate_fn.get_rate(current_time);
+    let current_infectiousness = calc_total_infectiousness(context, intrinsic, person);
 
     // If they are less infectious as we expected...
     if current_infectiousness < forecasted_total_infectiousness {
@@ -66,7 +64,6 @@ fn evaluate_forecast(
             return;
         }
     }
-    // TODO<ryl8@cdc.gov>: Handle the case where they are actually more infectious
 
     // Accept the infection
     let household_id = context.get_person_setting_id(person, Household);
@@ -99,7 +96,7 @@ pub fn init(context: &mut Context) {
 
     // Seed the initial population
     context.add_plan(0.0, move |context| {
-        seed_infections(context, initial_infections)
+        seed_infections(context, initial_infections);
     });
 
     context.subscribe_to_event::<PersonPropertyChangeEvent<InfectionStatus>>(|context, event| {
@@ -109,7 +106,7 @@ pub fn init(context: &mut Context) {
                 event.person_id,
                 context.get_current_time()
             );
-            context.assign_infection_properties(event.person_id);
+            assign_infection_properties(context, event.person_id);
             schedule_next_forecasted_infection(
                 context,
                 event.person_id,

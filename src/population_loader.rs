@@ -23,7 +23,6 @@ define_person_property!(CensusTract, usize);
 // ideally I wanted to keep this an internal implementation detail,
 // but there's no way to initialize it without exposing it
 define_setting!(Household);
-define_setting!(Work);
 
 fn create_person_from_record(
     context: &mut Context,
