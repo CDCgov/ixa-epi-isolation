@@ -9,7 +9,7 @@ use crate::{
     infectiousness_rate::{ConstantRate, InfectiousnessRateExt},
     population_loader::Household,
     settings::ContextSettingExt,
-    Alpha, GlobalTransmissibility, RecoveryTime,
+    Alpha, RecoveryTime, TransmissibilityFactor,
 };
 
 define_person_property_with_default!(TimeOfInfection, Option<OrderedFloat<f64>>, None);
@@ -81,7 +81,7 @@ pub fn assign_infection_properties(context: &mut Context, person_id: PersonId) {
 // Eventually, we're actually going to load these in from a file
 pub fn init(context: &mut Context) {
     let global_transmissibility = *context
-        .get_global_property_value(GlobalTransmissibility)
+        .get_global_property_value(TransmissibilityFactor)
         .unwrap();
     let max_time = *context.get_global_property_value(RecoveryTime).unwrap();
     let create_rate_fn =
