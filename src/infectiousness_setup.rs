@@ -84,6 +84,9 @@ pub fn init(context: &mut Context) {
         .get_global_property_value(TransmissibilityFactor)
         .unwrap();
     let max_time = *context.get_global_property_value(RecoveryTime).unwrap();
+
+    // This is where you'd actually load in a bunch of curves from files
+    // (like with a EmpiricalRate helper) and instantiate them
     let create_rate_fn =
         |rate: f64| Box::new(ConstantRate::new(rate * global_transmissibility, max_time));
     context.add_rate_fn(create_rate_fn(1.0));

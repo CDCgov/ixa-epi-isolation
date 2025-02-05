@@ -25,14 +25,11 @@ define_person_property_with_default!(
 
 define_rng!(InfectionRng);
 
-fn schedule_next_forecasted_infection(
-    context: &mut Context,
-    person: PersonId,
-    reference_time: f64,
-) {
-    let forecast = get_forecast(context, reference_time, person);
+fn schedule_next_forecasted_infection(context: &mut Context, person: PersonId) {
+    let current_time = context.get_current_time();
+    let forecast = get_forecast(context, current_time, person);
     if forecast.is_none() {
-        println!("Person {person} has recovered at {reference_time}");
+        println!("Person {person} has recovered at {current_time}");
         context.set_person_property(person, InfectionStatus, InfectionStatusValue::Recovered);
         return;
     }
@@ -77,7 +74,7 @@ fn evaluate_forecast(
         InfectionStatus,
         InfectionStatusValue::Infected,
     );
-    schedule_next_forecasted_infection(context, person, current_time);
+    schedule_next_forecasted_infection(context, person);
 }
 
 /// Seeds the initial population with a number of infected people.
@@ -107,11 +104,7 @@ pub fn init(context: &mut Context) {
                 context.get_current_time()
             );
             assign_infection_properties(context, event.person_id);
-            schedule_next_forecasted_infection(
-                context,
-                event.person_id,
-                context.get_current_time(),
-            );
+            schedule_next_forecasted_infection(context, event.person_id);
         }
     });
 }
