@@ -3,9 +3,12 @@ use ixa::{
     ContextRandomExt, PersonId,
 };
 
-define_person_property_with_default!(InfectiousnessRateId, Option<usize>, None);
+pub mod constant_rate;
+pub use constant_rate::ConstantRate;
 
-pub trait InfectiousnessRate {
+define_person_property_with_default!(RateFnId, Option<usize>, None);
+
+pub trait InfectiousnessRateFn {
     /// Returns the rate at time `t`
     fn get_rate(&self, t: f64) -> f64;
     /// Returns the maximum rate (useful for rejection sampling)
@@ -15,71 +18,40 @@ pub trait InfectiousnessRate {
     // fn inverse_cdf(&self, p: f64) -> f64;
 }
 
-struct InfectiousnessRateContainer {
-    rates: Vec<Box<dyn InfectiousnessRate>>,
+struct RateFnContainer {
+    rates: Vec<Box<dyn InfectiousnessRateFn>>,
 }
 
 define_data_plugin!(
-    InfectiousnessRatePlugin,
-    InfectiousnessRateContainer,
-    InfectiousnessRateContainer { rates: Vec::new() }
+    RateFnPlugin,
+    RateFnContainer,
+    RateFnContainer { rates: Vec::new() }
 );
 
 define_rng!(InfectiousnessRateRng);
 pub trait InfectiousnessRateExt {
-    fn add_rate_fn(&mut self, dist: Box<dyn InfectiousnessRate>);
+    fn add_rate_fn(&mut self, dist: Box<dyn InfectiousnessRateFn>);
     fn assign_random_rate_fn(&mut self, person_id: PersonId);
-    fn get_person_rate_fn(&self, person_id: PersonId) -> &dyn InfectiousnessRate;
+    fn get_person_rate_fn(&self, person_id: PersonId) -> &dyn InfectiousnessRateFn;
 }
 
-fn get_fn(context: &Context, index: usize) -> &dyn InfectiousnessRate {
-    context
-        .get_data_container(InfectiousnessRatePlugin)
-        .unwrap()
-        .rates[index]
-        .as_ref()
+fn get_fn(context: &Context, index: usize) -> &dyn InfectiousnessRateFn {
+    context.get_data_container(RateFnPlugin).unwrap().rates[index].as_ref()
 }
 
 impl InfectiousnessRateExt for Context {
-    fn add_rate_fn(&mut self, dist: Box<dyn InfectiousnessRate>) {
-        let container = self.get_data_container_mut(InfectiousnessRatePlugin);
+    fn add_rate_fn(&mut self, dist: Box<dyn InfectiousnessRateFn>) {
+        let container = self.get_data_container_mut(RateFnPlugin);
         container.rates.push(dist);
     }
     fn assign_random_rate_fn(&mut self, person_id: PersonId) {
-        let max = self
-            .get_data_container_mut(InfectiousnessRatePlugin)
-            .rates
-            .len();
+        let max = self.get_data_container_mut(RateFnPlugin).rates.len();
         let index = self.sample_range(InfectiousnessRateRng, 0..max);
-        self.set_person_property(person_id, InfectiousnessRateId, Some(index));
+        self.set_person_property(person_id, RateFnId, Some(index));
     }
-    fn get_person_rate_fn(&self, person_id: PersonId) -> &dyn InfectiousnessRate {
-        let index = self
-            .get_person_property(person_id, InfectiousnessRateId)
-            .unwrap();
+    fn get_person_rate_fn(&self, person_id: PersonId) -> &dyn InfectiousnessRateFn {
+        let index = self.get_person_property(person_id, RateFnId).unwrap();
         get_fn(self, index)
-    }
-}
-
-pub struct ConstantRate {
-    rate: f64,
-    max_time: f64,
-}
-impl ConstantRate {
-    #[must_use]
-    pub fn new(rate: f64, max_time: f64) -> Self {
-        Self { rate, max_time }
-    }
-}
-impl InfectiousnessRate for ConstantRate {
-    fn get_rate(&self, _t: f64) -> f64 {
-        self.rate
-    }
-    fn max_rate(&self) -> f64 {
-        self.rate
-    }
-    fn max_time(&self) -> f64 {
-        self.max_time
     }
 }
 
@@ -94,7 +66,7 @@ mod tests {
         constant: f64,
     }
 
-    impl InfectiousnessRate for DummyRate {
+    impl InfectiousnessRateFn for DummyRate {
         fn get_rate(&self, _t: f64) -> f64 {
             self.constant
         }
@@ -148,7 +120,7 @@ mod tests {
 
             // Retrieve the assigned index via the person property.
             let index = context
-                .get_person_property(person_id, InfectiousnessRateId)
+                .get_person_property(person_id, RateFnId)
                 .expect("Expected a rate index to have been assigned");
 
             if index == 0 {
