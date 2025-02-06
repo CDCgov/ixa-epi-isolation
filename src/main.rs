@@ -1,14 +1,14 @@
 mod contact;
 mod parameters;
 mod population_loader;
+pub mod settings;
 mod transmission_manager;
 
 use ixa::runner::run_with_args;
 use ixa::{ContextGlobalPropertiesExt, ContextPeopleExt, ContextRandomExt, ContextReportExt};
+use parameters::Parameters;
+use population_loader::{Age, CensusTract};
 use transmission_manager::InfectiousStatus;
-
-use crate::parameters::Parameters;
-use crate::population_loader::{Age, CensusTract};
 
 fn main() {
     run_with_args(|context, _, _| {

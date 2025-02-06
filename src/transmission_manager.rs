@@ -118,8 +118,7 @@ fn schedule_next_infection_attempt(
     context.add_plan(
         context.get_current_time() + time_until_next_infection_attempt_gi,
         move |context| {
-            infection_attempt(context, transmitter_id)
-                .expect("Error finding contact in infection attempt");
+            infection_attempt(context, transmitter_id);
             // Schedule the next infection attempt for this infected agent
             // once the last infection attempt is over.
             schedule_next_infection_attempt(
@@ -180,18 +179,14 @@ fn gi_inverse_cdf(context: &Context, uniform_draw: f64) -> f64 {
 /// and as long as it returns a valid contact id, it can use any sampling strategy.
 /// In other words, this code does not depend on the sampling logic, but it also doesn't
 /// check any characteristics of the contact.
-/// Errors
-/// - If there is only one person in the population.
-fn infection_attempt(context: &mut Context, transmitter_id: PersonId) -> Result<(), IxaError> {
-    // `get_contact`? returns Option<PersonId>. If the option is None, there are no valid
+fn infection_attempt(context: &mut Context, transmitter_id: PersonId) {
+    // If the option is None, there are no valid
     // contacts to infect, so do nothing.
-    if let Some(contact_id) = context.get_contact(transmitter_id)? {
+    if let Some(contact_id) = context.get_contact(transmitter_id, (Alive, true)) {
         // We evaluate transmission in its own function because there will be eventually
         // be intervention-based logic that determines whether a transmission event is successful.
         evaluate_transmission(context, contact_id, transmitter_id);
     }
-
-    Ok(())
 }
 
 /// Evaluates whether a transmission event is successful based on the characteristics
