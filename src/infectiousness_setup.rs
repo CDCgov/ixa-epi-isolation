@@ -44,7 +44,7 @@ define_rng!(ForecastRng);
 
 pub struct Forecast {
     pub next_time: f64,
-    pub expected_rate: f64,
+    pub forecasted_total_infectiousness: f64,
 }
 
 /// Forecast of the next expected infection time, and the expected rate of
@@ -70,13 +70,13 @@ pub fn get_forecast(context: &Context, person_id: PersonId) -> Option<Forecast> 
     let t = total_rate_fn.inverse_cum(e)?;
 
     let next_time = context.get_current_time() + t;
-    let expected_rate = total_rate_fn.get_rate(t);
+    let forecasted_total_infectiousness = total_rate_fn.get_rate(t);
 
-    trace!("Forecast t={expected_rate} expected_rate={expected_rate}");
+    trace!("Forecast t={next_time} expected_rate={forecasted_total_infectiousness}");
 
     Some(Forecast {
         next_time,
-        expected_rate,
+        forecasted_total_infectiousness,
     })
 }
 
@@ -99,6 +99,7 @@ pub fn evaluate_forecast(
 
     let elapsed_t = context.get_elapsed_infection_time(person_id);
     let current_infectiousness = total_rate_fn.get_rate(elapsed_t);
+
     trace!("Current={current_infectiousness} Forecasted={forecasted_total_infectiousness}");
 
     // If they are less infectious as we expected...
@@ -258,6 +259,6 @@ mod test {
         let f = get_forecast(&context, p1).expect("Forecast should be returned");
         // The expected rate is 2.0, because intrinsic is 1.0 and there are 2 contacts.
         // TODO<ryl8@cdc>: Check if the times are reasonable
-        assert_eq!(f.expected_rate, 2.0);
+        assert_eq!(f.forecasted_total_infectiousness, 2.0);
     }
 }

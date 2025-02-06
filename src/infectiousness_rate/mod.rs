@@ -11,14 +11,12 @@ define_person_property_with_default!(RateFnId, Option<usize>, None);
 pub trait InfectiousnessRateFn {
     /// Returns the rate at time `t`
     fn get_rate(&self, t: f64) -> f64;
-    fn scale_rate(&self, t: f64, offset: f64, factor: f64) -> f64;
-    /// Returns the maximum rate (useful for rejection sampling)
-    fn max_rate(&self) -> f64;
+    fn internal_only_scale_rate(&self, t: f64, offset: f64, factor: f64) -> f64;
     /// Returns the time at which a person is no longer infectious
     fn max_time(&self) -> f64;
     fn inverse_cum(&self, p: f64) -> Option<f64>;
     // Internal utility for implementing ScaleRateFn
-    fn scale_inverse_cum(&self, p: f64, offset: f64, factor: f64) -> Option<f64>;
+    fn internal_only_scale_inverse_cum(&self, p: f64, offset: f64, factor: f64) -> Option<f64>;
 }
 
 pub struct ScaledRateFn<'a, T>
@@ -42,22 +40,23 @@ impl<'a, T: ?Sized + InfectiousnessRateFn> ScaledRateFn<'a, T> {
 
 impl<'a, T: ?Sized + InfectiousnessRateFn> InfectiousnessRateFn for ScaledRateFn<'a, T> {
     fn get_rate(&self, t: f64) -> f64 {
-        self.base.scale_rate(t, self.offset, self.factor)
+        self.base
+            .internal_only_scale_rate(t, self.offset, self.factor)
     }
-    fn scale_rate(&self, t: f64, offset: f64, factor: f64) -> f64 {
-        self.base.scale_rate(t, offset, factor * self.factor)
-    }
-    fn max_rate(&self) -> f64 {
-        self.base.max_rate() * self.factor
+    fn internal_only_scale_rate(&self, t: f64, offset: f64, factor: f64) -> f64 {
+        self.base
+            .internal_only_scale_rate(t, offset, factor * self.factor)
     }
     fn max_time(&self) -> f64 {
         self.base.max_time()
     }
     fn inverse_cum(&self, p: f64) -> Option<f64> {
-        self.base.scale_inverse_cum(p, self.offset, self.factor)
+        self.base
+            .internal_only_scale_inverse_cum(p, self.offset, self.factor)
     }
-    fn scale_inverse_cum(&self, p: f64, offset: f64, factor: f64) -> Option<f64> {
-        self.base.scale_inverse_cum(p, offset, factor * self.factor)
+    fn internal_only_scale_inverse_cum(&self, p: f64, offset: f64, factor: f64) -> Option<f64> {
+        self.base
+            .internal_only_scale_inverse_cum(p, offset, factor * self.factor)
     }
 }
 
@@ -126,7 +125,6 @@ mod tests {
         let rate_fn = context.get_person_rate_fn(person_id);
 
         assert_eq!(rate_fn.get_rate(0.0), 1.0);
-        assert_eq!(rate_fn.max_rate(), 2.0);
         assert_eq!(rate_fn.max_time(), 3.0);
     }
 

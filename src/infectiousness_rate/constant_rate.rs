@@ -12,22 +12,19 @@ impl ConstantRate {
     }
 }
 impl InfectiousnessRateFn for ConstantRate {
-    fn get_rate(&self, _t: f64) -> f64 {
-        self.rate
+    fn get_rate(&self, t: f64) -> f64 {
+        self.internal_only_scale_rate(t, 0.0, 1.0)
     }
-    fn scale_rate(&self, _t: f64, _offset: f64, factor: f64) -> f64 {
+    fn internal_only_scale_rate(&self, _t: f64, _offset: f64, factor: f64) -> f64 {
         self.rate * factor
-    }
-    fn max_rate(&self) -> f64 {
-        self.rate
     }
     fn max_time(&self) -> f64 {
         self.max_time
     }
     fn inverse_cum(&self, p: f64) -> Option<f64> {
-        self.scale_inverse_cum(p, 0.0, 1.0)
+        self.internal_only_scale_inverse_cum(p, 0.0, 1.0)
     }
-    fn scale_inverse_cum(&self, p: f64, offset: f64, factor: f64) -> Option<f64> {
+    fn internal_only_scale_inverse_cum(&self, p: f64, offset: f64, factor: f64) -> Option<f64> {
         let t = p / (self.rate * factor);
         if (t + offset) > self.max_time {
             None
