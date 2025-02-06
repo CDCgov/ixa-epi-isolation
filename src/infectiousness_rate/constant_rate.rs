@@ -4,6 +4,7 @@ pub struct ConstantRate {
     rate: f64,
     max_time: f64,
 }
+
 impl ConstantRate {
     #[must_use]
     pub fn new(rate: f64, max_time: f64) -> Self {
@@ -19,5 +20,16 @@ impl InfectiousnessRateFn for ConstantRate {
     }
     fn max_time(&self) -> f64 {
         self.max_time
+    }
+    fn inverse_cum(&self, offset: f64, p: f64) -> Option<f64> {
+        self.scale_inverse_cum(p, offset, 1.0)
+    }
+    fn scale_inverse_cum(&self, p: f64, offset: f64, factor: f64) -> Option<f64> {
+        let t = p / (self.rate * factor);
+        if (t + offset) > self.max_time {
+            None
+        } else {
+            Some(t)
+        }
     }
 }

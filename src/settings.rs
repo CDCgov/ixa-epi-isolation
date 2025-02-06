@@ -37,11 +37,11 @@ macro_rules! define_setting {
                 }
                 fn get_members<Q>(&self, context: &Context, setting_id: usize, q: Q) -> Vec<ixa::PersonId>
                     where Q: ixa::people::Query {
-                    context.query_people(ixa::people::query_and(([<$name SettingId>], setting_id), q))
+                    context.query_people(ixa::people::QueryAnd::new(([<$name SettingId>], setting_id), q))
                 }
                 fn sample_members<Q, R: ixa::RngId + 'static>(&self, context: &Context, rng: R, setting_id: usize, q: Q) -> Result<ixa::PersonId, ixa::IxaError>
                 where Q: ixa::people::Query, R::RngType: rand::Rng {
-                    context.sample_person(rng, ixa::people::query_and(([<$name SettingId>], setting_id), q))
+                    context.sample_person(rng, ixa::people::QueryAnd::new(([<$name SettingId>], setting_id), q))
             }
                 fn get_person_setting_id(&self, context: &Context, person_id: ixa::PersonId) -> usize {
                     context.get_person_property(person_id, [<$name SettingId>])

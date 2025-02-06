@@ -15,8 +15,41 @@ pub trait InfectiousnessRateFn {
     fn max_rate(&self) -> f64;
     /// Returns the time at which a person is no longer infectious
     fn max_time(&self) -> f64;
+    fn inverse_cum(&self, p: f64, offset: f64) -> Option<f64>;
+    // Internal utility for implementing ScaleRateFn
+    fn scale_inverse_cum(&self, p: f64, offset: f64, actor: f64) -> Option<f64>;
+}
 
-    // fn inverse_cdf(&self, p: f64) -> f64;
+pub struct ScaledRateFn<'a, T>
+where
+    T: InfectiousnessRateFn + ?Sized,
+{
+    base: &'a T,
+    factor: f64,
+}
+
+impl<'a, T: ?Sized + InfectiousnessRateFn> ScaledRateFn<'a, T> {
+    pub fn new(base: &'a T, factor: f64) -> Self {
+        Self { base, factor }
+    }
+}
+
+impl<'a, T: ?Sized + InfectiousnessRateFn> InfectiousnessRateFn for ScaledRateFn<'a, T> {
+    fn get_rate(&self, t: f64) -> f64 {
+        self.base.get_rate(t) * self.factor
+    }
+    fn max_rate(&self) -> f64 {
+        self.base.max_rate() * self.factor
+    }
+    fn max_time(&self) -> f64 {
+        self.base.max_time()
+    }
+    fn inverse_cum(&self, p: f64, offset: f64) -> Option<f64> {
+        self.base.scale_inverse_cum(p, offset, self.factor)
+    }
+    fn scale_inverse_cum(&self, p: f64, offset: f64, factor: f64) -> Option<f64> {
+        self.base.scale_inverse_cum(p, offset, factor * self.factor)
+    }
 }
 
 struct RateFnContainer {
@@ -51,7 +84,9 @@ impl InfectiousnessRateExt for Context {
         self.set_person_property(person_id, RateFnId, Some(index));
     }
     fn get_person_rate_fn(&self, person_id: PersonId) -> &dyn InfectiousnessRateFn {
-        let index = self.get_person_property(person_id, RateFnId).unwrap();
+        let index = self
+            .get_person_property(person_id, RateFnId)
+            .unwrap_or_else(|| panic!("No rate function for {person_id}"));
         get_fn(self, index)
     }
 }
@@ -59,25 +94,9 @@ impl InfectiousnessRateExt for Context {
 #[cfg(test)]
 #[allow(clippy::float_cmp)]
 mod tests {
+    use super::constant_rate::ConstantRate;
     use super::*;
     use ixa::Context;
-
-    // A dummy implementation for testing.
-    struct DummyRate {
-        constant: f64,
-    }
-
-    impl InfectiousnessRateFn for DummyRate {
-        fn get_rate(&self, _t: f64) -> f64 {
-            self.constant
-        }
-        fn max_rate(&self) -> f64 {
-            self.constant * 2.0
-        }
-        fn max_time(&self) -> f64 {
-            self.constant * 3.0
-        }
-    }
 
     fn init_context() -> Context {
         let mut context = Context::new();
@@ -90,7 +109,7 @@ mod tests {
         let mut context = init_context();
         let person_id = context.add_person(()).unwrap();
 
-        let rate = DummyRate { constant: 1.0 };
+        let rate = ConstantRate::new(1.0, 3.0);
         context.add_rate_fn(Box::new(rate));
 
         context.assign_random_rate_fn(person_id);
@@ -108,8 +127,8 @@ mod tests {
     fn test_assign_random_rate_fn_with_multiple_rates() {
         let mut context = init_context();
 
-        let rate1 = DummyRate { constant: 1.0 };
-        let rate2 = DummyRate { constant: 2.0 };
+        let rate1 = ConstantRate::new(1.0, 3.0);
+        let rate2 = ConstantRate::new(2.0, 3.0);
         context.add_rate_fn(Box::new(rate1));
         context.add_rate_fn(Box::new(rate2));
 

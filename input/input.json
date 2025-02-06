@@ -2,7 +2,7 @@
   "epi_isolation.SynthPopulationFile": "input/people_test.csv",
   "epi_isolation.InitialInfections": 1,
   "epi_isolation.PopulationSize": 10,
-  "epi_isolation.RecoveryTime": 10.0,
+  "epi_isolation.RecoveryTime": 4.0,
   "epi_isolation.TransmissibilityFactor": 1.0,
   "epi_isolation.Alpha": 1.0
 }
