@@ -11,13 +11,14 @@ define_person_property_with_default!(RateFnId, Option<usize>, None);
 pub trait InfectiousnessRateFn {
     /// Returns the rate at time `t`
     fn get_rate(&self, t: f64) -> f64;
+    fn scale_rate(&self, t: f64, offset: f64, factor: f64) -> f64;
     /// Returns the maximum rate (useful for rejection sampling)
     fn max_rate(&self) -> f64;
     /// Returns the time at which a person is no longer infectious
     fn max_time(&self) -> f64;
-    fn inverse_cum(&self, p: f64, offset: f64) -> Option<f64>;
+    fn inverse_cum(&self, p: f64) -> Option<f64>;
     // Internal utility for implementing ScaleRateFn
-    fn scale_inverse_cum(&self, p: f64, offset: f64, actor: f64) -> Option<f64>;
+    fn scale_inverse_cum(&self, p: f64, offset: f64, factor: f64) -> Option<f64>;
 }
 
 pub struct ScaledRateFn<'a, T>
@@ -26,17 +27,25 @@ where
 {
     base: &'a T,
     factor: f64,
+    offset: f64,
 }
 
 impl<'a, T: ?Sized + InfectiousnessRateFn> ScaledRateFn<'a, T> {
-    pub fn new(base: &'a T, factor: f64) -> Self {
-        Self { base, factor }
+    pub fn new(base: &'a T, factor: f64, offset: f64) -> Self {
+        Self {
+            base,
+            factor,
+            offset,
+        }
     }
 }
 
 impl<'a, T: ?Sized + InfectiousnessRateFn> InfectiousnessRateFn for ScaledRateFn<'a, T> {
     fn get_rate(&self, t: f64) -> f64 {
-        self.base.get_rate(t) * self.factor
+        self.base.scale_rate(t, self.offset, self.factor)
+    }
+    fn scale_rate(&self, t: f64, offset: f64, factor: f64) -> f64 {
+        self.base.scale_rate(t, offset, factor * self.factor)
     }
     fn max_rate(&self) -> f64 {
         self.base.max_rate() * self.factor
@@ -44,8 +53,8 @@ impl<'a, T: ?Sized + InfectiousnessRateFn> InfectiousnessRateFn for ScaledRateFn
     fn max_time(&self) -> f64 {
         self.base.max_time()
     }
-    fn inverse_cum(&self, p: f64, offset: f64) -> Option<f64> {
-        self.base.scale_inverse_cum(p, offset, self.factor)
+    fn inverse_cum(&self, p: f64) -> Option<f64> {
+        self.base.scale_inverse_cum(p, self.offset, self.factor)
     }
     fn scale_inverse_cum(&self, p: f64, offset: f64, factor: f64) -> Option<f64> {
         self.base.scale_inverse_cum(p, offset, factor * self.factor)

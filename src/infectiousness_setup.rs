@@ -56,9 +56,8 @@ pub fn get_forecast(context: &Context, person_id: PersonId) -> Option<Forecast> 
     // This scales infectiousness by the maximum possible infectiousness across all settings
     let scale_factor = max_total_infectiousness_multiplier(context, person_id);
     // We need to shift the intrinsic infectiousness in time
-    // TODO<ryl8@cdc.gov>: this should be passed to the ScaledRateFn object, not inverse_cum function
     let elapsed = context.get_elapsed_infection_time(person_id);
-    let total_rate_fn = ScaledRateFn::new(rate_fn, scale_factor);
+    let total_rate_fn = ScaledRateFn::new(rate_fn, scale_factor, elapsed);
 
     trace!("Elapsed={elapsed} Scale={scale_factor}");
 
@@ -68,7 +67,7 @@ pub fn get_forecast(context: &Context, person_id: PersonId) -> Option<Forecast> 
     let exp = Exp::new(1.0).unwrap();
     let e = context.sample_distr(ForecastRng, exp);
     // Note: this returns None if forecasted > max_time
-    let t = total_rate_fn.inverse_cum(e, elapsed)?;
+    let t = total_rate_fn.inverse_cum(e)?;
 
     let next_time = context.get_current_time() + t;
     let expected_rate = total_rate_fn.get_rate(t);
@@ -88,8 +87,6 @@ pub fn evaluate_forecast(
     person_id: PersonId,
     forecasted_total_infectiousness: f64,
 ) -> Option<PersonId> {
-    // Again, we should probably be offsetting the rate_fn instead
-    let elapsed_infection_time = context.get_elapsed_infection_time(person_id);
     let rate_fn = context.get_person_rate_fn(person_id);
 
     // TODO<ryl8>: The setting is hard-coded for now, but we should replace this
@@ -98,9 +95,10 @@ pub fn evaluate_forecast(
 
     let total_multiplier =
         calc_total_infectiousness_multiplier(context, person_id, current_setting);
-    let total_rate_fn = ScaledRateFn::new(rate_fn, total_multiplier);
+    let total_rate_fn = ScaledRateFn::new(rate_fn, total_multiplier, 0.0);
 
-    let current_infectiousness = total_rate_fn.get_rate(elapsed_infection_time);
+    let elapsed_t = context.get_elapsed_infection_time(person_id);
+    let current_infectiousness = total_rate_fn.get_rate(elapsed_t);
     trace!("Current={current_infectiousness} Forecasted={forecasted_total_infectiousness}");
 
     // If they are less infectious as we expected...
