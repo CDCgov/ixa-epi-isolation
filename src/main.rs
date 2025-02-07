@@ -1,15 +1,20 @@
 mod contact;
+mod infection_propagation_loop;
+mod infectiousness_manager;
 mod parameters;
 mod population_loader;
 pub mod settings;
-mod transmission_manager;
 
+use infection_propagation_loop::InfectiousStatus;
 use ixa::runner::run_with_args;
 use ixa::{ContextGlobalPropertiesExt, ContextPeopleExt, ContextRandomExt, ContextReportExt};
 use parameters::Parameters;
 use population_loader::{Age, CensusTract};
-use transmission_manager::InfectiousStatus;
 
+// You must run this with a parameters file:
+// cargo run -- --config input/input.json
+// Try enabling logs to see some output about infections:
+// cargo run -- --config input/input.json --log-level=Trace -f | grep epi_isolation
 fn main() {
     run_with_args(|context, _, _| {
         // Read the global properties.
@@ -35,14 +40,7 @@ fn main() {
         context.index_property(Age);
         context.index_property(CensusTract);
 
-        // Initialize the person-to-person transmission workflow.
-        transmission_manager::init(context);
-
-        // Add a plan to shut down the simulation after `max_time`, regardless of
-        // what else is happening in the model.
-        context.add_plan(parameters.max_time, |context| {
-            context.shutdown();
-        });
+        infection_propagation_loop::init(context);
 
         // Print out the parameters for debugging purposes for the user.
         println!("{parameters:?}");
