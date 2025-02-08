@@ -3,6 +3,7 @@ mod infection_propagation_loop;
 mod infectiousness_manager;
 mod parameters;
 mod population_loader;
+pub mod rate_fns;
 pub mod settings;
 
 use infection_propagation_loop::InfectiousStatus;

@@ -1,5 +1,6 @@
 use crate::infectiousness_manager::{self, Forecast, InfectionContextExt};
 use crate::parameters::Parameters;
+use crate::rate_fns::{ConstantRate, InfectiousnessRateExt};
 use ixa::{
     define_person_property_with_default, define_rng, trace, Context, ContextGlobalPropertiesExt,
     ContextPeopleExt, PersonId, PersonPropertyChangeEvent,
@@ -54,6 +55,19 @@ fn schedule_next_forecasted_infection(
     });
 }
 
+/// Load the set of rate functions we will randomly assign to people
+/// Eventually, these will actually be loaded from a file
+pub fn load_rate_fns(context: &mut Context) {
+    let parameters = context.get_global_property_value(Parameters).unwrap();
+    let global_transmissibility = parameters.global_transmissibility;
+    let max_time = parameters.infection_duration;
+
+    let create_rate_fn =
+        |rate: f64| Box::new(ConstantRate::new(rate * global_transmissibility, max_time));
+    context.add_rate_fn(create_rate_fn(1.0));
+    context.add_rate_fn(create_rate_fn(2.0));
+}
+
 /// Seeds the initial population with a number of infected people.
 fn seed_infections(context: &mut Context, initial_infections: usize) {
     // First, seed an infected population
@@ -67,6 +81,8 @@ pub fn init(context: &mut Context) {
     let parameters = context.get_global_property_value(Parameters).unwrap();
     let initial_infections = parameters.initial_infections;
     let max_time = parameters.max_time;
+
+    load_rate_fns(context);
 
     // Seed the initial population
     context.add_plan(0.0, move |context| {
@@ -126,7 +142,7 @@ mod test {
             initial_infections: 3,
             max_time: 100.0,
             seed: 0,
-            r_0: 1.0,
+            global_transmissibility: 1.0,
             infection_duration: 5.0,
             report_period: 1.0,
             synth_population_file: PathBuf::from("."),
@@ -193,7 +209,7 @@ mod test {
     }
 
     #[test]
-    fn test_init() {
+    fn test_init_loop() {
         let mut context = setup_context();
         for _ in 0..10 {
             context.add_person((CensusTract, 1)).unwrap();
