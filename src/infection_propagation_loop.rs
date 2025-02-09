@@ -1,9 +1,9 @@
 use crate::infectiousness_manager::{self, Forecast, InfectionContextExt};
-use crate::parameters::Parameters;
+use crate::parameters::{ContextParametersExt, Params};
 use crate::rate_fns::{ConstantRate, InfectiousnessRateExt};
 use ixa::{
-    define_person_property_with_default, define_rng, trace, Context, ContextGlobalPropertiesExt,
-    ContextPeopleExt, PersonId, PersonPropertyChangeEvent,
+    define_person_property_with_default, define_rng, trace, Context, ContextPeopleExt, PersonId,
+    PersonPropertyChangeEvent,
 };
 
 #[derive(Hash, PartialEq, Debug, Clone, Copy)]
@@ -58,9 +58,11 @@ fn schedule_next_forecasted_infection(
 /// Load the set of rate functions we will randomly assign to people
 /// Eventually, these will actually be loaded from a file
 pub fn load_rate_fns(context: &mut Context) {
-    let parameters = context.get_global_property_value(Parameters).unwrap();
-    let global_transmissibility = parameters.global_transmissibility;
-    let max_time = parameters.infection_duration;
+    let &Params {
+        global_transmissibility,
+        max_time,
+        ..
+    } = context.get_params();
 
     let create_rate_fn =
         |rate: f64| Box::new(ConstantRate::new(rate * global_transmissibility, max_time));
@@ -78,9 +80,11 @@ fn seed_infections(context: &mut Context, initial_infections: usize) {
 }
 
 pub fn init(context: &mut Context) {
-    let parameters = context.get_global_property_value(Parameters).unwrap();
-    let initial_infections = parameters.initial_infections;
-    let max_time = parameters.max_time;
+    let &Params {
+        initial_infections,
+        max_time,
+        ..
+    } = context.get_params();
 
     load_rate_fns(context);
 
@@ -130,7 +134,7 @@ mod test {
             init, schedule_next_forecasted_infection, InfectiousStatus, InfectiousStatusValue,
         },
         infectiousness_manager::Forecast,
-        parameters::{Parameters, ParametersValues},
+        parameters::{ContextParametersExt, GlobalParams, Params},
         population_loader::CensusTract,
     };
 
@@ -138,7 +142,7 @@ mod test {
 
     fn setup_context() -> Context {
         let mut context = Context::new();
-        let parameters = ParametersValues {
+        let parameters = Params {
             initial_infections: 3,
             max_time: 100.0,
             seed: 0,
@@ -149,7 +153,7 @@ mod test {
         };
         context.init_random(parameters.seed);
         context
-            .set_global_property_value(Parameters, parameters)
+            .set_global_property_value(GlobalParams, parameters)
             .unwrap();
         context
     }
@@ -217,8 +221,7 @@ mod test {
 
         init(&mut context);
 
-        let parameters = context.get_global_property_value(Parameters).unwrap();
-        let expected_infected = parameters.initial_infections;
+        let expected_infected = context.get_params().initial_infections;
 
         // At the end of 0.0, we should have seeded 3 infections
         // based on the initial_infections parameter.

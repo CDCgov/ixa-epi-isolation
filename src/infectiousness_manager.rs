@@ -166,7 +166,7 @@ mod test {
     };
     use crate::{
         infectiousness_manager::ALPHA,
-        parameters::{Parameters, ParametersValues},
+        parameters::{GlobalParams, Params},
         population_loader::CensusTract,
         rate_fns::{ConstantRate, InfectiousnessRateExt, RateFnId},
     };
@@ -178,8 +178,8 @@ mod test {
         context.init_random(0);
         context
             .set_global_property_value(
-                Parameters,
-                ParametersValues {
+                GlobalParams,
+                Params {
                     initial_infections: 1,
                     max_time: 10.0,
                     seed: 0,

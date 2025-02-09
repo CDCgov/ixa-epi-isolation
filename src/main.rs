@@ -8,8 +8,8 @@ pub mod settings;
 
 use infection_propagation_loop::InfectiousStatus;
 use ixa::runner::run_with_args;
-use ixa::{ContextGlobalPropertiesExt, ContextPeopleExt, ContextRandomExt, ContextReportExt};
-use parameters::Parameters;
+use ixa::{ContextPeopleExt, ContextRandomExt, ContextReportExt};
+use parameters::{ContextParametersExt, Params};
 use population_loader::{Age, CensusTract};
 
 // You must run this with a parameters file:
@@ -19,19 +19,19 @@ use population_loader::{Age, CensusTract};
 fn main() {
     run_with_args(|context, _, _| {
         // Read the global properties.
-        let parameters = context
-            .get_global_property_value(Parameters)
-            .unwrap()
-            .clone();
-
+        let &Params {
+            seed,
+            report_period,
+            ..
+        } = context.get_params();
         // Set the random seed.
-        context.init_random(parameters.seed);
+        context.init_random(seed);
 
         // Report the number of people by age, census tract, and infectious status
         // every report_period.
         context.add_periodic_report(
             "person_property_count",
-            parameters.report_period,
+            report_period,
             (Age, CensusTract, InfectiousStatus),
         )?;
 
@@ -43,8 +43,6 @@ fn main() {
 
         infection_propagation_loop::init(context);
 
-        // Print out the parameters for debugging purposes for the user.
-        println!("{parameters:?}");
         Ok(())
     })
     .unwrap();

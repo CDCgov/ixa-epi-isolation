@@ -1,11 +1,11 @@
 use std::fmt::Debug;
 use std::path::PathBuf;
 
-use ixa::{define_global_property, IxaError};
+use ixa::{define_global_property, ContextGlobalPropertiesExt, IxaError};
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct ParametersValues {
+pub struct Params {
     pub initial_infections: usize,
     pub max_time: f64,
     pub seed: u64,
@@ -15,7 +15,7 @@ pub struct ParametersValues {
     pub synth_population_file: PathBuf,
 }
 
-fn validate_inputs(parameters: &ParametersValues) -> Result<(), IxaError> {
+fn validate_inputs(parameters: &Params) -> Result<(), IxaError> {
     if parameters.global_transmissibility < 0.0 {
         return Err(IxaError::IxaError(
             "global_transmissibility must be non-negative.".to_string(),
@@ -24,7 +24,18 @@ fn validate_inputs(parameters: &ParametersValues) -> Result<(), IxaError> {
     Ok(())
 }
 
-define_global_property!(Parameters, ParametersValues, validate_inputs);
+define_global_property!(GlobalParams, Params, validate_inputs);
+
+pub trait ContextParametersExt {
+    fn get_params(&self) -> &Params;
+}
+
+impl ContextParametersExt for ixa::Context {
+    fn get_params(&self) -> &Params {
+        self.get_global_property_value(GlobalParams)
+            .expect("Expected GlobalParams to be set")
+    }
+}
 
 #[cfg(test)]
 mod test {
@@ -33,11 +44,11 @@ mod test {
     use super::validate_inputs;
     use std::path::PathBuf;
 
-    use crate::parameters::ParametersValues;
+    use crate::parameters::Params;
 
     #[test]
     fn test_validate_global_transmissibility() {
-        let parameters = ParametersValues {
+        let parameters = Params {
             initial_infections: 1,
             max_time: 100.0,
             seed: 0,
@@ -61,7 +72,7 @@ mod test {
 
     #[test]
     fn test_validate_() {
-        let parameters = ParametersValues {
+        let parameters = Params {
             initial_infections: 1,
             max_time: 100.0,
             seed: 0,

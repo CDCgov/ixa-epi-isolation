@@ -1,12 +1,12 @@
 use ixa::{
-    define_person_property, define_person_property_with_default, Context,
-    ContextGlobalPropertiesExt, ContextPeopleExt, IxaError,
+    define_person_property, define_person_property_with_default, Context, ContextPeopleExt,
+    IxaError,
 };
 
 use serde::Deserialize;
 use std::path::PathBuf;
 
-use crate::{define_setting, parameters::Parameters};
+use crate::{define_setting, parameters::ContextParametersExt};
 
 #[derive(Deserialize, Debug)]
 #[allow(non_snake_case)]
@@ -50,8 +50,8 @@ fn load_synth_population(context: &mut Context, synth_input_file: PathBuf) -> Re
 }
 
 pub fn init(context: &mut Context) -> Result<(), IxaError> {
-    let parameters = context.get_global_property_value(Parameters).unwrap();
-    load_synth_population(context, parameters.synth_population_file.clone())
+    let file_path = context.get_params().synth_population_file.clone();
+    load_synth_population(context, file_path)
 }
 
 #[cfg(test)]
