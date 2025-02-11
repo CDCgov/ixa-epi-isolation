@@ -7,7 +7,7 @@ use statrs::distribution::Exp;
 
 use crate::{
     contact::ContextContactExt,
-    infection_propagation_loop::{InfectiousStatus, InfectiousStatusValue},
+    infection_propagation_loop::{InfectionStatus, InfectionStatusValue},
     population_loader::Alive,
     rate_fns::{InfectiousnessRateExt, InfectiousnessRateFn, ScaledRateFn},
 };
@@ -103,13 +103,14 @@ pub fn evaluate_forecast(
         }
     }
 
-    // TODO<ryl8@cdc.gov>: Right now, we always get a person from the same household
-    // This should be update to choose the appropriate setting you are in
+    // TODO<ryl8@cdc.gov>: Right now, we always get a person that happens to be
+    // alive and susceptible. This should be updated to choose a contact from
+    // a person's setting.
     context.get_contact(
         person_id,
         (
             (Alive, true),
-            (InfectiousStatus, InfectiousStatusValue::Susceptible),
+            (InfectionStatus, InfectionStatusValue::Susceptible),
         ),
     )
 }

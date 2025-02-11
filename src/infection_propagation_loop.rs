@@ -7,15 +7,15 @@ use ixa::{
 };
 
 #[derive(Hash, PartialEq, Debug, Clone, Copy)]
-pub enum InfectiousStatusValue {
+pub enum InfectionStatusValue {
     Susceptible,
     Infected,
     Recovered,
 }
 define_person_property_with_default!(
-    InfectiousStatus,
-    InfectiousStatusValue,
-    InfectiousStatusValue::Susceptible
+    InfectionStatus,
+    InfectionStatusValue,
+    InfectionStatusValue::Susceptible
 );
 
 define_rng!(InfectionRng);
@@ -33,7 +33,7 @@ fn schedule_next_forecasted_infection(
             // Note: this may not be quite right if the person is alone,
             // i.e., total infectiousness multiplier is 0.
             trace!("Person {person} has recovered at {current_time}");
-            context.set_person_property(person, InfectiousStatus, InfectiousStatusValue::Recovered);
+            context.set_person_property(person, InfectionStatus, InfectionStatusValue::Recovered);
         }
         Some(Forecast {
             next_time,
@@ -46,8 +46,8 @@ fn schedule_next_forecasted_infection(
                     trace!("Person {person}: Forecast accepted, infecting {next_contact}");
                     context.set_person_property(
                         next_contact,
-                        InfectiousStatus,
-                        InfectiousStatusValue::Infected,
+                        InfectionStatus,
+                        InfectionStatusValue::Infected,
                     );
                 }
                 // Continue scheduling forecasts until the person recovers.
@@ -80,7 +80,7 @@ fn seed_infections(context: &mut Context, initial_infections: usize) {
     // First, seed an infected population
     for _ in 0..initial_infections {
         let person = context.sample_person(InfectionRng, ()).unwrap();
-        context.set_person_property(person, InfectiousStatus, InfectiousStatusValue::Infected);
+        context.set_person_property(person, InfectionStatus, InfectionStatusValue::Infected);
     }
 }
 
@@ -102,8 +102,8 @@ pub fn init(context: &mut Context) {
         context.shutdown();
     });
 
-    context.subscribe_to_event::<PersonPropertyChangeEvent<InfectiousStatus>>(|context, event| {
-        if event.current != InfectiousStatusValue::Infected {
+    context.subscribe_to_event::<PersonPropertyChangeEvent<InfectionStatus>>(|context, event| {
+        if event.current != InfectionStatusValue::Infected {
             return;
         }
 
@@ -134,7 +134,7 @@ mod test {
     use crate::{
         contact::ContextContactExt,
         infection_propagation_loop::{
-            init, schedule_next_forecasted_infection, InfectiousStatus, InfectiousStatusValue,
+            init, schedule_next_forecasted_infection, InfectionStatus, InfectionStatusValue,
         },
         infectiousness_manager::Forecast,
         parameters::{Parameters, ParametersValues},
@@ -169,7 +169,7 @@ mod test {
         }
         seed_infections(&mut context, 5);
         let infected_count = context
-            .query_people((InfectiousStatus, InfectiousStatusValue::Infected))
+            .query_people((InfectionStatus, InfectionStatusValue::Infected))
             .len();
         assert_eq!(infected_count, 5);
     }
@@ -181,7 +181,7 @@ mod test {
         for _ in 0..10 {
             context.add_person(()).unwrap();
         }
-        context.set_person_property(person, InfectiousStatus, InfectiousStatusValue::Infected);
+        context.set_person_property(person, InfectionStatus, InfectionStatusValue::Infected);
 
         schedule_next_forecasted_infection(
             &mut context,
@@ -204,12 +204,12 @@ mod test {
 
         assert_eq!(context.get_current_time(), 9.0);
         assert_eq!(
-            context.get_person_property(person, InfectiousStatus),
-            InfectiousStatusValue::Recovered
+            context.get_person_property(person, InfectionStatus),
+            InfectionStatusValue::Recovered
         );
         assert_eq!(
             context
-                .query_people((InfectiousStatus, InfectiousStatusValue::Infected))
+                .query_people((InfectionStatus, InfectionStatusValue::Infected))
                 .len(),
             3
         );
@@ -233,7 +233,7 @@ mod test {
             0.0,
             move |context| {
                 let infected_count = context
-                    .query_people((InfectiousStatus, InfectiousStatusValue::Infected))
+                    .query_people((InfectionStatus, InfectionStatusValue::Infected))
                     .len();
                 assert_eq!(
                     infected_count, expected_infected,
@@ -246,7 +246,7 @@ mod test {
         context.execute();
         assert!(
             !context
-                .query_people((InfectiousStatus, InfectiousStatusValue::Recovered))
+                .query_people((InfectionStatus, InfectionStatusValue::Recovered))
                 .is_empty(),
             "Expected some people to recover"
         );

@@ -5,7 +5,7 @@ mod parameters;
 mod population_loader;
 pub mod rate_fns;
 
-use infection_propagation_loop::InfectiousStatus;
+use infection_propagation_loop::InfectionStatus;
 use ixa::runner::run_with_args;
 use ixa::{ContextGlobalPropertiesExt, ContextPeopleExt, ContextRandomExt, ContextReportExt};
 use parameters::Parameters;
@@ -31,7 +31,7 @@ fn main() {
         context.add_periodic_report(
             "person_property_count",
             parameters.report_period,
-            (Age, CensusTract, InfectiousStatus),
+            (Age, CensusTract, InfectionStatus),
         )?;
 
         // Load the synthetic population from the `synthetic_population_file`
