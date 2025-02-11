@@ -27,32 +27,39 @@ fn schedule_next_forecasted_infection(
     evaluate_forecast: impl Fn(&mut Context, PersonId, f64) -> Option<PersonId> + 'static,
 ) {
     let current_time = context.get_current_time();
-    let forecast = get_forecast(context, person);
-    if forecast.is_none() {
-        // Note: If the forecast returns None because the person lives alone
-        // (i.e., total infectiousness multiplier is 0) this isn't quite right
-        trace!("Person {person} has recovered at {current_time}");
-        context.set_person_property(person, InfectiousStatus, InfectiousStatusValue::Recovered);
-        return;
-    }
-    let Forecast {
-        next_time,
-        forecasted_total_infectiousness,
-    } = forecast.unwrap();
-    context.add_plan(next_time, move |context| {
-        let next_contact = evaluate_forecast(context, person, forecasted_total_infectiousness);
-        if let Some(next_contact) = next_contact {
-            trace!("Person {person}: Forecast accepted, infecting {next_contact}");
-            context.set_person_property(
-                next_contact,
-                InfectiousStatus,
-                InfectiousStatusValue::Infected,
-            );
+    match get_forecast(context, person) {
+        None => {
+            // No forecast was returned, so the person is assumed to recover.
+            // Note: this may not be quite right if the person is alone,
+            // i.e., total infectiousness multiplier is 0.
+            trace!("Person {person} has recovered at {current_time}");
+            context.set_person_property(person, InfectiousStatus, InfectiousStatusValue::Recovered);
         }
-        // Right now, forecasts will continue until the person recovers, regardless
-        // of if there are any more contacts left to infect.
-        schedule_next_forecasted_infection(context, person, get_forecast, evaluate_forecast);
-    });
+        Some(Forecast {
+            next_time,
+            forecasted_total_infectiousness,
+        }) => {
+            context.add_plan(next_time, move |context| {
+                if let Some(next_contact) =
+                    evaluate_forecast(context, person, forecasted_total_infectiousness)
+                {
+                    trace!("Person {person}: Forecast accepted, infecting {next_contact}");
+                    context.set_person_property(
+                        next_contact,
+                        InfectiousStatus,
+                        InfectiousStatusValue::Infected,
+                    );
+                }
+                // Continue scheduling forecasts until the person recovers.
+                schedule_next_forecasted_infection(
+                    context,
+                    person,
+                    get_forecast,
+                    evaluate_forecast,
+                );
+            });
+        }
+    }
 }
 
 /// Load the set of rate functions we will randomly assign to people
