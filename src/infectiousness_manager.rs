@@ -115,7 +115,6 @@ pub fn evaluate_forecast(
         person_id,
         (
             (Alive, true),
-            (InfectionStatus, InfectionStatusValue::Susceptible),
         ),
     )
 }
