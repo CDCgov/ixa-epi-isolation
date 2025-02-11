@@ -111,12 +111,15 @@ pub fn evaluate_forecast(
     // TODO<ryl8@cdc.gov>: Right now, we always get a person that happens to be
     // alive and susceptible. This should be updated to choose a contact from
     // a person's setting.
-    context.get_contact(
-        person_id,
-        (
-            (Alive, true),
-        ),
-    )
+    let next_contact = context.get_contact(person_id, ((Alive, true),))?;
+
+    if context.get_person_property(next_contact, InfectionStatus)
+        != InfectionStatusValue::Susceptible
+    {
+        return None;
+    }
+
+    Some(next_contact)
 }
 
 pub trait InfectionContextExt {
