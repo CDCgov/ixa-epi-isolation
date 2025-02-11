@@ -13,7 +13,7 @@ impl ContextContactExt for Context {
     fn get_contact<Q: Query>(&self, transmitter_id: PersonId, query: Q) -> Option<PersonId> {
         // Get list of eligible people given the provided query
         // We sample a random person from this list.
-        if self.query_people_count() > 1 {
+        if self.query_people_count(query) > 1 {
             let mut contact_id = transmitter_id;
             while contact_id == transmitter_id {
                 contact_id = match self.sample_person(ContactRng, query) {
