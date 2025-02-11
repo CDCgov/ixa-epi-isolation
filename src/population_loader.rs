@@ -6,7 +6,7 @@ use ixa::{
 use serde::Deserialize;
 use std::path::PathBuf;
 
-use crate::{define_setting, parameters::Parameters};
+use crate::parameters::Parameters;
 
 #[derive(Deserialize, Debug)]
 #[allow(non_snake_case)]
@@ -18,8 +18,8 @@ pub struct PeopleRecord<'a> {
 define_person_property!(Age, u8);
 define_person_property_with_default!(Alive, bool, true);
 
-define_setting!(Household);
-define_setting!(CensusTract);
+define_person_property!(Household, usize);
+define_person_property!(CensusTract, usize);
 
 fn create_person_from_record(
     context: &mut Context,

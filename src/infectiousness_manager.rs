@@ -6,40 +6,32 @@ use ordered_float::OrderedFloat;
 use statrs::distribution::Exp;
 
 use crate::{
+    contact::ContextContactExt,
     infection_propagation_loop::{InfectiousStatus, InfectiousStatusValue},
-    population_loader::{Alive, CensusTract},
+    population_loader::Alive,
     rate_fns::{InfectiousnessRateExt, InfectiousnessRateFn, ScaledRateFn},
-    settings::{ContextSettingExt, Setting},
 };
 
-// This needs to be data associated with the setting
-const ALPHA: f64 = 1.0;
+const TOTAL_INFECTIOUSNESS_MULTIPLIER: f64 = 2.0;
 
 define_person_property_with_default!(TimeOfInfection, Option<OrderedFloat<f64>>, None);
 
-/// Calculate the a scaling factor for total infectiousness for a person
-/// given factors related to their setting. This implementation is not
-/// time-dependent.
-///
-pub fn calc_setting_infectiousness_multiplier<S>(
-    context: &Context,
-    person_id: PersonId,
-    s: S,
-) -> f64
-where
-    S: Setting + Copy,
-{
-    let id = context.get_person_setting_id(person_id, s);
-    let members = context.get_setting_members(s, id, ()).len();
-    #[allow(clippy::cast_precision_loss)]
-    let max_contacts = (members - 1) as f64;
-    max_contacts.powf(ALPHA)
+/// Calculate the scaling factor that accounts for the total infectiousness
+/// for a person, given factors related to their environment, such as the number of people
+/// they come in contact with or how close they are.
+/// This is used to scale the intrinsic infectiousness function of that person.
+pub fn calc_total_infectiousness_multiplier(_context: &Context, _person_id: PersonId) -> f64 {
+    // TODO<ryl8@cdc.gov> This is a placeholder until we have an implementation
+    // of settings and itineraries
+    TOTAL_INFECTIOUSNESS_MULTIPLIER
 }
 
-// TODO<ryl8@cdc.gov> This should actually take into account *all* settings
-// For now we use your census tract
-pub fn max_total_infectiousness_multiplier(context: &Context, person_id: PersonId) -> f64 {
-    calc_setting_infectiousness_multiplier(context, person_id, CensusTract)
+/// Calculate the maximum possible scaling factor for total infectiousness
+/// for a person, given information we know at the time of a forecast.
+pub fn max_total_infectiousness_multiplier(_context: &Context, _person_id: PersonId) -> f64 {
+    // TODO<ryl8@cdc.gov> This is a placeholder until we have an implementation
+    // of settings and itineraries
+    TOTAL_INFECTIOUSNESS_MULTIPLIER
 }
 
 define_rng!(ForecastRng);
@@ -88,12 +80,7 @@ pub fn evaluate_forecast(
 ) -> Option<PersonId> {
     let rate_fn = context.get_person_rate_fn(person_id);
 
-    // TODO<ryl8>: The setting is hard-coded for now, but we should replace this
-    // with something more sophisticated.
-    let current_setting = CensusTract;
-
-    let total_multiplier =
-        calc_setting_infectiousness_multiplier(context, person_id, current_setting);
+    let total_multiplier = calc_total_infectiousness_multiplier(context, person_id);
     let total_rate_fn = ScaledRateFn {
         base: rate_fn,
         scale: total_multiplier,
@@ -116,9 +103,10 @@ pub fn evaluate_forecast(
         }
     }
 
-    context.get_contact_from_setting(
+    // TODO<ryl8@cdc.gov>: Right now, we always get a person from the same household
+    // This should be update to choose the appropriate setting you are in
+    context.get_contact(
         person_id,
-        current_setting,
         (
             (Alive, true),
             (InfectiousStatus, InfectiousStatusValue::Susceptible),
@@ -161,11 +149,10 @@ mod test {
     use std::path::PathBuf;
 
     use super::{
-        calc_setting_infectiousness_multiplier, get_forecast, max_total_infectiousness_multiplier,
-        InfectionContextExt, TimeOfInfection,
+        get_forecast, max_total_infectiousness_multiplier, InfectionContextExt, TimeOfInfection,
     };
     use crate::{
-        infectiousness_manager::ALPHA,
+        infectiousness_manager::TOTAL_INFECTIOUSNESS_MULTIPLIER,
         parameters::{Parameters, ParametersValues},
         population_loader::CensusTract,
         rate_fns::{ConstantRate, InfectiousnessRateExt, RateFnId},
@@ -230,19 +217,12 @@ mod test {
     #[test]
     fn test_calc_total_infectiousness_multiplier() {
         let mut context = setup_context();
-        let p1 = context.add_person((CensusTract, 1)).unwrap();
-        // Add two additional contacts, which should make the factor 2
-        context.add_person((CensusTract, 1)).unwrap();
-        context.add_person((CensusTract, 1)).unwrap();
-
-        // Number of additional contacts ^ Alpha
-        let expected = 2.0_f64.powf(ALPHA);
-        assert_eq!(
-            calc_setting_infectiousness_multiplier(&context, p1, CensusTract),
-            expected
-        );
+        let p1 = context.add_person(()).unwrap();
         // For now, max is always just the value of the CensusTract infectiousness
-        assert_eq!(max_total_infectiousness_multiplier(&context, p1), expected);
+        assert_eq!(
+            max_total_infectiousness_multiplier(&context, p1),
+            TOTAL_INFECTIOUSNESS_MULTIPLIER
+        );
     }
 
     #[test]
