@@ -60,7 +60,7 @@ pub fn get_forecast(context: &Context, person_id: PersonId) -> Option<Forecast> 
     let exp = Exp::new(1.0).unwrap();
     let e = context.sample_distr(ForecastRng, exp);
     // Note: this returns None if forecasted > infectious period
-    let t = total_rate_fn.inverse_cum(e)?;
+    let t = total_rate_fn.inverse_cum_rate(e)?;
 
     let next_time = context.get_current_time() + t;
     let forecasted_total_infectiousness = total_rate_fn.rate(t);
