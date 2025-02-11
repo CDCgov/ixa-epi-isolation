@@ -26,6 +26,12 @@ fn main() {
         // Set the random seed.
         context.init_random(parameters.seed);
 
+        // Add a plan to shut down the simulation after `max_time`, regardless of
+        // what else is happening in the model.
+        context.add_plan(parameters.max_time, |context| {
+            context.shutdown();
+        });
+
         // Report the number of people by age, census tract, and infectious status
         // every report_period.
         context.add_periodic_report(

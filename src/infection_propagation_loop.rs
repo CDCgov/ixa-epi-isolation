@@ -87,19 +87,12 @@ fn seed_infections(context: &mut Context, initial_infections: usize) {
 pub fn init(context: &mut Context) {
     let parameters = context.get_global_property_value(Parameters).unwrap();
     let initial_infections = parameters.initial_infections;
-    let max_time = parameters.max_time;
 
     load_rate_fns(context);
 
     // Seed the initial population
     context.add_plan(0.0, move |context| {
         seed_infections(context, initial_infections);
-    });
-
-    // Add a plan to shut down the simulation after `max_time`, regardless of
-    // what else is happening in the model.
-    context.add_plan(max_time, |context| {
-        context.shutdown();
     });
 
     context.subscribe_to_event::<PersonPropertyChangeEvent<InfectionStatus>>(|context, event| {
