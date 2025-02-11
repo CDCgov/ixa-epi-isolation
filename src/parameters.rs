@@ -6,12 +6,20 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ParametersValues {
+    /// The number of infections we seed the population with.
     pub initial_infections: usize,
+    /// The maximum run time of the simulation; even if there are still infections
+    /// scheduled to occur, the simulation will stop at this time.
     pub max_time: f64,
+    /// The random seed for the simulation.
     pub seed: u64,
+    /// A global scale factor on the intrinsic infectiousness rate of each person
     pub global_transmissibility: f64,
+    /// The duration of the infection in days
     pub infection_duration: f64,
+    /// The period at which to report tabulated values
     pub report_period: f64,
+    /// The path to the synthetic population file loaded in `population_loader`
     pub synth_population_file: PathBuf,
 }
 
