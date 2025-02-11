@@ -11,20 +11,20 @@ pub trait ContextContactExt {
 
 impl ContextContactExt for Context {
     fn get_contact<Q: Query>(&self, transmitter_id: PersonId, query: Q) -> Option<PersonId> {
+        // There must be at least two people (including the transmitter) for us to find a contact
+        if self.query_people_count(query) < 2 {
+            return None;
+        }
         // Get list of eligible people given the provided query
         // We sample a random person from this list.
-        if self.query_people_count(query) > 1 {
-            let mut contact_id = transmitter_id;
-            while contact_id == transmitter_id {
-                contact_id = match self.sample_person(ContactRng, query) {
-                    Ok(id) => id,
-                    Err(_) => return None,
-                };
-            }
-            Some(contact_id)
-        } else {
-            None
+        let mut contact_id = transmitter_id;
+        while contact_id == transmitter_id {
+            contact_id = match self.sample_person(ContactRng, query) {
+                Ok(id) => id,
+                Err(_) => return None,
+            };
         }
+        Some(contact_id)
     }
 }
 
