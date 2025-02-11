@@ -90,6 +90,11 @@ pub fn evaluate_forecast(
     let elapsed_t = context.get_elapsed_infection_time(person_id);
     let current_infectiousness = total_rate_fn.rate(elapsed_t);
 
+    assert!(
+        (current_infectiousness <= forecasted_total_infectiousness),
+        "Person {person_id}: Forecasted infectiousness must always be greater than or equal to current infectiousness. Current: {current_infectiousness}, Forecasted: {forecasted_total_infectiousness}"
+    );
+
     // If they are less infectious as we expected...
     if current_infectiousness < forecasted_total_infectiousness {
         // Reject with the ratio of current vs the forecasted
@@ -150,7 +155,8 @@ mod test {
     use std::path::PathBuf;
 
     use super::{
-        get_forecast, max_total_infectiousness_multiplier, InfectionContextExt, TimeOfInfection,
+        evaluate_forecast, get_forecast, max_total_infectiousness_multiplier, InfectionContextExt,
+        TimeOfInfection,
     };
     use crate::{
         infectiousness_manager::TOTAL_INFECTIOUSNESS_MULTIPLIER,
@@ -240,5 +246,16 @@ mod test {
         // The expected rate is 2.0, because intrinsic is 1.0 and there are 2 contacts.
         // TODO<ryl8@cdc>: Check if the times are reasonable
         assert_eq!(f.forecasted_total_infectiousness, 2.0);
+    }
+
+    #[test]
+    #[should_panic = "Person 0: Forecasted infectiousness must always be greater than or equal to current infectiousness. Current: 2, Forecasted: 1.9"]
+    fn test_assert_evaluate_fails_when_forecast_smaller() {
+        let mut context = setup_context();
+        let p1 = context.add_person((CensusTract, 1)).unwrap();
+        context.assign_infection_properties(p1);
+
+        let invalid_forecast = TOTAL_INFECTIOUSNESS_MULTIPLIER - 0.1;
+        evaluate_forecast(&mut context, p1, invalid_forecast);
     }
 }
