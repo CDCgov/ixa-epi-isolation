@@ -201,10 +201,9 @@ mod test {
         let mut context = setup_context();
         let p1 = context.add_person((CensusTract, 1)).unwrap();
         context.set_person_property(p1, TimeOfInfection, Some(OrderedFloat(1.0)));
-        context.add_plan(3.0, move |context| {
-            assert_eq!(context.get_elapsed_infection_time(p1), 2.0);
-        });
+        context.add_plan(3.0, move |_| {});
         context.execute();
+        assert_eq!(context.get_elapsed_infection_time(p1), 2.0);
     }
 
     #[test]
