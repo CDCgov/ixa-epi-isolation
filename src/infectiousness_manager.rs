@@ -152,7 +152,6 @@ pub fn select_next_contact(context: &Context, person_id: PersonId) -> Option<Per
 pub trait InfectionContextExt {
     fn infect_person(&mut self, person_id: PersonId);
     fn recover_person(&mut self, person_id: PersonId);
-    fn get_start_of_infection(&self, person_id: PersonId) -> f64;
     fn get_elapsed_infection_time(&self, person_id: PersonId) -> f64;
     fn get_person_rate_fn(&self, person_id: PersonId) -> &dyn InfectiousnessRateFn;
 }
@@ -193,17 +192,13 @@ impl InfectionContextExt for Context {
         self.get_rate_fn(rate_fn_id)
     }
 
-    fn get_start_of_infection(&self, person_id: PersonId) -> f64 {
+    fn get_elapsed_infection_time(&self, person_id: PersonId) -> f64 {
         let InfectionDataValue::Infected { infection_time, .. } =
             self.get_person_property(person_id, InfectionData)
         else {
             panic!("Person {person_id} is not infected")
         };
-        infection_time
-    }
-
-    fn get_elapsed_infection_time(&self, person_id: PersonId) -> f64 {
-        self.get_current_time() - self.get_start_of_infection(person_id)
+        self.get_current_time() - infection_time
     }
 }
 
@@ -216,7 +211,9 @@ mod test {
         evaluate_forecast, get_forecast, max_total_infectiousness_multiplier, InfectionContextExt,
     };
     use crate::{
-        infectiousness_manager::TOTAL_INFECTIOUSNESS_MULTIPLIER,
+        infectiousness_manager::{
+            InfectionData, InfectionDataValue, TOTAL_INFECTIOUSNESS_MULTIPLIER,
+        },
         parameters::{Parameters, ParametersValues},
         rate_fns::{ConstantRate, InfectiousnessRateExt},
     };
@@ -251,7 +248,12 @@ mod test {
             context.infect_person(p1);
         });
         context.execute();
-        assert_eq!(context.get_start_of_infection(p1), 2.0);
+        let InfectionDataValue::Infected { infection_time, .. } =
+            context.get_person_property(p1, InfectionData)
+        else {
+            panic!("Person {p1} is not infected")
+        };
+        assert_eq!(infection_time, 2.0);
         context.get_person_rate_fn(p1);
     }
 
