@@ -61,7 +61,7 @@ fn seed_infections(context: &mut Context, initial_infections: usize) {
     // First, seed an infected population
     for _ in 0..initial_infections {
         let person = context.sample_person(InfectionRng, ()).unwrap();
-        context.set_person_property(person, InfectionStatus, InfectionStatusValue::Infected);
+        context.infect_person(person);
     }
 }
 
@@ -94,7 +94,7 @@ mod test {
     };
 
     use crate::{
-        infection_propagation_loop::{init, InfectionStatus, InfectionStatusValue},
+        infection_propagation_loop::{init, load_rate_fns, InfectionStatus, InfectionStatusValue},
         parameters::{Parameters, ParametersValues},
         population_loader::CensusTract,
     };
@@ -125,6 +125,7 @@ mod test {
         for _ in 0..10 {
             context.add_person(()).unwrap();
         }
+        load_rate_fns(&mut context);
         seed_infections(&mut context, 5);
         let infected_count = context
             .query_people((InfectionStatus, InfectionStatusValue::Infected))

@@ -1,10 +1,10 @@
-use ixa::{
-    define_data_plugin, define_person_property_with_default, define_rng, Context, ContextRandomExt,
-};
+use ixa::{define_data_plugin, define_rng, Context, ContextRandomExt};
+use serde::Serialize;
 
 use super::rate_fn::InfectiousnessRateFn;
 
-define_person_property_with_default!(RateFnId, Option<usize>, None);
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+pub struct RateFnId(usize);
 
 struct RateFnContainer {
     rates: Vec<Box<dyn InfectiousnessRateFn>>,
@@ -17,26 +17,29 @@ define_data_plugin!(
 );
 
 define_rng!(InfectiousnessRateRng);
+
 pub trait InfectiousnessRateExt {
-    fn add_rate_fn(&mut self, dist: Box<dyn InfectiousnessRateFn>) -> usize;
-    fn get_random_rate_function(&mut self) -> usize;
-    fn get_rate_fn(&self, index: usize) -> &dyn InfectiousnessRateFn;
+    fn add_rate_fn(&mut self, dist: Box<dyn InfectiousnessRateFn>) -> RateFnId;
+    fn get_random_rate_function(&mut self) -> RateFnId;
+    fn get_rate_fn(&self, index: RateFnId) -> &dyn InfectiousnessRateFn;
 }
 
 impl InfectiousnessRateExt for Context {
-    fn add_rate_fn(&mut self, dist: Box<dyn InfectiousnessRateFn>) -> usize {
+    fn add_rate_fn(&mut self, dist: Box<dyn InfectiousnessRateFn>) -> RateFnId {
         let container = self.get_data_container_mut(RateFnPlugin);
         container.rates.push(dist);
-        container.rates.len() - 1
+        RateFnId(container.rates.len() - 1)
     }
-    fn get_random_rate_function(&mut self) -> usize {
+
+    fn get_random_rate_function(&mut self) -> RateFnId {
         let max = self.get_data_container_mut(RateFnPlugin).rates.len();
-        self.sample_range(InfectiousnessRateRng, 0..max)
+        RateFnId(self.sample_range(InfectiousnessRateRng, 0..max))
     }
-    fn get_rate_fn(&self, index: usize) -> &dyn InfectiousnessRateFn {
+
+    fn get_rate_fn(&self, index: RateFnId) -> &dyn InfectiousnessRateFn {
         self.get_data_container(RateFnPlugin)
             .expect("Expected rate function to exist")
-            .rates[index]
+            .rates[index.0]
             .as_ref()
     }
 }
@@ -49,7 +52,6 @@ mod tests {
 
     struct TestRateFn;
 
-    // This is totally not real, it's just so we can test the interface
     impl InfectiousnessRateFn for TestRateFn {
         fn rate(&self, _t: f64) -> f64 {
             1.0

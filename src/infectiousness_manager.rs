@@ -8,7 +8,7 @@ use statrs::distribution::Exp;
 use crate::{
     contact::ContextContactExt,
     population_loader::Alive,
-    rate_fns::{InfectiousnessRateExt, InfectiousnessRateFn, ScaledRateFn},
+    rate_fns::{InfectiousnessRateExt, InfectiousnessRateFn, RateFnId, ScaledRateFn},
 };
 
 #[derive(Serialize, PartialEq, Debug, Clone, Copy)]
@@ -16,7 +16,7 @@ pub enum InfectionDataValue {
     Susceptible,
     Infected {
         infection_time: f64,
-        rate_fn_id: usize,
+        rate_fn_id: RateFnId,
     },
     Recovered {
         recovery_time: f64,
@@ -219,7 +219,7 @@ mod test {
         infectiousness_manager::TOTAL_INFECTIOUSNESS_MULTIPLIER,
         parameters::{Parameters, ParametersValues},
         population_loader::CensusTract,
-        rate_fns::{ConstantRate, InfectiousnessRateExt, RateFnId},
+        rate_fns::{ConstantRate, InfectiousnessRateExt},
     };
     use ixa::{Context, ContextGlobalPropertiesExt, ContextPeopleExt, ContextRandomExt};
 
@@ -248,32 +248,24 @@ mod test {
     fn test_infect_person() {
         let mut context = setup_context();
         let p1 = context.add_person((CensusTract, 1)).unwrap();
-        context.add_plan(1.0, move |context| {
+        context.add_plan(2.0, move |context| {
             context.infect_person(p1);
-            context
-                .get_person_property(p1, RateFnId)
-                .expect("Person should have a rate fn assigned");
-            assert_eq!(context.get_start_of_infection(p1), 1.0);
         });
         context.execute();
-    }
-
-    #[test]
-    fn test_get_start_of_infection() {
-        let mut context = setup_context();
-        let p1 = context.add_person((CensusTract, 1)).unwrap();
-        context.infect_person(p1);
         assert_eq!(context.get_start_of_infection(p1), 2.0);
+        context.get_person_rate_fn(p1);
     }
 
     #[test]
     fn test_get_elapsed_infection_time() {
         let mut context = setup_context();
         let p1 = context.add_person((CensusTract, 1)).unwrap();
-        context.infect_person(p1);
+        context.add_plan(2.0, move |context| {
+            context.infect_person(p1);
+        });
         context.add_plan(3.0, move |_| {});
         context.execute();
-        assert_eq!(context.get_elapsed_infection_time(p1), 3.0);
+        assert_eq!(context.get_elapsed_infection_time(p1), 1.0);
     }
 
     #[test]
