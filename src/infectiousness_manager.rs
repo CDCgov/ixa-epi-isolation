@@ -1,20 +1,53 @@
 use ixa::{
-    define_person_property_with_default, define_rng, trace, Context, ContextPeopleExt,
-    ContextRandomExt, PersonId,
+    define_derived_property, define_person_property_with_default, define_rng, trace, Context,
+    ContextPeopleExt, ContextRandomExt, PersonId,
 };
-use ordered_float::OrderedFloat;
+use serde::Serialize;
 use statrs::distribution::Exp;
 
 use crate::{
     contact::ContextContactExt,
-    infection_propagation_loop::{InfectionStatus, InfectionStatusValue},
     population_loader::Alive,
     rate_fns::{InfectiousnessRateExt, InfectiousnessRateFn, ScaledRateFn},
 };
 
-const TOTAL_INFECTIOUSNESS_MULTIPLIER: f64 = 2.0;
+#[derive(Serialize, PartialEq, Debug, Clone, Copy)]
+pub enum InfectionDataValue {
+    Susceptible,
+    Infected {
+        infection_time: f64,
+        rate_fn_id: usize,
+    },
+    Recovered {
+        recovery_time: f64,
+    },
+}
 
-define_person_property_with_default!(TimeOfInfection, Option<OrderedFloat<f64>>, None);
+#[derive(Serialize, PartialEq, Debug, Clone, Copy)]
+pub enum InfectionStatusValue {
+    Susceptible,
+    Infected,
+    Recovered,
+}
+
+define_person_property_with_default!(
+    InfectionData,
+    InfectionDataValue,
+    InfectionDataValue::Susceptible
+);
+
+define_derived_property!(
+    InfectionStatus,
+    InfectionStatusValue,
+    [InfectionData],
+    |data| match data {
+        InfectionDataValue::Susceptible => InfectionStatusValue::Susceptible,
+        InfectionDataValue::Infected { .. } => InfectionStatusValue::Infected,
+        InfectionDataValue::Recovered { .. } => InfectionStatusValue::Recovered,
+    }
+);
+
+const TOTAL_INFECTIOUSNESS_MULTIPLIER: f64 = 2.0;
 
 /// Calculate the scaling factor that accounts for the total infectiousness
 /// for a person, given factors related to their environment, such as the number of people
@@ -48,7 +81,6 @@ pub fn get_forecast(context: &Context, person_id: PersonId) -> Option<Forecast> 
     let rate_fn = context.get_person_rate_fn(person_id);
     // This scales infectiousness by the maximum possible infectiousness across all settings
     let scale = max_total_infectiousness_multiplier(context, person_id);
-    // We need to shift the intrinsic infectiousness in time
     let elapsed = context.get_elapsed_infection_time(person_id);
     let total_rate_fn = ScaledRateFn::new(rate_fn, scale, elapsed);
 
@@ -118,31 +150,60 @@ pub fn select_next_contact(context: &Context, person_id: PersonId) -> Option<Per
 }
 
 pub trait InfectionContextExt {
-    fn assign_infection_properties(&mut self, person_id: PersonId);
+    fn infect_person(&mut self, person_id: PersonId);
+    fn recover_person(&mut self, person_id: PersonId);
     fn get_start_of_infection(&self, person_id: PersonId) -> f64;
     fn get_elapsed_infection_time(&self, person_id: PersonId) -> f64;
+    fn get_person_rate_fn(&self, person_id: PersonId) -> &dyn InfectiousnessRateFn;
 }
 
 impl InfectionContextExt for Context {
     // This function should be called from the main loop whenever
     // someone is first infected. It assigns all their properties needed to
     // calculate intrinsic infectiousness
-    fn assign_infection_properties(&mut self, person_id: PersonId) {
-        let t = self.get_current_time();
-        self.set_person_property(person_id, TimeOfInfection, Some(OrderedFloat(t)));
-        self.assign_random_rate_fn(person_id);
+    fn infect_person(&mut self, person_id: PersonId) {
+        let infection_time = self.get_current_time();
+        let rate_fn_id = self.get_random_rate_function();
+        trace!("Person {person_id}: Infected at {infection_time}");
+        self.set_person_property(
+            person_id,
+            InfectionData,
+            InfectionDataValue::Infected {
+                infection_time,
+                rate_fn_id,
+            },
+        );
+    }
+
+    fn recover_person(&mut self, person_id: PersonId) {
+        let recovery_time = self.get_current_time();
+        self.set_person_property(
+            person_id,
+            InfectionData,
+            InfectionDataValue::Recovered { recovery_time },
+        );
+    }
+
+    fn get_person_rate_fn(&self, person_id: PersonId) -> &dyn InfectiousnessRateFn {
+        let InfectionDataValue::Infected { rate_fn_id, .. } =
+            self.get_person_property(person_id, InfectionData)
+        else {
+            panic!("Person {person_id} is not infected")
+        };
+        self.get_rate_fn(rate_fn_id)
     }
 
     fn get_start_of_infection(&self, person_id: PersonId) -> f64 {
-        self.get_person_property(person_id, TimeOfInfection)
-            .expect("Person doesn't have a TimeOfInfection assigned")
-            .0
+        let InfectionDataValue::Infected { infection_time, .. } =
+            self.get_person_property(person_id, InfectionData)
+        else {
+            panic!("Person {person_id} is not infected")
+        };
+        infection_time
     }
 
     fn get_elapsed_infection_time(&self, person_id: PersonId) -> f64 {
-        let current_time = self.get_current_time();
-        let start_of_infection = self.get_start_of_infection(person_id);
-        current_time - start_of_infection
+        self.get_current_time() - self.get_start_of_infection(person_id)
     }
 }
 
@@ -153,7 +214,6 @@ mod test {
 
     use super::{
         evaluate_forecast, get_forecast, max_total_infectiousness_multiplier, InfectionContextExt,
-        TimeOfInfection,
     };
     use crate::{
         infectiousness_manager::TOTAL_INFECTIOUSNESS_MULTIPLIER,
@@ -162,7 +222,6 @@ mod test {
         rate_fns::{ConstantRate, InfectiousnessRateExt, RateFnId},
     };
     use ixa::{Context, ContextGlobalPropertiesExt, ContextPeopleExt, ContextRandomExt};
-    use ordered_float::OrderedFloat;
 
     fn setup_context() -> Context {
         let mut context = Context::new();
@@ -186,10 +245,24 @@ mod test {
     }
 
     #[test]
+    fn test_infect_person() {
+        let mut context = setup_context();
+        let p1 = context.add_person((CensusTract, 1)).unwrap();
+        context.add_plan(1.0, move |context| {
+            context.infect_person(p1);
+            context
+                .get_person_property(p1, RateFnId)
+                .expect("Person should have a rate fn assigned");
+            assert_eq!(context.get_start_of_infection(p1), 1.0);
+        });
+        context.execute();
+    }
+
+    #[test]
     fn test_get_start_of_infection() {
         let mut context = setup_context();
         let p1 = context.add_person((CensusTract, 1)).unwrap();
-        context.set_person_property(p1, TimeOfInfection, Some(OrderedFloat(2.0)));
+        context.infect_person(p1);
         assert_eq!(context.get_start_of_infection(p1), 2.0);
     }
 
@@ -197,24 +270,10 @@ mod test {
     fn test_get_elapsed_infection_time() {
         let mut context = setup_context();
         let p1 = context.add_person((CensusTract, 1)).unwrap();
-        context.set_person_property(p1, TimeOfInfection, Some(OrderedFloat(1.0)));
+        context.infect_person(p1);
         context.add_plan(3.0, move |_| {});
         context.execute();
-        assert_eq!(context.get_elapsed_infection_time(p1), 2.0);
-    }
-
-    #[test]
-    fn test_assign_infection_properties() {
-        let mut context = setup_context();
-        let p1 = context.add_person((CensusTract, 1)).unwrap();
-        context.add_plan(1.0, move |context| {
-            context.assign_infection_properties(p1);
-            context
-                .get_person_property(p1, RateFnId)
-                .expect("Person should have a rate fn assigned");
-            assert_eq!(context.get_start_of_infection(p1), 1.0);
-        });
-        context.execute();
+        assert_eq!(context.get_elapsed_infection_time(p1), 3.0);
     }
 
     #[test]
@@ -236,7 +295,7 @@ mod test {
         context.add_person((CensusTract, 1)).unwrap();
         context.add_person((CensusTract, 1)).unwrap();
 
-        context.assign_infection_properties(p1);
+        context.infect_person(p1);
 
         let f = get_forecast(&context, p1).expect("Forecast should be returned");
         // The expected rate is 2.0, because intrinsic is 1.0 and there are 2 contacts.
@@ -249,7 +308,7 @@ mod test {
     fn test_assert_evaluate_fails_when_forecast_smaller() {
         let mut context = setup_context();
         let p1 = context.add_person((CensusTract, 1)).unwrap();
-        context.assign_infection_properties(p1);
+        context.infect_person(p1);
 
         let invalid_forecast = TOTAL_INFECTIOUSNESS_MULTIPLIER - 0.1;
         evaluate_forecast(&mut context, p1, invalid_forecast);

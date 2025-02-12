@@ -5,7 +5,7 @@ mod parameters;
 mod population_loader;
 pub mod rate_fns;
 
-use infection_propagation_loop::InfectionStatus;
+use infectiousness_manager::InfectionStatus;
 use ixa::runner::run_with_args;
 use ixa::{ContextGlobalPropertiesExt, ContextPeopleExt, ContextRandomExt, ContextReportExt};
 use parameters::Parameters;
