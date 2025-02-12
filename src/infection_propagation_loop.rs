@@ -27,8 +27,8 @@ fn schedule_next_forecasted_infection(context: &mut Context, person: PersonId) {
     match get_forecast(context, person) {
         None => {
             // No forecast was returned, so the person is assumed to recover.
-            // Note: this may not be quite right if the person is alone,
-            // i.e., total infectiousness multiplier is 0.
+            // Note: this may not be quite right if  total infectiousness multiplier is 0
+            // e.g., because the person is alone
             trace!("Person {person} has recovered at {current_time}");
             context.set_person_property(person, InfectionStatus, InfectionStatusValue::Recovered);
         }
