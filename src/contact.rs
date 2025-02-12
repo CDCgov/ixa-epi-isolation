@@ -1,4 +1,4 @@
-use ixa::{define_rng, people::Query, Context, ContextPeopleExt, PersonId};
+use ixa::{define_rng, people::Query, Context, ContextPeopleExt, ContextRandomExt, PersonId};
 
 define_rng!(ContactRng);
 
@@ -11,18 +11,19 @@ pub trait ContextContactExt {
 
 impl ContextContactExt for Context {
     fn get_contact<Q: Query>(&self, transmitter_id: PersonId, query: Q) -> Option<PersonId> {
-        // There must be at least two people (including the transmitter) for us to find a contact
-        if self.query_people_count(query) < 2 {
+        // Get list of eligible people given the provided query
+        let possible_contacts = self.query_people(query);
+        if possible_contacts.is_empty()
+            || (possible_contacts.len() == 1 && possible_contacts[0] == transmitter_id)
+        {
             return None;
         }
-        // Get list of eligible people given the provided query
-        // We sample a random person from this list.
+
+        // We sample a random person from the list. If the person we draw is the transmitter, we draw again.
         let mut contact_id = transmitter_id;
         while contact_id == transmitter_id {
-            contact_id = match self.sample_person(ContactRng, query) {
-                Ok(id) => id,
-                Err(_) => return None,
-            };
+            contact_id =
+                possible_contacts[self.sample_range(ContactRng, 0..possible_contacts.len())];
         }
         Some(contact_id)
     }
@@ -34,6 +35,7 @@ mod test {
     use ixa::{define_person_property_with_default, Context, ContextPeopleExt, ContextRandomExt};
 
     define_person_property_with_default!(Alive, bool, true);
+    define_person_property_with_default!(IsRunner, bool, false);
 
     #[test]
     fn test_cant_get_contact_in_pop_of_one() {
@@ -42,6 +44,16 @@ mod test {
         let transmitter = context.add_person((Alive, true)).unwrap();
         let result = context.get_contact(transmitter, ());
         assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_one_contact_different_query() {
+        let mut context = Context::new();
+        context.init_random(108);
+        let transmitter = context.add_person((IsRunner, false)).unwrap();
+        let contact = context.add_person((IsRunner, true)).unwrap();
+        let result = context.get_contact(transmitter, (IsRunner, true));
+        assert_eq!(result, Some(contact));
     }
 
     #[test]
