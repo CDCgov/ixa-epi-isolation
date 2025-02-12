@@ -43,7 +43,7 @@ fn schedule_recovery(context: &mut Context, person: PersonId) {
 }
 
 /// Load a rate function.
-/// Eventually, we will load multiple values from a file / files
+/// TODO<ryl8@cdc.gov>: Eventually, we will load multiple values from a file / files
 /// and randomly assign them to people
 pub fn load_rate_fns(context: &mut Context) {
     let &ParametersValues {

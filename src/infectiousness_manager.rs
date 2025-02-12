@@ -267,6 +267,28 @@ mod test {
     }
 
     #[test]
+    fn test_recover_person() {
+        let mut context = setup_context();
+        let p1 = context.add_person(()).unwrap();
+        context.add_plan(2.0, move |context| {
+            context.infect_person(p1);
+        });
+        context.add_plan(3.0, move |context| {
+            context.recover_person(p1);
+        });
+        context.execute();
+        let InfectionDataValue::Recovered {
+            infection_time,
+            recovery_time,
+        } = context.get_person_property(p1, InfectionData)
+        else {
+            panic!("Person {p1} is not recovered")
+        };
+        assert_eq!(infection_time, 2.0);
+        assert_eq!(recovery_time, 3.0);
+    }
+
+    #[test]
     fn test_get_elapsed_infection_time() {
         let mut context = setup_context();
         let p1 = context.add_person(()).unwrap();
