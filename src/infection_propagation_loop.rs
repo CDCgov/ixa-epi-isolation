@@ -40,6 +40,16 @@ fn schedule_next_forecasted_infection(context: &mut Context, person: PersonId) {
     }
 }
 
+fn schedule_recovery(context: &mut Context, person: PersonId) {
+    let &ParametersValues {
+        infection_duration, ..
+    } = context.get_global_property_value(Parameters).unwrap();
+    let recovery_time = context.get_current_time() + infection_duration;
+    context.add_plan(recovery_time, move |context| {
+        context.recover_person(person);
+    });
+}
+
 /// Load a rate function.
 /// Eventually, we will load multiple values from a file / files
 /// and randomly assign them to people
@@ -81,6 +91,7 @@ pub fn init(context: &mut Context) {
             return;
         }
         schedule_next_forecasted_infection(context, event.person_id);
+        schedule_recovery(context, event.person_id);
     });
 }
 
