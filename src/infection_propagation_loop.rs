@@ -1,7 +1,7 @@
 use crate::infectiousness_manager::{
     evaluate_forecast, get_forecast, select_next_contact, Forecast, InfectionContextExt,
 };
-use crate::parameters::Parameters;
+use crate::parameters::{Parameters, ParametersValues};
 use crate::rate_fns::{ConstantRate, InfectiousnessRateExt};
 use ixa::{
     define_person_property_with_default, define_rng, trace, Context, ContextGlobalPropertiesExt,
@@ -55,17 +55,20 @@ fn schedule_next_forecasted_infection(context: &mut Context, person: PersonId) {
     }
 }
 
-/// Load the set of rate functions we will randomly assign to people
-/// Eventually, these will actually be loaded from a file
+/// Load a rate function.
+/// Eventually, we will load multiple values from a file / files
+/// and randomly assign them to people
 pub fn load_rate_fns(context: &mut Context) {
-    let parameters = context.get_global_property_value(Parameters).unwrap();
-    let global_transmissibility = parameters.global_transmissibility;
-    let max_time = parameters.infection_duration;
+    let &ParametersValues {
+        rate_of_infection,
+        infection_duration,
+        ..
+    } = context.get_global_property_value(Parameters).unwrap();
 
-    let create_rate_fn =
-        |rate: f64| Box::new(ConstantRate::new(rate * global_transmissibility, max_time));
-    context.add_rate_fn(create_rate_fn(1.0));
-    context.add_rate_fn(create_rate_fn(2.0));
+    context.add_rate_fn(Box::new(ConstantRate::new(
+        rate_of_infection,
+        infection_duration,
+    )));
 }
 
 /// Seeds the initial population with a number of infected people.
@@ -126,7 +129,7 @@ mod test {
             initial_infections: 3,
             max_time: 100.0,
             seed: 0,
-            global_transmissibility: 1.0,
+            rate_of_infection: 1.0,
             infection_duration: 5.0,
             report_period: 1.0,
             synth_population_file: PathBuf::from("."),

@@ -13,8 +13,8 @@ pub struct ParametersValues {
     pub max_time: f64,
     /// The random seed for the simulation.
     pub seed: u64,
-    /// A global scale factor on the intrinsic infectiousness rate of each person
-    pub global_transmissibility: f64,
+    /// A constant rate of infection applied to all individuals.
+    pub rate_of_infection: f64,
     /// The duration of the infection in days
     pub infection_duration: f64,
     /// The period at which to report tabulated values
@@ -24,9 +24,9 @@ pub struct ParametersValues {
 }
 
 fn validate_inputs(parameters: &ParametersValues) -> Result<(), IxaError> {
-    if parameters.global_transmissibility < 0.0 {
+    if parameters.rate_of_infection < 0.0 {
         return Err(IxaError::IxaError(
-            "global_transmissibility must be non-negative.".to_string(),
+            "rate_of_infection must be non-negative.".to_string(),
         ));
     }
     Ok(())
@@ -44,12 +44,12 @@ mod test {
     use crate::parameters::ParametersValues;
 
     #[test]
-    fn test_validate_global_transmissibility() {
+    fn test_validate_rate_of_infection() {
         let parameters = ParametersValues {
             initial_infections: 1,
             max_time: 100.0,
             seed: 0,
-            global_transmissibility: -1.0,
+            rate_of_infection: -1.0,
             infection_duration: 5.0,
             report_period: 1.0,
             synth_population_file: PathBuf::from("."),
@@ -57,10 +57,10 @@ mod test {
         let e = validate_inputs(&parameters).err();
         match e {
             Some(IxaError::IxaError(msg)) => {
-                assert_eq!(msg, "global_transmissibility must be non-negative.".to_string());
+                assert_eq!(msg, "rate_of_infection must be non-negative.".to_string());
             }
             Some(ue) => panic!(
-                "Expected an error that global_transmissibility validation should fail. Instead got {:?}",
+                "Expected an error that rate_of_infection validation should fail. Instead got {:?}",
                 ue.to_string()
             ),
             None => panic!("Expected an error. Instead, validation passed with no errors."),
@@ -73,7 +73,7 @@ mod test {
             initial_infections: 1,
             max_time: 100.0,
             seed: 0,
-            global_transmissibility: -1.0,
+            rate_of_infection: -1.0,
             infection_duration: 5.0,
             report_period: 1.0,
             synth_population_file: PathBuf::from("."),
@@ -81,10 +81,10 @@ mod test {
         let e = validate_inputs(&parameters).err();
         match e {
             Some(IxaError::IxaError(msg)) => {
-                assert_eq!(msg, "global_transmissibility must be non-negative.".to_string());
+                assert_eq!(msg, "rate_of_infection must be non-negative.".to_string());
             }
             Some(ue) => panic!(
-                "Expected an error that global_transmissibility validation should fail. Instead got {:?}",
+                "Expected an error that rate_of_infection validation should fail. Instead got {:?}",
                 ue.to_string()
             ),
             None => panic!("Expected an error. Instead, validation passed with no errors."),

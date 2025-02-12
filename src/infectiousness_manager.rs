@@ -50,11 +50,7 @@ pub fn get_forecast(context: &Context, person_id: PersonId) -> Option<Forecast> 
     let scale = max_total_infectiousness_multiplier(context, person_id);
     // We need to shift the intrinsic infectiousness in time
     let elapsed = context.get_elapsed_infection_time(person_id);
-    let total_rate_fn = ScaledRateFn {
-        base: rate_fn,
-        scale,
-        offset: elapsed,
-    };
+    let total_rate_fn = ScaledRateFn::new(rate_fn, scale, elapsed);
 
     // Draw an exponential and use that to determine the next time
     let exp = Exp::new(1.0).unwrap();
@@ -81,11 +77,7 @@ pub fn evaluate_forecast(
     let rate_fn = context.get_person_rate_fn(person_id);
 
     let total_multiplier = calc_total_infectiousness_multiplier(context, person_id);
-    let total_rate_fn = ScaledRateFn {
-        base: rate_fn,
-        scale: total_multiplier,
-        offset: 0.0,
-    };
+    let total_rate_fn = ScaledRateFn::new(rate_fn, total_multiplier, 0.0);
 
     let elapsed_t = context.get_elapsed_infection_time(person_id);
     let current_infectiousness = total_rate_fn.rate(elapsed_t);
@@ -182,7 +174,7 @@ mod test {
                     initial_infections: 1,
                     max_time: 10.0,
                     seed: 0,
-                    global_transmissibility: 1.0,
+                    rate_of_infection: 1.0,
                     infection_duration: 5.0,
                     report_period: 1.0,
                     synth_population_file: PathBuf::from("."),

@@ -2,7 +2,7 @@
   "epi_isolation.Parameters": {
     "max_time": 200.0,
     "seed": 123,
-    "global_transmissibility": 1.0,
+    "rate_of_infection": 1.0,
     "initial_infections": 1,
     "infection_duration": 5.0,
     "report_period": 1.0,
