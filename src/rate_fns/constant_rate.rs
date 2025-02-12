@@ -27,8 +27,8 @@ impl InfectiousnessRateFn for ConstantRate {
     fn cum_rate(&self, t: f64) -> f64 {
         self.r * t.min(self.infection_duration)
     }
-    fn inverse_cum_rate(&self, p: f64) -> Option<f64> {
-        let t = p / self.r;
+    fn inverse_cum_rate(&self, events: f64) -> Option<f64> {
+        let t = events / self.r;
         if t > self.infection_duration {
             None
         } else {

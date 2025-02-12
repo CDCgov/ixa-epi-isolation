@@ -19,6 +19,7 @@ pub enum InfectionDataValue {
         rate_fn_id: RateFnId,
     },
     Recovered {
+        infection_time: f64,
         recovery_time: f64,
     },
 }
@@ -176,10 +177,18 @@ impl InfectionContextExt for Context {
 
     fn recover_person(&mut self, person_id: PersonId) {
         let recovery_time = self.get_current_time();
+        let InfectionDataValue::Infected { infection_time, .. } =
+            self.get_person_property(person_id, InfectionData)
+        else {
+            panic!("Person {person_id} is not infected")
+        };
         self.set_person_property(
             person_id,
             InfectionData,
-            InfectionDataValue::Recovered { recovery_time },
+            InfectionDataValue::Recovered {
+                recovery_time,
+                infection_time,
+            },
         );
     }
 

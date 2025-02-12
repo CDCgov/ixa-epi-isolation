@@ -14,14 +14,15 @@ pub trait InfectiousnessRateFn {
     /// a time other than 0.
     fn cum_rate(&self, t: f64) -> f64;
 
-    /// Returns the expected time, starting at 0, at which `p` people will be infected.
+    /// Returns the expected time, starting at 0, at which a number of infection `events` will have
+    /// occurred.
     ///
     /// E.g., Where t=day, `inverse_cum_rate(6.0)` -> 2.0 means that we would expect
     /// that it would take 2 days to infect 6 people
     ///
     /// See `ScaledRateFn` for how to calculate the inverse cumulative rate for an interval starting
     /// at a time other than 0.
-    fn inverse_cum_rate(&self, p: f64) -> Option<f64>;
+    fn inverse_cum_rate(&self, events: f64) -> Option<f64>;
 }
 
 /// A utility for scaling and shifting an infectiousness rate function
@@ -61,7 +62,7 @@ impl<T: ?Sized + InfectiousnessRateFn> InfectiousnessRateFn for ScaledRateFn<'_,
     /// Returns the expected time, starting at `self.elapsed` by which an expected number of infection
     /// `events` will occur, and sped up by a factor of `self.scale`.
     /// For example, say the current time is 2.1 and you want to calculate the time to infect the
-    /// next person (p=1.0). You would create a `ScaledRateFn` with an elapsed of 2.1 and take
+    /// next person (events=1.0). You would create a `ScaledRateFn` with an elapsed of 2.1 and take
     /// `inverse_cum_rate(1.0)`. If you want to speed up the rate by a factor of 2.0 (halve the
     /// expected time to infect that person), you would create a `ScaledRateFn` with a scale of 2.0.
     fn inverse_cum_rate(&self, events: f64) -> Option<f64> {

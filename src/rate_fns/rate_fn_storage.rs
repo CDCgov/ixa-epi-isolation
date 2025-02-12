@@ -59,7 +59,7 @@ mod tests {
         fn cum_rate(&self, _t: f64) -> f64 {
             1.0
         }
-        fn inverse_cum_rate(&self, _p: f64) -> Option<f64> {
+        fn inverse_cum_rate(&self, _events: f64) -> Option<f64> {
             Some(1.0)
         }
     }
@@ -78,17 +78,7 @@ mod tests {
         context.add_rate_fn(Box::new(rate_fn));
 
         let i = context.get_random_rate_function();
-
-        assert_eq!(context.get_rate_fn(i).rate(0.0), 1.0);
-    }
-
-    #[test]
-    fn test_get_rate_fn() {
-        let mut context = init_context();
-
-        let rate_fn = TestRateFn {};
-        let i = context.add_rate_fn(Box::new(rate_fn));
-
+        assert!(i.0 == 0);
         assert_eq!(context.get_rate_fn(i).rate(0.0), 1.0);
     }
 }
