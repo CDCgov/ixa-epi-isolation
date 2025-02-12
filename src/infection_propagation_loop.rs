@@ -96,7 +96,6 @@ mod test {
     use crate::{
         infection_propagation_loop::{init, load_rate_fns, InfectionStatus, InfectionStatusValue},
         parameters::{Parameters, ParametersValues},
-        population_loader::CensusTract,
     };
 
     use super::seed_infections;
@@ -137,7 +136,7 @@ mod test {
     fn test_init_loop() {
         let mut context = setup_context();
         for _ in 0..10 {
-            context.add_person((CensusTract, 1)).unwrap();
+            context.add_person(()).unwrap();
         }
 
         init(&mut context);

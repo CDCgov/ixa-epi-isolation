@@ -218,7 +218,6 @@ mod test {
     use crate::{
         infectiousness_manager::TOTAL_INFECTIOUSNESS_MULTIPLIER,
         parameters::{Parameters, ParametersValues},
-        population_loader::CensusTract,
         rate_fns::{ConstantRate, InfectiousnessRateExt},
     };
     use ixa::{Context, ContextGlobalPropertiesExt, ContextPeopleExt, ContextRandomExt};
@@ -247,7 +246,7 @@ mod test {
     #[test]
     fn test_infect_person() {
         let mut context = setup_context();
-        let p1 = context.add_person((CensusTract, 1)).unwrap();
+        let p1 = context.add_person(()).unwrap();
         context.add_plan(2.0, move |context| {
             context.infect_person(p1);
         });
@@ -259,7 +258,7 @@ mod test {
     #[test]
     fn test_get_elapsed_infection_time() {
         let mut context = setup_context();
-        let p1 = context.add_person((CensusTract, 1)).unwrap();
+        let p1 = context.add_person(()).unwrap();
         context.add_plan(2.0, move |context| {
             context.infect_person(p1);
         });
@@ -272,7 +271,6 @@ mod test {
     fn test_calc_total_infectiousness_multiplier() {
         let mut context = setup_context();
         let p1 = context.add_person(()).unwrap();
-        // For now, max is always just the value of the CensusTract infectiousness
         assert_eq!(
             max_total_infectiousness_multiplier(&context, p1),
             TOTAL_INFECTIOUSNESS_MULTIPLIER
@@ -282,10 +280,10 @@ mod test {
     #[test]
     fn test_forecast() {
         let mut context = setup_context();
-        let p1 = context.add_person((CensusTract, 1)).unwrap();
+        let p1 = context.add_person(()).unwrap();
         // Add two additional contacts, which should make the factor 2
-        context.add_person((CensusTract, 1)).unwrap();
-        context.add_person((CensusTract, 1)).unwrap();
+        context.add_person(()).unwrap();
+        context.add_person(()).unwrap();
 
         context.infect_person(p1);
 
@@ -299,7 +297,7 @@ mod test {
     #[should_panic = "Person 0: Forecasted infectiousness must always be greater than or equal to current infectiousness. Current: 2, Forecasted: 1.9"]
     fn test_assert_evaluate_fails_when_forecast_smaller() {
         let mut context = setup_context();
-        let p1 = context.add_person((CensusTract, 1)).unwrap();
+        let p1 = context.add_person(()).unwrap();
         context.infect_person(p1);
 
         let invalid_forecast = TOTAL_INFECTIOUSNESS_MULTIPLIER - 0.1;
