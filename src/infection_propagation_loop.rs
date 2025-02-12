@@ -12,31 +12,22 @@ use ixa::{
 define_rng!(InfectionRng);
 
 fn schedule_next_forecasted_infection(context: &mut Context, person: PersonId) {
-    let current_time = context.get_current_time();
-    match get_forecast(context, person) {
-        None => {
-            // No forecast was returned, so the person is assumed to recover.
-            // Note: this may not be quite right if  total infectiousness multiplier is 0
-            // e.g., because the person is alone
-            trace!("Person {person} has recovered at {current_time}");
-            context.recover_person(person);
-        }
-        Some(Forecast {
-            next_time,
-            forecasted_total_infectiousness,
-        }) => {
-            context.add_plan(next_time, move |context| {
-                // TODO<ryl8@cc.gov>: We will choose a setting here
-                if evaluate_forecast(context, person, forecasted_total_infectiousness) {
-                    if let Some(next_contact) = select_next_contact(context, person) {
-                        trace!("Person {person}: Forecast accepted, infecting {next_contact}");
-                        context.infect_person(next_contact);
-                    }
+    if let Some(Forecast {
+        next_time,
+        forecasted_total_infectiousness,
+    }) = get_forecast(context, person)
+    {
+        context.add_plan(next_time, move |context| {
+            // TODO<ryl8@cc.gov>: We will choose a setting here
+            if evaluate_forecast(context, person, forecasted_total_infectiousness) {
+                if let Some(next_contact) = select_next_contact(context, person) {
+                    trace!("Person {person}: Forecast accepted, infecting {next_contact}");
+                    context.infect_person(next_contact);
                 }
-                // Continue scheduling forecasts until the person recovers.
-                schedule_next_forecasted_infection(context, person);
-            });
-        }
+            }
+            // Continue scheduling forecasts until the person recovers.
+            schedule_next_forecasted_infection(context, person);
+        });
     }
 }
 
@@ -46,6 +37,7 @@ fn schedule_recovery(context: &mut Context, person: PersonId) {
     } = context.get_global_property_value(Parameters).unwrap();
     let recovery_time = context.get_current_time() + infection_duration;
     context.add_plan(recovery_time, move |context| {
+        trace!("Person {person} has recovered at {recovery_time}");
         context.recover_person(person);
     });
 }
