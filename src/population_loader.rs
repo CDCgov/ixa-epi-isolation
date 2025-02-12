@@ -1,4 +1,3 @@
-use crate::parameters::Parameters;
 use ixa::{
     define_person_property, define_person_property_with_default, Context,
     ContextGlobalPropertiesExt, ContextPeopleExt, IxaError,
@@ -6,6 +5,8 @@ use ixa::{
 
 use serde::Deserialize;
 use std::path::PathBuf;
+
+use crate::parameters::Parameters;
 
 #[derive(Deserialize, Debug)]
 #[allow(non_snake_case)]
@@ -15,8 +16,9 @@ pub struct PeopleRecord<'a> {
 }
 
 define_person_property!(Age, u8);
-define_person_property!(HomeId, usize);
 define_person_property_with_default!(Alive, bool, true);
+
+define_person_property!(Household, usize);
 define_person_property!(CensusTract, usize);
 
 fn create_person_from_record(
@@ -28,7 +30,7 @@ fn create_person_from_record(
 
     let _person_id = context.add_person((
         (Age, person_record.age),
-        (HomeId, home_id.parse()?),
+        (Household, home_id.parse()?),
         (CensusTract, tract.parse()?),
     ))?;
 
@@ -49,7 +51,6 @@ fn load_synth_population(context: &mut Context, synth_input_file: PathBuf) -> Re
 
 pub fn init(context: &mut Context) -> Result<(), IxaError> {
     let parameters = context.get_global_property_value(Parameters).unwrap();
-
     load_synth_population(context, parameters.synth_population_file.clone())
 }
 
@@ -86,7 +87,7 @@ mod test {
                 context.query_people_count((
                     (Age, age[i]),
                     (CensusTract, tract[i]),
-                    (HomeId, home_id[i]),
+                    (Household, home_id[i]),
                 ))
             );
         }

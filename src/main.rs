@@ -1,15 +1,20 @@
 mod contact;
+mod infection_propagation_loop;
+mod infectiousness_manager;
 mod parameters;
 mod population_loader;
-mod transmission_manager;
+pub mod rate_fns;
 
+use infectiousness_manager::InfectionStatus;
 use ixa::runner::run_with_args;
 use ixa::{ContextGlobalPropertiesExt, ContextPeopleExt, ContextRandomExt, ContextReportExt};
-use transmission_manager::InfectiousStatus;
+use parameters::Parameters;
+use population_loader::{Age, CensusTract};
 
-use crate::parameters::Parameters;
-use crate::population_loader::{Age, CensusTract};
-
+// You must run this with a parameters file:
+// cargo run -- --config input/input.json
+// Try enabling logs to see some output about infections:
+// cargo run -- --config input/input.json --log-level=Trace -f | grep epi_isolation
 fn main() {
     run_with_args(|context, _, _| {
         // Read the global properties.
@@ -21,12 +26,18 @@ fn main() {
         // Set the random seed.
         context.init_random(parameters.seed);
 
+        // Add a plan to shut down the simulation after `max_time`, regardless of
+        // what else is happening in the model.
+        context.add_plan(parameters.max_time, |context| {
+            context.shutdown();
+        });
+
         // Report the number of people by age, census tract, and infectious status
         // every report_period.
         context.add_periodic_report(
             "person_property_count",
             parameters.report_period,
-            (Age, CensusTract, InfectiousStatus),
+            (Age, CensusTract, InfectionStatus),
         )?;
 
         // Load the synthetic population from the `synthetic_population_file`
@@ -35,14 +46,7 @@ fn main() {
         context.index_property(Age);
         context.index_property(CensusTract);
 
-        // Initialize the person-to-person transmission workflow.
-        transmission_manager::init(context);
-
-        // Add a plan to shut down the simulation after `max_time`, regardless of
-        // what else is happening in the model.
-        context.add_plan(parameters.max_time, |context| {
-            context.shutdown();
-        });
+        infection_propagation_loop::init(context);
 
         // Print out the parameters for debugging purposes for the user.
         println!("{parameters:?}");

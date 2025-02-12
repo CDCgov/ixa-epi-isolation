@@ -1,73 +1,70 @@
-use ixa::{define_rng, Context, ContextPeopleExt, IxaError, PersonId};
-
-use crate::population_loader::Alive;
+use ixa::{define_rng, people::Query, Context, ContextPeopleExt, ContextRandomExt, PersonId};
 
 define_rng!(ContactRng);
 
 pub trait ContextContactExt {
-    /// Returns a potential contact for the transmitter.
-    /// Returns Ok(None) if there are no eligible contacts.
-    /// In the future, this function can be expanded to return a
-    /// contact specific to the person's household or to weight
-    /// drawing contacts be a contact matrix.
-    ///
-    /// Errors
-    /// - If there is only one person in the population.
-    fn get_contact(&mut self, transmitter_id: PersonId) -> Result<Option<PersonId>, IxaError>;
+    /// Returns a potential contact for the transmitter given a query of people
+    /// properties, for example `(Alive, true)`.
+    /// Returns None if there are no eligible contacts.
+    fn get_contact<Q: Query>(&self, transmitter_id: PersonId, query: Q) -> Option<PersonId>;
 }
 
 impl ContextContactExt for Context {
-    fn get_contact(&mut self, transmitter_id: PersonId) -> Result<Option<PersonId>, IxaError> {
-        if self.get_current_population() == 1 {
-            return Err(IxaError::IxaError(
-                "Cannot get a contact when there is only one person in the population.".to_string(),
-            ));
-        };
-        // Get list of eligible people (for now, all alive people). May be expanded in the future
-        // to instead be list of alive people in the transmitter's contact setting or household.
-        // We sample a random person from this list.
-        if self.query_people((Alive, true)).len() > 1 {
-            let mut contact_id = transmitter_id;
-            while contact_id == transmitter_id {
-                // In the future, we might like to sample people from the list by weights according
-                // to some contact matrix. We would use sample_weighted instead. We would calculate
-                // the weights _before_ the loop and then sample from the list of people like here.
-                contact_id = self.sample_person(ContactRng, (Alive, true))?;
-            }
-            Ok(Some(contact_id))
-        } else {
-            // This means that there are no eligible contacts in the population besides the transmitter.
-            Ok(None)
+    fn get_contact<Q: Query>(&self, transmitter_id: PersonId, query: Q) -> Option<PersonId> {
+        // Get list of eligible people given the provided query
+        let possible_contacts = self.query_people(query);
+        if possible_contacts.is_empty()
+            || (possible_contacts.len() == 1 && possible_contacts[0] == transmitter_id)
+        {
+            return None;
         }
+
+        // We sample a random person from the list. If the person we draw is the transmitter, we draw again.
+        let mut contact_id = transmitter_id;
+        while contact_id == transmitter_id {
+            contact_id =
+                possible_contacts[self.sample_range(ContactRng, 0..possible_contacts.len())];
+        }
+        Some(contact_id)
     }
 }
 
 #[cfg(test)]
 mod test {
     use super::ContextContactExt;
-    use crate::population_loader::Alive;
-    use ixa::{Context, ContextPeopleExt, ContextRandomExt, IxaError};
+    use ixa::{define_person_property_with_default, Context, ContextPeopleExt, ContextRandomExt};
+
+    define_person_property_with_default!(Alive, bool, true);
+    define_person_property_with_default!(IsRunner, bool, false);
 
     #[test]
     fn test_cant_get_contact_in_pop_of_one() {
         let mut context = Context::new();
-        let transmitter = context.add_person(()).unwrap();
-        let e = context.get_contact(transmitter);
-        match e {
-            Err(IxaError::IxaError(msg)) => assert_eq!(msg, "Cannot get a contact when there is only one person in the population.".to_string()),
-            Err(ue) => panic!("Expected an error that there should be no contacts when there is only one person in the population. Instead got {:?}", ue.to_string()),
-            Ok(Some(contact)) => panic!("Expected an error. Instead, got {contact:?} as valid contact."),
-            Ok(None) => panic!("Expected an error. Instead, returned None, meaning that there are no valid contacts."),
-        }
+        context.init_random(108);
+        let transmitter = context.add_person((Alive, true)).unwrap();
+        let result = context.get_contact(transmitter, ());
+        assert!(result.is_none());
     }
 
     #[test]
-    fn test_return_none() {
+    fn test_one_contact_different_query() {
         let mut context = Context::new();
         context.init_random(108);
-        let transmitter = context.add_person(()).unwrap();
-        let _ = context.add_person((Alive, false)).unwrap();
-        let observed_contact = context.get_contact(transmitter).unwrap();
+        let transmitter = context.add_person((IsRunner, false)).unwrap();
+        let contact = context.add_person((IsRunner, true)).unwrap();
+        let result = context.get_contact(transmitter, (IsRunner, true));
+        assert_eq!(result, Some(contact));
+    }
+
+    #[test]
+    fn test_return_none_transmitter_only_contact() {
+        let mut context = Context::new();
+        context.init_random(108);
+        let transmitter = context.add_person((Alive, true)).unwrap();
+        context.add_person((Alive, false)).unwrap();
+        context.add_person((Alive, false)).unwrap();
+
+        let observed_contact = context.get_contact(transmitter, (Alive, true));
         assert!(observed_contact.is_none());
     }
 
@@ -75,10 +72,14 @@ mod test {
     fn test_return_remaining_alive_person() {
         let mut context = Context::new();
         context.init_random(108);
-        let transmitter = context.add_person(()).unwrap();
-        let _ = context.add_person((Alive, false)).unwrap();
-        let presumed_contact = context.add_person(()).unwrap();
-        let observed_contact = context.get_contact(transmitter).unwrap();
-        assert_eq!(observed_contact.unwrap(), presumed_contact);
+        let transmitter = context.add_person((Alive, true)).unwrap();
+        let presumed_contact = context.add_person((Alive, true)).unwrap();
+        // Add some more people that don't match
+        context.add_person((Alive, false)).unwrap();
+        context.add_person((Alive, false)).unwrap();
+        context.add_person((Alive, false)).unwrap();
+
+        let observed_contact = context.get_contact(transmitter, (Alive, true)).unwrap();
+        assert_eq!(observed_contact, presumed_contact);
     }
 }
