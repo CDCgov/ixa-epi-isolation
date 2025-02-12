@@ -77,7 +77,7 @@ pub fn evaluate_forecast(
     context: &mut Context,
     person_id: PersonId,
     forecasted_total_infectiousness: f64,
-) -> Option<PersonId> {
+) -> bool {
     let rate_fn = context.get_person_rate_fn(person_id);
 
     let total_multiplier = calc_total_infectiousness_multiplier(context, person_id);
@@ -104,13 +104,17 @@ pub fn evaluate_forecast(
         ) {
             trace!("Person{person_id}: Forecast rejected");
 
-            return None;
+            return false;
         }
     }
 
-    // TODO<ryl8@cdc.gov>: Right now, we always get a person that happens to be
-    // alive and susceptible. This should be updated to choose a contact from
-    // a person's setting.
+    true
+}
+
+// TODO<ryl8@cdc.gov>:
+/// Choose a the next contact for a given transmitter.
+/// Returns None if the contact is not susceptible.
+pub fn select_next_contact(context: &Context, person_id: PersonId) -> Option<PersonId> {
     let next_contact = context.get_contact(person_id, ((Alive, true),))?;
 
     if context.get_person_property(next_contact, InfectionStatus)
@@ -118,7 +122,6 @@ pub fn evaluate_forecast(
     {
         return None;
     }
-
     Some(next_contact)
 }
 

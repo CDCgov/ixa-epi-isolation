@@ -1,4 +1,6 @@
-use crate::infectiousness_manager::{self, Forecast, InfectionContextExt};
+use crate::infectiousness_manager::{
+    evaluate_forecast, get_forecast, select_next_contact, Forecast, InfectionContextExt,
+};
 use crate::parameters::Parameters;
 use crate::rate_fns::{ConstantRate, InfectiousnessRateExt};
 use ixa::{
@@ -20,12 +22,7 @@ define_person_property_with_default!(
 
 define_rng!(InfectionRng);
 
-fn schedule_next_forecasted_infection(
-    context: &mut Context,
-    person: PersonId,
-    get_forecast: impl Fn(&Context, PersonId) -> Option<Forecast> + 'static,
-    evaluate_forecast: impl Fn(&mut Context, PersonId, f64) -> Option<PersonId> + 'static,
-) {
+fn schedule_next_forecasted_infection(context: &mut Context, person: PersonId) {
     let current_time = context.get_current_time();
     match get_forecast(context, person) {
         None => {
@@ -40,23 +37,19 @@ fn schedule_next_forecasted_infection(
             forecasted_total_infectiousness,
         }) => {
             context.add_plan(next_time, move |context| {
-                if let Some(next_contact) =
-                    evaluate_forecast(context, person, forecasted_total_infectiousness)
-                {
-                    trace!("Person {person}: Forecast accepted, infecting {next_contact}");
-                    context.set_person_property(
-                        next_contact,
-                        InfectionStatus,
-                        InfectionStatusValue::Infected,
-                    );
+                // TODO<ryl8@cc.gov>: We will choose a setting here
+                if evaluate_forecast(context, person, forecasted_total_infectiousness) {
+                    if let Some(next_contact) = select_next_contact(context, person) {
+                        trace!("Person {person}: Forecast accepted, infecting {next_contact}");
+                        context.set_person_property(
+                            next_contact,
+                            InfectionStatus,
+                            InfectionStatusValue::Infected,
+                        );
+                    }
                 }
                 // Continue scheduling forecasts until the person recovers.
-                schedule_next_forecasted_infection(
-                    context,
-                    person,
-                    get_forecast,
-                    evaluate_forecast,
-                );
+                schedule_next_forecasted_infection(context, person);
             });
         }
     }
@@ -106,12 +99,7 @@ pub fn init(context: &mut Context) {
 
         context.assign_infection_properties(event.person_id);
 
-        schedule_next_forecasted_infection(
-            context,
-            person,
-            infectiousness_manager::get_forecast,
-            infectiousness_manager::evaluate_forecast,
-        );
+        schedule_next_forecasted_infection(context, person);
     });
 }
 
@@ -125,11 +113,7 @@ mod test {
     };
 
     use crate::{
-        contact::ContextContactExt,
-        infection_propagation_loop::{
-            init, schedule_next_forecasted_infection, InfectionStatus, InfectionStatusValue,
-        },
-        infectiousness_manager::Forecast,
+        infection_propagation_loop::{init, InfectionStatus, InfectionStatusValue},
         parameters::{Parameters, ParametersValues},
         population_loader::CensusTract,
     };
@@ -165,47 +149,6 @@ mod test {
             .query_people((InfectionStatus, InfectionStatusValue::Infected))
             .len();
         assert_eq!(infected_count, 5);
-    }
-
-    #[test]
-    fn test_schedule_next_forecasted_infection() {
-        let mut context = setup_context();
-        let person = context.add_person(()).unwrap();
-        for _ in 0..10 {
-            context.add_person(()).unwrap();
-        }
-        context.set_person_property(person, InfectionStatus, InfectionStatusValue::Infected);
-
-        schedule_next_forecasted_infection(
-            &mut context,
-            person,
-            |context, _| {
-                // Person should recover at time 9.0 after infecting 2 other people
-                if context.get_current_time() >= 9.0 {
-                    return None;
-                }
-                Some(Forecast {
-                    // Person should be scheduled to attempt infection at 3.0
-                    next_time: context.get_current_time() + 3.0,
-                    forecasted_total_infectiousness: 1.0,
-                })
-            },
-            move |context, _, _| context.get_contact(person, ()),
-        );
-
-        context.execute();
-
-        assert_eq!(context.get_current_time(), 9.0);
-        assert_eq!(
-            context.get_person_property(person, InfectionStatus),
-            InfectionStatusValue::Recovered
-        );
-        assert_eq!(
-            context
-                .query_people((InfectionStatus, InfectionStatusValue::Infected))
-                .len(),
-            3
-        );
     }
 
     #[test]
