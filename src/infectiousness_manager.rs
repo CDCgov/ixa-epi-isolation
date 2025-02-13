@@ -223,7 +223,7 @@ mod test {
         infectiousness_manager::{
             InfectionData, InfectionDataValue, TOTAL_INFECTIOUSNESS_MULTIPLIER,
         },
-        parameters::{Parameters, ParametersValues},
+        parameters::{GlobalParams, Params},
         rate_fns::{ConstantRate, InfectiousnessRateExt},
     };
     use ixa::{Context, ContextGlobalPropertiesExt, ContextPeopleExt, ContextRandomExt};
@@ -233,8 +233,8 @@ mod test {
         context.init_random(0);
         context
             .set_global_property_value(
-                Parameters,
-                ParametersValues {
+                GlobalParams,
+                Params {
                     initial_infections: 1,
                     max_time: 10.0,
                     seed: 0,
