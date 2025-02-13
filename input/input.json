@@ -1,5 +1,5 @@
 {
-  "epi_isolation.Parameters": {
+  "epi_isolation.GlobalParams": {
     "max_time": 200.0,
     "seed": 123,
     "rate_of_infection": 1.0,

@@ -55,6 +55,16 @@ mod test {
     use crate::parameters::{ContextParametersExt, GlobalParams, Params};
 
     #[test]
+    fn test_default_input_file() {
+        let mut context = Context::new();
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("input/input.json");
+        context
+            .load_global_properties(&path)
+            .expect("Could not load input file");
+        context.get_params();
+    }
+
+    #[test]
     fn test_get_params() {
         let mut context = Context::new();
         let parameters = Params {
