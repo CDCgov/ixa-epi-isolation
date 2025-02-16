@@ -4,6 +4,7 @@ mod infectiousness_manager;
 mod parameters;
 mod population_loader;
 pub mod rate_fns;
+pub mod utils;
 mod transmission_report;
 
 use infectiousness_manager::InfectionStatus;
