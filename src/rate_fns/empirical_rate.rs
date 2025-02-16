@@ -1,6 +1,6 @@
 use ixa::IxaError;
 
-use crate::utils::{linear_interpolation, midpoint_integration::midpoint_integration};
+use crate::utils::{cumulative_integral, linear_interpolation, midpoint_integration};
 
 use super::InfectiousnessRateFn;
 
@@ -9,6 +9,7 @@ pub struct EmpiricalRate {
     times: Vec<f64>,
     // Samples of the hazard rate at the given times
     instantaneous_rate: Vec<f64>,
+    cum_rates: Vec<f64>,
 }
 
 impl EmpiricalRate {
@@ -27,12 +28,11 @@ impl EmpiricalRate {
                 "times must be sorted in ascending order".to_string(),
             ));
         }
-        if times[0] != 0.0 {
-            return Err(IxaError::IxaError("times must start at 0.0".to_string()));
-        }
+        let cum_rates = cumulative_integral(&times, &instantaneous_rate);
         Ok(Self {
             times,
             instantaneous_rate,
+            cum_rates,
         })
     }
 }
@@ -77,22 +77,13 @@ impl InfectiousnessRateFn for EmpiricalRate {
     }
 
     fn inverse_cum_rate(&self, events: f64) -> Option<f64> {
-        let cum_rates = self
-            .times
-            .windows(2)
-            .zip(self.instantaneous_rate.windows(2))
-            .scan(0.0, |state, (ts, rates)| {
-                *state += midpoint_integration(ts, rates);
-                Some(*state)
-            })
-            .collect::<Vec<f64>>();
-        if events > *cum_rates.last().unwrap() {
+        if events > *self.cum_rates.last().unwrap() {
             return None;
         }
-        let lower_index = get_lower_index(&cum_rates, events);
+        let lower_index = get_lower_index(&self.cum_rates, events);
         Some(linear_interpolation(
-            cum_rates[lower_index],
-            cum_rates[lower_index + 1],
+            self.cum_rates[lower_index],
+            self.cum_rates[lower_index + 1],
             self.times[lower_index],
             self.times[lower_index + 1],
             events,
@@ -103,7 +94,12 @@ impl InfectiousnessRateFn for EmpiricalRate {
 fn get_lower_index(xs: &[f64], xp: f64) -> usize {
     match xs.binary_search_by(|x| x.partial_cmp(&xp).unwrap()) {
         Ok(i) => i,
-        Err(i) => i - 1,
+        // xp may be less than min(xs), so binary search may return Err(0)
+        // We want to return 0 in this case and do extrapolation from the two smallest values of
+        // `xs`, so we need to ensure that the minimum index returned is 0.
+        // We subtract 1 normally because binary search returns the index of the where `xp` would
+        // fit, which is one after the closest value in `xs`.
+        Err(i) => usize::max(i - 1, 0),
     }
 }
 
