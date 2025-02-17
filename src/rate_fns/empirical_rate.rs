@@ -20,15 +20,27 @@ impl EmpiricalRate {
     pub fn new(times: Vec<f64>, instantaneous_rate: Vec<f64>) -> Result<Self, IxaError> {
         if times.len() != instantaneous_rate.len() {
             return Err(IxaError::IxaError(
-                "times and instantaneous_rate must have the same length".to_string(),
+                "`times` and `instantaneous_rate` must have the same length".to_string(),
             ));
+        }
+        if times[0] != 0.0 {
+            return Err(IxaError::IxaError("`times` must start 0.0".to_string()));
         }
         if !times.is_sorted() {
             return Err(IxaError::IxaError(
-                "times must be sorted in ascending order".to_string(),
+                "`times` must be sorted in ascending order".to_string(),
             ));
         }
-        let cum_rates = cumulative_integral(&times, &instantaneous_rate);
+        // We need to use the running cumulative integral to estimate the inverse rate, so calculate
+        // it once and then store it for later.
+        let mut cum_rates = cumulative_integral(&times, &instantaneous_rate)?;
+        // `cum_rates` is one element shorter than `times` because its elements are the integral
+        // from the start of the time series to the time at the same index in `times`. We need to
+        // add the extra infectiousness that is there at the beginning of the timeseries.
+        cum_rates
+            .iter_mut()
+            .for_each(|x| *x += instantaneous_rate[0]);
+        cum_rates.push(instantaneous_rate[0]);
         Ok(Self {
             times,
             instantaneous_rate,
@@ -91,12 +103,16 @@ impl InfectiousnessRateFn for EmpiricalRate {
     }
 }
 
+/// Get the index of the largest value in `xs` that is less than or equal to `xp`
+/// If there are multiple instances of that value in `xs`, a deterministically random one's index is
+/// returned.
 fn get_lower_index(xs: &[f64], xp: f64) -> usize {
     match xs.binary_search_by(|x| x.partial_cmp(&xp).unwrap()) {
         Ok(i) => i,
         // xp may be less than min(xs), so binary search may return Err(0)
         // We want to return 0 in this case and do extrapolation from the two smallest values of
-        // `xs`, so we need to ensure that the minimum index returned is 0.
+        // `xs`, so we need to ensure that the minimum index returned is 0. This lets us have not
+        // require samples of the rate function to start at time = 0.0.
         // We subtract 1 normally because binary search returns the index of the where `xp` would
         // fit, which is one after the closest value in `xs`.
         Err(i) => usize::max(i - 1, 0),
