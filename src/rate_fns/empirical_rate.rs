@@ -66,10 +66,7 @@ impl InfectiousnessRateFn for EmpiricalRate {
         // Integrate rate function up until lower index -- over all times in the samples of the rate
         // function less than t.
         let lower_index = get_lower_index(&self.times, t);
-        let mut cum_rate = midpoint_integration(
-            &self.times[0..=lower_index],
-            &self.instantaneous_rate[0..=lower_index],
-        );
+        let mut cum_rate = self.cum_rates[lower_index];
         // Now we need to estimate the extra area from the last time in our samples of the rate
         // function to t
         // Estimate the rate at t
