@@ -1,5 +1,9 @@
 #[must_use]
+/// Linear interpolation between two points. Returns the average y value when `x1 == x2`.
 pub fn linear_interpolation(x1: f64, x2: f64, y1: f64, y2: f64, xp: f64) -> f64 {
+    // At the tails of a cumulative rate function, we may hit a point where the cumulative rates are
+    // the same, but we still need to be able to do interpolation. We just return the average of the
+    // y values in this case (x1 == x2 == xp).
     #[allow(clippy::float_cmp)]
     if x1 == x2 {
         return (y1 + y2) / 2.0;
@@ -20,7 +24,7 @@ mod test {
     }
 
     #[test]
-    fn test_linear_exterpolation_simple() {
+    fn test_linear_extrapolation_simple() {
         let result = linear_interpolation(1.0, 2.0, 3.0, 6.0, 2.5);
         assert_almost_eq!(result, 7.5, 0.0);
     }
