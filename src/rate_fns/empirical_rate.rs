@@ -111,14 +111,16 @@ impl InfectiousnessRateFn for EmpiricalRate {
 /// returned.
 fn get_lower_index(xs: &[f64], xp: f64) -> usize {
     match xs.binary_search_by(|x| x.partial_cmp(&xp).unwrap()) {
-        Ok(i) => i,
+        // In the case where xp >= max(xs), we want to return the second to last index so that we
+        // have two points over which to do interpolation.
+        Ok(i) => usize::min(i, xs.len() - 2),
         // xp may be less than min(xs), so binary search may return Err(0)
         // We want to return 0 in this case and do extrapolation from the two smallest values of
         // `xs`, so we need to ensure that the minimum index returned is 0. This lets us have not
         // require samples of the rate function to start at time = 0.0.
         // We subtract 1 normally because binary search returns the index of the where `xp` would
         // fit, which is one after the closest value in `xs`.
-        Err(i) => usize::max(i, 1) - 1,
+        Err(i) => usize::min(usize::max(i, 1), xs.len() - 1) - 1,
     }
 }
 
@@ -139,13 +141,19 @@ mod test {
     #[test]
     fn test_get_lower_index_included() {
         let xs = vec![1.0, 2.0, 3.0];
-        assert_eq!(get_lower_index(&xs, 3.0), 2);
+        assert_eq!(get_lower_index(&xs, 3.0), 1);
     }
 
     #[test]
-    fn test_get_lower_index_not_included_not_inclusive() {
+    fn test_get_lower_index_not_included_not_inclusive_below() {
         let xs = vec![1.0, 2.0, 3.0];
         assert_eq!(get_lower_index(&xs, 0.5), 0);
+    }
+
+    #[test]
+    fn test_get_lower_index_not_included_not_inclusive_above() {
+        let xs = vec![1.0, 2.0, 3.0];
+        assert_eq!(get_lower_index(&xs, 3.5), 1);
     }
 
     #[test]
@@ -209,6 +217,12 @@ mod test {
     fn test_internal_index_rate_t_provided() {
         let empirical = EmpiricalRate::new(vec![0.0, 1.0, 2.0], vec![0.0, 1.0, 2.0]).unwrap();
         assert_eq!(empirical.lower_index_and_rate(1.0), (1, 1.0));
+    }
+
+    #[test]
+    fn test_internal_index_rate_t_above_bounds() {
+        let empirical = EmpiricalRate::new(vec![0.0, 1.0, 2.0], vec![0.0, 1.0, 2.0]).unwrap();
+        assert_eq!(empirical.lower_index_and_rate(2.5), (1, 2.5));
     }
 
     #[test]
