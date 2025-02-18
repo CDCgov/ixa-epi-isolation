@@ -48,39 +48,40 @@ impl EmpiricalRate {
         })
     }
     #[allow(dead_code)]
+    /// Helper function to get out the cumulative rates at each time.
     fn get_cum_rates(&self) -> Vec<f64> {
         self.cum_rates.clone()
+    }
+    /// Helper function to return all the elements we may need from the rate function interpolation
+    /// routine.
+    fn lower_index_and_rate(&self, t: f64) -> (usize, f64) {
+        // Find indeces of times that window `t`
+        let lower_index = get_lower_index(&self.times, t);
+        // Linear interpolation between those two points
+        (
+            lower_index,
+            linear_interpolation(
+                self.times[lower_index],
+                self.times[lower_index + 1],
+                self.instantaneous_rate[lower_index],
+                self.instantaneous_rate[lower_index + 1],
+                t,
+            ),
+        )
     }
 }
 
 impl InfectiousnessRateFn for EmpiricalRate {
     fn rate(&self, t: f64) -> f64 {
-        // Find indeces of times that window `t`
-        let lower_index = get_lower_index(&self.times, t);
-        // Linear interpolation between those two points
-        linear_interpolation(
-            self.times[lower_index],
-            self.times[lower_index + 1],
-            self.instantaneous_rate[lower_index],
-            self.instantaneous_rate[lower_index + 1],
-            t,
-        )
+        self.lower_index_and_rate(t).1
     }
     fn cum_rate(&self, t: f64) -> f64 {
         // Integrate rate function up until lower index -- over all times in the samples of the rate
         // function less than t.
-        let lower_index = get_lower_index(&self.times, t);
+        let (lower_index, estimated_rate) = self.lower_index_and_rate(t);
         let mut cum_rate = self.cum_rates[lower_index];
         // Now we need to estimate the extra area from the last time in our samples of the rate
         // function to t
-        // Estimate the rate at t
-        let estimated_rate = linear_interpolation(
-            self.times[lower_index],
-            self.times[lower_index + 1],
-            self.instantaneous_rate[lower_index],
-            self.instantaneous_rate[lower_index + 1],
-            t,
-        );
         // Integrate from the last time in our samples of the rate function to t
         cum_rate += trapezoid_integral(
             &[self.times[lower_index], t],
@@ -196,6 +197,18 @@ mod test {
             ),
             None => panic!("Expected an error. Instead, passed with no errors."),
         }
+    }
+
+    #[test]
+    fn test_internal_index_rate_t_within_bounds() {
+        let empirical = EmpiricalRate::new(vec![0.0, 1.0, 2.0], vec![0.0, 1.0, 2.0]).unwrap();
+        assert_eq!(empirical.lower_index_and_rate(1.5), (1, 1.5));
+    }
+
+    #[test]
+    fn test_internal_index_rate_t_provided() {
+        let empirical = EmpiricalRate::new(vec![0.0, 1.0, 2.0], vec![0.0, 1.0, 2.0]).unwrap();
+        assert_eq!(empirical.lower_index_and_rate(1.0), (1, 1.0));
     }
 
     #[test]
