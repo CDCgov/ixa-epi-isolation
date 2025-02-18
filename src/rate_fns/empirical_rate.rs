@@ -35,12 +35,9 @@ impl EmpiricalRate {
         // it once and then store it for later.
         let mut cum_rates = cumulative_trapezoid_integral(&times, &instantaneous_rate)?;
         // `cum_rates` is one element shorter than `times` because its elements are the integral
-        // from the start of the time series to the time at the same index in `times`. We need to
-        // add the extra infectiousness that is there at the beginning of the timeseries.
-        cum_rates
-            .iter_mut()
-            .for_each(|x| *x += instantaneous_rate[0]);
-        cum_rates.insert(0, instantaneous_rate[0]);
+        // from the start of the time series to the time at the same index in `times`. At time = 0,
+        // there can be no infectiousness in the past.
+        cum_rates.insert(0, 0.0);
         Ok(Self {
             times,
             instantaneous_rate,
@@ -270,7 +267,7 @@ mod test {
     #[test]
     fn test_inverse_cum_rate_in_bounds_invertible() {
         let empirical = EmpiricalRate::new(vec![0.0, 1.0, 2.0], vec![1.0, 1.0, 1.0]).unwrap();
-        assert_eq!(empirical.inverse_cum_rate(1.5), Some(0.5));
+        assert_eq!(empirical.inverse_cum_rate(1.5), Some(1.5));
     }
 
     #[test]
