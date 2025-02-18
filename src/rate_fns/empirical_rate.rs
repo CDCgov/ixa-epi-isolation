@@ -1,6 +1,6 @@
 use ixa::IxaError;
 
-use crate::utils::{cumulative_integral, linear_interpolation, midpoint_integration};
+use crate::utils::{cumulative_trapezoid_integral, linear_interpolation, trapezoid_integral};
 
 use super::InfectiousnessRateFn;
 
@@ -33,7 +33,7 @@ impl EmpiricalRate {
         }
         // We need to use the running cumulative integral to estimate the inverse rate, so calculate
         // it once and then store it for later.
-        let mut cum_rates = cumulative_integral(&times, &instantaneous_rate)?;
+        let mut cum_rates = cumulative_trapezoid_integral(&times, &instantaneous_rate)?;
         // `cum_rates` is one element shorter than `times` because its elements are the integral
         // from the start of the time series to the time at the same index in `times`. We need to
         // add the extra infectiousness that is there at the beginning of the timeseries.
@@ -82,7 +82,7 @@ impl InfectiousnessRateFn for EmpiricalRate {
             t,
         );
         // Integrate from the last time in our samples of the rate function to t
-        cum_rate += midpoint_integration(
+        cum_rate += trapezoid_integral(
             &[self.times[lower_index], t],
             &[self.instantaneous_rate[lower_index], estimated_rate],
         )
