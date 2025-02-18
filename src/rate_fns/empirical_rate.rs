@@ -54,17 +54,18 @@ impl EmpiricalRate {
     }
     /// Helper function to return all the elements we may need from the rate function interpolation
     /// routine.
-    fn lower_index_and_rate(&self, t: f64) -> (usize, f64) {
+    fn lower_index_and_rate(&self, t: f64) -> (usize, usize, f64) {
         // Find indeces of times that window `t`
-        let lower_index = get_lower_index(&self.times, t);
+        let (integration_index, interpolation_index) = get_lower_index(&self.times, t);
         // Linear interpolation between those two points
         (
-            lower_index,
+            integration_index,
+            interpolation_index,
             linear_interpolation(
-                self.times[lower_index],
-                self.times[lower_index + 1],
-                self.instantaneous_rate[lower_index],
-                self.instantaneous_rate[lower_index + 1],
+                self.times[interpolation_index],
+                self.times[interpolation_index + 1],
+                self.instantaneous_rate[interpolation_index],
+                self.instantaneous_rate[interpolation_index + 1],
                 t,
             ),
         )
@@ -73,19 +74,19 @@ impl EmpiricalRate {
 
 impl InfectiousnessRateFn for EmpiricalRate {
     fn rate(&self, t: f64) -> f64 {
-        self.lower_index_and_rate(t).1
+        self.lower_index_and_rate(t).2
     }
     fn cum_rate(&self, t: f64) -> f64 {
         // Integrate rate function up until lower index -- over all times in the samples of the rate
         // function less than t.
-        let (lower_index, estimated_rate) = self.lower_index_and_rate(t);
-        let mut cum_rate = self.cum_rates[lower_index];
+        let (integration_index, _, estimated_rate) = self.lower_index_and_rate(t);
+        let mut cum_rate = self.cum_rates[integration_index];
         // Now we need to estimate the extra area from the last time in our samples of the rate
         // function to t
         // Integrate from the last time in our samples of the rate function to t
         cum_rate += trapezoid_integral(
-            &[self.times[lower_index], t],
-            &[self.instantaneous_rate[lower_index], estimated_rate],
+            &[self.times[integration_index], t],
+            &[self.instantaneous_rate[integration_index], estimated_rate],
         )
         .unwrap();
         cum_rate
@@ -95,12 +96,12 @@ impl InfectiousnessRateFn for EmpiricalRate {
         if events > *self.cum_rates.last().unwrap() {
             return None;
         }
-        let lower_index = get_lower_index(&self.cum_rates, events);
+        let (_, interpolation_index) = get_lower_index(&self.cum_rates, events);
         Some(linear_interpolation(
-            self.cum_rates[lower_index],
-            self.cum_rates[lower_index + 1],
-            self.times[lower_index],
-            self.times[lower_index + 1],
+            self.cum_rates[interpolation_index],
+            self.cum_rates[interpolation_index + 1],
+            self.times[interpolation_index],
+            self.times[interpolation_index + 1],
             events,
         ))
     }
@@ -109,19 +110,24 @@ impl InfectiousnessRateFn for EmpiricalRate {
 /// Get the index of the largest value in `xs` that is less than or equal to `xp`
 /// If there are multiple instances of that value in `xs`, a deterministically random one's index is
 /// returned.
-fn get_lower_index(xs: &[f64], xp: f64) -> usize {
-    match xs.binary_search_by(|x| x.partial_cmp(&xp).unwrap()) {
-        // In the case where xp >= max(xs), we want to return the second to last index so that we
-        // have two points over which to do interpolation.
-        Ok(i) => usize::min(i, xs.len() - 2),
+fn get_lower_index(xs: &[f64], xp: f64) -> (usize, usize) {
+    let integration_index = match xs.binary_search_by(|x| x.partial_cmp(&xp).unwrap()) {
+        Ok(i) => i,
         // xp may be less than min(xs), so binary search may return Err(0)
         // We want to return 0 in this case and do extrapolation from the two smallest values of
         // `xs`, so we need to ensure that the minimum index returned is 0. This lets us have not
         // require samples of the rate function to start at time = 0.0.
         // We subtract 1 normally because binary search returns the index of the where `xp` would
         // fit, which is one after the closest value in `xs`.
-        Err(i) => usize::min(usize::max(i, 1), xs.len() - 1) - 1,
-    }
+        Err(i) => usize::max(i, 1) - 1,
+    };
+
+    // In the case where xp >= max(xs), we want to return the second to last index so that we
+    // have two points over which to do interpolation.
+    (
+        integration_index,
+        usize::min(integration_index, xs.len() - 2),
+    )
 }
 
 #[cfg(test)]
@@ -135,25 +141,25 @@ mod test {
     #[test]
     fn test_get_lower_index_not_included_but_inclusive() {
         let xs = vec![1.0, 2.0, 3.0];
-        assert_eq!(get_lower_index(&xs, 2.5), 1);
+        assert_eq!(get_lower_index(&xs, 2.5), (1, 1));
     }
 
     #[test]
     fn test_get_lower_index_included() {
         let xs = vec![1.0, 2.0, 3.0];
-        assert_eq!(get_lower_index(&xs, 3.0), 1);
+        assert_eq!(get_lower_index(&xs, 3.0), (2, 1));
     }
 
     #[test]
     fn test_get_lower_index_not_included_not_inclusive_below() {
         let xs = vec![1.0, 2.0, 3.0];
-        assert_eq!(get_lower_index(&xs, 0.5), 0);
+        assert_eq!(get_lower_index(&xs, 0.5), (0, 0));
     }
 
     #[test]
     fn test_get_lower_index_not_included_not_inclusive_above() {
         let xs = vec![1.0, 2.0, 3.0];
-        assert_eq!(get_lower_index(&xs, 3.5), 1);
+        assert_eq!(get_lower_index(&xs, 3.5), (2, 1));
     }
 
     #[test]
@@ -210,19 +216,25 @@ mod test {
     #[test]
     fn test_internal_index_rate_t_within_bounds() {
         let empirical = EmpiricalRate::new(vec![0.0, 1.0, 2.0], vec![0.0, 1.0, 2.0]).unwrap();
-        assert_eq!(empirical.lower_index_and_rate(1.5), (1, 1.5));
+        assert_eq!(empirical.lower_index_and_rate(1.5), (1, 1, 1.5));
     }
 
     #[test]
     fn test_internal_index_rate_t_provided() {
         let empirical = EmpiricalRate::new(vec![0.0, 1.0, 2.0], vec![0.0, 1.0, 2.0]).unwrap();
-        assert_eq!(empirical.lower_index_and_rate(1.0), (1, 1.0));
+        assert_eq!(empirical.lower_index_and_rate(1.0), (1, 1, 1.0));
     }
 
     #[test]
     fn test_internal_index_rate_t_above_bounds() {
         let empirical = EmpiricalRate::new(vec![0.0, 1.0, 2.0], vec![0.0, 1.0, 2.0]).unwrap();
-        assert_eq!(empirical.lower_index_and_rate(2.5), (1, 2.5));
+        assert_eq!(empirical.lower_index_and_rate(2.5), (2, 1, 2.5));
+    }
+
+    #[test]
+    fn test_internal_index_rate_t_below_bounds() {
+        let empirical = EmpiricalRate::new(vec![0.0, 1.0, 2.0], vec![0.0, 1.0, 2.0]).unwrap();
+        assert_eq!(empirical.lower_index_and_rate(-0.5), (0, 0, -0.5));
     }
 
     #[test]
