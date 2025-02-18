@@ -1,6 +1,6 @@
-pub mod linear_interpolation;
-pub use linear_interpolation::linear_interpolation;
+pub mod curve_fitting;
+pub use curve_fitting::linear_interpolation;
 
-pub mod midpoint_integration;
-pub use midpoint_integration::cumulative_integral;
-pub use midpoint_integration::midpoint_integration;
+pub mod numeric_integrators;
+pub use numeric_integrators::cumulative_trapezoid_integral;
+pub use numeric_integrators::trapezoid_integral;
