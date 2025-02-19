@@ -28,7 +28,14 @@ impl EmpiricalRate {
                 "`times` and `instantaneous_rate` must have at least two elements.".to_string(),
             ));
         }
-        if times.iter().any(|&x| x < 0.0) {
+        if !times.is_sorted() {
+            return Err(IxaError::IxaError(
+                "`times` must be sorted in ascending order.".to_string(),
+            ));
+        }
+        // Because times are sorted, we know that if the first value is greater than zero,
+        // everything must be greater than 0.
+        if times[0] < 0.0 {
             return Err(IxaError::IxaError(
                 "`times` must be non-negative.".to_string(),
             ));
@@ -36,11 +43,6 @@ impl EmpiricalRate {
         if instantaneous_rate.iter().any(|&x| x < 0.0) {
             return Err(IxaError::IxaError(
                 "`instantaneous_rate` must be non-negative.".to_string(),
-            ));
-        }
-        if !times.is_sorted() {
-            return Err(IxaError::IxaError(
-                "`times` must be sorted in ascending order.".to_string(),
             ));
         }
         let empirical_rate_no_cum = Self {
