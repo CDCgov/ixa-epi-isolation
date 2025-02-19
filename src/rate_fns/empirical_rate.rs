@@ -23,12 +23,14 @@ impl EmpiricalRate {
                 "`times` and `instantaneous_rate` must have the same length.".to_string(),
             ));
         }
-        if times[0] != 0.0 {
-            return Err(IxaError::IxaError("`times` must start at 0.0.".to_string()));
-        }
         if times.len() <= 1 {
             return Err(IxaError::IxaError(
                 "`times` and `instantaneous_rate` must have at least two elements.".to_string(),
+            ));
+        }
+        if times.iter().any(|&x| x < 0.0) {
+            return Err(IxaError::IxaError(
+                "`times` must be non-negative.".to_string(),
             ));
         }
         if instantaneous_rate.iter().any(|&x| x < 0.0) {
@@ -41,17 +43,39 @@ impl EmpiricalRate {
                 "`times` must be sorted in ascending order.".to_string(),
             ));
         }
-        // We need to use the running cumulative integral to estimate the inverse rate, so calculate
-        // it once and then store it for later.
-        let mut cum_rates = cumulative_trapezoid_integral(&times, &instantaneous_rate)?;
-        // `cum_rates` is one element shorter than `times` because its elements are the integral
-        // from the start of the time series to the time at the same index in `times`. At time = 0,
-        // there can be no infectiousness in the past.
-        cum_rates.insert(0, 0.0);
-        Ok(Self {
+        let empirical_rate_no_cum = Self {
             times,
             instantaneous_rate,
+            cum_rates: vec![],
+        };
+        // We need to use the running cumulative integral to estimate the inverse rate, so calculate
+        // it once and then store it for later.
+        let mut cum_rates = cumulative_trapezoid_integral(
+            &empirical_rate_no_cum.times,
+            &empirical_rate_no_cum.instantaneous_rate,
+        )?;
+        // `cum_rates` is one element shorter than `times` because its elements are the integral
+        // from the start of the time series to the time at the same index in `times` (omitting the
+        // integral from the first value in the time series to itself).
+        // We add that zero here:
+        cum_rates.insert(0, 0.0);
+        // Next we account for there being infectiousness potentially before the first value in the
+        // timeseries -- i.e., if the rate timeseries does not start at 0.
+        // We need to calculate that infectiousness and add it to our cumulative rates.
+        let (_, _, estimated_rate_zero) = empirical_rate_no_cum.lower_index_and_rate(0.0);
+        let pre_times_zero_infectiousness = trapezoid_integral(
+            &[0.0, empirical_rate_no_cum.times[0]],
+            &[
+                estimated_rate_zero,
+                empirical_rate_no_cum.instantaneous_rate[0],
+            ],
+        )?;
+        cum_rates
+            .iter_mut()
+            .for_each(|x| *x += pre_times_zero_infectiousness);
+        Ok(Self {
             cum_rates,
+            ..empirical_rate_no_cum
         })
     }
     #[allow(dead_code)]
@@ -195,16 +219,16 @@ mod test {
     }
 
     #[test]
-    fn test_empirical_rate_times_start_at_0() {
-        let times = vec![1.0, 2.0];
-        let instantaneous_rate = vec![0.0, 1.0];
+    fn test_empirical_rate_times_non_negative() {
+        let times = vec![-1.0, 0.0, 1.0];
+        let instantaneous_rate = vec![0.0, 1.0, 2.0];
         let e = EmpiricalRate::new(times, instantaneous_rate).err();
         match e {
             Some(IxaError::IxaError(msg)) => {
-                assert_eq!(msg, "`times` must start at 0.0.".to_string());
+                assert_eq!(msg, "`times` must be non-negative.".to_string());
             }
             Some(ue) => panic!(
-                "Expected an error that `times` must start at 0.0. Instead got {:?}",
+                "Expected an error that `times` must be non-negative. Instead got {:?}",
                 ue.to_string()
             ),
             None => panic!("Expected an error. Instead, passed with no errors."),
@@ -229,7 +253,7 @@ mod test {
     }
 
     #[test]
-    fn test_empirical_rate_times_non_negative() {
+    fn test_empirical_rate_instantaneous_rate_non_negative() {
         let times = vec![0.0, 1.0];
         let instantaneous_rate = vec![0.0, -0.2];
         let e = EmpiricalRate::new(times, instantaneous_rate).err();
@@ -305,6 +329,12 @@ mod test {
     fn test_cum_rate_vector() {
         let empirical = EmpiricalRate::new(vec![0.0, 1.0, 2.0], vec![0.0, 1.0, 2.0]).unwrap();
         assert_eq!(empirical.get_cum_rates(), vec![0.0, 0.5, 2.0]);
+    }
+
+    #[test]
+    fn test_cum_rate_vector_nonzero_start() {
+        let empirical = EmpiricalRate::new(vec![1.0, 2.0, 3.0], vec![1.0, 1.0, 1.0]).unwrap();
+        assert_eq!(empirical.get_cum_rates(), vec![1.0, 2.0, 3.0]);
     }
 
     #[test]
