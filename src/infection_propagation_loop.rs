@@ -185,11 +185,7 @@ mod test {
     #[test]
     fn test_zero_rate_no_infections() {
         let mut context = setup_context(0, 0.0);
-        for _ in 0..=context
-            .get_global_property_value(Parameters)
-            .unwrap()
-            .initial_infections
-        {
+        for _ in 0..=context.get_params().initial_infections {
             context.add_person(()).unwrap();
         }
 
@@ -209,10 +205,7 @@ mod test {
 
         assert_eq!(
             *num_new_infections.borrow(),
-            context
-                .get_global_property_value(Parameters)
-                .unwrap()
-                .initial_infections
+            context.get_params().initial_infections
         );
     }
 
