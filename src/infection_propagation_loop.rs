@@ -224,10 +224,10 @@ mod test {
         let rate = 1.5;
         // We need the total infectiousness multiplier for the person.
         let mut total_infectiousness_multiplier = None;
-        let mut num_infections_end_one_time_unit = [0usize; NUM_SIMS];
-        // Where we store the infection times
+        let mut num_infections_end_one_time_unit = Vec::<usize>::with_capacity(NUM_SIMS);
+        // Where we store the infection times.
         let infection_times = Rc::new(RefCell::new(Vec::<f64>::new()));
-        for (seed, num_infections) in num_infections_end_one_time_unit.iter_mut().enumerate() {
+        for seed in 0..NUM_SIMS {
             let infection_times_clone = Rc::clone(&infection_times);
             let mut context = setup_context(seed.try_into().unwrap(), rate);
             // We only run the simulation for 1.0 time units.
@@ -273,7 +273,7 @@ mod test {
             {
                 infected_count -= 1;
             }
-            *num_infections = infected_count;
+            num_infections_end_one_time_unit.push(infected_count);
         }
         #[allow(clippy::cast_precision_loss)]
         let avg_number_infections =
