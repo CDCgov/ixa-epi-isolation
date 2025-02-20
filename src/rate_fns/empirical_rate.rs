@@ -383,8 +383,20 @@ mod test {
     }
 
     #[test]
-    fn test_inverse_cum_rate_out_bounds() {
+    fn test_inverse_cum_rate_out_bounds_above() {
         let empirical = EmpiricalRate::new(vec![0.0, 1.0, 2.0], vec![0.0, 1.0, 2.0]).unwrap();
         assert_eq!(empirical.inverse_cum_rate(2.1), None);
+    }
+
+    #[test]
+    fn test_inverse_cum_rate_out_bounds_below() {
+        // Want to test that if we need to calculate the inverse cum rate for a number of events
+        // less than the minimum value in the cumulative rates vector, do we actually return a
+        // value less than that minimum value? In other words, does our pre-calculation of the
+        // cumulative rates vector + extra integration work for the case when that extra integration
+        // needs to return a negative value?
+        let empirical = EmpiricalRate::new(vec![1.0, 2.0, 3.0], vec![1.0, 1.0, 1.0]).unwrap();
+        assert_eq!(empirical.get_cum_rates(), vec![1.0, 2.0, 3.0]);
+        assert_eq!(empirical.inverse_cum_rate(0.5), Some(0.5));
     }
 }
