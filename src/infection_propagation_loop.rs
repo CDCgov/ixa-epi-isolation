@@ -77,7 +77,7 @@ pub fn init(context: &mut Context) {
     });
 
     context.subscribe_to_event::<PersonPropertyChangeEvent<InfectionStatus>>(|context, event| {
-        if event.current != InfectionStatusValue::Infected {
+        if event.current != InfectionStatusValue::Infectious {
             return;
         }
         schedule_next_forecasted_infection(context, event.person_id);
@@ -128,7 +128,7 @@ mod test {
         load_rate_fns(&mut context);
         seed_infections(&mut context, 5);
         let infected_count = context
-            .query_people((InfectionStatus, InfectionStatusValue::Infected))
+            .query_people((InfectionStatus, InfectionStatusValue::Infectious))
             .len();
         assert_eq!(infected_count, 5);
     }
@@ -153,7 +153,7 @@ mod test {
             0.0,
             move |context| {
                 let infected_count = context
-                    .query_people((InfectionStatus, InfectionStatusValue::Infected))
+                    .query_people((InfectionStatus, InfectionStatusValue::Infectious))
                     .len();
                 assert_eq!(
                     infected_count, expected_infected,
