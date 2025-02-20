@@ -93,21 +93,26 @@ mod test {
     use ixa::{
         Context, ContextGlobalPropertiesExt, ContextPeopleExt, ContextRandomExt, ExecutionPhase,
     };
+    use statrs::assert_almost_eq;
 
     use crate::{
-        infection_propagation_loop::{init, load_rate_fns, InfectionStatus, InfectionStatusValue},
+        infection_propagation_loop::{
+            init, load_rate_fns, schedule_next_forecasted_infection, schedule_recovery,
+            InfectionStatus, InfectionStatusValue,
+        },
+        infectiousness_manager::{max_total_infectiousness_multiplier, InfectionContextExt},
         parameters::{ContextParametersExt, GlobalParams, Params},
     };
 
     use super::seed_infections;
 
-    fn setup_context(seed: u64) -> Context {
+    fn setup_context(seed: u64, rate_of_infection: f64) -> Context {
         let mut context = Context::new();
         let parameters = Params {
             initial_infections: 3,
             max_time: 100.0,
             seed,
-            rate_of_infection: 1.0,
+            rate_of_infection,
             infection_duration: 5.0,
             report_period: 1.0,
             synth_population_file: PathBuf::from("."),
@@ -122,7 +127,7 @@ mod test {
 
     #[test]
     fn test_seed_infections() {
-        let mut context = setup_context(0);
+        let mut context = setup_context(0, 1.0);
         for _ in 0..10 {
             context.add_person(()).unwrap();
         }
@@ -136,7 +141,7 @@ mod test {
 
     #[test]
     fn test_init_loop() {
-        let mut context = setup_context(0);
+        let mut context = setup_context(0, 1.0);
         for _ in 0..10 {
             context.add_person(()).unwrap();
         }
@@ -170,6 +175,61 @@ mod test {
                 .query_people((InfectionStatus, InfectionStatusValue::Recovered))
                 .is_empty(),
             "Expected some people to recover"
+        );
+    }
+
+    #[test]
+    fn avg_number_infections_one_time_unit() {
+        // Does one infectious person generate the number of infections as expected by the rate?
+        // We're going to run many simulations that each start with one person infected and have a
+        // very large number of susceptible people (mirroring one susceptible in an infinitely-large
+        // population) but those people themselves cannot transmit secondary infections. We're going
+        // to stop those simulations at the end of 1.0 time units and compare the number of infected
+        // people to the infectious rate we used to set up the simulation.
+        const NUM_SIMS: usize = 10000;
+        let rate = 1.5;
+        // We need the total infectiousness multiplier for the person.
+        let mut total_infectiousness_multiplier = None;
+        let mut num_infections_end_one_time_unit = [0usize; NUM_SIMS];
+        for (seed, num_infections) in num_infections_end_one_time_unit.iter_mut().enumerate() {
+            let mut context = setup_context(seed.try_into().unwrap(), rate);
+            context.add_plan_with_phase(1.0, ixa::Context::shutdown, ExecutionPhase::Last);
+            for _ in 0..100 {
+                context.add_person(()).unwrap();
+            }
+            // We don't want infectious people beyond our index case to be able to transmit, so we
+            // have to do setup on our own since just calling `init` will trigger a watcher for
+            // people becoming infectious that lets them transmit.
+            load_rate_fns(&mut context);
+            let infectious_person = context.add_person(()).unwrap();
+            context.infect_person(infectious_person);
+            if total_infectiousness_multiplier.is_none() {
+                total_infectiousness_multiplier = Some(max_total_infectiousness_multiplier(
+                    &context,
+                    infectious_person,
+                ));
+            }
+            schedule_next_forecasted_infection(&mut context, infectious_person);
+            schedule_recovery(&mut context, infectious_person);
+            context.execute();
+            let mut infected_count = context
+                .query_people((InfectionStatus, InfectionStatusValue::Infected))
+                .len();
+            // If our initial infection is still infected, we have to subtract one.
+            if context.get_person_property(infectious_person, InfectionStatus)
+                == InfectionStatusValue::Infected
+            {
+                infected_count -= 1;
+            }
+            *num_infections = infected_count;
+        }
+        #[allow(clippy::cast_precision_loss)]
+        let avg_number_infections =
+            num_infections_end_one_time_unit.iter().sum::<usize>() as f64 / NUM_SIMS as f64;
+        assert_almost_eq!(
+            avg_number_infections,
+            rate * total_infectiousness_multiplier.unwrap(),
+            0.05
         );
     }
 }
