@@ -55,9 +55,9 @@ pub fn load_rate_fns(context: &mut Context) {
     )));
 }
 
-/// Seeds the initial population with a number of infected people.
+/// Seeds the initial population with a number of infectious people.
 fn seed_infections(context: &mut Context, initial_infections: usize) {
-    // First, seed an infected population
+    // First, seed an infectious population
     for _ in 0..initial_infections {
         let person = context.sample_person(InfectionRng, ()).unwrap();
         context.infect_person(person);
@@ -127,10 +127,10 @@ mod test {
         }
         load_rate_fns(&mut context);
         seed_infections(&mut context, 5);
-        let infected_count = context
+        let infectious_count = context
             .query_people((InfectionStatus, InfectionStatusValue::Infectious))
             .len();
-        assert_eq!(infected_count, 5);
+        assert_eq!(infectious_count, 5);
     }
 
     #[test]
@@ -143,7 +143,7 @@ mod test {
         init(&mut context);
 
         let &Params {
-            initial_infections: expected_infected,
+            initial_infections: expected_infectious,
             ..
         } = context.get_params();
 
@@ -152,11 +152,11 @@ mod test {
         context.add_plan_with_phase(
             0.0,
             move |context| {
-                let infected_count = context
+                let infectious_count = context
                     .query_people((InfectionStatus, InfectionStatusValue::Infectious))
                     .len();
                 assert_eq!(
-                    infected_count, expected_infected,
+                    infectious_count, expected_infectious,
                     "Infections should be seeded at 0.0"
                 );
             },
