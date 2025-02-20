@@ -14,7 +14,7 @@ use crate::{
 #[derive(Serialize, PartialEq, Debug, Clone, Copy)]
 pub enum InfectionDataValue {
     Susceptible,
-    Infected {
+    Infectious {
         infection_time: f64,
         rate_fn_id: RateFnId,
     },
@@ -27,7 +27,7 @@ pub enum InfectionDataValue {
 #[derive(Serialize, PartialEq, Debug, Clone, Copy)]
 pub enum InfectionStatusValue {
     Susceptible,
-    Infected,
+    Infectious,
     Recovered,
 }
 
@@ -43,7 +43,7 @@ define_derived_property!(
     [InfectionData],
     |data| match data {
         InfectionDataValue::Susceptible => InfectionStatusValue::Susceptible,
-        InfectionDataValue::Infected { .. } => InfectionStatusValue::Infected,
+        InfectionDataValue::Infectious { .. } => InfectionStatusValue::Infectious,
         InfectionDataValue::Recovered { .. } => InfectionStatusValue::Recovered,
     }
 );
@@ -168,7 +168,7 @@ impl InfectionContextExt for Context {
         self.set_person_property(
             person_id,
             InfectionData,
-            InfectionDataValue::Infected {
+            InfectionDataValue::Infectious {
                 infection_time,
                 rate_fn_id,
             },
@@ -177,7 +177,7 @@ impl InfectionContextExt for Context {
 
     fn recover_person(&mut self, person_id: PersonId) {
         let recovery_time = self.get_current_time();
-        let InfectionDataValue::Infected { infection_time, .. } =
+        let InfectionDataValue::Infectious { infection_time, .. } =
             self.get_person_property(person_id, InfectionData)
         else {
             panic!("Person {person_id} is not infected")
@@ -193,7 +193,7 @@ impl InfectionContextExt for Context {
     }
 
     fn get_person_rate_fn(&self, person_id: PersonId) -> &dyn InfectiousnessRateFn {
-        let InfectionDataValue::Infected { rate_fn_id, .. } =
+        let InfectionDataValue::Infectious { rate_fn_id, .. } =
             self.get_person_property(person_id, InfectionData)
         else {
             panic!("Person {person_id} is not infected")
@@ -202,7 +202,7 @@ impl InfectionContextExt for Context {
     }
 
     fn get_elapsed_infection_time(&self, person_id: PersonId) -> f64 {
-        let InfectionDataValue::Infected { infection_time, .. } =
+        let InfectionDataValue::Infectious { infection_time, .. } =
             self.get_person_property(person_id, InfectionData)
         else {
             panic!("Person {person_id} is not infected")
@@ -257,7 +257,7 @@ mod test {
             context.infect_person(p1);
         });
         context.execute();
-        let InfectionDataValue::Infected { infection_time, .. } =
+        let InfectionDataValue::Infectious { infection_time, .. } =
             context.get_person_property(p1, InfectionData)
         else {
             panic!("Person {p1} is not infected")
