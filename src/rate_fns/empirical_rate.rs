@@ -9,14 +9,17 @@ pub struct EmpiricalRate {
     times: Vec<f64>,
     // Samples of the hazard rate at the given times
     instantaneous_rate: Vec<f64>,
+    // Estimated cumulative hazard elapsed at a given time
     cum_rates: Vec<f64>,
 }
 
 impl EmpiricalRate {
     /// Creates a new empirical rate function from a sample of times and hazard rates
     /// # Errors
-    /// - If `times` and `instantaneous_rate` do not have the same length
-    /// - If `times` is not sorted in ascending order
+    /// - If `times` and `instantaneous_rate` do not have the same length and are less than two
+    ///   elements long.
+    /// - If `times` is not sorted in ascending order.
+    /// - If `times` or `instantaneous_rate` contain negative values.
     pub fn new(times: Vec<f64>, instantaneous_rate: Vec<f64>) -> Result<Self, IxaError> {
         if times.len() != instantaneous_rate.len() {
             return Err(IxaError::IxaError(
@@ -81,19 +84,24 @@ impl EmpiricalRate {
         })
     }
     #[allow(dead_code)]
-    /// Helper function to get out the cumulative rates at each time.
+    /// Used exclusively in tests for checking that we have created the cumulative rates correctly.
     fn get_cum_rates(&self) -> Vec<f64> {
         self.cum_rates.clone()
     }
-    /// Helper function to return all the elements we may need from the rate function interpolation
-    /// routine.
+    /// Private function that returns all the values used in the rate function interpolation
+    /// process. In particular, returns a tuple where the first two elements are the result of
+    /// `get_lower_index(times, t)` (i.e., the first element is the index in `times` of the greatest
+    /// value less than `t` and the second element is the minimum of that index and the length of
+    /// `times` - 2) and the third element is the estimated rate at time `t`.
     fn lower_index_and_rate(&self, t: f64) -> (usize, usize, f64) {
-        // Find indeces of times that window `t`
+        // Get index of greatest value in `times` less than or equal to `t` and an adjusted index
+        // that ensures there is a value to the right of the index in `times` for interpolation.
         let (integration_index, interpolation_index) = get_lower_index(&self.times, t);
-        // Linear interpolation between those two points
+        // Return both indices and the estimated rate at time `t`.
         (
             integration_index,
             interpolation_index,
+            // Linear interpolation between the two points that window `t`.
             linear_interpolation(
                 self.times[interpolation_index],
                 self.times[interpolation_index + 1],
@@ -107,17 +115,22 @@ impl EmpiricalRate {
 
 impl InfectiousnessRateFn for EmpiricalRate {
     fn rate(&self, t: f64) -> f64 {
-        // Ensure the rate cannot be negative
+        // Ensure the rate is not negative.
         f64::max(0.0, self.lower_index_and_rate(t).2)
     }
     fn cum_rate(&self, t: f64) -> f64 {
-        // Integrate rate function up until lower index -- over all times in the samples of the rate
-        // function less than t.
+        // We use a two-step process: first, we use the pre-calculated cumulative rates vector to
+        // get the cumulative rate up until the greatest value in `times` less than or equal to `t`.
+        // Then, we estimate the extra cumulative rate from the last time in our samples of the rate
+        // function to `t`.
+
+        // We need the get the index of the greatest value in `times` less than or equal to `t` for
+        // the first step (querying the pre-calculated cumulative rates vector value at that index).
+        // Later, we will need the estimated rate at `t` for the second step, so we get both here.
         let (integration_index, _, estimated_rate) = self.lower_index_and_rate(t);
         let mut cum_rate = self.cum_rates[integration_index];
         // Now we need to estimate the extra area from the last time in our samples of the rate
-        // function to t
-        // Integrate from the last time in our samples of the rate function to t
+        // function to t.
         cum_rate += trapezoid_integral(
             &[self.times[integration_index], t],
             &[self.instantaneous_rate[integration_index], estimated_rate],
@@ -141,27 +154,33 @@ impl InfectiousnessRateFn for EmpiricalRate {
     }
 }
 
-/// Get the index of the largest value in `xs` that is less than or equal to `xp`, and the index of
-/// the largest value in `xs` that is less than or equal to `xp` but accounts for there being at
-/// least one value in `xs` that is greater.
-/// If there are multiple instances of the greatest value less than or equal to `xp` in `xs`, a
-/// deterministically random one's index is returned.
+/// Returns a pair of indices referring to locations in `xs`. The first is the index of the largest
+/// value in `xs` that is less than or equal to `xp` (unless `xp` < `min(xs)` in which case it
+/// returns 0). This index is used for querying that value or a vector calculated from the
+/// corresponding values in `xs`. The second index is an adjusted version of the first index that
+/// ensures that there is at least one value to the right of the index in `xs`. In other words, if
+/// the first index is the last index in `xs`, the second index will be the second to last index in
+/// `xs`.
+/// Assumes that `xs` is sorted in ascending order. However, this is a private function only called
+/// within `EmpiricalRate` where the values are already checked to be sorted.
 fn get_lower_index(xs: &[f64], xp: f64) -> (usize, usize) {
     let integration_index = match xs.binary_search_by(|x| x.partial_cmp(&xp).unwrap()) {
         Ok(i) => i,
-        // xp may be less than min(xs), so binary search may return Err(0)
-        // We want to return 0 in this case and do extrapolation from the two smallest values of
-        // `xs`, so we need to ensure that the minimum index returned is 0. This lets us have not
-        // require samples of the rate function to start at time = 0.0.
+        // xp may be less than min(xs), so binary search may return Err(0). This case can arise
+        // because we do not require that the samples of the rate function start at time = 0.0 or if
+        // the `events` in `inverse_cum_rate` are less than the first value in `cum_rates`.
+        // We still want to be able to query a value of `cum_rates`, so we need to return 0.
         // We subtract 1 normally because binary search returns the index of the where `xp` would
         // fit, which is one after the closest value in `xs`.
         Err(i) => usize::max(i, 1) - 1,
     };
 
-    // In the case where xp >= max(xs), we want to return the second to last index so that we
-    // have two points over which to do interpolation.
+    // We need to return the integration index and an adjusted version of that index for
+    // interpolation.
     (
         integration_index,
+        // In the case where xp >= max(xs), we want to return the second to last index so that we
+        // have two points over which to do interpolation.
         usize::min(integration_index, xs.len() - 2),
     )
 }
