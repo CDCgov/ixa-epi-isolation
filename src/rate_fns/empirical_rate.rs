@@ -166,6 +166,9 @@ impl InfectiousnessRateFn for EmpiricalRate {
 /// `xs`.
 /// Assumes that `xs` is sorted in ascending order. However, this is a private function only called
 /// within `EmpiricalRate` where the values are already checked to be sorted.
+/// If there are multiple values in `xs` that satisfy being the largest value less than or equal to
+/// `xp`, the function returns a deterministically random index from that set of values because we
+/// are using binary search.
 fn get_lower_index(xs: &[f64], xp: f64) -> (usize, usize) {
     let integration_index = match xs.binary_search_by(|x| x.partial_cmp(&xp).unwrap()) {
         Ok(i) => i,
