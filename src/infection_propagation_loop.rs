@@ -88,10 +88,11 @@ pub fn init(context: &mut Context) {
 #[cfg(test)]
 #[allow(clippy::float_cmp)]
 mod test {
-    use std::path::PathBuf;
+    use std::{cell::RefCell, path::PathBuf, rc::Rc};
 
     use ixa::{
         Context, ContextGlobalPropertiesExt, ContextPeopleExt, ContextRandomExt, ExecutionPhase,
+        PersonPropertyChangeEvent,
     };
     use statrs::assert_almost_eq;
 
@@ -175,6 +176,40 @@ mod test {
                 .query_people((InfectionStatus, InfectionStatusValue::Recovered))
                 .is_empty(),
             "Expected some people to recover"
+        );
+    }
+
+    #[test]
+    fn test_zero_rate_no_infections() {
+        let mut context = setup_context(0, 0.0);
+        for _ in 0..=context
+            .get_global_property_value(Parameters)
+            .unwrap()
+            .initial_infections
+        {
+            context.add_person(()).unwrap();
+        }
+
+        init(&mut context);
+
+        let num_new_infections = Rc::new(RefCell::new(0usize));
+        let num_new_infections_clone = Rc::clone(&num_new_infections);
+        context.subscribe_to_event::<PersonPropertyChangeEvent<InfectionStatus>>(
+            move |_context, event| {
+                if event.current == InfectionStatusValue::Infected {
+                    *num_new_infections_clone.borrow_mut() += 1;
+                }
+            },
+        );
+
+        context.execute();
+
+        assert_eq!(
+            *num_new_infections.borrow(),
+            context
+                .get_global_property_value(Parameters)
+                .unwrap()
+                .initial_infections
         );
     }
 
