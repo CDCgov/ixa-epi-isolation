@@ -1,11 +1,11 @@
 use std::fmt::Debug;
 use std::path::PathBuf;
 
-use ixa::{define_global_property, IxaError};
+use ixa::{define_global_property, ContextGlobalPropertiesExt, IxaError};
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct ParametersValues {
+pub struct Params {
     /// The number of infections we seed the population with.
     pub initial_infections: usize,
     /// The maximum run time of the simulation; even if there are still infections
@@ -23,7 +23,7 @@ pub struct ParametersValues {
     pub synth_population_file: PathBuf,
 }
 
-fn validate_inputs(parameters: &ParametersValues) -> Result<(), IxaError> {
+fn validate_inputs(parameters: &Params) -> Result<(), IxaError> {
     if parameters.rate_of_infection < 0.0 {
         return Err(IxaError::IxaError(
             "rate_of_infection must be non-negative.".to_string(),
@@ -32,44 +32,63 @@ fn validate_inputs(parameters: &ParametersValues) -> Result<(), IxaError> {
     Ok(())
 }
 
-define_global_property!(Parameters, ParametersValues, validate_inputs);
+define_global_property!(GlobalParams, Params, validate_inputs);
+
+pub trait ContextParametersExt {
+    fn get_params(&self) -> &Params;
+}
+
+impl ContextParametersExt for ixa::Context {
+    fn get_params(&self) -> &Params {
+        self.get_global_property_value(GlobalParams)
+            .expect("Expected GlobalParams to be set")
+    }
+}
 
 #[cfg(test)]
 mod test {
-    use ixa::IxaError;
+    use ixa::{Context, ContextGlobalPropertiesExt, IxaError};
 
     use super::validate_inputs;
     use std::path::PathBuf;
 
-    use crate::parameters::ParametersValues;
+    use crate::parameters::{ContextParametersExt, GlobalParams, Params};
 
     #[test]
-    fn test_validate_rate_of_infection() {
-        let parameters = ParametersValues {
+    fn test_default_input_file() {
+        let mut context = Context::new();
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("input/input.json");
+        context
+            .load_global_properties(&path)
+            .expect("Could not load input file");
+        context.get_params();
+    }
+
+    #[test]
+    fn test_get_params() {
+        let mut context = Context::new();
+        let parameters = Params {
             initial_infections: 1,
             max_time: 100.0,
             seed: 0,
-            rate_of_infection: -1.0,
+            rate_of_infection: 1.0,
             infection_duration: 5.0,
             report_period: 1.0,
             synth_population_file: PathBuf::from("."),
         };
-        let e = validate_inputs(&parameters).err();
-        match e {
-            Some(IxaError::IxaError(msg)) => {
-                assert_eq!(msg, "rate_of_infection must be non-negative.".to_string());
-            }
-            Some(ue) => panic!(
-                "Expected an error that rate_of_infection validation should fail. Instead got {:?}",
-                ue.to_string()
-            ),
-            None => panic!("Expected an error. Instead, validation passed with no errors."),
-        }
+        context
+            .set_global_property_value(GlobalParams, parameters)
+            .unwrap();
+
+        let &Params {
+            initial_infections, ..
+        } = context.get_params();
+        assert_eq!(initial_infections, 1);
     }
 
     #[test]
-    fn test_validate_() {
-        let parameters = ParametersValues {
+    fn test_validate_rate_of_infection() {
+        let parameters = Params {
             initial_infections: 1,
             max_time: 100.0,
             seed: 0,

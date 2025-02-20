@@ -7,8 +7,8 @@ pub mod rate_fns;
 
 use infectiousness_manager::InfectionStatus;
 use ixa::runner::run_with_args;
-use ixa::{ContextGlobalPropertiesExt, ContextPeopleExt, ContextRandomExt, ContextReportExt};
-use parameters::Parameters;
+use ixa::{ContextPeopleExt, ContextRandomExt, ContextReportExt};
+use parameters::{ContextParametersExt, Params};
 use population_loader::{Age, CensusTract};
 
 // You must run this with a parameters file:
@@ -18,17 +18,19 @@ use population_loader::{Age, CensusTract};
 fn main() {
     run_with_args(|context, _, _| {
         // Read the global properties.
-        let parameters = context
-            .get_global_property_value(Parameters)
-            .unwrap()
-            .clone();
+        let &Params {
+            max_time,
+            seed,
+            report_period,
+            ..
+        } = context.get_params();
 
         // Set the random seed.
-        context.init_random(parameters.seed);
+        context.init_random(seed);
 
         // Add a plan to shut down the simulation after `max_time`, regardless of
         // what else is happening in the model.
-        context.add_plan(parameters.max_time, |context| {
+        context.add_plan(max_time, |context| {
             context.shutdown();
         });
 
@@ -36,7 +38,7 @@ fn main() {
         // every report_period.
         context.add_periodic_report(
             "person_property_count",
-            parameters.report_period,
+            report_period,
             (Age, CensusTract, InfectionStatus),
         )?;
 
@@ -48,8 +50,6 @@ fn main() {
 
         infection_propagation_loop::init(context);
 
-        // Print out the parameters for debugging purposes for the user.
-        println!("{parameters:?}");
         Ok(())
     })
     .unwrap();

@@ -2,12 +2,9 @@ use crate::infectiousness_manager::{
     evaluate_forecast, get_forecast, select_next_contact, Forecast, InfectionContextExt,
     InfectionStatus, InfectionStatusValue,
 };
-use crate::parameters::{Parameters, ParametersValues};
+use crate::parameters::{ContextParametersExt, Params};
 use crate::rate_fns::{ConstantRate, InfectiousnessRateExt};
-use ixa::{
-    define_rng, trace, Context, ContextGlobalPropertiesExt, ContextPeopleExt, PersonId,
-    PersonPropertyChangeEvent,
-};
+use ixa::{define_rng, trace, Context, ContextPeopleExt, PersonId, PersonPropertyChangeEvent};
 
 define_rng!(InfectionRng);
 
@@ -32,9 +29,9 @@ fn schedule_next_forecasted_infection(context: &mut Context, person: PersonId) {
 }
 
 fn schedule_recovery(context: &mut Context, person: PersonId) {
-    let &ParametersValues {
+    let &Params {
         infection_duration, ..
-    } = context.get_global_property_value(Parameters).unwrap();
+    } = context.get_params();
     let recovery_time = context.get_current_time() + infection_duration;
     context.add_plan(recovery_time, move |context| {
         trace!("Person {person} has recovered at {recovery_time}");
@@ -46,11 +43,11 @@ fn schedule_recovery(context: &mut Context, person: PersonId) {
 /// TODO<ryl8@cdc.gov>: Eventually, we will load multiple values from a file / files
 /// and randomly assign them to people
 pub fn load_rate_fns(context: &mut Context) {
-    let &ParametersValues {
+    let &Params {
         rate_of_infection,
         infection_duration,
         ..
-    } = context.get_global_property_value(Parameters).unwrap();
+    } = context.get_params();
 
     context.add_rate_fn(Box::new(ConstantRate::new(
         rate_of_infection,
@@ -68,8 +65,9 @@ fn seed_infections(context: &mut Context, initial_infections: usize) {
 }
 
 pub fn init(context: &mut Context) {
-    let parameters = context.get_global_property_value(Parameters).unwrap();
-    let initial_infections = parameters.initial_infections;
+    let &Params {
+        initial_infections, ..
+    } = context.get_params();
 
     load_rate_fns(context);
 
@@ -98,14 +96,14 @@ mod test {
 
     use crate::{
         infection_propagation_loop::{init, load_rate_fns, InfectionStatus, InfectionStatusValue},
-        parameters::{Parameters, ParametersValues},
+        parameters::{ContextParametersExt, GlobalParams, Params},
     };
 
     use super::seed_infections;
 
     fn setup_context() -> Context {
         let mut context = Context::new();
-        let parameters = ParametersValues {
+        let parameters = Params {
             initial_infections: 3,
             max_time: 100.0,
             seed: 0,
@@ -116,7 +114,7 @@ mod test {
         };
         context.init_random(parameters.seed);
         context
-            .set_global_property_value(Parameters, parameters)
+            .set_global_property_value(GlobalParams, parameters)
             .unwrap();
         context
     }
@@ -144,8 +142,10 @@ mod test {
 
         init(&mut context);
 
-        let parameters = context.get_global_property_value(Parameters).unwrap();
-        let expected_infected = parameters.initial_infections;
+        let &Params {
+            initial_infections: expected_infected,
+            ..
+        } = context.get_params();
 
         // At the end of 0.0, we should have seeded 3 infections
         // based on the initial_infections parameter.
