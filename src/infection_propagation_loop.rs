@@ -101,12 +101,12 @@ mod test {
 
     use super::seed_infections;
 
-    fn setup_context() -> Context {
+    fn setup_context(seed: u64) -> Context {
         let mut context = Context::new();
         let parameters = Params {
             initial_infections: 3,
             max_time: 100.0,
-            seed: 0,
+            seed,
             rate_of_infection: 1.0,
             infection_duration: 5.0,
             report_period: 1.0,
@@ -121,7 +121,7 @@ mod test {
 
     #[test]
     fn test_seed_infections() {
-        let mut context = setup_context();
+        let mut context = setup_context(0);
         for _ in 0..10 {
             context.add_person(()).unwrap();
         }
@@ -135,7 +135,7 @@ mod test {
 
     #[test]
     fn test_init_loop() {
-        let mut context = setup_context();
+        let mut context = setup_context(0);
         for _ in 0..10 {
             context.add_person(()).unwrap();
         }
