@@ -5,16 +5,10 @@ use ixa::IxaError;
 /// `y` changes linearly between each adjacent set of `x` values.
 /// # Errors
 /// - If `x` and `y` do not have the same length.
-/// - If `x` is not sorted in ascending order.
 pub fn trapezoid_integral(x: &[f64], y: &[f64]) -> Result<f64, IxaError> {
     if x.len() != y.len() {
         return Err(IxaError::IxaError(
             "`x` and `y` must have the same length.".to_string(),
-        ));
-    }
-    if !x.is_sorted() {
-        return Err(IxaError::IxaError(
-            "`x` must be sorted in ascending order.".to_string(),
         ));
     }
     Ok(x.windows(2)
@@ -84,24 +78,6 @@ mod tests {
             }
             Some(ue) => panic!(
                 "Expected an error that `x` and `y` must be the same length. Instead got {:?}",
-                ue.to_string()
-            ),
-            None => panic!("Expected an error. Instead, passed with no errors."),
-        }
-    }
-
-    #[test]
-    fn test_trapezoid_integral_x_sorted() {
-        let x = vec![2.0, 1.0, 3.0, 4.0];
-        let y = vec![1.0, 2.0, 3.0, 4.0];
-
-        let e = trapezoid_integral(&x, &y).err();
-        match e {
-            Some(IxaError::IxaError(msg)) => {
-                assert_eq!(msg, "`x` must be sorted in ascending order.".to_string());
-            }
-            Some(ue) => panic!(
-                "Expected an error that `x` must be sorted in ascending order. Instead got {:?}",
                 ue.to_string()
             ),
             None => panic!("Expected an error. Instead, passed with no errors."),

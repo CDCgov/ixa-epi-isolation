@@ -102,12 +102,16 @@ impl EmpiricalRate {
             integration_index,
             interpolation_index,
             // Linear interpolation between the two points that window `t`.
-            linear_interpolation(
-                self.times[interpolation_index],
-                self.times[interpolation_index + 1],
-                self.instantaneous_rate[interpolation_index],
-                self.instantaneous_rate[interpolation_index + 1],
-                t,
+            // Ensure the returned rate is not negative even if extrapolation tells us it should be.
+            f64::max(
+                0.0,
+                linear_interpolation(
+                    self.times[interpolation_index],
+                    self.times[interpolation_index + 1],
+                    self.instantaneous_rate[interpolation_index],
+                    self.instantaneous_rate[interpolation_index + 1],
+                    t,
+                ),
             ),
         )
     }
@@ -115,8 +119,7 @@ impl EmpiricalRate {
 
 impl InfectiousnessRateFn for EmpiricalRate {
     fn rate(&self, t: f64) -> f64 {
-        // Ensure the rate is not negative.
-        f64::max(0.0, self.lower_index_and_rate(t).2)
+        self.lower_index_and_rate(t).2
     }
     fn cum_rate(&self, t: f64) -> f64 {
         // We use a two-step process: first, we use the pre-calculated cumulative rates vector to
@@ -330,8 +333,8 @@ mod test {
 
     #[test]
     fn test_internal_index_rate_t_below_bounds() {
-        let empirical = EmpiricalRate::new(vec![0.0, 1.0, 2.0], vec![0.0, 1.0, 2.0]).unwrap();
-        assert_eq!(empirical.lower_index_and_rate(-0.5), (0, 0, -0.5));
+        let empirical = EmpiricalRate::new(vec![1.0, 2.0, 3.0], vec![1.0, 2.0, 3.0]).unwrap();
+        assert_eq!(empirical.lower_index_and_rate(0.5), (0, 0, 0.5));
     }
 
     #[test]
@@ -398,5 +401,14 @@ mod test {
         let empirical = EmpiricalRate::new(vec![1.0, 2.0, 3.0], vec![1.0, 1.0, 1.0]).unwrap();
         assert_eq!(empirical.get_cum_rates(), vec![1.0, 2.0, 3.0]);
         assert_eq!(empirical.inverse_cum_rate(0.5), Some(0.5));
+    }
+
+    #[test]
+    fn test_cum_rate_below_zero_rate() {
+        let empirical = EmpiricalRate::new(vec![1.0, 2.0, 3.0], vec![1.0, 3.0, 5.0]).unwrap();
+        // At t = 0, the rate would be -1.0, but we should return 0.0.
+        assert_almost_eq!(empirical.cum_rate(0.0), 0.0, 0.0);
+        // When we integrate from 0.0 to 1.0, we get 0.5 then.
+        assert_eq!(empirical.get_cum_rates(), vec![0.5, 2.5, 6.5]);
     }
 }
