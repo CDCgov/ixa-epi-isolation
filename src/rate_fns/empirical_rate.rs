@@ -1,6 +1,9 @@
 use ixa::IxaError;
 
-use crate::utils::{cumulative_trapezoid_integral, linear_interpolation, trapezoid_integral};
+use crate::utils::{
+    cumulative_trapezoid_integral, curve_fitting::upper_quadratic_root, linear_interpolation,
+    trapezoid_integral,
+};
 
 use super::InfectiousnessRateFn;
 
@@ -146,14 +149,35 @@ impl InfectiousnessRateFn for EmpiricalRate {
         if events > *self.cum_rates.last().unwrap() {
             return None;
         }
+        // We want to return the time at which `events` would have happened. We know that
+        // `cum_rates` is the running total of how many events have happened by a given time, so we
+        // start be finding the index of the greatest value in `cum_rates` less than or equal to
+        // `events` and using that to figure out at least how much time has passed.
         let (_, interpolation_index) = get_lower_index(&self.cum_rates, events);
-        Some(linear_interpolation(
-            self.cum_rates[interpolation_index],
-            self.cum_rates[interpolation_index + 1],
-            self.times[interpolation_index],
-            self.times[interpolation_index + 1],
-            events,
-        ))
+        let time_passed = self.times[interpolation_index];
+        // We need the number of events beyond the last value in `cum_rates` to estimate the extra
+        // time that has passed.
+        let extra_events = events - self.cum_rates[interpolation_index];
+        // We know that events are the integral of rate over time, so we basically need to solve the
+        // following formula for t:
+        // extra_events = integral_{time_passed}^{time_passed+t}, rate(\tau) d\tau)
+        // We assume that rates change linearly over adjacent time windows.
+        // extra_events = integral_{0}^{t}, (rate(time_passed) + slope*\tau) d\tau)
+        // extra_events = rate(time_passed) * t + t^2 * slope / 2 = (rate(time_passed) + t * slope / 2) * t
+        // 0 = t^2 * slope / 2 + rate(time_passed) * t - extra_events
+        let delta_y = self.instantaneous_rate[interpolation_index + 1]
+            - self.instantaneous_rate[interpolation_index];
+        let delta_x = self.times[interpolation_index + 1] - self.times[interpolation_index];
+        let slope = delta_y / delta_x;
+        // Because extra_events is >= 0 by definition, we know that this quadratic equation will
+        // always have at least one root. So, we don't need to worry about the case where this
+        // function returns `None`.
+        let upper_root = upper_quadratic_root(
+            slope / 2.0,
+            self.instantaneous_rate[interpolation_index],
+            -extra_events,
+        );
+        Some(upper_root.unwrap() + time_passed)
     }
 }
 
@@ -197,7 +221,7 @@ mod test {
     use statrs::assert_almost_eq;
 
     use super::{get_lower_index, EmpiricalRate};
-    use crate::{rate_fns::InfectiousnessRateFn, utils::linear_interpolation};
+    use crate::rate_fns::InfectiousnessRateFn;
 
     #[test]
     fn test_get_lower_index_not_included_but_inclusive() {
@@ -373,19 +397,8 @@ mod test {
     #[test]
     fn test_inverse_cum_rate_in_bounds() {
         let empirical = EmpiricalRate::new(vec![0.0, 1.0, 2.0], vec![0.0, 1.0, 2.0]).unwrap();
-        assert_eq!(
-            empirical.inverse_cum_rate(1.125),
-            // The rate function is linear, so it's integral (cum rate) is quadratic, and not
-            // linearly invertible. This is why we don't get exactly 1.5 here.
-            // We show exact linear invertibility in the next test.
-            Some(linear_interpolation(0.5, 2.0, 1.0, 2.0, 1.125))
-        );
-    }
-
-    #[test]
-    fn test_inverse_cum_rate_in_bounds_invertible() {
-        let empirical = EmpiricalRate::new(vec![0.0, 1.0, 2.0], vec![1.0, 1.0, 1.0]).unwrap();
-        assert_eq!(empirical.inverse_cum_rate(1.5), Some(1.5));
+        // Inverse of example values above.
+        assert_eq!(empirical.inverse_cum_rate(1.125), Some(1.5));
     }
 
     #[test]
