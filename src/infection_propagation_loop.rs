@@ -224,7 +224,7 @@ mod test {
         let rate = 1.5;
         // We need the total infectiousness multiplier for the person.
         let mut total_infectiousness_multiplier = None;
-        let mut num_infections_end_one_time_unit = Vec::<usize>::with_capacity(NUM_SIMS);
+        let mut num_infections_end_one_time_unit: usize = 0;
         // Where we store the infection times.
         let infection_times = Rc::new(RefCell::new(Vec::<f64>::new()));
         for seed in 0..NUM_SIMS {
@@ -273,11 +273,10 @@ mod test {
             {
                 infected_count -= 1;
             }
-            num_infections_end_one_time_unit.push(infected_count);
+            num_infections_end_one_time_unit += infected_count;
         }
         #[allow(clippy::cast_precision_loss)]
-        let avg_number_infections =
-            num_infections_end_one_time_unit.iter().sum::<usize>() as f64 / NUM_SIMS as f64;
+        let avg_number_infections = num_infections_end_one_time_unit as f64 / NUM_SIMS as f64;
         assert_almost_eq!(
             avg_number_infections,
             rate * total_infectiousness_multiplier.unwrap(),
