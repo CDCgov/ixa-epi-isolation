@@ -88,26 +88,35 @@ pub fn init(context: &mut Context) {
 #[cfg(test)]
 #[allow(clippy::float_cmp)]
 mod test {
-    use std::path::PathBuf;
+    use std::{cell::RefCell, path::PathBuf, rc::Rc};
 
     use ixa::{
         Context, ContextGlobalPropertiesExt, ContextPeopleExt, ContextRandomExt, ExecutionPhase,
+        PersonPropertyChangeEvent,
+    };
+    use statrs::{
+        assert_almost_eq,
+        distribution::{ContinuousCDF, Uniform},
     };
 
     use crate::{
-        infection_propagation_loop::{init, load_rate_fns, InfectionStatus, InfectionStatusValue},
+        infection_propagation_loop::{
+            init, load_rate_fns, schedule_next_forecasted_infection, schedule_recovery,
+            InfectionStatus, InfectionStatusValue,
+        },
+        infectiousness_manager::{max_total_infectiousness_multiplier, InfectionContextExt},
         parameters::{ContextParametersExt, GlobalParams, Params},
     };
 
     use super::seed_infections;
 
-    fn setup_context() -> Context {
+    fn setup_context(seed: u64, rate_of_infection: f64) -> Context {
         let mut context = Context::new();
         let parameters = Params {
             initial_infections: 3,
             max_time: 100.0,
-            seed: 0,
-            rate_of_infection: 1.0,
+            seed,
+            rate_of_infection,
             infection_duration: 5.0,
             report_period: 1.0,
             synth_population_file: PathBuf::from("."),
@@ -121,7 +130,7 @@ mod test {
 
     #[test]
     fn test_seed_infections() {
-        let mut context = setup_context();
+        let mut context = setup_context(0, 1.0);
         for _ in 0..10 {
             context.add_person(()).unwrap();
         }
@@ -135,7 +144,7 @@ mod test {
 
     #[test]
     fn test_init_loop() {
-        let mut context = setup_context();
+        let mut context = setup_context(0, 1.0);
         for _ in 0..10 {
             context.add_person(()).unwrap();
         }
@@ -170,5 +179,131 @@ mod test {
                 .is_empty(),
             "Expected some people to recover"
         );
+    }
+
+    #[test]
+    fn test_zero_rate_no_infections() {
+        let mut context = setup_context(0, 0.0);
+        for _ in 0..=context.get_params().initial_infections {
+            context.add_person(()).unwrap();
+        }
+
+        init(&mut context);
+
+        let num_new_infections = Rc::new(RefCell::new(0usize));
+        let num_new_infections_clone = Rc::clone(&num_new_infections);
+        context.subscribe_to_event::<PersonPropertyChangeEvent<InfectionStatus>>(
+            move |_context, event| {
+                if event.current == InfectionStatusValue::Infected {
+                    *num_new_infections_clone.borrow_mut() += 1;
+                }
+            },
+        );
+
+        context.execute();
+
+        assert_eq!(
+            *num_new_infections.borrow(),
+            context.get_params().initial_infections
+        );
+    }
+
+    #[test]
+    fn test_number_timing_infections_one_time_unit() {
+        // Does one infectious person generate the number of infections as expected by the rate?
+        // We're going to run many simulations that each start with one person infected and have a
+        // very large number of susceptible people (mirroring one susceptible in an infinitely-large
+        // population) but those people themselves cannot transmit secondary infections. We're going
+        // to stop those simulations at the end of 1.0 time units and compare the number of infected
+        // people to the infectious rate we used to set up the simulation.
+        // We're also going to check the times at which they are infected -- since we only record
+        // infection times of when people are actually infected, we expect the times to be uniform
+        // on [0, 1].
+        const NUM_SIMS: usize = 10000;
+        let rate = 1.5;
+        // We need the total infectiousness multiplier for the person.
+        let mut total_infectiousness_multiplier = None;
+        let mut num_infections_end_one_time_unit: usize = 0;
+        // Where we store the infection times.
+        let infection_times = Rc::new(RefCell::new(Vec::<f64>::new()));
+        for seed in 0..NUM_SIMS {
+            let infection_times_clone = Rc::clone(&infection_times);
+            let mut context = setup_context(seed.try_into().unwrap(), rate);
+            // We only run the simulation for 1.0 time units.
+            context.add_plan_with_phase(1.0, ixa::Context::shutdown, ExecutionPhase::Last);
+            // Add a bunch of people so we mimic an infinitely large population.
+            for _ in 0..100 {
+                context.add_person(()).unwrap();
+            }
+            // We don't want infectious people beyond our index case to be able to transmit, so we
+            // have to do setup on our own since just calling `init` will trigger a watcher for
+            // people becoming infectious that lets them transmit.
+            load_rate_fns(&mut context);
+            // Add our infectious fellow.
+            let infectious_person = context.add_person(()).unwrap();
+            context.infect_person(infectious_person);
+            // Get the total infectiousness multiplier for comparison to total number of infections.
+            if total_infectiousness_multiplier.is_none() {
+                total_infectiousness_multiplier = Some(max_total_infectiousness_multiplier(
+                    &context,
+                    infectious_person,
+                ));
+            }
+            // Add a watcher for when people are infected to record the infection times.
+            context.subscribe_to_event::<PersonPropertyChangeEvent<InfectionStatus>>(
+                move |context, event| {
+                    if event.current == InfectionStatusValue::Infected {
+                        let current_time = context.get_current_time();
+                        infection_times_clone.borrow_mut().push(current_time);
+                    }
+                },
+            );
+            // Setup is now over -- onto actually letting our infectious fellow infect others.
+            schedule_next_forecasted_infection(&mut context, infectious_person);
+            schedule_recovery(&mut context, infectious_person);
+            context.execute();
+            let mut infected_count = context
+                .query_people((InfectionStatus, InfectionStatusValue::Infected))
+                .len();
+            // If our initial infection is still infected, we have to subtract one from our recorded
+            // number of infected people.
+            if context.get_person_property(infectious_person, InfectionStatus)
+                == InfectionStatusValue::Infected
+            {
+                infected_count -= 1;
+            }
+            num_infections_end_one_time_unit += infected_count;
+        }
+        #[allow(clippy::cast_precision_loss)]
+        let avg_number_infections = num_infections_end_one_time_unit as f64 / NUM_SIMS as f64;
+        assert_almost_eq!(
+            avg_number_infections,
+            rate * total_infectiousness_multiplier.unwrap(),
+            0.05
+        );
+        // Check whether the times at when people are infected fall uniformly on [0, 1].
+        check_ks_stat(&mut infection_times.borrow_mut(), |x| {
+            Uniform::new(0.0, 1.0).unwrap().cdf(x)
+        });
+    }
+
+    fn check_ks_stat(times: &mut [f64], theoretical_cdf: impl Fn(f64) -> f64) {
+        // Sort the empirical times to make an empirical CDF.
+        times.sort_by(|a, b| a.partial_cmp(b).unwrap());
+
+        // KS stat is the maximum observed CDF deviation.
+        let ks_stat = times
+            .iter()
+            .enumerate()
+            .map(|(i, time)| {
+                #[allow(clippy::cast_precision_loss)]
+                let empirical_cdf_value = (i as f64) / (times.len() as f64);
+                let theoretical_cdf_value = theoretical_cdf(*time);
+                (empirical_cdf_value - theoretical_cdf_value).abs()
+            })
+            .reduce(f64::max)
+            .unwrap();
+
+        assert_almost_eq!(ks_stat, 0.0, 0.01);
     }
 }
