@@ -1,0 +1,16 @@
+{
+	"image": "mcr.microsoft.com/devcontainers/rust:latest",
+	"customizations": {
+		"vscode": {
+			"settings": {
+				"lldb.executable": "/usr/bin/lldb"
+			},
+			"extensions": [
+				"rust-lang.rust-analyzer",
+				"tamasfe.even-better-toml",
+				"vadimcn.vscode-lldb",
+				"yzhang.markdown-all-in-one"
+			]
+		}
+	}
+}
