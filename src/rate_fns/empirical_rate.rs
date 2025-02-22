@@ -135,6 +135,7 @@ impl InfectiousnessRateFn for EmpiricalRate {
         // Later, we will need the estimated rate at `t` for the second step, so we get both here.
         let (integration_index, _, estimated_rate) = self.lower_index_and_rate(t);
         let mut cum_rate = self.cum_rates[integration_index];
+
         // Now we need to estimate the extra area from the last time in our samples of the rate
         // function to t.
         cum_rate += trapezoid_integral(
@@ -149,35 +150,68 @@ impl InfectiousnessRateFn for EmpiricalRate {
         if events > *self.cum_rates.last().unwrap() {
             return None;
         }
-        // We want to return the time at which `events` would have happened. We know that
-        // `cum_rates` is the running total of how many events have happened by a given time, so we
-        // start be finding the index of the greatest value in `cum_rates` less than or equal to
-        // `events` and using that to figure out at least how much time has passed.
-        let (_, interpolation_index) = get_lower_index(&self.cum_rates, events);
-        let time_passed = self.times[interpolation_index];
+        // We want to return the time at which `events` would have happened. At a high level, this
+        // consists of a two-step process -- we find the minimum time at which the greatest value
+        // in `cum_rates` less than or equal to `events` would have occurred. Then, we estimate the
+        // extra time that has passed since that number of events, accounting for corner cases of
+        // the rate potentially being zero over a window.
+        // We know that `cum_rates` is the running total of how many events have happened by a given
+        // time, so we start be finding the index of the greatest value in `cum_rates` less than or
+        // equal to `events` and using that to figure out at least how much time has passed.
+        let (mut integration_index, _) = get_lower_index(&self.cum_rates, events);
+
         // We need the number of events beyond the last value in `cum_rates` to estimate the extra
-        // time that has passed.
-        let extra_events = events - self.cum_rates[interpolation_index];
-        // We know that events are the integral of rate over time, so we basically need to solve the
-        // following formula for t:
+        // time that has passed. We describe a formula below for relating this value to the time.
+        let extra_events = events - self.cum_rates[integration_index];
+
+        // There's an odd corner case for when the rate is zero over a time window -- in this case,
+        // the cumulative rate is constant over that period. We've obtained the minimum time at
+        // which the number of events in question can occur, so we don't need to do any further
+        // calculations.
+        if extra_events == 0.0 {
+            return Some(self.times[integration_index]);
+        }
+
+        // In the case where extra_events > 0, we need to make sure that we're basing our minimum
+        // time on the *maximum* occurrence of the value at `cum_rates[integration_index]`.
+        // Basically, if the rate is 0 over some time period, there can't be any events occurring in
+        // that window, so we have to instead use the first time at which the rate is again
+        // positive. To obtain this value, we walk right until we find a non-zero rate.
+        // We know that `events` is now less than `max(cum_rates)` because (a) we already returned
+        // None if it was greater and (b) we just handled the case above where `events` is the max
+        // value because then `extra_events` would be 0. Therefore, we know that there is an
+        // increase in cum_rates that happens at some value to the right, so this walk right will
+        // always succeed.
+        while integration_index < self.cum_rates.len() - 1 {
+            #[allow(clippy::float_cmp)]
+            if self.cum_rates[integration_index + 1] != self.cum_rates[integration_index] {
+                break;
+            }
+            integration_index += 1;
+        }
+
+        // Now, we are ready to estimate the time at which `events` would have occurred.
+        // We know that events are the integral of rate over time, so we need to solve the following
+        // for t:
         // extra_events = integral_{time_passed}^{time_passed+t}, rate(\tau) d\tau)
         // We assume that rates change linearly over adjacent time windows.
         // extra_events = integral_{0}^{t}, (rate(time_passed) + slope*\tau) d\tau)
         // extra_events = rate(time_passed) * t + t^2 * slope / 2 = (rate(time_passed) + t * slope / 2) * t
         // 0 = t^2 * slope / 2 + rate(time_passed) * t - extra_events
-        let delta_y = self.instantaneous_rate[interpolation_index + 1]
-            - self.instantaneous_rate[interpolation_index];
-        let delta_x = self.times[interpolation_index + 1] - self.times[interpolation_index];
+        let delta_y = self.instantaneous_rate[integration_index + 1]
+            - self.instantaneous_rate[integration_index];
+        let delta_x = self.times[integration_index + 1] - self.times[integration_index];
         let slope = delta_y / delta_x;
+
         // Because extra_events is >= 0 by definition, we know that this quadratic equation will
         // always have at least one root. So, we don't need to worry about the case where this
         // function returns `None`.
         let upper_root = upper_quadratic_root(
             slope / 2.0,
-            self.instantaneous_rate[interpolation_index],
+            self.instantaneous_rate[integration_index],
             -extra_events,
         );
-        Some(upper_root.unwrap() + time_passed)
+        Some(self.times[integration_index] + upper_root.unwrap())
     }
 }
 
@@ -191,10 +225,9 @@ impl InfectiousnessRateFn for EmpiricalRate {
 /// Assumes that `xs` is sorted in ascending order. However, this is a private function only called
 /// within `EmpiricalRate` where the values are already checked to be sorted.
 /// If there are multiple values in `xs` that satisfy being the largest value less than or equal to
-/// `xp`, the function returns a deterministically random index from that set of values because we
-/// are using binary search.
+/// `xp`, the function checks to return the smallest of those values.
 fn get_lower_index(xs: &[f64], xp: f64) -> (usize, usize) {
-    let integration_index = match xs.binary_search_by(|x| x.partial_cmp(&xp).unwrap()) {
+    let mut integration_index = match xs.binary_search_by(|x| x.partial_cmp(&xp).unwrap()) {
         Ok(i) => i,
         // xp may be less than min(xs), so binary search may return Err(0). This case can arise
         // because we do not require that the samples of the rate function start at time = 0.0 or if
@@ -204,6 +237,19 @@ fn get_lower_index(xs: &[f64], xp: f64) -> (usize, usize) {
         // fit, which is one after the closest value in `xs`.
         Err(i) => usize::max(i, 1) - 1,
     };
+
+    // We want to make sure we return the smallest index in the case where there are multiple values
+    // in `xs` that are equal to the value at `integration_index`.
+    // To do this, we "walk left" along the array until we hit a value not equal to the value in
+    // question.
+    let val = xs[integration_index];
+    while integration_index > 0 {
+        #[allow(clippy::float_cmp)]
+        if xs[integration_index - 1] != val {
+            break;
+        }
+        integration_index -= 1;
+    }
 
     // We need to return the integration index and an adjusted version of that index for
     // interpolation.
@@ -426,5 +472,23 @@ mod test {
         assert_almost_eq!(empirical.cum_rate(0.0), 0.0, 0.0);
         // When we integrate from 0.0 to 1.0, we get 0.5 then.
         assert_eq!(empirical.get_cum_rates(), vec![0.5, 2.5, 6.5]);
+    }
+
+    #[test]
+    fn test_inverse_cum_rate_plateaus() {
+        let empirical =
+            EmpiricalRate::new(vec![0.0, 1.0, 2.0, 3.0, 4.0], vec![1.0, 1.0, 0.0, 0.0, 1.0])
+                .unwrap();
+        // The cumulative rates should plateau.
+        assert_eq!(empirical.get_cum_rates(), vec![0.0, 1.0, 1.5, 1.5, 2.0]);
+        // Searching for the index for `events = 1.6` should return 2.
+        // (Without our code to check for this, can confirm that in this particular example we
+        // return (3, 3).)
+        assert_eq!(get_lower_index(&empirical.get_cum_rates(), 1.6), (2, 2));
+        // Getting the time of an inverse cumulative rate of 1.5 should return 2.0 (first index).
+        assert_eq!(empirical.inverse_cum_rate(1.5), Some(2.0));
+        // And getting the inverse cumulative rate for a slightly greater value should return a time
+        // greater than 3.0 because the rate starts moving again after t = 3.0.
+        assert!(empirical.inverse_cum_rate(1.6).unwrap() > 3.0);
     }
 }
