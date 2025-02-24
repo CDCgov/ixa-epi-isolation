@@ -19,7 +19,7 @@ fn schedule_next_forecasted_infection(context: &mut Context, person: PersonId) {
             if evaluate_forecast(context, person, forecasted_total_infectiousness) {
                 if let Some(next_contact) = select_next_contact(context, person) {
                     trace!("Person {person}: Forecast accepted, infecting {next_contact}");
-                    context.infect_person(next_contact);
+                    context.create_transmission_event(person, next_contact);
                 }
             }
             // Continue scheduling forecasts until the person recovers.
@@ -111,6 +111,7 @@ mod test {
             infection_duration: 5.0,
             report_period: 1.0,
             synth_population_file: PathBuf::from("."),
+            transmission_report_name: None,
         };
         context.init_random(parameters.seed);
         context

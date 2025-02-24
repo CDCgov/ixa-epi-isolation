@@ -48,6 +48,8 @@ define_derived_property!(
     }
 );
 
+define_person_property_with_default!(InfectedBy, Option<PersonId>, None);
+
 const TOTAL_INFECTIOUSNESS_MULTIPLIER: f64 = 2.0;
 
 /// Calculate the scaling factor that accounts for the total infectiousness
@@ -155,6 +157,7 @@ pub trait InfectionContextExt {
     fn recover_person(&mut self, person_id: PersonId);
     fn get_elapsed_infection_time(&self, person_id: PersonId) -> f64;
     fn get_person_rate_fn(&self, person_id: PersonId) -> &dyn InfectiousnessRateFn;
+    fn create_transmission_event(&mut self, source: PersonId, target: PersonId);
 }
 
 impl InfectionContextExt for Context {
@@ -209,6 +212,12 @@ impl InfectionContextExt for Context {
         };
         self.get_current_time() - infection_time
     }
+
+    fn create_transmission_event(&mut self, source: PersonId, target: PersonId) {
+        self.infect_person(target);
+        self.set_person_property(target, InfectedBy, Some(source));
+        trace!("Person{source} infected Person{target}");
+    }
 }
 
 #[cfg(test)]
@@ -221,7 +230,8 @@ mod test {
     };
     use crate::{
         infectiousness_manager::{
-            InfectionData, InfectionDataValue, TOTAL_INFECTIOUSNESS_MULTIPLIER,
+            InfectedBy, InfectionData, InfectionDataValue, InfectionStatus, InfectionStatusValue,
+            TOTAL_INFECTIOUSNESS_MULTIPLIER,
         },
         parameters::{GlobalParams, Params},
         rate_fns::{ConstantRate, InfectiousnessRateExt},
@@ -242,6 +252,7 @@ mod test {
                     infection_duration: 5.0,
                     report_period: 1.0,
                     synth_population_file: PathBuf::from("."),
+                    transmission_report_name: None,
                 },
             )
             .unwrap();
@@ -335,5 +346,24 @@ mod test {
 
         let invalid_forecast = TOTAL_INFECTIOUSNESS_MULTIPLIER - 0.1;
         evaluate_forecast(&mut context, p1, invalid_forecast);
+    }
+
+    #[test]
+    fn test_create_transmission_event() {
+        let mut context = setup_context();
+        let index = context.add_person(()).unwrap();
+        let contact = context.add_person(()).unwrap();
+
+        context.create_transmission_event(index, contact);
+        context.execute();
+
+        assert_eq!(
+            context.get_person_property(contact, InfectionStatus),
+            InfectionStatusValue::Infected
+        );
+        assert_eq!(
+            context.get_person_property(contact, InfectedBy).unwrap(),
+            index
+        );
     }
 }
