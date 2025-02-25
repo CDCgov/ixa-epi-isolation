@@ -40,17 +40,14 @@ fn schedule_recovery(context: &mut Context, person: PersonId) {
 /// Instantiate the rate functions specified in the global parameter `rate_of_infection` as actual
 /// rate functions for the simulation that are assigned randomly to agents when they are infected.
 pub fn instantiate_rate_fns(context: &mut Context) -> Result<(), IxaError> {
-    let &Params {
-        rate_of_infection,
-        infection_duration,
-        ..
-    } = context.get_params();
+    let rate_of_infection = context.get_params().rate_of_infection.clone();
+    let infection_duration = context.get_params().infection_duration;
 
-    for rate in rate_of_infection {
+    for rate in rate_of_infection.clone() {
         context.add_rate_fn(match rate {
             Rates::Constant(rate) => Box::new(ConstantRate::new(rate, infection_duration)?),
             Rates::Empirical(rate_fn) => {
-                let (t, r) = rate_fn.into_iter().unzip();
+                let (t, r): (Vec<f64>, Vec<f64>) = rate_fn.into_iter().unzip();
                 Box::new(EmpiricalRate::new(t, r)?)
             },
         });
@@ -167,7 +164,7 @@ mod test {
             context.add_person(()).unwrap();
         }
 
-        init(&mut context);
+        init(&mut context).unwrap();
 
         let &Params {
             initial_infections: expected_infectious,
