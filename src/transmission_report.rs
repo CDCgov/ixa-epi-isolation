@@ -121,7 +121,7 @@ mod test {
         let source = context.add_person(()).unwrap();
         let target = context.add_person(()).unwrap();
         let infection_time = 1.0;
-        
+
         context.infect_person(source, None);
 
         context.add_plan(infection_time, move |context| {
