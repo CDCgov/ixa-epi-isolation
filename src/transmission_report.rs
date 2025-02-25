@@ -32,14 +32,17 @@ impl TransmissionReportContextExt for Context {
         else {
             panic!("Person {target_id} is not infectious")
         };
+
         // let setting = get_person_setting_id(infector).unwrap();
 
-        self.send_report(TransmissionReport {
-            time: self.get_current_time(),
-            target_id,
-            infected_by,
-            // setting_id: setting,
-        });
+        if infected_by.is_some() {
+            self.send_report(TransmissionReport {
+                time: self.get_current_time(),
+                target_id,
+                infected_by,
+                // setting_id: setting,
+            });
+        }
     }
 
     fn create_transmission_report(&mut self, file_name: &str) -> Result<(), IxaError> {
