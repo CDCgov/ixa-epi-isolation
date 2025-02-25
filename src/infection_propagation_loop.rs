@@ -2,9 +2,9 @@ use crate::infectiousness_manager::{
     evaluate_forecast, get_forecast, select_next_contact, Forecast, InfectionContextExt,
     InfectionStatus, InfectionStatusValue,
 };
-use crate::parameters::{ContextParametersExt, Params};
+use crate::parameters::{ContextParametersExt, Params, Rates};
 use crate::rate_fns::{ConstantRate, InfectiousnessRateExt};
-use ixa::{define_rng, trace, Context, ContextPeopleExt, PersonId, PersonPropertyChangeEvent};
+use ixa::{define_rng, trace, Context, ContextPeopleExt, IxaError, PersonId, PersonPropertyChangeEvent};
 
 define_rng!(InfectionRng);
 
@@ -37,20 +37,25 @@ fn schedule_recovery(context: &mut Context, person: PersonId) {
     });
 }
 
-/// Load a rate function.
-/// TODO<ryl8@cdc.gov>: Eventually, we will load multiple values from a file / files
-/// and randomly assign them to people
-pub fn load_rate_fns(context: &mut Context) {
+/// Instantiate the rate functions specified in the global parameter `rate_of_infection` as actual
+/// rate functions for the simulation that are assigned randomly to agents when they are infected.
+pub fn instantiate_rate_fns(context: &mut Context) -> Result<(), IxaError> {
     let &Params {
         rate_of_infection,
         infection_duration,
         ..
     } = context.get_params();
 
-    context.add_rate_fn(Box::new(ConstantRate::new(
-        rate_of_infection,
-        infection_duration,
-    )));
+    for rate in rate_of_infection {
+        context.add_rate_fn(match rate {
+            Rates::Constant(rate) => Box::new(ConstantRate::new(rate, infection_duration)?),
+            Rates::Empirical(rate_fn) => {
+                let (t, r) = rate_fn.into_iter().unzip();
+                Box::new(EmpiricalRate::new(t, r)?)
+            },
+        });
+    }
+    Ok(())
 }
 
 /// Seeds the initial population with a number of infectious people.
@@ -62,12 +67,12 @@ fn seed_infections(context: &mut Context, initial_infections: usize) {
     }
 }
 
-pub fn init(context: &mut Context) {
+pub fn init(context: &mut Context) -> Result<(), IxaError> {
     let &Params {
         initial_infections, ..
     } = context.get_params();
 
-    load_rate_fns(context);
+    instantiate_rate_fns(context)?;
 
     // Seed the initial population
     context.add_plan(0.0, move |context| {
@@ -81,6 +86,7 @@ pub fn init(context: &mut Context) {
         schedule_next_forecasted_infection(context, event.person_id);
         schedule_recovery(context, event.person_id);
     });
+    Ok(())
 }
 
 #[cfg(test)]
@@ -116,8 +122,8 @@ mod test {
         let parameters = Params {
             initial_infections: 3,
             max_time: 100.0,
-            seed,
-            rate_of_infection,
+            seed: 0,
+            rate_of_infection: vec![Rates::Constant(rate_of_infection)],
             infection_duration: 5.0,
             report_period: 1.0,
             synth_population_file: PathBuf::from("."),
@@ -136,7 +142,7 @@ mod test {
         for _ in 0..10 {
             context.add_person(()).unwrap();
         }
-        load_rate_fns(&mut context);
+        instantiate_rate_fns(&mut context).unwrap();
         seed_infections(&mut context, 5);
         let infectious_count = context
             .query_people((InfectionStatus, InfectionStatusValue::Infectious))
