@@ -27,10 +27,10 @@ trait TransmissionReportContextExt {
 impl TransmissionReportContextExt for Context {
     fn record_transmission_event(&mut self, event: PersonPropertyChangeEvent<InfectionData>) {
         let target_id = event.person_id;
-        let InfectionDataValue::Infected { infected_by, .. } =
+        let InfectionDataValue::Infectious { infected_by, .. } =
             self.get_person_property(target_id, InfectionData)
         else {
-            panic!("Person {target_id} is not infected")
+            panic!("Person {target_id} is not infectious")
         };
         // let setting = get_person_setting_id(infector).unwrap();
 

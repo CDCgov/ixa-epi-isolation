@@ -182,7 +182,7 @@ impl InfectionContextExt for Context {
         let InfectionDataValue::Infectious { infection_time, .. } =
             self.get_person_property(person_id, InfectionData)
         else {
-            panic!("Person {person_id} is not infected")
+            panic!("Person {person_id} is not infectious")
         };
         self.set_person_property(
             person_id,
@@ -198,7 +198,7 @@ impl InfectionContextExt for Context {
         let InfectionDataValue::Infectious { rate_fn_id, .. } =
             self.get_person_property(person_id, InfectionData)
         else {
-            panic!("Person {person_id} is not infected")
+            panic!("Person {person_id} is not infectious")
         };
         self.get_rate_fn(rate_fn_id)
     }
@@ -207,7 +207,7 @@ impl InfectionContextExt for Context {
         let InfectionDataValue::Infectious { infection_time, .. } =
             self.get_person_property(person_id, InfectionData)
         else {
-            panic!("Person {person_id} is not infected")
+            panic!("Person {person_id} is not infectious")
         };
         self.get_current_time() - infection_time
     }
@@ -264,7 +264,7 @@ mod test {
         let InfectionDataValue::Infectious { infection_time, .. } =
             context.get_person_property(p1, InfectionData)
         else {
-            panic!("Person {p1} is not infected")
+            panic!("Person {p1} is not infectious")
         };
         assert_eq!(infection_time, 2.0);
         context.get_person_rate_fn(p1);
@@ -352,13 +352,13 @@ mod test {
 
         assert_eq!(
             context.get_person_property(contact, InfectionStatus),
-            InfectionStatusValue::Infected
+            InfectionStatusValue::Infectious
         );
 
-        let InfectionDataValue::Infected { infected_by, .. } =
+        let InfectionDataValue::Infectious { infected_by, .. } =
             context.get_person_property(contact, InfectionData)
         else {
-            panic!("Person {contact} is not infected")
+            panic!("Person {contact} is not infectious")
         };
 
         assert_eq!(infected_by.unwrap(), index);
