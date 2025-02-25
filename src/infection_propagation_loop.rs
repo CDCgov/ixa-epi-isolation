@@ -195,7 +195,7 @@ mod test {
         let num_new_infections_clone = Rc::clone(&num_new_infections);
         context.subscribe_to_event::<PersonPropertyChangeEvent<InfectionStatus>>(
             move |_context, event| {
-                if event.current == InfectionStatusValue::Infected {
+                if event.current == InfectionStatusValue::Infectious {
                     *num_new_infections_clone.borrow_mut() += 1;
                 }
             },
@@ -253,7 +253,7 @@ mod test {
             // Add a watcher for when people are infected to record the infection times.
             context.subscribe_to_event::<PersonPropertyChangeEvent<InfectionStatus>>(
                 move |context, event| {
-                    if event.current == InfectionStatusValue::Infected {
+                    if event.current == InfectionStatusValue::Infectious {
                         let current_time = context.get_current_time();
                         infection_times_clone.borrow_mut().push(current_time);
                     }
@@ -264,12 +264,12 @@ mod test {
             schedule_recovery(&mut context, infectious_person);
             context.execute();
             let mut infected_count = context
-                .query_people((InfectionStatus, InfectionStatusValue::Infected))
+                .query_people((InfectionStatus, InfectionStatusValue::Infectious))
                 .len();
             // If our initial infection is still infected, we have to subtract one from our recorded
             // number of infected people.
             if context.get_person_property(infectious_person, InfectionStatus)
-                == InfectionStatusValue::Infected
+                == InfectionStatusValue::Infectious
             {
                 infected_count -= 1;
             }
