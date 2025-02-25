@@ -4,6 +4,12 @@ use std::path::PathBuf;
 use ixa::{define_global_property, ContextGlobalPropertiesExt, IxaError};
 use serde::{Deserialize, Serialize};
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub enum Rates {
+    Constant(f64),
+    Empirical(Vec<(f64, f64)>),
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Params {
     /// The number of infections we seed the population with.
@@ -13,8 +19,8 @@ pub struct Params {
     pub max_time: f64,
     /// The random seed for the simulation.
     pub seed: u64,
-    /// A constant rate of infection applied to all individuals.
-    pub rate_of_infection: f64,
+    /// A library of infection rates to assign to infected people.
+    pub rate_of_infection: Vec<Rates>,
     /// The duration of the infection in days
     pub infection_duration: f64,
     /// The period at which to report tabulated values
@@ -26,9 +32,19 @@ pub struct Params {
 }
 
 fn validate_inputs(parameters: &Params) -> Result<(), IxaError> {
-    if parameters.rate_of_infection < 0.0 {
+    if parameters.max_time < 0.0 {
         return Err(IxaError::IxaError(
-            "rate_of_infection must be non-negative.".to_string(),
+            "The max simulation running time must be non-negative.".to_string(),
+        ));
+    }
+    if parameters.infection_duration < 0.0 {
+        return Err(IxaError::IxaError(
+            "The duration of infection must be non-negative.".to_string(),
+        ));
+    }
+    if parameters.report_period < 0.0 {
+        return Err(IxaError::IxaError(
+            "The report writing period must be non-negative.".to_string(),
         ));
     }
     Ok(())
@@ -54,7 +70,7 @@ mod test {
     use super::validate_inputs;
     use std::path::PathBuf;
 
-    use crate::parameters::{ContextParametersExt, GlobalParams, Params};
+    use crate::parameters::{ContextParametersExt, GlobalParams, Params, Rates};
 
     #[test]
     fn test_default_input_file() {
@@ -73,7 +89,7 @@ mod test {
             initial_infections: 1,
             max_time: 100.0,
             seed: 0,
-            rate_of_infection: 1.0,
+            rate_of_infection: vec![Rates::Constant(1.0)],
             infection_duration: 5.0,
             report_period: 1.0,
             synth_population_file: PathBuf::from("."),
@@ -90,13 +106,13 @@ mod test {
     }
 
     #[test]
-    fn test_validate_rate_of_infection() {
+    fn test_validate_infection_duration() {
         let parameters = Params {
             initial_infections: 1,
             max_time: 100.0,
             seed: 0,
-            rate_of_infection: -1.0,
-            infection_duration: 5.0,
+            rate_of_infection: vec![Rates::Constant(1.0)],
+            infection_duration: -5.0,
             report_period: 1.0,
             synth_population_file: PathBuf::from("."),
             transmission_report_name: None,
@@ -104,13 +120,20 @@ mod test {
         let e = validate_inputs(&parameters).err();
         match e {
             Some(IxaError::IxaError(msg)) => {
-                assert_eq!(msg, "rate_of_infection must be non-negative.".to_string());
+                assert_eq!(msg, "The duration of infection must be non-negative.".to_string());
             }
             Some(ue) => panic!(
-                "Expected an error that rate_of_infection validation should fail. Instead got {:?}",
+                "Expected an error that the duration of infection validation should fail. Instead got {:?}",
                 ue.to_string()
             ),
             None => panic!("Expected an error. Instead, validation passed with no errors."),
         }
+    }
+
+    #[test]
+    fn test_deserialization_rates() {
+        let deserialized = serde_json::from_str::<Vec<Rates>>("[{\"Constant\": 1.0}, {\"Empirical\": [[0.0, 0.0], [1.0, 1.0]]}]").unwrap();
+        assert_eq!(deserialized[0], Rates::Constant(1.0));
+        assert_eq!(deserialized[1], Rates::Empirical(vec![(0.0, 0.0), (1.0, 1.0)]));
     }
 }
