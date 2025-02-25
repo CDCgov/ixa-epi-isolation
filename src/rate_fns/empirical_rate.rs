@@ -1,9 +1,6 @@
 use ixa::IxaError;
 
-use crate::utils::{
-    cumulative_trapezoid_integral, curve_fitting::upper_quadratic_root, linear_interpolation,
-    trapezoid_integral,
-};
+use crate::utils::{cumulative_trapezoid_integral, linear_interpolation, trapezoid_integral};
 
 use super::InfectiousnessRateFn;
 
@@ -203,15 +200,24 @@ impl InfectiousnessRateFn for EmpiricalRate {
         let delta_x = self.times[integration_index + 1] - self.times[integration_index];
         let slope = delta_y / delta_x;
 
-        // Because extra_events is >= 0 by definition, we know that this quadratic equation will
-        // always have at least one root. So, we don't need to worry about the case where this
-        // function returns `None`.
-        let upper_root = upper_quadratic_root(
-            slope / 2.0,
-            self.instantaneous_rate[integration_index],
-            -extra_events,
-        );
-        Some(self.times[integration_index] + upper_root.unwrap())
+        // Because extra_events is > 0 by this point, we know that this quadratic equation will
+        // always have at least one root. We can manually calculate the root.
+        // But first, we have to check that we really have a quadratic equation and not a linear
+        // equation.
+        if slope == 0.0 {
+            return Some(
+                self.times[integration_index]
+                    + extra_events / self.instantaneous_rate[integration_index],
+            );
+        }
+        let discriminant =
+            f64::powi(self.instantaneous_rate[integration_index], 2) + 2.0 * slope * extra_events;
+        // Finally, the reason this quadratic solution arises is because we are inverting a
+        // quadratic function. Therefore, we can show that we always want the solution where we add
+        // the square root of the discriminant because when we make the quadratic function, we are
+        // *accumulating* extra area.
+        let t = (-self.instantaneous_rate[integration_index] + f64::sqrt(discriminant)) / slope;
+        Some(self.times[integration_index] + t)
     }
 }
 
@@ -436,15 +442,23 @@ mod test {
 
     #[test]
     fn test_cum_rate_eval() {
-        let empirical = EmpiricalRate::new(vec![0.0, 1.0, 2.0], vec![0.0, 1.0, 2.0]).unwrap();
+        let empirical =
+            EmpiricalRate::new(vec![0.0, 1.0, 2.0, 3.0, 4.0], vec![0.0, 1.0, 2.0, 1.0, 0.0])
+                .unwrap();
         assert_almost_eq!(empirical.cum_rate(1.5), 1.125, 0.0);
+        assert_almost_eq!(empirical.cum_rate(2.5), 2.875, 0.0);
     }
 
     #[test]
     fn test_inverse_cum_rate_in_bounds() {
-        let empirical = EmpiricalRate::new(vec![0.0, 1.0, 2.0], vec![0.0, 1.0, 2.0]).unwrap();
+        let empirical =
+            EmpiricalRate::new(vec![0.0, 1.0, 2.0, 3.0, 4.0], vec![0.0, 1.0, 2.0, 1.0, 0.0])
+                .unwrap();
         // Inverse of example values above.
+        // The rate is increasing, so slope is positive, so this is the positive quadratic root.
         assert_eq!(empirical.inverse_cum_rate(1.125), Some(1.5));
+        // Slope is decreasing; negative quadratic root.
+        assert_eq!(empirical.inverse_cum_rate(2.875), Some(2.5));
     }
 
     #[test]
