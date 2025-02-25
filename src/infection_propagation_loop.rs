@@ -102,7 +102,7 @@ mod test {
 
     use crate::{
         infection_propagation_loop::{init, instantiate_rate_fns, InfectionStatus, InfectionStatusValue},
-        parameters::{ContextParametersExt, GlobalParams, Params, Rates},
+        parameters::{ContextParametersExt, GlobalParams, Params, Rates}, rate_fns::InfectiousnessRateExt,
     };
 
     use super::seed_infections;
@@ -138,6 +138,16 @@ mod test {
             .query_people((InfectionStatus, InfectionStatusValue::Infectious))
             .len();
         assert_eq!(infectious_count, 5);
+    }
+
+    #[test]
+    fn test_instantiate_rate_fns() {
+        let mut context = setup_context();
+        instantiate_rate_fns(&mut context).unwrap();
+        let rate_fn_id = context.get_random_rate_function();
+        let rate_fn = context.get_rate_fn(rate_fn_id);
+        assert_eq!(rate_fn.rate(0.0), 1.0);
+        assert_eq!(rate_fn.rate(5.1), 0.0);
     }
 
     #[test]
