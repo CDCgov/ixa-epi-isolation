@@ -151,6 +151,16 @@ mod test {
     }
 
     #[test]
+    fn test_instantiate_rate_fns() {
+        let mut context = setup_context(1, 1.0);
+        instantiate_rate_fns(&mut context).unwrap();
+        let rate_fn_id = context.get_random_rate_function();
+        let rate_fn = context.get_rate_fn(rate_fn_id);
+        assert_eq!(rate_fn.rate(0.0), 1.0);
+        assert_eq!(rate_fn.rate(5.1), 0.0);
+    }
+
+    #[test]
     fn test_init_loop() {
         let mut context = setup_context(0, 1.0);
         for _ in 0..10 {
