@@ -17,6 +17,7 @@ pub enum InfectionDataValue {
     Infectious {
         infection_time: f64,
         rate_fn_id: RateFnId,
+        infected_by: Option<PersonId>,
     },
     Recovered {
         infection_time: f64,
@@ -47,8 +48,6 @@ define_derived_property!(
         InfectionDataValue::Recovered { .. } => InfectionStatusValue::Recovered,
     }
 );
-
-define_person_property_with_default!(InfectedBy, Option<PersonId>, None);
 
 const TOTAL_INFECTIOUSNESS_MULTIPLIER: f64 = 2.0;
 
@@ -153,27 +152,27 @@ pub fn select_next_contact(context: &Context, person_id: PersonId) -> Option<Per
 }
 
 pub trait InfectionContextExt {
-    fn infect_person(&mut self, person_id: PersonId);
+    fn infect_person(&mut self, target_id: PersonId, source_id: Option<PersonId>);
     fn recover_person(&mut self, person_id: PersonId);
     fn get_elapsed_infection_time(&self, person_id: PersonId) -> f64;
     fn get_person_rate_fn(&self, person_id: PersonId) -> &dyn InfectiousnessRateFn;
-    fn create_transmission_event(&mut self, source: PersonId, target: PersonId);
 }
 
 impl InfectionContextExt for Context {
     // This function should be called from the main loop whenever
     // someone is first infected. It assigns all their properties needed to
     // calculate intrinsic infectiousness
-    fn infect_person(&mut self, person_id: PersonId) {
+    fn infect_person(&mut self, target_id: PersonId, source_id: Option<PersonId>) {
         let infection_time = self.get_current_time();
         let rate_fn_id = self.get_random_rate_function();
-        trace!("Person {person_id}: Infected at {infection_time}");
+        trace!("Person {target_id}: Infected at {infection_time}");
         self.set_person_property(
-            person_id,
+            target_id,
             InfectionData,
             InfectionDataValue::Infectious {
                 infection_time,
                 rate_fn_id,
+                infected_by: source_id,
             },
         );
     }
@@ -212,12 +211,6 @@ impl InfectionContextExt for Context {
         };
         self.get_current_time() - infection_time
     }
-
-    fn create_transmission_event(&mut self, source: PersonId, target: PersonId) {
-        self.infect_person(target);
-        self.set_person_property(target, InfectedBy, Some(source));
-        trace!("Person{source} infected Person{target}");
-    }
 }
 
 #[cfg(test)]
@@ -230,7 +223,7 @@ mod test {
     };
     use crate::{
         infectiousness_manager::{
-            InfectedBy, InfectionData, InfectionDataValue, InfectionStatus, InfectionStatusValue,
+            InfectionData, InfectionDataValue, InfectionStatus, InfectionStatusValue,
             TOTAL_INFECTIOUSNESS_MULTIPLIER,
         },
         parameters::{GlobalParams, Params},
@@ -265,7 +258,7 @@ mod test {
         let mut context = setup_context();
         let p1 = context.add_person(()).unwrap();
         context.add_plan(2.0, move |context| {
-            context.infect_person(p1);
+            context.infect_person(p1, None);
         });
         context.execute();
         let InfectionDataValue::Infectious { infection_time, .. } =
@@ -282,7 +275,7 @@ mod test {
         let mut context = setup_context();
         let p1 = context.add_person(()).unwrap();
         context.add_plan(2.0, move |context| {
-            context.infect_person(p1);
+            context.infect_person(p1, None);
         });
         context.add_plan(3.0, move |context| {
             context.recover_person(p1);
@@ -304,7 +297,7 @@ mod test {
         let mut context = setup_context();
         let p1 = context.add_person(()).unwrap();
         context.add_plan(2.0, move |context| {
-            context.infect_person(p1);
+            context.infect_person(p1, None);
         });
         context.add_plan(3.0, move |_| {});
         context.execute();
@@ -329,7 +322,7 @@ mod test {
         context.add_person(()).unwrap();
         context.add_person(()).unwrap();
 
-        context.infect_person(p1);
+        context.infect_person(p1, None);
 
         let f = get_forecast(&context, p1).expect("Forecast should be returned");
         // The expected rate is 2.0, because intrinsic is 1.0 and there are 2 contacts.
@@ -342,28 +335,32 @@ mod test {
     fn test_assert_evaluate_fails_when_forecast_smaller() {
         let mut context = setup_context();
         let p1 = context.add_person(()).unwrap();
-        context.infect_person(p1);
+        context.infect_person(p1, None);
 
         let invalid_forecast = TOTAL_INFECTIOUSNESS_MULTIPLIER - 0.1;
         evaluate_forecast(&mut context, p1, invalid_forecast);
     }
 
     #[test]
-    fn test_create_transmission_event() {
+    fn test_infected_by() {
         let mut context = setup_context();
         let index = context.add_person(()).unwrap();
         let contact = context.add_person(()).unwrap();
 
-        context.create_transmission_event(index, contact);
+        context.infect_person(contact, Some(index));
         context.execute();
 
         assert_eq!(
             context.get_person_property(contact, InfectionStatus),
             InfectionStatusValue::Infected
         );
-        assert_eq!(
-            context.get_person_property(contact, InfectedBy).unwrap(),
-            index
-        );
+
+        let InfectionDataValue::Infected { infected_by, .. } =
+            context.get_person_property(contact, InfectionData)
+        else {
+            panic!("Person {contact} is not infected")
+        };
+
+        assert_eq!(infected_by.unwrap(), index);
     }
 }

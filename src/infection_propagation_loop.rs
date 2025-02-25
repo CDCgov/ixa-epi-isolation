@@ -19,7 +19,7 @@ fn schedule_next_forecasted_infection(context: &mut Context, person: PersonId) {
             if evaluate_forecast(context, person, forecasted_total_infectiousness) {
                 if let Some(next_contact) = select_next_contact(context, person) {
                     trace!("Person {person}: Forecast accepted, infecting {next_contact}");
-                    context.create_transmission_event(person, next_contact);
+                    context.infect_person(next_contact, Some(person));
                 }
             }
             // Continue scheduling forecasts until the person recovers.
@@ -60,7 +60,7 @@ fn seed_infections(context: &mut Context, initial_infections: usize) {
     // First, seed an infectious population
     for _ in 0..initial_infections {
         let person = context.sample_person(InfectionRng, ()).unwrap();
-        context.infect_person(person);
+        context.infect_person(person, None);
     }
 }
 
