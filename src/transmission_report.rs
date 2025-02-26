@@ -19,39 +19,35 @@ struct TransmissionReport {
 
 create_report_trait!(TransmissionReport);
 
-trait TransmissionReportContextExt {
-    fn record_transmission_event(&mut self, event: PersonPropertyChangeEvent<InfectionData>);
-    fn create_transmission_report(&mut self, file_name: &str) -> Result<(), IxaError>;
+fn record_transmission_event(
+    context: &mut Context,
+    event: PersonPropertyChangeEvent<InfectionData>,
+) {
+    let target_id = event.person_id;
+    let InfectionDataValue::Infectious { infected_by, .. } =
+        context.get_person_property(target_id, InfectionData)
+    else {
+        panic!("Person {target_id} is not infectious")
+    };
+
+    // let setting = get_person_setting_id(infector).unwrap();
+
+    if infected_by.is_some() {
+        context.send_report(TransmissionReport {
+            time: context.get_current_time(),
+            target_id,
+            infected_by,
+            // setting_id: setting,
+        });
+    }
 }
 
-impl TransmissionReportContextExt for Context {
-    fn record_transmission_event(&mut self, event: PersonPropertyChangeEvent<InfectionData>) {
-        let target_id = event.person_id;
-        let InfectionDataValue::Infectious { infected_by, .. } =
-            self.get_person_property(target_id, InfectionData)
-        else {
-            panic!("Person {target_id} is not infectious")
-        };
-
-        // let setting = get_person_setting_id(infector).unwrap();
-
-        if infected_by.is_some() {
-            self.send_report(TransmissionReport {
-                time: self.get_current_time(),
-                target_id,
-                infected_by,
-                // setting_id: setting,
-            });
-        }
-    }
-
-    fn create_transmission_report(&mut self, file_name: &str) -> Result<(), IxaError> {
-        self.add_report::<TransmissionReport>(file_name)?;
-        self.subscribe_to_event::<PersonPropertyChangeEvent<InfectionData>>(|context, event| {
-            context.record_transmission_event(event);
-        });
-        Ok(())
-    }
+fn create_transmission_report(context: &mut Context, file_name: &str) -> Result<(), IxaError> {
+    context.add_report::<TransmissionReport>(file_name)?;
+    context.subscribe_to_event::<PersonPropertyChangeEvent<InfectionData>>(|context, event| {
+        record_transmission_event(context, event);
+    });
+    Ok(())
 }
 
 pub fn init(context: &mut Context) -> Result<(), IxaError> {
@@ -59,7 +55,7 @@ pub fn init(context: &mut Context) -> Result<(), IxaError> {
     let report = parameters.transmission_report_name.clone();
     match report {
         Some(path_name) => {
-            context.create_transmission_report(path_name.as_ref())?;
+            create_transmission_report(context, path_name.as_ref())?;
         }
         None => {
             info!("No transmission report name provided. Skipping transmission report creation");
