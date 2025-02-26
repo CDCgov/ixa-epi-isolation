@@ -75,14 +75,22 @@ mod test {
     use ixa::{
         Context, ContextGlobalPropertiesExt, ContextPeopleExt, ContextRandomExt, ContextReportExt,
     };
-    use std::path::{Path, PathBuf};
+    use std::path::PathBuf;
     use tempfile::tempdir;
 
     use super::TransmissionReport;
+    use std::fs::File;
+    use std::io::Write;
 
-    fn setup_context_from_path(path: &Path) -> Context {
+    fn setup_context_from_str(params_json: &str) -> Context {
+        let temp_dir = tempdir().unwrap();
+        let dir = PathBuf::from(&temp_dir.path());
+        let file_path = dir.join("input.json");
+        let mut file = File::create(file_path.clone()).unwrap();
+        file.write_all(params_json.as_bytes()).unwrap();
+
         let mut context = Context::new();
-        context.load_global_properties(path).unwrap();
+        context.load_global_properties(&file_path).unwrap();
         context.init_random(context.get_params().seed);
         context.add_rate_fn(Box::new(ConstantRate::new(1.0, 5.0)));
         context
@@ -90,25 +98,63 @@ mod test {
 
     #[test]
     fn test_empty_transmission_report() {
-        let path = PathBuf::from("tests/data/empty_transmission_report_test.json");
-        let context = setup_context_from_path(path.as_ref());
+        let params_json = r#"
+            {
+                "epi_isolation.GlobalParams": {
+                "max_time": 200.0,
+                "seed": 123,
+                "rate_of_infection": 1.0,
+                "initial_infections": 1,
+                "infection_duration": 5.0,
+                "report_period": 1.0,
+                "synth_population_file": "input/people_test.csv"
+                }
+            }
+        "#;
+        let context = setup_context_from_str(params_json);
         let report_name = context.get_params().transmission_report_name.clone();
         assert!(report_name.is_none());
     }
 
     #[test]
     fn test_filled_transmission_report() {
-        let path = PathBuf::from("tests/data/filled_transmission_report_test.json");
-        let context = setup_context_from_path(path.as_ref());
+        let params_json = r#"
+            {
+                "epi_isolation.GlobalParams": {
+                "max_time": 200.0,
+                "seed": 123,
+                "rate_of_infection": 1.0,
+                "initial_infections": 1,
+                "infection_duration": 5.0,
+                "report_period": 1.0,
+                "synth_population_file": "input/people_test.csv",
+                "transmission_report_name": "output.csv"
+                }
+            }
+        "#;
+        let context = setup_context_from_str(params_json);
         let report_name = context.get_params().transmission_report_name.clone();
-        assert_eq!(report_name.unwrap(), "output.csv");
+        assert_eq!(report_name.unwrap(), "output.csv".to_string());
     }
 
     #[test]
     #[allow(clippy::float_cmp)]
     fn test_generate_transmission_report() {
-        let path = PathBuf::from("tests/data/filled_transmission_report_test.json");
-        let mut context = setup_context_from_path(path.as_ref());
+        let params_json = r#"
+            {
+                "epi_isolation.GlobalParams": {
+                "max_time": 200.0,
+                "seed": 123,
+                "rate_of_infection": 1.0,
+                "initial_infections": 1,
+                "infection_duration": 5.0,
+                "report_period": 1.0,
+                "synth_population_file": "input/people_test.csv",
+                "transmission_report_name": "output.csv"
+                }
+            }
+        "#;
+        let mut context = setup_context_from_str(params_json);
 
         let temp_dir = tempdir().unwrap();
         let path = PathBuf::from(&temp_dir.path());
