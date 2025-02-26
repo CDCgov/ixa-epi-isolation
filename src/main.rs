@@ -4,6 +4,7 @@ mod infectiousness_manager;
 mod parameters;
 mod population_loader;
 pub mod rate_fns;
+mod transmission_report;
 
 use infectiousness_manager::InfectionStatus;
 use ixa::runner::run_with_args;
@@ -49,6 +50,7 @@ fn main() {
         context.index_property(CensusTract);
 
         infection_propagation_loop::init(context);
+        transmission_report::init(context)?;
 
         Ok(())
     })

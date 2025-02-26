@@ -21,6 +21,8 @@ pub struct Params {
     pub report_period: f64,
     /// The path to the synthetic population file loaded in `population_loader`
     pub synth_population_file: PathBuf,
+    /// The path to the transmission report file
+    pub transmission_report_name: Option<String>,
 }
 
 fn validate_inputs(parameters: &Params) -> Result<(), IxaError> {
@@ -75,6 +77,7 @@ mod test {
             infection_duration: 5.0,
             report_period: 1.0,
             synth_population_file: PathBuf::from("."),
+            transmission_report_name: None,
         };
         context
             .set_global_property_value(GlobalParams, parameters)
@@ -96,6 +99,7 @@ mod test {
             infection_duration: 5.0,
             report_period: 1.0,
             synth_population_file: PathBuf::from("."),
+            transmission_report_name: None,
         };
         let e = validate_inputs(&parameters).err();
         match e {
