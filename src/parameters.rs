@@ -132,8 +132,14 @@ mod test {
 
     #[test]
     fn test_deserialization_rates() {
-        let deserialized = serde_json::from_str::<Vec<Rates>>("[{\"Constant\": 1.0}, {\"Empirical\": [[0.0, 0.0], [1.0, 1.0]]}]").unwrap();
+        let deserialized = serde_json::from_str::<Vec<Rates>>(
+            "[{\"Constant\": 1.0}, {\"Empirical\": [[0.0, 0.0], [1.0, 1.0]]}]",
+        )
+        .unwrap();
         assert_eq!(deserialized[0], Rates::Constant(1.0));
-        assert_eq!(deserialized[1], Rates::Empirical(vec![(0.0, 0.0), (1.0, 1.0)]));
+        assert_eq!(
+            deserialized[1],
+            Rates::Empirical(vec![(0.0, 0.0), (1.0, 1.0)])
+        );
     }
 }

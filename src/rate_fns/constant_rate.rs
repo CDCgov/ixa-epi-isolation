@@ -10,7 +10,9 @@ pub struct ConstantRate {
 }
 
 impl ConstantRate {
-    #[must_use]
+    /// # Errors
+    /// - The rate of infection must be non-negative.
+    /// - The duration of infection must be non-negative.
     pub fn new(r: f64, infection_duration: f64) -> Result<Self, IxaError> {
         if r < 0.0 {
             return Err(IxaError::IxaError(

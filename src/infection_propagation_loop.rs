@@ -3,8 +3,10 @@ use crate::infectiousness_manager::{
     InfectionStatus, InfectionStatusValue,
 };
 use crate::parameters::{ContextParametersExt, Params, Rates};
-use crate::rate_fns::{ConstantRate, InfectiousnessRateExt};
-use ixa::{define_rng, trace, Context, ContextPeopleExt, IxaError, PersonId, PersonPropertyChangeEvent};
+use crate::rate_fns::{ConstantRate, EmpiricalRate, InfectiousnessRateExt};
+use ixa::{
+    define_rng, trace, Context, ContextPeopleExt, IxaError, PersonId, PersonPropertyChangeEvent,
+};
 
 define_rng!(InfectionRng);
 
@@ -51,7 +53,7 @@ pub fn instantiate_rate_fns(context: &mut Context) -> Result<(), IxaError> {
             Rates::Empirical(rate_fn) => {
                 let (t, r): (Vec<f64>, Vec<f64>) = rate_fn.into_iter().unzip();
                 Box::new(EmpiricalRate::new(t, r)?)
-            },
+            }
         });
     }
     Ok(())
@@ -98,8 +100,11 @@ mod test {
     };
 
     use crate::{
-        infection_propagation_loop::{init, instantiate_rate_fns, InfectionStatus, InfectionStatusValue},
-        parameters::{ContextParametersExt, GlobalParams, Params, Rates}, rate_fns::InfectiousnessRateExt,
+        infection_propagation_loop::{
+            init, instantiate_rate_fns, InfectionStatus, InfectionStatusValue,
+        },
+        parameters::{ContextParametersExt, GlobalParams, Params, Rates},
+        rate_fns::InfectiousnessRateExt,
     };
 
     use super::seed_infections;

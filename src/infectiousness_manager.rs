@@ -222,10 +222,12 @@ mod test {
         evaluate_forecast, get_forecast, max_total_infectiousness_multiplier, InfectionContextExt,
     };
     use crate::{
-        infection_propagation_loop::instantiate_rate_fns, infectiousness_manager::{
+        infection_propagation_loop::instantiate_rate_fns,
+        infectiousness_manager::{
             InfectionData, InfectionDataValue, InfectionStatus, InfectionStatusValue,
             TOTAL_INFECTIOUSNESS_MULTIPLIER,
-        }, parameters::{GlobalParams, Params, Rates}
+        },
+        parameters::{GlobalParams, Params, Rates},
     };
     use ixa::{Context, ContextGlobalPropertiesExt, ContextPeopleExt, ContextRandomExt};
 

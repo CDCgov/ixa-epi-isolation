@@ -92,7 +92,7 @@ mod test {
         let mut context = Context::new();
         context.load_global_properties(&file_path).unwrap();
         context.init_random(context.get_params().seed);
-        context.add_rate_fn(Box::new(ConstantRate::new(1.0, 5.0)));
+        context.add_rate_fn(Box::new(ConstantRate::new(1.0, 5.0).unwrap()));
         context
     }
 
@@ -103,7 +103,7 @@ mod test {
                 "epi_isolation.GlobalParams": {
                 "max_time": 200.0,
                 "seed": 123,
-                "rate_of_infection": 1.0,
+                "rate_of_infection": [{"Constant": 1.0}],
                 "initial_infections": 1,
                 "infection_duration": 5.0,
                 "report_period": 1.0,
@@ -123,7 +123,7 @@ mod test {
                 "epi_isolation.GlobalParams": {
                 "max_time": 200.0,
                 "seed": 123,
-                "rate_of_infection": 1.0,
+                "rate_of_infection": [{"Constant": 1.0}],
                 "initial_infections": 1,
                 "infection_duration": 5.0,
                 "report_period": 1.0,
@@ -145,7 +145,7 @@ mod test {
                 "epi_isolation.GlobalParams": {
                 "max_time": 200.0,
                 "seed": 123,
-                "rate_of_infection": 1.0,
+                "rate_of_infection": [{"Constant": 1.0}],
                 "initial_infections": 1,
                 "infection_duration": 5.0,
                 "report_period": 1.0,
