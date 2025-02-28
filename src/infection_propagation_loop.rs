@@ -2,9 +2,11 @@ use crate::infectiousness_manager::{
     evaluate_forecast, get_forecast, select_next_contact, Forecast, InfectionContextExt,
     InfectionStatus, InfectionStatusValue,
 };
-use crate::parameters::{ContextParametersExt, Params};
-use crate::rate_fns::{ConstantRate, InfectiousnessRateExt};
-use ixa::{define_rng, trace, Context, ContextPeopleExt, PersonId, PersonPropertyChangeEvent};
+use crate::parameters::{ContextParametersExt, Params, Rates};
+use crate::rate_fns::{ConstantRate, EmpiricalRate, InfectiousnessRateExt};
+use ixa::{
+    define_rng, trace, Context, ContextPeopleExt, IxaError, PersonId, PersonPropertyChangeEvent,
+};
 
 define_rng!(InfectionRng);
 
@@ -39,20 +41,22 @@ fn schedule_recovery(context: &mut Context, person: PersonId) {
     });
 }
 
-/// Load a rate function.
-/// TODO<ryl8@cdc.gov>: Eventually, we will load multiple values from a file / files
-/// and randomly assign them to people
-pub fn load_rate_fns(context: &mut Context) {
-    let &Params {
-        rate_of_infection,
-        infection_duration,
-        ..
-    } = context.get_params();
+/// Instantiate the rate functions specified in the global parameter `rate_of_infection` as actual
+/// rate functions for the simulation that are assigned randomly to agents when they are infected.
+pub fn instantiate_rate_fns(context: &mut Context) -> Result<(), IxaError> {
+    let rate_of_infection = context.get_params().rate_of_infection.clone();
+    let infection_duration = context.get_params().infection_duration;
 
-    context.add_rate_fn(Box::new(ConstantRate::new(
-        rate_of_infection,
-        infection_duration,
-    )));
+    for rate in rate_of_infection.clone() {
+        context.add_rate_fn(match rate {
+            Rates::Constant(rate) => Box::new(ConstantRate::new(rate, infection_duration)?),
+            Rates::Empirical(rate_fn) => {
+                let (t, r): (Vec<f64>, Vec<f64>) = rate_fn.into_iter().unzip();
+                Box::new(EmpiricalRate::new(t, r)?)
+            }
+        });
+    }
+    Ok(())
 }
 
 /// Seeds the initial population with a number of infectious people.
@@ -64,12 +68,12 @@ fn seed_infections(context: &mut Context, initial_infections: usize) {
     }
 }
 
-pub fn init(context: &mut Context) {
+pub fn init(context: &mut Context) -> Result<(), IxaError> {
     let &Params {
         initial_infections, ..
     } = context.get_params();
 
-    load_rate_fns(context);
+    instantiate_rate_fns(context)?;
 
     // Seed the initial population
     context.add_plan(0.0, move |context| {
@@ -83,6 +87,7 @@ pub fn init(context: &mut Context) {
         schedule_next_forecasted_infection(context, event.person_id);
         schedule_recovery(context, event.person_id);
     });
+    Ok(())
 }
 
 #[cfg(test)]
@@ -95,8 +100,11 @@ mod test {
     };
 
     use crate::{
-        infection_propagation_loop::{init, load_rate_fns, InfectionStatus, InfectionStatusValue},
-        parameters::{ContextParametersExt, GlobalParams, Params},
+        infection_propagation_loop::{
+            init, instantiate_rate_fns, InfectionStatus, InfectionStatusValue,
+        },
+        parameters::{ContextParametersExt, GlobalParams, Params, Rates},
+        rate_fns::InfectiousnessRateExt,
     };
 
     use super::seed_infections;
@@ -107,7 +115,7 @@ mod test {
             initial_infections: 3,
             max_time: 100.0,
             seed: 0,
-            rate_of_infection: 1.0,
+            rate_of_infection: vec![Rates::Constant(1.0)],
             infection_duration: 5.0,
             report_period: 1.0,
             synth_population_file: PathBuf::from("."),
@@ -126,12 +134,22 @@ mod test {
         for _ in 0..10 {
             context.add_person(()).unwrap();
         }
-        load_rate_fns(&mut context);
+        instantiate_rate_fns(&mut context).unwrap();
         seed_infections(&mut context, 5);
         let infectious_count = context
             .query_people((InfectionStatus, InfectionStatusValue::Infectious))
             .len();
         assert_eq!(infectious_count, 5);
+    }
+
+    #[test]
+    fn test_instantiate_rate_fns() {
+        let mut context = setup_context();
+        instantiate_rate_fns(&mut context).unwrap();
+        let rate_fn_id = context.get_random_rate_function();
+        let rate_fn = context.get_rate_fn(rate_fn_id);
+        assert_eq!(rate_fn.rate(0.0), 1.0);
+        assert_eq!(rate_fn.rate(5.1), 0.0);
     }
 
     #[test]
@@ -141,7 +159,7 @@ mod test {
             context.add_person(()).unwrap();
         }
 
-        init(&mut context);
+        init(&mut context).unwrap();
 
         let &Params {
             initial_infections: expected_infectious,

@@ -117,7 +117,7 @@ pub fn evaluate_forecast(
     let current_infectiousness = total_rate_fn.rate(elapsed_t);
 
     assert!(
-        (current_infectiousness <= forecasted_total_infectiousness),
+        (f64::abs(current_infectiousness - forecasted_total_infectiousness) <= f64::EPSILON),
         "Person {person_id}: Forecasted infectiousness must always be greater than or equal to current infectiousness. Current: {current_infectiousness}, Forecasted: {forecasted_total_infectiousness}"
     );
 
@@ -222,12 +222,12 @@ mod test {
         evaluate_forecast, get_forecast, max_total_infectiousness_multiplier, InfectionContextExt,
     };
     use crate::{
+        infection_propagation_loop::instantiate_rate_fns,
         infectiousness_manager::{
             InfectionData, InfectionDataValue, InfectionStatus, InfectionStatusValue,
             TOTAL_INFECTIOUSNESS_MULTIPLIER,
         },
-        parameters::{GlobalParams, Params},
-        rate_fns::{ConstantRate, InfectiousnessRateExt},
+        parameters::{GlobalParams, Params, Rates},
     };
     use ixa::{Context, ContextGlobalPropertiesExt, ContextPeopleExt, ContextRandomExt};
 
@@ -241,7 +241,7 @@ mod test {
                     initial_infections: 1,
                     max_time: 10.0,
                     seed: 0,
-                    rate_of_infection: 1.0,
+                    rate_of_infection: vec![Rates::Constant(1.0)],
                     infection_duration: 5.0,
                     report_period: 1.0,
                     synth_population_file: PathBuf::from("."),
@@ -249,7 +249,7 @@ mod test {
                 },
             )
             .unwrap();
-        context.add_rate_fn(Box::new(ConstantRate::new(1.0, 5.0)));
+        instantiate_rate_fns(&mut context).unwrap();
         context
     }
 
