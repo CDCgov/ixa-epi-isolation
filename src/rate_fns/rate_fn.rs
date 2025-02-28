@@ -21,6 +21,10 @@ pub trait InfectiousnessRateFn {
     /// E.g., Where t=day, `inverse_cum_rate(6.0)` -> 2.0 means that we would expect
     /// that it would take 2 days to infect 6 people
     fn inverse_cum_rate(&self, events: f64) -> Option<f64>;
+
+    /// Returns the remaining time of the infectiousness period at time `t`. Can return a negative
+    /// number if the infectiousness period has already ended.
+    fn infection_duration_remaining(&self, t: f64) -> f64;
 }
 
 /// A utility for scaling and shifting an infectiousness rate function
@@ -70,6 +74,10 @@ impl<T: ?Sized + InfectiousnessRateFn> InfectiousnessRateFn for ScaledRateFn<'_,
                 .inverse_cum_rate(events / self.scale + elapsed_cum_rate)?
                 - self.elapsed,
         )
+    }
+    /// Returns the remaining infectiousness period at `t + elapsed`.
+    fn infection_duration_remaining(&self, t: f64) -> f64 {
+        self.base.infection_duration_remaining(t + self.elapsed)
     }
 }
 
