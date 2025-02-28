@@ -35,6 +35,9 @@ impl InfectiousnessRateFn for ConstantRate {
             Some(t)
         }
     }
+    fn infection_duration_remaining(&self, t: f64) -> f64 {
+        self.infection_duration - t
+    }
 }
 
 #[cfg(test)]
