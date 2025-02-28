@@ -29,9 +29,9 @@ fn schedule_next_forecasted_infection(context: &mut Context, person: PersonId) {
 }
 
 fn schedule_recovery(context: &mut Context, person: PersonId) {
-    let &Params {
-        infection_duration, ..
-    } = context.get_params();
+    let infection_duration = context
+        .get_person_rate_fn(person)
+        .infection_duration_remaining(0.0);
     let recovery_time = context.get_current_time() + infection_duration;
     context.add_plan(recovery_time, move |context| {
         trace!("Person {person} has recovered at {recovery_time}");
@@ -93,13 +93,15 @@ mod test {
     use ixa::{
         Context, ContextGlobalPropertiesExt, ContextPeopleExt, ContextRandomExt, ExecutionPhase,
     };
+    use statrs::assert_almost_eq;
 
     use crate::{
         infection_propagation_loop::{init, load_rate_fns, InfectionStatus, InfectionStatusValue},
+        infectiousness_manager::{InfectionContextExt, InfectionData, InfectionDataValue},
         parameters::{ContextParametersExt, GlobalParams, Params},
     };
 
-    use super::seed_infections;
+    use super::{schedule_recovery, seed_infections};
 
     fn setup_context() -> Context {
         let mut context = Context::new();
@@ -171,5 +173,29 @@ mod test {
                 .is_empty(),
             "Expected some people to recover"
         );
+    }
+
+    #[test]
+    fn test_schedule_recovery() {
+        let mut context = setup_context();
+        load_rate_fns(&mut context);
+        let person = context.add_person(()).unwrap();
+        seed_infections(&mut context, 1);
+        // For later, we need to get the recovery time from the rate function.
+        let recovery_time = context
+            .get_person_rate_fn(person)
+            .infection_duration_remaining(0.0);
+        schedule_recovery(&mut context, person);
+        context.execute();
+        // Make sure person is recovered.
+        assert_eq!(
+            context.get_person_property(person, InfectionData),
+            InfectionDataValue::Recovered {
+                infection_time: 0.0,
+                recovery_time
+            }
+        );
+        // Make sure nothing has happened after person is recovered.
+        assert_almost_eq!(context.get_current_time(), recovery_time, 0.0);
     }
 }

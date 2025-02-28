@@ -21,6 +21,10 @@ pub trait InfectiousnessRateFn {
     /// E.g., Where t=day, `inverse_cum_rate(6.0)` -> 2.0 means that we would expect
     /// that it would take 2 days to infect 6 people
     fn inverse_cum_rate(&self, events: f64) -> Option<f64>;
+
+    /// Returns the remaining time of the infectiousness period at time `t`. Can return a negative
+    /// number if the infectiousness period has already ended.
+    fn infection_duration_remaining(&self, t: f64) -> f64;
 }
 
 /// A utility for scaling and shifting an infectiousness rate function
@@ -71,11 +75,17 @@ impl<T: ?Sized + InfectiousnessRateFn> InfectiousnessRateFn for ScaledRateFn<'_,
                 - self.elapsed,
         )
     }
+    /// Returns the remaining infectiousness period at `t + elapsed`.
+    fn infection_duration_remaining(&self, t: f64) -> f64 {
+        self.base.infection_duration_remaining(t + self.elapsed)
+    }
 }
 
 #[cfg(test)]
 #[allow(clippy::float_cmp)]
 mod tests {
+    use statrs::assert_almost_eq;
+
     use crate::rate_fns::{
         rate_fn::{InfectiousnessRateFn, ScaledRateFn},
         ConstantRate,
@@ -130,5 +140,18 @@ mod tests {
         assert_eq!(scaled_rate_fn.inverse_cum_rate(4.0), Some(1.0));
         assert_eq!(scaled_rate_fn.inverse_cum_rate(8.0), Some(2.0));
         assert_eq!(scaled_rate_fn.inverse_cum_rate(11.0), None);
+    }
+
+    #[test]
+    fn test_scale_rate_fn_infection_duration() {
+        let rate_fn = ConstantRate::new(2.0, 5.0);
+        let scaled_rate_fn = ScaledRateFn {
+            base: &rate_fn,
+            scale: 2.0,
+            elapsed: 3.0,
+        };
+        assert_almost_eq!(scaled_rate_fn.infection_duration_remaining(0.0), 2.0, 0.0);
+        assert_almost_eq!(scaled_rate_fn.infection_duration_remaining(1.0), 1.0, 0.0);
+        assert_almost_eq!(scaled_rate_fn.infection_duration_remaining(3.0), -1.0, 0.0);
     }
 }

@@ -144,7 +144,7 @@ impl InfectiousnessRateFn for EmpiricalRate {
     }
 
     fn inverse_cum_rate(&self, events: f64) -> Option<f64> {
-        if events > *self.cum_rates.last().unwrap() {
+        if events > self.cum_rates[self.cum_rates.len() - 1] {
             return None;
         }
         // We want to return the time at which `events` would have happened. At a high level, this
@@ -218,6 +218,10 @@ impl InfectiousnessRateFn for EmpiricalRate {
         // *accumulating* extra area.
         let t = (-self.instantaneous_rate[integration_index] + f64::sqrt(discriminant)) / slope;
         Some(self.times[integration_index] + t)
+    }
+
+    fn infection_duration_remaining(&self, t: f64) -> f64 {
+        self.times[self.times.len() - 1] - t
     }
 }
 
@@ -504,5 +508,16 @@ mod test {
         // And getting the inverse cumulative rate for a slightly greater value should return a time
         // greater than 3.0 because the rate starts moving again after t = 3.0.
         assert!(empirical.inverse_cum_rate(1.6).unwrap() > 3.0);
+    }
+
+    #[test]
+    fn test_infection_duration_remaining() {
+        let empirical = EmpiricalRate::new(
+            vec![0.0, 1.0, 2.0, 3.0, 4.0, 5.0],
+            vec![1.0, 1.0, 0.0, 0.0, 1.0, 0.0],
+        )
+        .unwrap();
+        assert_almost_eq!(empirical.infection_duration_remaining(2.0), 3.0, 0.0);
+        assert_almost_eq!(empirical.infection_duration_remaining(7.0), -2.0, 0.0);
     }
 }
