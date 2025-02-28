@@ -84,6 +84,8 @@ impl<T: ?Sized + InfectiousnessRateFn> InfectiousnessRateFn for ScaledRateFn<'_,
 #[cfg(test)]
 #[allow(clippy::float_cmp)]
 mod tests {
+    use statrs::assert_almost_eq;
+
     use crate::rate_fns::{
         rate_fn::{InfectiousnessRateFn, ScaledRateFn},
         ConstantRate,
@@ -138,5 +140,18 @@ mod tests {
         assert_eq!(scaled_rate_fn.inverse_cum_rate(4.0), Some(1.0));
         assert_eq!(scaled_rate_fn.inverse_cum_rate(8.0), Some(2.0));
         assert_eq!(scaled_rate_fn.inverse_cum_rate(11.0), None);
+    }
+
+    #[test]
+    fn test_scale_rate_fn_infection_duration() {
+        let rate_fn = ConstantRate::new(2.0, 5.0);
+        let scaled_rate_fn = ScaledRateFn {
+            base: &rate_fn,
+            scale: 2.0,
+            elapsed: 3.0,
+        };
+        assert_almost_eq!(scaled_rate_fn.infection_duration_remaining(0.0), 2.0, 0.0);
+        assert_almost_eq!(scaled_rate_fn.infection_duration_remaining(1.0), 1.0, 0.0);
+        assert_almost_eq!(scaled_rate_fn.infection_duration_remaining(3.0), -1.0, 0.0);
     }
 }

@@ -43,6 +43,8 @@ impl InfectiousnessRateFn for ConstantRate {
 #[cfg(test)]
 #[allow(clippy::float_cmp)]
 mod test {
+    use statrs::assert_almost_eq;
+
     use super::ConstantRate;
     use super::InfectiousnessRateFn;
 
@@ -66,5 +68,13 @@ mod test {
         assert_eq!(r.inverse_cum_rate(10.0), Some(5.0));
         assert_eq!(r.inverse_cum_rate(20.0), Some(10.0));
         assert_eq!(r.inverse_cum_rate(21.0), None);
+    }
+
+    #[test]
+    fn test_infection_duration_remaining() {
+        let r = ConstantRate::new(2.0, 10.0);
+        assert_almost_eq!(r.infection_duration_remaining(0.0), 10.0, 0.0);
+        assert_almost_eq!(r.infection_duration_remaining(3.0), 7.0, 0.0);
+        assert_almost_eq!(r.infection_duration_remaining(13.0), -3.0, 0.0);
     }
 }

@@ -509,4 +509,15 @@ mod test {
         // greater than 3.0 because the rate starts moving again after t = 3.0.
         assert!(empirical.inverse_cum_rate(1.6).unwrap() > 3.0);
     }
+
+    #[test]
+    fn test_infection_duration_remaining() {
+        let empirical = EmpiricalRate::new(
+            vec![0.0, 1.0, 2.0, 3.0, 4.0, 5.0],
+            vec![1.0, 1.0, 0.0, 0.0, 1.0, 0.0],
+        )
+        .unwrap();
+        assert_almost_eq!(empirical.infection_duration_remaining(2.0), 3.0, 0.0);
+        assert_almost_eq!(empirical.infection_duration_remaining(7.0), -2.0, 0.0);
+    }
 }
