@@ -117,7 +117,7 @@ pub fn evaluate_forecast(
     let current_infectiousness = total_rate_fn.rate(elapsed_t);
 
     assert!(
-        (current_infectiousness <= forecasted_total_infectiousness),
+        (f64::abs(current_infectiousness - forecasted_total_infectiousness) <= f64::EPSILON),
         "Person {person_id}: Forecasted infectiousness must always be greater than or equal to current infectiousness. Current: {current_infectiousness}, Forecasted: {forecasted_total_infectiousness}"
     );
 
