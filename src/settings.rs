@@ -148,31 +148,23 @@ mod test {
         // TODO: if setting not registered, shouldn't be able to register setting
         let mut context = Context::new();
         context.register_setting_type::<Home>(SettingProperties{alpha: 0.1});
-        let home_props = context.get_setting_properties::<Home>();
-        // Create 5 people
-        for _ in 0..5 {
-            let person = context.add_person(()).unwrap();
-            // Add them all to the same setting (Home)
-            let _ = context.add_setting::<Home>(1, person);
+        context.register_setting_type::<CensusTract>(SettingProperties{alpha: 0.001});
+        for s in 0..5 {
+            // Create 5 people
+            for _ in 0..5 {
+                let person = context.add_person(()).unwrap();
+                // Add them all to the same setting (Home)
+                let _ = context.add_setting::<Home>(s, person);
+                let _ = context.add_setting::<CensusTract>(s, person);
+            }
+            let members = context.get_setting_members::<Home>(s).unwrap();
+            let tract_members = context.get_setting_members::<CensusTract>(s).unwrap();
+            // Get the number of people for this house and should be 5
+            assert_eq!(members.len(), 5);
+            assert_eq!(tract_members.len(), 5);            
+            println!("Members of house {s} are {:#?} - CensusTract {:#?}", members, tract_members);
         }
 
-        println!("test_setting_registration:: Registring people to house with alpha {}", home_props.alpha);
-        let members = context.get_setting_members::<Home>(1).unwrap();
-        assert_eq!(members.len(), 5);
-        println!("Members of house 1 are {:#?}", members);
-        // Get the number of people for this house and should be 5
-        /*
-        // Registration
-        context.register_setting_type::<Home>(SettingProperties);
-        let setting_id: SettingId<Home> = context.add_setting::<Home>(id: String);
-
-        context.add_person_to_setting(person, setting_id);
-        // Internally this checks if a matching home exists and creates it first if not
-        // it should convert a representation of a setting id from a csv file probably by
-        // hashing it at some point
-        context.add_person_to_predefined_setting::<Home>(person1, 123);
-        context.add_person_to_predefined_setting::<Home>(person2, 123);
-         */
     }
     /*
     Test failure of getting properties if not initialized
