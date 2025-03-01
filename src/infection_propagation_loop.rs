@@ -220,16 +220,16 @@ mod test {
         // We're also going to check the times at which they are infected -- since we only record
         // infection times of when people are actually infected, we expect the times to be uniform
         // on [0, 1].
-        const NUM_SIMS: usize = 10000;
+        let num_sims: u64 = 10000;
         let rate = 1.5;
         // We need the total infectiousness multiplier for the person.
         let mut total_infectiousness_multiplier = None;
-        let mut num_infections_end_one_time_unit: usize = 0;
+        let mut num_infections_end_one_time_unit = 0;
         // Where we store the infection times.
         let infection_times = Rc::new(RefCell::new(Vec::<f64>::new()));
-        for seed in 0..NUM_SIMS {
+        for seed in 0..num_sims {
             let infection_times_clone = Rc::clone(&infection_times);
-            let mut context = setup_context(seed.try_into().unwrap(), rate);
+            let mut context = setup_context(seed, rate);
             // We only run the simulation for 1.0 time units.
             context.add_plan_with_phase(1.0, ixa::Context::shutdown, ExecutionPhase::Last);
             // Add a bunch of people so we mimic an infinitely large population.
@@ -276,7 +276,7 @@ mod test {
             num_infections_end_one_time_unit += infected_count;
         }
         #[allow(clippy::cast_precision_loss)]
-        let avg_number_infections = num_infections_end_one_time_unit as f64 / NUM_SIMS as f64;
+        let avg_number_infections = num_infections_end_one_time_unit as f64 / num_sims as f64;
         assert_almost_eq!(
             avg_number_infections,
             rate * total_infectiousness_multiplier.unwrap(),
