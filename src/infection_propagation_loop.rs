@@ -101,10 +101,13 @@ mod test {
 
     use crate::{
         infection_propagation_loop::{
-            init, load_rate_fns, schedule_next_forecasted_infection, schedule_recovery,
-            InfectionStatus, InfectionStatusValue,
+            init, load_rate_fns, schedule_next_forecasted_infection, InfectionStatus,
+            InfectionStatusValue,
         },
-        infectiousness_manager::{max_total_infectiousness_multiplier, InfectionContextExt},
+        infectiousness_manager::{
+            max_total_infectiousness_multiplier, InfectionContextExt, InfectionData,
+            InfectionDataValue,
+        },
         parameters::{ContextParametersExt, GlobalParams, Params},
     };
 
@@ -212,11 +215,11 @@ mod test {
     #[test]
     fn test_number_timing_infections_one_time_unit() {
         // Does one infectious person generate the number of infections as expected by the rate?
-        // We're going to run many simulations that each start with one person infected and have a
-        // very large number of susceptible people (mirroring one susceptible in an infinitely-large
-        // population) but those people themselves cannot transmit secondary infections. We're going
-        // to stop those simulations at the end of 1.0 time units and compare the number of infected
-        // people to the infectious rate we used to set up the simulation.
+        // We're going to run many simulations that each start with one infectious and one
+        // susceptible person. The susceptible person gets moved back to susceptible when becoming
+        // infected, so this is really a setup where there is no susceptible depletion/an
+        // infinitely large starting population. We stop the simulation at the end of 1.0 time units
+        // and compare the number of infected people to the infectious rate.
         // We're also going to check the times at which they are infected -- since we only record
         // infection times of when people are actually infected, we expect the times to be uniform
         // on [0, 1].
@@ -224,18 +227,17 @@ mod test {
         let rate = 1.5;
         // We need the total infectiousness multiplier for the person.
         let mut total_infectiousness_multiplier = None;
-        let mut num_infections_end_one_time_unit = 0;
         // Where we store the infection times.
         let infection_times = Rc::new(RefCell::new(Vec::<f64>::new()));
+        let num_infected = Rc::new(RefCell::new(0usize));
         for seed in 0..num_sims {
             let infection_times_clone = Rc::clone(&infection_times);
+            let num_infected_clone = Rc::clone(&num_infected);
             let mut context = setup_context(seed, rate);
             // We only run the simulation for 1.0 time units.
             context.add_plan_with_phase(1.0, ixa::Context::shutdown, ExecutionPhase::Last);
-            // Add a bunch of people so we mimic an infinitely large population.
-            for _ in 0..100 {
-                context.add_person(()).unwrap();
-            }
+            // Add a a person who will get infected.
+            context.add_person(()).unwrap();
             // We don't want infectious people beyond our index case to be able to transmit, so we
             // have to do setup on our own since just calling `init` will trigger a watcher for
             // people becoming infectious that lets them transmit.
@@ -256,27 +258,24 @@ mod test {
                     if event.current == InfectionStatusValue::Infectious {
                         let current_time = context.get_current_time();
                         infection_times_clone.borrow_mut().push(current_time);
+                        // Reset the person to susceptible.
+                        if event.person_id != infectious_person {
+                            *num_infected_clone.borrow_mut() += 1;
+                            context.set_person_property(
+                                event.person_id,
+                                InfectionData,
+                                InfectionDataValue::Susceptible,
+                            );
+                        }
                     }
                 },
             );
             // Setup is now over -- onto actually letting our infectious fellow infect others.
             schedule_next_forecasted_infection(&mut context, infectious_person);
-            schedule_recovery(&mut context, infectious_person);
             context.execute();
-            let mut infected_count = context
-                .query_people((InfectionStatus, InfectionStatusValue::Infectious))
-                .len();
-            // If our initial infection is still infected, we have to subtract one from our recorded
-            // number of infected people.
-            if context.get_person_property(infectious_person, InfectionStatus)
-                == InfectionStatusValue::Infectious
-            {
-                infected_count -= 1;
-            }
-            num_infections_end_one_time_unit += infected_count;
         }
         #[allow(clippy::cast_precision_loss)]
-        let avg_number_infections = num_infections_end_one_time_unit as f64 / num_sims as f64;
+        let avg_number_infections = num_infected.take() as f64 / num_sims as f64;
         assert_almost_eq!(
             avg_number_infections,
             rate * total_infectiousness_multiplier.unwrap(),
