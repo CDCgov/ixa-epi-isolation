@@ -220,9 +220,15 @@ mod test {
         // infected, so this is really a setup where there is no susceptible depletion/an
         // infinitely large starting population. We stop the simulation at the end of 1.0 time units
         // and compare the number of infected people to the infectious rate.
-        // We're also going to check the times at which they are infected -- since we only record
-        // infection times of when people are actually infected, we expect the times to be uniform
-        // on [0, 1].
+        // We're also going to check the times at which they are infected. In this test simulation,
+        // we are using a constant hazard of infection, and we only record infection times that are
+        // within 1.0 time units, so we expect the timing of infection attempts to follow U(0, 1).
+        // First, we should not expect to observe an exponential distribution because we may observe
+        // multiple infection attempts in the same experiment, not just the first. This also helps
+        // provide intuition for why we expect a uniform distribution -- if the first infection
+        // attempt happens quickly, that increases the chance we see another in 1.0 time units, and
+        // because there is basically this compensating relationship between the time and the number
+        // of events, they "cancel" each other out to give a uniform distribution (handwavingly).
         let num_sims: u64 = 10000;
         let rate = 1.5;
         // We need the total infectiousness multiplier for the person.
