@@ -244,7 +244,7 @@ mod test {
             load_rate_fns(&mut context);
             // Add our infectious fellow.
             let infectious_person = context.add_person(()).unwrap();
-            context.infect_person(infectious_person);
+            context.infect_person(infectious_person, None);
             // Get the total infectiousness multiplier for comparison to total number of infections.
             if total_infectiousness_multiplier.is_none() {
                 total_infectiousness_multiplier = Some(max_total_infectiousness_multiplier(
