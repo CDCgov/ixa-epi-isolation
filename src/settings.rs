@@ -267,7 +267,7 @@ mod test {
         let inf_multiplier = context.calculate_infectiousness_multiplier::<Home>(person, home_id);
         let members = context.get_setting_members::<Home>(home_id).unwrap();
         println!("Setting multiplier {inf_multiplier} with members  {:#?}", members);
-        assert_almost_eq!(inf_multiplier, ((6.0 - 1.0) as f64).powf(0.1), 0.1);
+        assert_eq!(inf_multiplier, ((6.0 - 1.0) as f64).powf(0.1));
     }
 
     #[test]
@@ -300,6 +300,22 @@ mod test {
         assert_eq!(home_ids, person_settings.get(&TypeId::of::<Home>()).unwrap().clone());
         assert_eq!(tract_ids, person_settings.get(&TypeId::of::<CensusTract>()).unwrap().clone());
     }
+
+    #[test]
+    fn test_total_infectiousness_multiplier() {
+        // Go through all the settings and compute infectiousness multiplier
+        // First check only one setting, then check a person in multiple settings
+        assert_eq!(0,0);
+    }
+
+    #[test]
+    fn test_get_contacts() {
+        // Register multiple people to a setting
+        // get a list of people from one setting
+        // get one random contact
+        assert_eq!(0,0);
+    }
+    
     /*TODO:
     Test failure of getting properties if not initialized
     Test failure if a setting is registered more than once? 
