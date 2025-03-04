@@ -8,9 +8,9 @@ use std::collections::HashMap;
 use std::collections::hash_map::Entry;
 use std::hash::Hash;
 use std::marker::PhantomData;
+use tinyset::SetUsize;
 
 #[allow(dead_code)]
-
 define_rng!(SettingsRng);
 
 // This is not the most flexible structure but would work for now
@@ -20,8 +20,10 @@ pub struct SettingProperties {
 }
 
 
-pub trait SettingType: Any + Hash + Eq + PartialEq {
-    fn new() -> Self;
+pub trait SettingType: Any + Hash + Eq + PartialEq + Default{
+    fn new() -> Self {
+        Self::default()
+    }
     fn calculate_multiplier(&self, n_members: usize, setting_properties: &SettingProperties) -> f64;
 }
 
@@ -46,16 +48,14 @@ impl<T: SettingType> SettingId<T> {
 pub struct SettingDataContainer {
     setting_properties: HashMap<TypeId, SettingProperties>,
     members: HashMap<TypeId, HashMap<usize, Vec<PersonId>>>,
+    members_to_settings: HashMap<PersonId, HashMap<TypeId,SetUsize>>,
 }
 
 // Define a home setting
-#[derive(Hash, Eq, PartialEq)]
+#[derive(Default, Hash, Eq, PartialEq)]
 pub struct Home {}
 
 impl SettingType for Home {
-    fn new() -> Self {
-        Home {}
-    }
     // Read members and setting_properties as arguments
     fn calculate_multiplier(&self, n_members: usize, setting_properties: &SettingProperties) -> f64 {
         return ((n_members - 1) as f64).powf(setting_properties.alpha);
@@ -69,6 +69,7 @@ define_data_plugin!(
     SettingDataContainer {
         setting_properties: HashMap::default(),
         members: HashMap::default(),
+        members_to_settings: HashMap::default(),
     }
 );
 
@@ -76,9 +77,11 @@ pub trait ContextSettingExt {
     fn get_setting_properties<T: SettingType>(&mut self) -> SettingProperties;
     fn register_setting_type<T: SettingType>(&mut self, setting_props: SettingProperties);
     fn add_setting<T: SettingType>(&mut self, setting_id: usize, person_id: PersonId) -> Result<(), IxaError>;
+    fn register_setting_for_person<T: SettingType>(&mut self, setting_id: usize, person_id: PersonId) -> Result<(), IxaError>;
     // TODO: To get setting members, how can we query instead?(e.g., filter Alive.)
     fn get_setting_members<T: SettingType>(&mut self, setting_id: usize) -> Option<Vec<PersonId>>;
     fn calculate_infectiousness_multiplier<T: SettingType>(&mut self, person_id: PersonId, setting_id: usize) -> f64;
+    fn get_settings_per_person(&mut self, person_id: PersonId) -> Option<HashMap<TypeId, SetUsize>>;
     // fn get_contact<T: SettingType>(&mut self, person_id: PersonId, setting_id: usize) -> Option<PersonId>;
 }
 
@@ -96,7 +99,35 @@ impl ContextSettingExt for Context {
         self.get_data_container_mut(SettingDataPlugin)
             .setting_properties.insert(TypeId::of::<T>(), setting_props);
     }
-    
+
+    fn register_setting_for_person<T: SettingType>(&mut self, setting_id: usize, person_id: PersonId) -> Result<(), IxaError> {
+        match self.get_data_container_mut(SettingDataPlugin).members_to_settings.entry(person_id) {
+            Entry::Vacant(entry) => {
+                let mut setting_map = HashMap::new();
+                let mut new_setting_set = SetUsize::new();
+                new_setting_set.insert(setting_id);
+                setting_map.insert(TypeId::of::<T>(),new_setting_set);
+                entry.insert(setting_map);
+                Ok(())
+            }
+            Entry::Occupied(mut entry) => {
+                // If occupied, it means already there's a setting type (e.g., home) not necessarily the setting id
+                match entry.get_mut().entry(TypeId::of::<T>()) {
+                    Entry::Vacant(setting_map) => {
+                        let mut new_setting_set = SetUsize::new();
+                        new_setting_set.insert(setting_id);
+                        setting_map.insert(new_setting_set);
+                    }
+                    Entry::Occupied(mut setting_map) => {
+                        setting_map.get_mut()
+                            .insert(setting_id);
+                    }
+                }
+                Ok(())
+            }
+        }
+    }
+    //TODO: person_ids should probably be a set and not a vec to avoid duplicates
     fn add_setting<T: SettingType>(&mut self, setting_id: usize, person_id: PersonId) -> Result<(), IxaError> {
     // First create a map if empty
     // add person id to map of type and ids
@@ -105,6 +136,7 @@ impl ContextSettingExt for Context {
                 let mut setting_map = HashMap::<usize, Vec<PersonId>>::new();
                 setting_map.insert(setting_id, vec!(person_id));
                 entry.insert(setting_map);
+                self.register_setting_for_person::<T>(setting_id, person_id)?;
                 Ok(())
             }
             Entry::Occupied(mut entry) => {
@@ -119,6 +151,7 @@ impl ContextSettingExt for Context {
                             .push(person_id);
                     }
                 }
+                self.register_setting_for_person::<T>(setting_id, person_id)?;
                 Ok(())
             }
         }
@@ -143,23 +176,35 @@ impl ContextSettingExt for Context {
         let setting  = T::new();
         return setting.calculate_multiplier(members.len(), &setting_properties);
     }
+    
+    // Perhaps setting ids should include type and id so that one can have a vector of setting ids
+    fn get_settings_per_person(&mut self, person_id: PersonId) -> Option<HashMap<TypeId, SetUsize>> {
+        let setting_person_map = self.get_data_container_mut(SettingDataPlugin)
+            .members_to_settings
+            .get(&person_id);
+        match setting_person_map {
+            Some(person_map) => {
+                return Some(person_map.clone());
+            },
+            None => None
+        }
+    }
 }
  
 
 
 #[cfg(test)]
 mod test {
+    use statrs::assert_almost_eq;
+
     use super::*;
     use crate::settings::ContextSettingExt;
     // Define a home setting
-    #[derive(Hash, Eq, PartialEq)]
+    #[derive(Default, Hash, Eq, PartialEq)]
     pub struct CensusTract {}
     impl SettingType for CensusTract {
-        fn new() -> Self {
-            CensusTract {}
-        }
         fn calculate_multiplier(&self, n_members: usize, setting_properties: &SettingProperties) -> f64 {
-            return 10.0;
+            return ((n_members - 1) as f64).powf(setting_properties.alpha);
         }
     }
 
@@ -215,12 +260,6 @@ mod test {
             }
         }
 
-        /*
-        - Get a few people
-        - For each person, get their setting id for home
-        - get members of home id
-        - calculate infectiousness multiplier for home id (N - 1) ^ alpha
-        */
         let home_id = 0;
         let person = context.add_person(()).unwrap();
         let _ = context.add_setting::<Home>(home_id, person);
@@ -228,7 +267,38 @@ mod test {
         let inf_multiplier = context.calculate_infectiousness_multiplier::<Home>(person, home_id);
         let members = context.get_setting_members::<Home>(home_id).unwrap();
         println!("Setting multiplier {inf_multiplier} with members  {:#?}", members);
+        assert_almost_eq!(inf_multiplier, ((6.0 - 1.0) as f64).powf(0.1), 0.1);
+    }
+
+    #[test]
+    fn test_person_settings() {
+        let mut context = Context::new();
+        context.register_setting_type::<Home>(SettingProperties{alpha: 0.1});
+        context.register_setting_type::<CensusTract>(SettingProperties{alpha: 0.01});
+        // Create 5 people
+        for _ in 0..5 {
+            let person = context.add_person(()).unwrap();
+            let _ = context.add_setting::<Home>(0, person);
+            let _ = context.add_setting::<CensusTract>(0, person);
+        }
+        // Get all settings a person is registered
+        // Every person should be registered to home 0 and census tract 0
+        let person = context.add_person(()).unwrap();
+        let _ = context.add_setting::<Home>(0, person);
+        let _ = context.add_setting::<CensusTract>(0, person);
+        let _ = context.add_setting::<CensusTract>(1, person);
+        let person_settings = context.get_settings_per_person(person).unwrap();
+        let mut home_ids = SetUsize::new();
+        home_ids.insert(0);
+        let mut tract_ids = SetUsize::new();
+        tract_ids.insert(0);
+        tract_ids.insert(1);
         
+        println!("Person settings for {person} {:#?}", person_settings.get(&TypeId::of::<Home>()));
+        println!("Settings for person {person}: {:#?}", person_settings);
+
+        assert_eq!(home_ids, person_settings.get(&TypeId::of::<Home>()).unwrap().clone());
+        assert_eq!(tract_ids, person_settings.get(&TypeId::of::<CensusTract>()).unwrap().clone());
     }
     /*TODO:
     Test failure of getting properties if not initialized
