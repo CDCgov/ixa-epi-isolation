@@ -19,35 +19,21 @@ pub struct SettingProperties {
 }
 
 
-pub trait SettingType: Any + Hash + Eq + PartialEq + Default{
-    fn new() -> Self {
-        Self::default()
-    }
-    fn calculate_multiplier(&self, n_members: usize, setting_properties: &SettingProperties) -> f64;
+pub trait SettingType {
+    fn calculate_multiplier(&self, context: &Context, setting_id: usize, setting_properties: &SettingProperties) -> f64;
 }
 
-
-// TODO: Use setting id instead of usize id. 
-#[derive(Hash, Eq, PartialEq, Ord, PartialOrd)]
-pub struct SettingId<T: SettingType> {
-    pub id: usize,
-    // Marker to say this group id is associated with T (but does not own it)
-    pub setting_type: PhantomData<*const T>,
-}
-
-impl<T: SettingType> SettingId<T> {
-    pub fn new(id: usize) -> SettingId<T> {
-        SettingId {
-            id,
-            setting_type: PhantomData,
-        }
-    }
+struct ItineraryEntry {
+    setting_type: Box<dyn SettingType>,
+    setting_id: usize,
+    ratio: f64
 }
 
 pub struct SettingDataContainer {
     setting_properties: HashMap<TypeId, SettingProperties>,
     members: HashMap<TypeId, HashMap<usize, Vec<PersonId>>>,
     members_to_settings: HashMap<PersonId, HashMap<TypeId,SetUsize>>,
+    itineraries: HashMap<PersonId, Vec<ItineraryEntry>>
 }
 
 // Define a home setting
@@ -56,7 +42,8 @@ pub struct Home {}
 
 impl SettingType for Home {
     // Read members and setting_properties as arguments
-    fn calculate_multiplier(&self, n_members: usize, setting_properties: &SettingProperties) -> f64 {
+    fn calculate_multiplier(context: &Context, setting_id: usize, setting_properties: &SettingProperties) -> f64 {
+        let n_members = context.get_setting_members::<Self>(setting_id).unwrap().len();
         return ((n_members - 1) as f64).powf(setting_properties.alpha);
     }
 }
@@ -64,7 +51,8 @@ impl SettingType for Home {
 #[derive(Default, Hash, Eq, PartialEq)]
 pub struct CensusTract {}
 impl SettingType for CensusTract {
-    fn calculate_multiplier(&self, n_members: usize, setting_properties: &SettingProperties) -> f64 {
+    fn calculate_multiplier(context: &Context, setting_id: usize, setting_properties: &SettingProperties) -> f64 {
+        let n_members = context.get_setting_members::<Self>(setting_id).unwrap().len();
         return ((n_members - 1) as f64).powf(setting_properties.alpha);
     }
 }
@@ -77,24 +65,25 @@ define_data_plugin!(
         setting_properties: HashMap::default(),
         members: HashMap::default(),
         members_to_settings: HashMap::default(),
+        itineraries: HashMap::default()
     }
 );
 
 pub trait ContextSettingExt {
-    fn get_setting_properties<T: SettingType>(&mut self) -> SettingProperties;
+    fn get_setting_properties<T: SettingType>(&self) -> SettingProperties;
     fn register_setting_type<T: SettingType>(&mut self, setting_props: SettingProperties);
     fn add_setting<T: SettingType>(&mut self, setting_id: usize, person_id: PersonId) -> Result<(), IxaError>;
     fn register_setting_for_person<T: SettingType>(&mut self, setting_id: usize, person_id: PersonId) -> Result<(), IxaError>;
     // TODO: To get setting members, how can we query instead?(e.g., filter Alive.)
-    fn get_setting_members<T: SettingType>(&mut self, setting_id: usize) -> Option<Vec<PersonId>>;
-    fn calculate_infectiousness_multiplier<T: SettingType>(&mut self, setting_id: usize) -> f64;
-    fn calculate_total_infectiousness_multiplier(&mut self, person_id: PersonId) -> Option<f64>;
-    fn get_settings_per_person(&mut self, person_id: PersonId) -> Option<HashMap<TypeId, SetUsize>>;
-    fn get_contact<T: SettingType>(&mut self, person_id: PersonId, setting_id: usize) -> Option<PersonId>;
+    fn get_setting_members<T: SettingType>(&self, setting_id: usize) -> Option<Vec<PersonId>>;
+    fn calculate_total_infectiousness_multiplier_for_setting<T: SettingType>(&self, setting_id: usize) -> f64;
+    fn calculate_total_infectiousness_multiplier_for_person(&self, person_id: PersonId) -> Option<f64>;
+    fn get_itinerary(&self, person_id: PersonId) -> Option<Vec<ItineraryEntry>>;
+    fn get_contact<T: SettingType>(&self, person_id: PersonId, setting_id: usize) -> Option<PersonId>;
 }
 
 impl ContextSettingExt for Context {    
-    fn get_setting_properties<T: SettingType>(&mut self) -> SettingProperties {
+    fn get_setting_properties<T: SettingType>(&self) -> SettingProperties {
         let data_container = self.get_data_container(SettingDataPlugin)
             .unwrap()
             .setting_properties
@@ -164,7 +153,7 @@ impl ContextSettingExt for Context {
             }
         }
     }
-    fn get_setting_members<T: SettingType>(&mut self, setting_id: usize) -> Option<Vec<PersonId>> {
+    fn get_setting_members<T: SettingType + 'static>(&self, setting_id: usize) -> Option<Vec<PersonId>> {
         let setting_container = self.get_data_container(SettingDataPlugin)
             .unwrap()
             .members
@@ -178,25 +167,24 @@ impl ContextSettingExt for Context {
         }        
     }
 
-    fn calculate_infectiousness_multiplier<T: SettingType>(&mut self, setting_id: usize) -> f64 {
-        let members = self.get_setting_members::<T>(setting_id).unwrap();
+    fn calculate_total_infectiousness_multiplier_for_setting<T: SettingType>(&self, setting, setting_id: usize) -> f64 {
         let setting_properties = self.get_setting_properties::<T>();
-        let setting  = T::new();
-        return setting.calculate_multiplier(members.len(), &setting_properties);
+        let setting = 
+        return setting.calculate_multiplier(self, setting_id,  &setting_properties);
     }
 
-    fn calculate_total_infectiousness_multiplier(&mut self, person_id: PersonId) -> Option<f64> {
-        // TODO: This will prbably change for a person property implementation or something else
+    fn calculate_total_infectiousness_multiplier_for_person(&self, person_id: PersonId) -> Option<f64> {
+        // TODO: This will probably change for a person property implementation or something else
         //       Needs to incorporate proportion of time to compute infectiousness by setting id
-        if let Some(settings_per_person) = self.get_settings_per_person(person_id) {
+        if let Some(itinerary) = self.get_itinerary(person_id) {
             let mut total_infectiousness = 0.0;
             // Go through each registered setting and calculate total infectiousness
-            for (setting_type, setting_ids) in settings_per_person.into_iter() {
+            for itinerary_entry in itinerary.into_iter() {
                 for id in setting_ids.iter() {
                     // I know this is wrong, but some hacky way of doing this for now
                     total_infectiousness += match setting_type {
-                        t if t == TypeId::of::<Home>() =>  self.calculate_infectiousness_multiplier::<Home>( id),
-                        t if t == TypeId::of::<CensusTract>() => self.calculate_infectiousness_multiplier::<CensusTract>( id),
+                        t if t == TypeId::of::<Home>() =>  self.calculate_total_infectiousness_multiplier_for_setting::<Home>( id),
+                        t if t == TypeId::of::<CensusTract>() => self.calculate_total_infectiousness_multiplier_for_setting::<CensusTract>( id),
                         _ => 0.0,
                     }
                 }
@@ -208,19 +196,14 @@ impl ContextSettingExt for Context {
     }
     
     // Perhaps setting ids should include type and id so that one can have a vector of setting ids
-    fn get_settings_per_person(&mut self, person_id: PersonId) -> Option<HashMap<TypeId, SetUsize>> {
-        let setting_person_map = self.get_data_container_mut(SettingDataPlugin)
-            .members_to_settings
-            .get(&person_id);
-        match setting_person_map {
-            Some(person_map) => {
-                return Some(person_map.clone());
-            },
-            None => None
-        }
+    fn get_itinerary(&self, person_id: PersonId) -> Option<Vec<ItineraryEntry>> {
+        self.get_data_container(SettingDataPlugin)
+            .expect("Person should be added to settings")
+            .itineraries
+            .get(&person_id)
     }
 
-    fn get_contact<T: SettingType>(&mut self, person_id: PersonId, setting_id: usize) -> Option<PersonId> {
+    fn get_contact<T: SettingType>(&self, person_id: PersonId, setting_id: usize) -> Option<PersonId> {
         if let Some(members) = self.get_setting_members::<T>(setting_id) {
             if members.len() == 1 {
                 return None;
@@ -300,7 +283,7 @@ mod test {
         let person = context.add_person(()).unwrap();
         let _ = context.add_setting::<Home>(home_id, person);
 
-        let inf_multiplier = context.calculate_infectiousness_multiplier::<Home>(home_id);
+        let inf_multiplier = context.calculate_total_infectiousness_multiplier_for_setting::<Home>(home_id);
         let members = context.get_setting_members::<Home>(home_id).unwrap();
         println!("Setting multiplier {inf_multiplier} with members  {:#?}", members);
         assert_eq!(inf_multiplier, ((6.0 - 1.0) as f64).powf(0.1));
@@ -323,7 +306,7 @@ mod test {
         let _ = context.add_setting::<Home>(0, person);
         let _ = context.add_setting::<CensusTract>(0, person);
         let _ = context.add_setting::<CensusTract>(1, person);
-        let person_settings = context.get_settings_per_person(person).unwrap();
+        let person_settings = context.get_itinerary(person).unwrap();
         let mut home_ids = SetUsize::new();
         home_ids.insert(0);
         let mut tract_ids = SetUsize::new();
@@ -362,19 +345,19 @@ mod test {
         let _ = context.add_setting::<Home>(0, person);
 
         // If only registered at home, total infectiousness multiplier should be (6 - 1) ^ (alpha)
-        let inf_multiplier = context.calculate_total_infectiousness_multiplier(person).unwrap();
+        let inf_multiplier = context.calculate_total_infectiousness_multiplier_for_person(person).unwrap();
         println!("Total infectiousness with one setting: {inf_multiplier}");
         assert_eq!(inf_multiplier, ((6.0 - 1.0) as f64).powf(0.1));
 
         // If another setting with other 6 people are added, the total infectiousness should be the sum of infs
         // Censustract alpha here defined as 0.01
         let _ = context.add_setting::<CensusTract>(0, person);
-        let inf_multiplier_two_settings = context.calculate_total_infectiousness_multiplier(person).unwrap();
+        let inf_multiplier_two_settings = context.calculate_total_infectiousness_multiplier_for_person(person).unwrap();
         println!("Total infectiousness with two settings: {inf_multiplier_two_settings}");
         assert_eq!(inf_multiplier_two_settings, ((6.0 - 1.0) as f64).powf(0.1) + ((6.0 - 1.0) as f64).powf(0.01));
         
         let _ = context.add_setting::<CensusTract>(1, person);
-        let inf_multiplier_three_settings = context.calculate_total_infectiousness_multiplier(person).unwrap();
+        let inf_multiplier_three_settings = context.calculate_total_infectiousness_multiplier_for_person(person).unwrap();
         // Adding a third setting to the person but this setting has only 4 people, not 6
         println!("Total infectiousness with three settings: {inf_multiplier_three_settings}");
         assert_eq!(inf_multiplier_three_settings, ((6.0 - 1.0) as f64).powf(0.1) + ((6.0 - 1.0) as f64).powf(0.01) + ((4.0 - 1.0) as f64).powf(0.01));
