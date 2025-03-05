@@ -3,8 +3,8 @@ mod infection_propagation_loop;
 mod infectiousness_manager;
 mod parameters;
 mod population_loader;
-mod settings;
 pub mod rate_fns;
+mod settings;
 
 use infectiousness_manager::InfectionStatus;
 use ixa::runner::run_with_args;
