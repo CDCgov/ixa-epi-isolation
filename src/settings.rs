@@ -62,6 +62,14 @@ impl SettingType for Home {
     }
 }
 
+#[derive(Default, Hash, Eq, PartialEq)]
+pub struct CensusTract {}
+impl SettingType for CensusTract {
+    fn calculate_multiplier(&self, n_members: usize, setting_properties: &SettingProperties) -> f64 {
+        return ((n_members - 1) as f64).powf(setting_properties.alpha);
+    }
+}
+
 
 define_data_plugin!(
     SettingDataPlugin,
@@ -81,6 +89,7 @@ pub trait ContextSettingExt {
     // TODO: To get setting members, how can we query instead?(e.g., filter Alive.)
     fn get_setting_members<T: SettingType>(&mut self, setting_id: usize) -> Option<Vec<PersonId>>;
     fn calculate_infectiousness_multiplier<T: SettingType>(&mut self, person_id: PersonId, setting_id: usize) -> f64;
+    fn calculate_total_infectiousness_multiplier(&mut self, person_id: PersonId) -> Option<f64>;
     fn get_settings_per_person(&mut self, person_id: PersonId) -> Option<HashMap<TypeId, SetUsize>>;
     // fn get_contact<T: SettingType>(&mut self, person_id: PersonId, setting_id: usize) -> Option<PersonId>;
 }
@@ -176,6 +185,26 @@ impl ContextSettingExt for Context {
         let setting  = T::new();
         return setting.calculate_multiplier(members.len(), &setting_properties);
     }
+
+    fn calculate_total_infectiousness_multiplier(&mut self, person_id: PersonId) -> Option<f64> {
+        if let Some(settings_per_person) = self.get_settings_per_person(person_id) {
+            let mut total_infectiousness = 0.0;
+            // Go through each registered setting and calculate total infectiousness
+            for (setting_type, setting_ids) in settings_per_person.into_iter() {
+                for id in setting_ids.iter() {
+                    // I know this is wrong, but some hacky way of doing this for now
+                    total_infectiousness += match setting_type {
+                        t if t == TypeId::of::<Home>() =>  self.calculate_infectiousness_multiplier::<Home>(person_id, id),
+                        t if t == TypeId::of::<CensusTract>() => self.calculate_infectiousness_multiplier::<CensusTract>(person_id, id),
+                        _ => 0.0,
+                    }
+                }
+            }
+            Some(total_infectiousness)
+        } else {
+            None
+        }
+    }
     
     // Perhaps setting ids should include type and id so that one can have a vector of setting ids
     fn get_settings_per_person(&mut self, person_id: PersonId) -> Option<HashMap<TypeId, SetUsize>> {
@@ -195,19 +224,8 @@ impl ContextSettingExt for Context {
 
 #[cfg(test)]
 mod test {
-    use statrs::assert_almost_eq;
-
     use super::*;
     use crate::settings::ContextSettingExt;
-    // Define a home setting
-    #[derive(Default, Hash, Eq, PartialEq)]
-    pub struct CensusTract {}
-    impl SettingType for CensusTract {
-        fn calculate_multiplier(&self, n_members: usize, setting_properties: &SettingProperties) -> f64 {
-            return ((n_members - 1) as f64).powf(setting_properties.alpha);
-        }
-    }
-
     #[test]
     fn test_setting_type_creation() {
         let mut context = Context::new();
@@ -305,7 +323,45 @@ mod test {
     fn test_total_infectiousness_multiplier() {
         // Go through all the settings and compute infectiousness multiplier
         // First check only one setting, then check a person in multiple settings
-        assert_eq!(0,0);
+        let mut context = Context::new();
+        context.register_setting_type::<Home>(SettingProperties{alpha: 0.1});
+        context.register_setting_type::<CensusTract>(SettingProperties{alpha: 0.01});
+        // Create 5 people
+        for _ in 0..5 {
+            let person = context.add_person(()).unwrap();
+            let _ = context.add_setting::<Home>(0, person);
+            let _ = context.add_setting::<CensusTract>(0, person);
+        }
+        // Add three more people to census tract 1 
+        for _ in 0..3 {
+            let person = context.add_person(()).unwrap();
+             let _ = context.add_setting::<CensusTract>(1, person);
+        }
+        
+        // Get all settings a person is registered
+        // Create a new person and register to home 0 
+        let person = context.add_person(()).unwrap();
+        let _ = context.add_setting::<Home>(0, person);
+
+        // If only registered at home, total infectiousness multiplier should be (6 - 1) ^ (alpha)
+        let inf_multiplier = context.calculate_total_infectiousness_multiplier(person).unwrap();
+        println!("Total infectiousness with one setting: {inf_multiplier}");
+        assert_eq!(inf_multiplier, ((6.0 - 1.0) as f64).powf(0.1));
+
+        // If another setting with other 6 people are added, the total infectiousness should be the sum of infs
+        // Censustract alpha here defined as 0.01
+        let _ = context.add_setting::<CensusTract>(0, person);
+        let inf_multiplier_two_settings = context.calculate_total_infectiousness_multiplier(person).unwrap();
+        println!("Total infectiousness with two settings: {inf_multiplier_two_settings}");
+        assert_eq!(inf_multiplier_two_settings, ((6.0 - 1.0) as f64).powf(0.1) + ((6.0 - 1.0) as f64).powf(0.01));
+        
+        let _ = context.add_setting::<CensusTract>(1, person);
+        let inf_multiplier_three_settings = context.calculate_total_infectiousness_multiplier(person).unwrap();
+        // Adding a third setting to the person but this setting has only 4 people, not 6
+        println!("Total infectiousness with three settings: {inf_multiplier_three_settings}");
+        assert_eq!(inf_multiplier_three_settings, ((6.0 - 1.0) as f64).powf(0.1) + ((6.0 - 1.0) as f64).powf(0.01) + ((4.0 - 1.0) as f64).powf(0.01));
+
+        
     }
 
     #[test]
