@@ -1,6 +1,6 @@
 use ixa::{
     define_data_plugin, Context, ContextPeopleExt, IxaError,
-    define_rng
+    define_rng, ContextRandomExt
 };
 use ixa::people::PersonId;
 use std::any::{Any, TypeId};
@@ -10,7 +10,6 @@ use std::hash::Hash;
 use std::marker::PhantomData;
 use tinyset::SetUsize;
 
-#[allow(dead_code)]
 define_rng!(SettingsRng);
 
 // This is not the most flexible structure but would work for now
@@ -88,10 +87,10 @@ pub trait ContextSettingExt {
     fn register_setting_for_person<T: SettingType>(&mut self, setting_id: usize, person_id: PersonId) -> Result<(), IxaError>;
     // TODO: To get setting members, how can we query instead?(e.g., filter Alive.)
     fn get_setting_members<T: SettingType>(&mut self, setting_id: usize) -> Option<Vec<PersonId>>;
-    fn calculate_infectiousness_multiplier<T: SettingType>(&mut self, person_id: PersonId, setting_id: usize) -> f64;
+    fn calculate_infectiousness_multiplier<T: SettingType>(&mut self, setting_id: usize) -> f64;
     fn calculate_total_infectiousness_multiplier(&mut self, person_id: PersonId) -> Option<f64>;
     fn get_settings_per_person(&mut self, person_id: PersonId) -> Option<HashMap<TypeId, SetUsize>>;
-    // fn get_contact<T: SettingType>(&mut self, person_id: PersonId, setting_id: usize) -> Option<PersonId>;
+    fn get_contact<T: SettingType>(&mut self, person_id: PersonId, setting_id: usize) -> Option<PersonId>;
 }
 
 impl ContextSettingExt for Context {    
@@ -179,7 +178,7 @@ impl ContextSettingExt for Context {
         }        
     }
 
-    fn calculate_infectiousness_multiplier<T: SettingType>(&mut self, person_id: PersonId, setting_id: usize) -> f64 {
+    fn calculate_infectiousness_multiplier<T: SettingType>(&mut self, setting_id: usize) -> f64 {
         let members = self.get_setting_members::<T>(setting_id).unwrap();
         let setting_properties = self.get_setting_properties::<T>();
         let setting  = T::new();
@@ -187,6 +186,8 @@ impl ContextSettingExt for Context {
     }
 
     fn calculate_total_infectiousness_multiplier(&mut self, person_id: PersonId) -> Option<f64> {
+        // TODO: This will prbably change for a person property implementation or something else
+        //       Needs to incorporate proportion of time to compute infectiousness by setting id
         if let Some(settings_per_person) = self.get_settings_per_person(person_id) {
             let mut total_infectiousness = 0.0;
             // Go through each registered setting and calculate total infectiousness
@@ -194,8 +195,8 @@ impl ContextSettingExt for Context {
                 for id in setting_ids.iter() {
                     // I know this is wrong, but some hacky way of doing this for now
                     total_infectiousness += match setting_type {
-                        t if t == TypeId::of::<Home>() =>  self.calculate_infectiousness_multiplier::<Home>(person_id, id),
-                        t if t == TypeId::of::<CensusTract>() => self.calculate_infectiousness_multiplier::<CensusTract>(person_id, id),
+                        t if t == TypeId::of::<Home>() =>  self.calculate_infectiousness_multiplier::<Home>( id),
+                        t if t == TypeId::of::<CensusTract>() => self.calculate_infectiousness_multiplier::<CensusTract>( id),
                         _ => 0.0,
                     }
                 }
@@ -217,6 +218,23 @@ impl ContextSettingExt for Context {
             },
             None => None
         }
+    }
+
+    fn get_contact<T: SettingType>(&mut self, person_id: PersonId, setting_id: usize) -> Option<PersonId> {
+        if let Some(members) = self.get_setting_members::<T>(setting_id) {
+            if members.len() == 1 {
+                return None;
+            }
+            let mut contact_id = person_id;
+            while contact_id == person_id {
+                contact_id = members[self.sample_range(SettingsRng, 0..members.len())];
+            }
+            Some(contact_id)
+        } else {
+            None
+        }
+        
+        
     }
 }
  
@@ -282,7 +300,7 @@ mod test {
         let person = context.add_person(()).unwrap();
         let _ = context.add_setting::<Home>(home_id, person);
 
-        let inf_multiplier = context.calculate_infectiousness_multiplier::<Home>(person, home_id);
+        let inf_multiplier = context.calculate_infectiousness_multiplier::<Home>(home_id);
         let members = context.get_setting_members::<Home>(home_id).unwrap();
         println!("Setting multiplier {inf_multiplier} with members  {:#?}", members);
         assert_eq!(inf_multiplier, ((6.0 - 1.0) as f64).powf(0.1));
@@ -366,10 +384,20 @@ mod test {
 
     #[test]
     fn test_get_contacts() {
-        // Register multiple people to a setting
-        // get a list of people from one setting
-        // get one random contact
-        assert_eq!(0,0);
+        // Register two people to a setting and make sure that the person chosen is the other one
+        // Attempt to draw a contact from a setting with only the person trying to get a contact
+        // TODO: What happens if the person isn't registered in the setting? 
+        let mut context = Context::new();
+        context.init_random(42);
+        context.register_setting_type::<Home>(SettingProperties{alpha: 0.1});
+        context.register_setting_type::<CensusTract>(SettingProperties{alpha: 0.01});
+        let person_a = context.add_person(()).unwrap();
+        let person_b = context.add_person(()).unwrap();
+        let _ = context.add_setting::<Home>(0, person_a);
+        let _ = context.add_setting::<Home>(0, person_b);
+        let _ = context.add_setting::<CensusTract>(0, person_a);
+        assert_eq!(person_b,context.get_contact::<Home>(person_a, 0).unwrap());
+        assert!(context.get_contact::<CensusTract>(person_a, 0).is_none());
     }
     
     /*TODO:
