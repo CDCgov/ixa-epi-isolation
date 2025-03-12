@@ -151,5 +151,13 @@ mod tests {
             elapsed: 3.0,
         };
         assert_almost_eq!(scaled_rate_fn.infection_duration(), 2.0, 0.0);
+
+        // Show that changing `elapsed`` also changes the infection duration
+        let scaled_rate_fn = ScaledRateFn {
+            base: &rate_fn,
+            scale: 2.0,
+            elapsed: 2.0,
+        };
+        assert_almost_eq!(scaled_rate_fn.infection_duration(), 3.0, 0.0);
     }
 }

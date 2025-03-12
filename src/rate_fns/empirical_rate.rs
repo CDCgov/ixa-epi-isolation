@@ -518,5 +518,13 @@ mod test {
         )
         .unwrap();
         assert_almost_eq!(empirical.infection_duration(), 5.0, 0.0);
+
+        // Show that the infection duration is agnostic to the value in `instantaneous_rate`
+        let empirical = EmpiricalRate::new(
+            vec![0.0, 1.0, 2.0, 3.0, 4.0, 5.0],
+            vec![1.0, 1.0, 0.0, 0.0, 1.0, 1.0],
+        )
+        .unwrap();
+        assert_almost_eq!(empirical.infection_duration(), 5.0, 0.0);
     }
 }
