@@ -29,9 +29,7 @@ fn schedule_next_forecasted_infection(context: &mut Context, person: PersonId) {
 }
 
 fn schedule_recovery(context: &mut Context, person: PersonId) {
-    let infection_duration = context
-        .get_person_rate_fn(person)
-        .infection_duration_remaining(0.0);
+    let infection_duration = context.get_person_rate_fn(person).infection_duration();
     let recovery_time = context.get_current_time() + infection_duration;
     context.add_plan(recovery_time, move |context| {
         trace!("Person {person} has recovered at {recovery_time}");
@@ -321,9 +319,7 @@ mod test {
         let person = context.add_person(()).unwrap();
         seed_infections(&mut context, 1);
         // For later, we need to get the recovery time from the rate function.
-        let recovery_time = context
-            .get_person_rate_fn(person)
-            .infection_duration_remaining(0.0);
+        let recovery_time = context.get_person_rate_fn(person).infection_duration();
         schedule_recovery(&mut context, person);
         context.execute();
         // Make sure person is recovered.

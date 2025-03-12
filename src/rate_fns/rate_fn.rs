@@ -24,7 +24,7 @@ pub trait InfectiousnessRateFn {
 
     /// Returns the remaining time of the infectiousness period at time `t`. Can return a negative
     /// number if the infectiousness period has already ended.
-    fn infection_duration_remaining(&self, t: f64) -> f64;
+    fn infection_duration(&self) -> f64;
 }
 
 /// A utility for scaling and shifting an infectiousness rate function
@@ -75,9 +75,9 @@ impl<T: ?Sized + InfectiousnessRateFn> InfectiousnessRateFn for ScaledRateFn<'_,
                 - self.elapsed,
         )
     }
-    /// Returns the remaining infectiousness period at `t + elapsed`.
-    fn infection_duration_remaining(&self, t: f64) -> f64 {
-        self.base.infection_duration_remaining(t + self.elapsed)
+    /// Returns the remaining infectiousness period at `elapsed`.
+    fn infection_duration(&self) -> f64 {
+        self.base.infection_duration() - self.elapsed
     }
 }
 
@@ -150,8 +150,6 @@ mod tests {
             scale: 2.0,
             elapsed: 3.0,
         };
-        assert_almost_eq!(scaled_rate_fn.infection_duration_remaining(0.0), 2.0, 0.0);
-        assert_almost_eq!(scaled_rate_fn.infection_duration_remaining(1.0), 1.0, 0.0);
-        assert_almost_eq!(scaled_rate_fn.infection_duration_remaining(3.0), -1.0, 0.0);
+        assert_almost_eq!(scaled_rate_fn.infection_duration(), 2.0, 0.0);
     }
 }

@@ -220,8 +220,8 @@ impl InfectiousnessRateFn for EmpiricalRate {
         Some(self.times[integration_index] + t)
     }
 
-    fn infection_duration_remaining(&self, t: f64) -> f64 {
-        self.times[self.times.len() - 1] - t
+    fn infection_duration(&self) -> f64 {
+        self.times[self.times.len() - 1]
     }
 }
 
@@ -511,13 +511,12 @@ mod test {
     }
 
     #[test]
-    fn test_infection_duration_remaining() {
+    fn test_infection_duration() {
         let empirical = EmpiricalRate::new(
             vec![0.0, 1.0, 2.0, 3.0, 4.0, 5.0],
             vec![1.0, 1.0, 0.0, 0.0, 1.0, 0.0],
         )
         .unwrap();
-        assert_almost_eq!(empirical.infection_duration_remaining(2.0), 3.0, 0.0);
-        assert_almost_eq!(empirical.infection_duration_remaining(7.0), -2.0, 0.0);
+        assert_almost_eq!(empirical.infection_duration(), 5.0, 0.0);
     }
 }

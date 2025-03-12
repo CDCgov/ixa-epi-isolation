@@ -62,8 +62,8 @@ mod tests {
         fn inverse_cum_rate(&self, _events: f64) -> Option<f64> {
             Some(1.0)
         }
-        fn infection_duration_remaining(&self, t: f64) -> f64 {
-            1.0 - t
+        fn infection_duration(&self) -> f64 {
+            1.0
         }
     }
 

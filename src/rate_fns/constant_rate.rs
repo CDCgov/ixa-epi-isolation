@@ -35,8 +35,8 @@ impl InfectiousnessRateFn for ConstantRate {
             Some(t)
         }
     }
-    fn infection_duration_remaining(&self, t: f64) -> f64 {
-        self.infection_duration - t
+    fn infection_duration(&self) -> f64 {
+        self.infection_duration
     }
 }
 
@@ -71,10 +71,8 @@ mod test {
     }
 
     #[test]
-    fn test_infection_duration_remaining() {
+    fn test_infection_duration() {
         let r = ConstantRate::new(2.0, 10.0);
-        assert_almost_eq!(r.infection_duration_remaining(0.0), 10.0, 0.0);
-        assert_almost_eq!(r.infection_duration_remaining(3.0), 7.0, 0.0);
-        assert_almost_eq!(r.infection_duration_remaining(13.0), -3.0, 0.0);
+        assert_almost_eq!(r.infection_duration(), 10.0, 0.0);
     }
 }
