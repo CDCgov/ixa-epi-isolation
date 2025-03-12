@@ -96,7 +96,6 @@ mod test {
         assert_almost_eq,
         distribution::{ContinuousCDF, Uniform},
     };
-    use statrs::assert_almost_eq;
 
     use crate::{
         infection_propagation_loop::{
@@ -314,7 +313,7 @@ mod test {
 
     #[test]
     fn test_schedule_recovery() {
-        let mut context = setup_context();
+        let mut context = setup_context(0, 0.0);
         load_rate_fns(&mut context);
         let person = context.add_person(()).unwrap();
         seed_infections(&mut context, 1);
