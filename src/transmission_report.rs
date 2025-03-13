@@ -103,7 +103,7 @@ mod test {
                 "epi_isolation.GlobalParams": {
                 "max_time": 200.0,
                 "seed": 123,
-                "rate_of_infection": [{"Constant": 1.0}],
+                "infectiousness_rate_fcn": {"Constant": 1.0},
                 "initial_infections": 1,
                 "infection_duration": 5.0,
                 "report_period": 1.0,
@@ -123,7 +123,7 @@ mod test {
                 "epi_isolation.GlobalParams": {
                 "max_time": 200.0,
                 "seed": 123,
-                "rate_of_infection": [{"Constant": 1.0}],
+                "infectiousness_rate_fcn": {"Constant": 1.0},
                 "initial_infections": 1,
                 "infection_duration": 5.0,
                 "report_period": 1.0,
@@ -145,7 +145,7 @@ mod test {
                 "epi_isolation.GlobalParams": {
                 "max_time": 200.0,
                 "seed": 123,
-                "rate_of_infection": [{"Constant": 1.0}],
+                "infectiousness_rate_fcn": {"Constant": 1.0},
                 "initial_infections": 1,
                 "infection_duration": 5.0,
                 "report_period": 1.0,

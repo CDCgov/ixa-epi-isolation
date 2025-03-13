@@ -227,7 +227,7 @@ mod test {
             InfectionData, InfectionDataValue, InfectionStatus, InfectionStatusValue,
             TOTAL_INFECTIOUSNESS_MULTIPLIER,
         },
-        parameters::{GlobalParams, Params, Rates},
+        parameters::{GlobalParams, Params, RateFunctionType},
     };
     use ixa::{Context, ContextGlobalPropertiesExt, ContextPeopleExt, ContextRandomExt};
 
@@ -241,7 +241,7 @@ mod test {
                     initial_infections: 1,
                     max_time: 10.0,
                     seed: 0,
-                    rate_of_infection: vec![Rates::Constant(1.0)],
+                    infectiousness_rate_fcn: RateFunctionType::Constant(1.0),
                     infection_duration: 5.0,
                     report_period: 1.0,
                     synth_population_file: PathBuf::from("."),

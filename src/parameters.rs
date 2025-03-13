@@ -5,7 +5,7 @@ use ixa::{define_global_property, ContextGlobalPropertiesExt, IxaError};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub enum Rates {
+pub enum RateFunctionType {
     Constant(f64),
     Empirical(Vec<(f64, f64)>),
 }
@@ -20,7 +20,7 @@ pub struct Params {
     /// The random seed for the simulation.
     pub seed: u64,
     /// A library of infection rates to assign to infected people.
-    pub rate_of_infection: Vec<Rates>,
+    pub infectiousness_rate_fcn: RateFunctionType,
     /// The duration of the infection in days
     pub infection_duration: f64,
     /// The period at which to report tabulated values
@@ -70,7 +70,7 @@ mod test {
     use super::validate_inputs;
     use std::path::PathBuf;
 
-    use crate::parameters::{ContextParametersExt, GlobalParams, Params, Rates};
+    use crate::parameters::{ContextParametersExt, GlobalParams, Params, RateFunctionType};
 
     #[test]
     fn test_default_input_file() {
@@ -89,7 +89,7 @@ mod test {
             initial_infections: 1,
             max_time: 100.0,
             seed: 0,
-            rate_of_infection: vec![Rates::Constant(1.0)],
+            infectiousness_rate_fcn: RateFunctionType::Constant(1.0),
             infection_duration: 5.0,
             report_period: 1.0,
             synth_population_file: PathBuf::from("."),
@@ -111,7 +111,7 @@ mod test {
             initial_infections: 1,
             max_time: 100.0,
             seed: 0,
-            rate_of_infection: vec![Rates::Constant(1.0)],
+            infectiousness_rate_fcn: RateFunctionType::Constant(1.0),
             infection_duration: -5.0,
             report_period: 1.0,
             synth_population_file: PathBuf::from("."),
@@ -132,14 +132,7 @@ mod test {
 
     #[test]
     fn test_deserialization_rates() {
-        let deserialized = serde_json::from_str::<Vec<Rates>>(
-            "[{\"Constant\": 1.0}, {\"Empirical\": [[0.0, 0.0], [1.0, 1.0]]}]",
-        )
-        .unwrap();
-        assert_eq!(deserialized[0], Rates::Constant(1.0));
-        assert_eq!(
-            deserialized[1],
-            Rates::Empirical(vec![(0.0, 0.0), (1.0, 1.0)])
-        );
+        let deserialized = serde_json::from_str::<RateFunctionType>("{\"Constant\": 1.0}").unwrap();
+        assert_eq!(deserialized, RateFunctionType::Constant(1.0));
     }
 }
