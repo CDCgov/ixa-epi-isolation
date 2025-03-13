@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum RateFunctionType {
     Constant(f64),
-    Empirical(Vec<(f64, f64)>),
+    FromFile(PathBuf),
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]

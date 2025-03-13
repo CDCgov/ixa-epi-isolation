@@ -222,7 +222,7 @@ mod test {
         evaluate_forecast, get_forecast, max_total_infectiousness_multiplier, InfectionContextExt,
     };
     use crate::{
-        infection_propagation_loop::instantiate_rate_fns,
+        infection_propagation_loop::load_rate_fcns,
         infectiousness_manager::{
             InfectionData, InfectionDataValue, InfectionStatus, InfectionStatusValue,
             TOTAL_INFECTIOUSNESS_MULTIPLIER,
@@ -249,7 +249,7 @@ mod test {
                 },
             )
             .unwrap();
-        instantiate_rate_fns(&mut context).unwrap();
+        load_rate_fcns(&mut context).unwrap();
         context
     }
 

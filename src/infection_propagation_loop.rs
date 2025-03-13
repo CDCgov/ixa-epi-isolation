@@ -39,9 +39,10 @@ fn schedule_recovery(context: &mut Context, person: PersonId) {
     });
 }
 
-/// Instantiate the rate functions specified in the global parameter `rate_of_infection` as actual
-/// rate functions for the simulation that are assigned randomly to agents when they are infected.
-pub fn instantiate_rate_fns(context: &mut Context) -> Result<(), IxaError> {
+/// Load the rate functions specified in the global parameter `infectiousness_rate_fcn` as
+/// actual rate functions for the simulation that are assigned randomly to agents when they are
+/// infected.
+pub fn load_rate_fcns(context: &mut Context) -> Result<(), IxaError> {
     let rate_of_infection = context.get_params().infectiousness_rate_fcn.clone();
     let infection_duration = context.get_params().infection_duration;
 
@@ -49,9 +50,8 @@ pub fn instantiate_rate_fns(context: &mut Context) -> Result<(), IxaError> {
         RateFunctionType::Constant(rate) => {
             context.add_rate_fn(Box::new(ConstantRate::new(rate, infection_duration)?));
         }
-        RateFunctionType::Empirical(rate_fn) => {
-            let (t, r): (Vec<f64>, Vec<f64>) = rate_fn.into_iter().unzip();
-            context.add_rate_fn(Box::new(EmpiricalRate::new(t, r)?));
+        RateFunctionType::FromFile(file) => {
+            // Read rate functions from file
         }
     }
     Ok(())
@@ -71,7 +71,7 @@ pub fn init(context: &mut Context) -> Result<(), IxaError> {
         initial_infections, ..
     } = context.get_params();
 
-    instantiate_rate_fns(context)?;
+    load_rate_fcns(context)?;
 
     // Seed the initial population
     context.add_plan(0.0, move |context| {
@@ -103,14 +103,7 @@ mod test {
     };
 
     use crate::{
-        infection_propagation_loop::{
-            init, load_rate_fns, schedule_next_forecasted_infection, InfectionStatus,
-            InfectionStatusValue,
-        },
-        infectiousness_manager::{
-            max_total_infectiousness_multiplier, InfectionContextExt, InfectionData,
-            InfectionDataValue,
-        },
+        infection_propagation_loop::{init, load_rate_fcns, InfectionStatus, InfectionStatusValue},
         parameters::{ContextParametersExt, GlobalParams, Params, RateFunctionType},
         rate_fns::InfectiousnessRateExt,
     };
@@ -142,7 +135,7 @@ mod test {
         for _ in 0..10 {
             context.add_person(()).unwrap();
         }
-        instantiate_rate_fns(&mut context).unwrap();
+        load_rate_fcns(&mut context).unwrap();
         seed_infections(&mut context, 5);
         let infectious_count = context
             .query_people((InfectionStatus, InfectionStatusValue::Infectious))
@@ -153,7 +146,7 @@ mod test {
     #[test]
     fn test_instantiate_rate_fns() {
         let mut context = setup_context(1, 1.0);
-        instantiate_rate_fns(&mut context).unwrap();
+        load_rate_fcns(&mut context).unwrap();
         let rate_fn_id = context.get_random_rate_function();
         let rate_fn = context.get_rate_fn(rate_fn_id);
         assert_eq!(rate_fn.rate(0.0), 1.0);
