@@ -46,10 +46,9 @@ fn schedule_recovery(context: &mut Context, person: PersonId) {
 /// infectiousness rate functions for the simulation.
 pub fn load_rate_fcns(context: &mut Context) -> Result<(), IxaError> {
     let rate_of_infection = context.get_params().infectiousness_rate_fcn.clone();
-    let infection_duration = context.get_params().infection_duration;
 
     match rate_of_infection {
-        RateFunctionType::Constant(rate) => {
+        RateFunctionType::Constant(rate, infection_duration) => {
             context.add_rate_fn(Box::new(ConstantRate::new(rate, infection_duration)?));
         }
         RateFunctionType::EmpiricalFromFile(file) => {
@@ -165,8 +164,7 @@ mod test {
             initial_infections: 3,
             max_time: 100.0,
             seed,
-            infectiousness_rate_fcn: RateFunctionType::Constant(rate_of_infection),
-            infection_duration: 5.0,
+            infectiousness_rate_fcn: RateFunctionType::Constant(rate_of_infection, 5.0),
             report_period: 1.0,
             synth_population_file: PathBuf::from("."),
             transmission_report_name: None,

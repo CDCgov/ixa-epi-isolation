@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum RateFunctionType {
-    Constant(f64),
+    Constant(f64, f64),
     EmpiricalFromFile(PathBuf),
 }
 
@@ -21,8 +21,6 @@ pub struct Params {
     pub seed: u64,
     /// A library of infection rates to assign to infected people.
     pub infectiousness_rate_fcn: RateFunctionType,
-    /// The duration of the infection in days
-    pub infection_duration: f64,
     /// The period at which to report tabulated values
     pub report_period: f64,
     /// The path to the synthetic population file loaded in `population_loader`
@@ -35,11 +33,6 @@ fn validate_inputs(parameters: &Params) -> Result<(), IxaError> {
     if parameters.max_time < 0.0 {
         return Err(IxaError::IxaError(
             "The max simulation running time must be non-negative.".to_string(),
-        ));
-    }
-    if parameters.infection_duration < 0.0 {
-        return Err(IxaError::IxaError(
-            "The duration of infection must be non-negative.".to_string(),
         ));
     }
     if parameters.report_period < 0.0 {
@@ -89,8 +82,7 @@ mod test {
             initial_infections: 1,
             max_time: 100.0,
             seed: 0,
-            infectiousness_rate_fcn: RateFunctionType::Constant(1.0),
-            infection_duration: 5.0,
+            infectiousness_rate_fcn: RateFunctionType::Constant(1.0, 5.0),
             report_period: 1.0,
             synth_population_file: PathBuf::from("."),
             transmission_report_name: None,
@@ -106,13 +98,12 @@ mod test {
     }
 
     #[test]
-    fn test_validate_infection_duration() {
+    fn test_validate_max_time() {
         let parameters = Params {
             initial_infections: 1,
-            max_time: 100.0,
+            max_time: -100.0,
             seed: 0,
-            infectiousness_rate_fcn: RateFunctionType::Constant(1.0),
-            infection_duration: -5.0,
+            infectiousness_rate_fcn: RateFunctionType::Constant(1.0, 5.0),
             report_period: 1.0,
             synth_population_file: PathBuf::from("."),
             transmission_report_name: None,
@@ -120,10 +111,10 @@ mod test {
         let e = validate_inputs(&parameters).err();
         match e {
             Some(IxaError::IxaError(msg)) => {
-                assert_eq!(msg, "The duration of infection must be non-negative.".to_string());
+                assert_eq!(msg, "The max simulation running time must be non-negative.".to_string());
             }
             Some(ue) => panic!(
-                "Expected an error that the duration of infection validation should fail. Instead got {:?}",
+                "Expected an error that the max simulation running time validation should fail. Instead got {:?}",
                 ue.to_string()
             ),
             None => panic!("Expected an error. Instead, validation passed with no errors."),
@@ -132,7 +123,7 @@ mod test {
 
     #[test]
     fn test_deserialization_rates() {
-        let deserialized = serde_json::from_str::<RateFunctionType>("{\"Constant\": 1.0}").unwrap();
-        assert_eq!(deserialized, RateFunctionType::Constant(1.0));
+        let deserialized = serde_json::from_str::<RateFunctionType>("{\"Constant\": 1.0, 5.0}").unwrap();
+        assert_eq!(deserialized, RateFunctionType::Constant(1.0, 5.0));
     }
 }
