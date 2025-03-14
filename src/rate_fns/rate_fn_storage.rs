@@ -20,7 +20,7 @@ define_rng!(InfectiousnessRateRng);
 
 pub trait InfectiousnessRateExt {
     fn add_rate_fn(&mut self, dist: Box<dyn InfectiousnessRateFn>) -> RateFnId;
-    fn get_random_rate_function(&mut self) -> RateFnId;
+    fn get_random_rate_fn(&mut self) -> RateFnId;
     fn get_rate_fn(&self, index: RateFnId) -> &dyn InfectiousnessRateFn;
 }
 
@@ -31,7 +31,7 @@ impl InfectiousnessRateExt for Context {
         RateFnId(container.rates.len() - 1)
     }
 
-    fn get_random_rate_function(&mut self) -> RateFnId {
+    fn get_random_rate_fn(&mut self) -> RateFnId {
         let max = self.get_data_container_mut(RateFnPlugin).rates.len();
         RateFnId(self.sample_range(InfectiousnessRateRng, 0..max))
     }
@@ -80,7 +80,7 @@ mod tests {
         let rate_fn = TestRateFn {};
         context.add_rate_fn(Box::new(rate_fn));
 
-        let i = context.get_random_rate_function();
+        let i = context.get_random_rate_fn();
         assert!(i.0 == 0);
         assert_eq!(context.get_rate_fn(i).rate(0.0), 1.0);
     }

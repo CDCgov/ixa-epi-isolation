@@ -68,7 +68,7 @@ pub fn init(context: &mut Context) -> Result<(), IxaError> {
 mod test {
 
     use crate::{
-        infection_propagation_loop::load_rate_fcns, infectiousness_manager::InfectionContextExt,
+        infection_propagation_loop::load_rate_fns, infectiousness_manager::InfectionContextExt,
         parameters::ContextParametersExt,
     };
     use ixa::{
@@ -91,7 +91,7 @@ mod test {
         let mut context = Context::new();
         context.load_global_properties(&file_path).unwrap();
         context.init_random(context.get_params().seed);
-        load_rate_fcns(&mut context).unwrap();
+        load_rate_fns(&mut context).unwrap();
         context
     }
 
@@ -102,7 +102,7 @@ mod test {
                 "epi_isolation.GlobalParams": {
                 "max_time": 200.0,
                 "seed": 123,
-                "infectiousness_rate_fcn": {"Constant": [1.0, 5.0]},
+                "infectiousness_rate_fn": {"Constant": [1.0, 5.0]},
                 "initial_infections": 1,
                 "report_period": 1.0,
                 "synth_population_file": "input/people_test.csv"
@@ -121,7 +121,7 @@ mod test {
                 "epi_isolation.GlobalParams": {
                 "max_time": 200.0,
                 "seed": 123,
-                "infectiousness_rate_fcn": {"Constant": [1.0, 5.0]},
+                "infectiousness_rate_fn": {"Constant": [1.0, 5.0]},
                 "initial_infections": 1,
                 "report_period": 1.0,
                 "synth_population_file": "input/people_test.csv",
@@ -142,7 +142,7 @@ mod test {
                 "epi_isolation.GlobalParams": {
                 "max_time": 200.0,
                 "seed": 123,
-                "infectiousness_rate_fcn": {"Constant": [1.0, 5.0]},
+                "infectiousness_rate_fn": {"Constant": [1.0, 5.0]},
                 "initial_infections": 1,
                 "report_period": 1.0,
                 "synth_population_file": "input/people_test.csv",

@@ -164,7 +164,7 @@ impl InfectionContextExt for Context {
     // calculate intrinsic infectiousness
     fn infect_person(&mut self, target_id: PersonId, source_id: Option<PersonId>) {
         let infection_time = self.get_current_time();
-        let rate_fn_id = self.get_random_rate_function();
+        let rate_fn_id = self.get_random_rate_fn();
         trace!("Person {target_id}: Infected at {infection_time}");
         self.set_person_property(
             target_id,
@@ -222,12 +222,12 @@ mod test {
         evaluate_forecast, get_forecast, max_total_infectiousness_multiplier, InfectionContextExt,
     };
     use crate::{
-        infection_propagation_loop::load_rate_fcns,
+        infection_propagation_loop::load_rate_fns,
         infectiousness_manager::{
             InfectionData, InfectionDataValue, InfectionStatus, InfectionStatusValue,
             TOTAL_INFECTIOUSNESS_MULTIPLIER,
         },
-        parameters::{GlobalParams, Params, RateFunctionType},
+        parameters::{GlobalParams, Params, RateFnType},
     };
     use ixa::{Context, ContextGlobalPropertiesExt, ContextPeopleExt, ContextRandomExt};
 
@@ -241,14 +241,14 @@ mod test {
                     initial_infections: 1,
                     max_time: 10.0,
                     seed: 0,
-                    infectiousness_rate_fcn: RateFunctionType::Constant(1.0, 5.0),
+                    infectiousness_rate_fn: RateFnType::Constant(1.0, 5.0),
                     report_period: 1.0,
                     synth_population_file: PathBuf::from("."),
                     transmission_report_name: None,
                 },
             )
             .unwrap();
-        load_rate_fcns(&mut context).unwrap();
+        load_rate_fns(&mut context).unwrap();
         context
     }
 

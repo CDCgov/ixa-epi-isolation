@@ -55,7 +55,6 @@ impl InfectiousnessRateFn for ConstantRate {
 }
 
 #[cfg(test)]
-#[allow(clippy::float_cmp)]
 mod test {
     use ixa::IxaError;
     use statrs::assert_almost_eq;
@@ -96,15 +95,15 @@ mod test {
     #[test]
     fn test_rate() {
         let r = ConstantRate::new(2.0, 10.0).unwrap();
-        assert_eq!(r.rate(5.0), 2.0);
-        assert_eq!(r.rate(11.0), 0.0);
+        assert_almost_eq!(r.rate(5.0), 2.0, 0.0);
+        assert_almost_eq!(r.rate(11.0), 0.0, 0.0);
     }
 
     #[test]
     fn test_cum_rate() {
         let r = ConstantRate::new(2.0, 10.0).unwrap();
-        assert_eq!(r.cum_rate(5.0), 10.0);
-        assert_eq!(r.cum_rate(11.0), 20.0);
+        assert_almost_eq!(r.cum_rate(5.0), 10.0, 0.0);
+        assert_almost_eq!(r.cum_rate(11.0), 20.0, 0.0);
     }
 
     #[test]

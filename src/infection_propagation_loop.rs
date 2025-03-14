@@ -4,7 +4,7 @@ use crate::infectiousness_manager::{
     evaluate_forecast, get_forecast, select_next_contact, Forecast, InfectionContextExt,
     InfectionStatus, InfectionStatusValue,
 };
-use crate::parameters::{ContextParametersExt, Params, RateFunctionType};
+use crate::parameters::{ContextParametersExt, Params, RateFnType};
 use crate::rate_fns::{ConstantRate, EmpiricalRate, InfectiousnessRateExt};
 use ixa::{
     define_rng, trace, Context, ContextPeopleExt, IxaError, PersonId, PersonPropertyChangeEvent,
@@ -42,32 +42,32 @@ fn schedule_recovery(context: &mut Context, person: PersonId) {
     });
 }
 
-/// Turn the information specified in the global parameter `infectiousness_rate_fcn` into actual
+/// Turn the information specified in the global parameter `infectiousness_rate_fn` into actual
 /// infectiousness rate functions for the simulation.
-pub fn load_rate_fcns(context: &mut Context) -> Result<(), IxaError> {
-    let rate_of_infection = context.get_params().infectiousness_rate_fcn.clone();
+pub fn load_rate_fns(context: &mut Context) -> Result<(), IxaError> {
+    let rate_of_infection = context.get_params().infectiousness_rate_fn.clone();
 
     match rate_of_infection {
-        RateFunctionType::Constant(rate, infection_duration) => {
+        RateFnType::Constant(rate, infection_duration) => {
             context.add_rate_fn(Box::new(ConstantRate::new(rate, infection_duration)?));
         }
-        RateFunctionType::EmpiricalFromFile(file) => {
-            add_rate_functions_from_file(context, file)?;
+        RateFnType::EmpiricalFromFile(file) => {
+            add_rate_fns_from_file(context, file)?;
         }
     }
     Ok(())
 }
 
 #[derive(Deserialize)]
-pub struct RateFunctionRecord {
+pub struct RateFnRecord {
     id: u8,
     time: f64,
     value: f64,
 }
 
-fn add_rate_functions_from_file(context: &mut Context, file: PathBuf) -> Result<(), IxaError> {
+fn add_rate_fns_from_file(context: &mut Context, file: PathBuf) -> Result<(), IxaError> {
     let mut reader = csv::Reader::from_path(file)?;
-    let mut reader = reader.deserialize::<RateFunctionRecord>();
+    let mut reader = reader.deserialize::<RateFnRecord>();
     // Pop out the first record so we can initialize the vectors
     let record = reader.next().unwrap()?;
     let mut last_id = record.id;
@@ -112,7 +112,7 @@ pub fn init(context: &mut Context) -> Result<(), IxaError> {
         initial_infections, ..
     } = context.get_params();
 
-    load_rate_fcns(context)?;
+    load_rate_fns(context)?;
 
     // Seed the initial population
     context.add_plan(0.0, move |context| {
@@ -145,14 +145,14 @@ mod test {
 
     use crate::{
         infection_propagation_loop::{
-            add_rate_functions_from_file, init, load_rate_fcns, schedule_next_forecasted_infection,
+            add_rate_fns_from_file, init, load_rate_fns, schedule_next_forecasted_infection,
             InfectionStatus, InfectionStatusValue,
         },
         infectiousness_manager::{
             max_total_infectiousness_multiplier, InfectionContextExt, InfectionData,
             InfectionDataValue,
         },
-        parameters::{ContextParametersExt, GlobalParams, Params, RateFunctionType},
+        parameters::{ContextParametersExt, GlobalParams, Params, RateFnType},
         rate_fns::InfectiousnessRateExt,
     };
 
@@ -164,7 +164,7 @@ mod test {
             initial_infections: 3,
             max_time: 100.0,
             seed,
-            infectiousness_rate_fcn: RateFunctionType::Constant(rate_of_infection, 5.0),
+            infectiousness_rate_fn: RateFnType::Constant(rate_of_infection, 5.0),
             report_period: 1.0,
             synth_population_file: PathBuf::from("."),
             transmission_report_name: None,
@@ -182,7 +182,7 @@ mod test {
         for _ in 0..10 {
             context.add_person(()).unwrap();
         }
-        load_rate_fcns(&mut context).unwrap();
+        load_rate_fns(&mut context).unwrap();
         seed_infections(&mut context, 5);
         let infectious_count = context
             .query_people((InfectionStatus, InfectionStatusValue::Infectious))
@@ -193,8 +193,8 @@ mod test {
     #[test]
     fn test_load_rate_functions_constant() {
         let mut context = setup_context(1, 1.0);
-        load_rate_fcns(&mut context).unwrap();
-        let rate_fn_id = context.get_random_rate_function();
+        load_rate_fns(&mut context).unwrap();
+        let rate_fn_id = context.get_random_rate_fn();
         let rate_fn = context.get_rate_fn(rate_fn_id);
         assert_eq!(rate_fn.rate(0.0), 1.0);
         assert_eq!(rate_fn.rate(5.1), 0.0);
@@ -204,8 +204,8 @@ mod test {
     fn test_read_rate_function_file() {
         let mut context = setup_context(1, 1.0);
         let file = PathBuf::from("./tests/data/one_rate_function.csv");
-        add_rate_functions_from_file(&mut context, file).unwrap();
-        let rate_fn_id = context.get_random_rate_function();
+        add_rate_fns_from_file(&mut context, file).unwrap();
+        let rate_fn_id = context.get_random_rate_fn();
         let rate_fn = context.get_rate_fn(rate_fn_id);
         assert_eq!(rate_fn.rate(0.0), 1.0);
         assert_eq!(rate_fn.rate(1.0), 2.0);
@@ -312,7 +312,7 @@ mod test {
             // We don't want infectious people beyond our index case to be able to transmit, so we
             // have to do setup on our own since just calling `init` will trigger a watcher for
             // people becoming infectious that lets them transmit.
-            load_rate_fcns(&mut context).unwrap();
+            load_rate_fns(&mut context).unwrap();
             // Add our infectious fellow.
             let infectious_person = context.add_person(()).unwrap();
             context.infect_person(infectious_person, None);
@@ -381,7 +381,7 @@ mod test {
     #[test]
     fn test_schedule_recovery() {
         let mut context = setup_context(0, 0.0);
-        load_rate_fcns(&mut context).unwrap();
+        load_rate_fns(&mut context).unwrap();
         let person = context.add_person(()).unwrap();
         seed_infections(&mut context, 1);
         // For later, we need to get the recovery time from the rate function.
