@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 use crate::infectiousness_manager::{
     evaluate_forecast, get_forecast, select_next_contact, Forecast, InfectionContextExt,
     InfectionStatus, InfectionStatusValue,
@@ -7,6 +9,7 @@ use crate::rate_fns::{ConstantRate, EmpiricalRate, InfectiousnessRateExt};
 use ixa::{
     define_rng, trace, Context, ContextPeopleExt, IxaError, PersonId, PersonPropertyChangeEvent,
 };
+use serde::Deserialize;
 
 define_rng!(InfectionRng);
 
@@ -39,9 +42,8 @@ fn schedule_recovery(context: &mut Context, person: PersonId) {
     });
 }
 
-/// Load the rate functions specified in the global parameter `infectiousness_rate_fcn` as
-/// actual rate functions for the simulation that are assigned randomly to agents when they are
-/// infected.
+/// Turn the information specified in the global parameter `infectiousness_rate_fcn` into actual
+/// infectiousness rate functions for the simulation.
 pub fn load_rate_fcns(context: &mut Context) -> Result<(), IxaError> {
     let rate_of_infection = context.get_params().infectiousness_rate_fcn.clone();
     let infection_duration = context.get_params().infection_duration;
@@ -50,10 +52,50 @@ pub fn load_rate_fcns(context: &mut Context) -> Result<(), IxaError> {
         RateFunctionType::Constant(rate) => {
             context.add_rate_fn(Box::new(ConstantRate::new(rate, infection_duration)?));
         }
-        RateFunctionType::FromFile(file) => {
-            // Read rate functions from file
+        RateFunctionType::EmpiricalFromFile(file) => {
+            add_rate_functions_from_file(context, file)?;
         }
     }
+    Ok(())
+}
+
+#[derive(Deserialize)]
+pub struct RateFunctionRecord {
+    id: u8,
+    time: f64,
+    value: f64,
+}
+
+fn add_rate_functions_from_file(context: &mut Context, file: PathBuf) -> Result<(), IxaError> {
+    let mut reader = csv::Reader::from_path(file)?;
+    let mut reader = reader.deserialize::<RateFunctionRecord>();
+    // Pop out the first record so we can initialize the vectors
+    let record = reader.next().unwrap()?;
+    let mut last_id = record.id;
+    let mut times = vec![record.time];
+    let mut values = vec![record.value];
+    for record in reader {
+        let record = record?;
+        // For now, assume only empirical rate functions
+        if record.id == last_id {
+            // Add to the current rate function
+            times.push(record.time);
+            values.push(record.value);
+        } else {
+            // Take the last values of times and values and make them into a rate function
+            if !times.is_empty() {
+                let fcn = Box::new(EmpiricalRate::new(times, values)?);
+                context.add_rate_fn(fcn);
+                last_id = record.id;
+            }
+            // Start the new values off
+            times = vec![record.time];
+            values = vec![record.value];
+        }
+    }
+    // Add the last rate function in the CSV
+    let fcn = Box::new(EmpiricalRate::new(times, values)?);
+    context.add_rate_fn(fcn);
     Ok(())
 }
 
@@ -103,7 +145,10 @@ mod test {
     };
 
     use crate::{
-        infection_propagation_loop::{init, load_rate_fcns, InfectionStatus, InfectionStatusValue},
+        infection_propagation_loop::{
+            add_rate_functions_from_file, init, load_rate_fcns, InfectionStatus,
+            InfectionStatusValue,
+        },
         parameters::{ContextParametersExt, GlobalParams, Params, RateFunctionType},
         rate_fns::InfectiousnessRateExt,
     };
@@ -144,7 +189,7 @@ mod test {
     }
 
     #[test]
-    fn test_instantiate_rate_fns() {
+    fn test_load_rate_functions_constant() {
         let mut context = setup_context(1, 1.0);
         load_rate_fcns(&mut context).unwrap();
         let rate_fn_id = context.get_random_rate_function();
@@ -154,8 +199,19 @@ mod test {
     }
 
     #[test]
+    fn test_read_rate_function_file() {
+        let mut context = setup_context();
+        let file = PathBuf::from("./tests/data/one_rate_function.csv");
+        add_rate_functions_from_file(&mut context, file).unwrap();
+        let rate_fn_id = context.get_random_rate_function();
+        let rate_fn = context.get_rate_fn(rate_fn_id);
+        assert_eq!(rate_fn.rate(0.0), 1.0);
+        assert_eq!(rate_fn.rate(1.0), 2.0);
+    }
+
+    #[test]
     fn test_init_loop() {
-        let mut context = setup_context(0, 1.0);
+        let mut context = setup_context();
         for _ in 0..10 {
             context.add_person(()).unwrap();
         }
