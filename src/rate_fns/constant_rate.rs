@@ -57,8 +57,8 @@ impl InfectiousnessRateFn for ConstantRate {
 #[cfg(test)]
 #[allow(clippy::float_cmp)]
 mod test {
-    use statrs::assert_almost_eq;
     use ixa::IxaError;
+    use statrs::assert_almost_eq;
 
     use super::ConstantRate;
     use super::InfectiousnessRateFn;

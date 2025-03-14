@@ -123,7 +123,8 @@ mod test {
 
     #[test]
     fn test_deserialization_rates() {
-        let deserialized = serde_json::from_str::<RateFunctionType>("{\"Constant\": [1.0, 5.0]}").unwrap();
+        let deserialized =
+            serde_json::from_str::<RateFunctionType>("{\"Constant\": [1.0, 5.0]}").unwrap();
         assert_eq!(deserialized, RateFunctionType::Constant(1.0, 5.0));
     }
 }
