@@ -146,8 +146,12 @@ mod test {
 
     use crate::{
         infection_propagation_loop::{
-            add_rate_functions_from_file, init, load_rate_fcns, InfectionStatus,
-            InfectionStatusValue,
+            add_rate_functions_from_file, init, load_rate_fcns, schedule_next_forecasted_infection,
+            InfectionStatus, InfectionStatusValue,
+        },
+        infectiousness_manager::{
+            max_total_infectiousness_multiplier, InfectionContextExt, InfectionData,
+            InfectionDataValue,
         },
         parameters::{ContextParametersExt, GlobalParams, Params, RateFunctionType},
         rate_fns::InfectiousnessRateExt,
@@ -160,8 +164,8 @@ mod test {
         let parameters = Params {
             initial_infections: 3,
             max_time: 100.0,
-            seed: 0,
-            rate_of_infection: vec![RateFunctionType::Constant(1.0)],
+            seed,
+            infectiousness_rate_fcn: RateFunctionType::Constant(rate_of_infection),
             infection_duration: 5.0,
             report_period: 1.0,
             synth_population_file: PathBuf::from("."),
@@ -200,7 +204,7 @@ mod test {
 
     #[test]
     fn test_read_rate_function_file() {
-        let mut context = setup_context();
+        let mut context = setup_context(1, 1.0);
         let file = PathBuf::from("./tests/data/one_rate_function.csv");
         add_rate_functions_from_file(&mut context, file).unwrap();
         let rate_fn_id = context.get_random_rate_function();
@@ -211,7 +215,7 @@ mod test {
 
     #[test]
     fn test_init_loop() {
-        let mut context = setup_context();
+        let mut context = setup_context(42, 1.0);
         for _ in 0..10 {
             context.add_person(()).unwrap();
         }
@@ -255,7 +259,7 @@ mod test {
             context.add_person(()).unwrap();
         }
 
-        init(&mut context);
+        init(&mut context).unwrap();
 
         let num_new_infections = Rc::new(RefCell::new(0usize));
         let num_new_infections_clone = Rc::clone(&num_new_infections);
@@ -310,7 +314,7 @@ mod test {
             // We don't want infectious people beyond our index case to be able to transmit, so we
             // have to do setup on our own since just calling `init` will trigger a watcher for
             // people becoming infectious that lets them transmit.
-            load_rate_fns(&mut context);
+            load_rate_fcns(&mut context).unwrap();
             // Add our infectious fellow.
             let infectious_person = context.add_person(()).unwrap();
             context.infect_person(infectious_person, None);
