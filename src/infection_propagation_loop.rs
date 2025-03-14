@@ -381,7 +381,7 @@ mod test {
     #[test]
     fn test_schedule_recovery() {
         let mut context = setup_context(0, 0.0);
-        load_rate_fns(&mut context);
+        load_rate_fcns(&mut context).unwrap();
         let person = context.add_person(()).unwrap();
         seed_infections(&mut context, 1);
         // For later, we need to get the recovery time from the rate function.

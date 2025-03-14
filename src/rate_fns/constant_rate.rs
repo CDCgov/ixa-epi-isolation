@@ -117,7 +117,7 @@ mod test {
 
     #[test]
     fn test_infection_duration() {
-        let r = ConstantRate::new(2.0, 10.0);
+        let r = ConstantRate::new(2.0, 10.0).unwrap();
         assert_almost_eq!(r.infection_duration(), 10.0, 0.0);
     }
 }
