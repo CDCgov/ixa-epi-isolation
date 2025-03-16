@@ -68,8 +68,8 @@ pub fn init(context: &mut Context) -> Result<(), IxaError> {
 mod test {
 
     use crate::{
-        infection_propagation_loop::load_rate_fns, infectiousness_manager::InfectionContextExt,
-        parameters::ContextParametersExt,
+        infectiousness_manager::InfectionContextExt, parameters::ContextParametersExt,
+        rate_fns::load_rate_fns,
     };
     use ixa::{
         Context, ContextGlobalPropertiesExt, ContextPeopleExt, ContextRandomExt, ContextReportExt,

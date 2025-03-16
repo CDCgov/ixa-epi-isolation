@@ -1,15 +1,12 @@
-use std::path::PathBuf;
-
 use crate::infectiousness_manager::{
     evaluate_forecast, get_forecast, select_next_contact, Forecast, InfectionContextExt,
     InfectionStatus, InfectionStatusValue,
 };
-use crate::parameters::{ContextParametersExt, Params, RateFnType};
-use crate::rate_fns::{ConstantRate, EmpiricalRate, InfectiousnessRateExt};
+use crate::parameters::{ContextParametersExt, Params};
+use crate::rate_fns::rate_fn_storage::load_rate_fns;
 use ixa::{
     define_rng, trace, Context, ContextPeopleExt, IxaError, PersonId, PersonPropertyChangeEvent,
 };
-use serde::Deserialize;
 
 define_rng!(InfectionRng);
 
@@ -40,62 +37,6 @@ fn schedule_recovery(context: &mut Context, person: PersonId) {
         trace!("Person {person} has recovered at {recovery_time}");
         context.recover_person(person);
     });
-}
-
-/// Turn the information specified in the global parameter `infectiousness_rate_fn` into actual
-/// infectiousness rate functions for the simulation.
-pub fn load_rate_fns(context: &mut Context) -> Result<(), IxaError> {
-    let rate_of_infection = context.get_params().infectiousness_rate_fn.clone();
-
-    match rate_of_infection {
-        RateFnType::Constant(rate, infection_duration) => {
-            context.add_rate_fn(Box::new(ConstantRate::new(rate, infection_duration)?));
-        }
-        RateFnType::EmpiricalFromFile(file) => {
-            add_rate_fns_from_file(context, file)?;
-        }
-    }
-    Ok(())
-}
-
-#[derive(Deserialize)]
-pub struct RateFnRecord {
-    id: u8,
-    time: f64,
-    value: f64,
-}
-
-fn add_rate_fns_from_file(context: &mut Context, file: PathBuf) -> Result<(), IxaError> {
-    let mut reader = csv::Reader::from_path(file)?;
-    let mut reader = reader.deserialize::<RateFnRecord>();
-    // Pop out the first record so we can initialize the vectors
-    let record = reader.next().unwrap()?;
-    let mut last_id = record.id;
-    let mut times = vec![record.time];
-    let mut values = vec![record.value];
-    for record in reader {
-        let record = record?;
-        // For now, assume only empirical rate functions
-        if record.id == last_id {
-            // Add to the current rate function
-            times.push(record.time);
-            values.push(record.value);
-        } else {
-            // Take the last values of times and values and make them into a rate function
-            if !times.is_empty() {
-                let fcn = Box::new(EmpiricalRate::new(times, values)?);
-                context.add_rate_fn(fcn);
-                last_id = record.id;
-            }
-            // Start the new values off
-            times = vec![record.time];
-            values = vec![record.value];
-        }
-    }
-    // Add the last rate function in the CSV
-    let fcn = Box::new(EmpiricalRate::new(times, values)?);
-    context.add_rate_fn(fcn);
-    Ok(())
 }
 
 /// Seeds the initial population with a number of infectious people.
@@ -145,15 +86,14 @@ mod test {
 
     use crate::{
         infection_propagation_loop::{
-            add_rate_fns_from_file, init, load_rate_fns, schedule_next_forecasted_infection,
-            InfectionStatus, InfectionStatusValue,
+            init, schedule_next_forecasted_infection, InfectionStatus, InfectionStatusValue,
         },
         infectiousness_manager::{
             max_total_infectiousness_multiplier, InfectionContextExt, InfectionData,
             InfectionDataValue,
         },
         parameters::{ContextParametersExt, GlobalParams, Params, RateFnType},
-        rate_fns::InfectiousnessRateExt,
+        rate_fns::load_rate_fns,
     };
 
     use super::{schedule_recovery, seed_infections};
@@ -188,27 +128,6 @@ mod test {
             .query_people((InfectionStatus, InfectionStatusValue::Infectious))
             .len();
         assert_eq!(infectious_count, 5);
-    }
-
-    #[test]
-    fn test_load_rate_functions_constant() {
-        let mut context = setup_context(1, 1.0);
-        load_rate_fns(&mut context).unwrap();
-        let rate_fn_id = context.get_random_rate_fn();
-        let rate_fn = context.get_rate_fn(rate_fn_id);
-        assert_eq!(rate_fn.rate(0.0), 1.0);
-        assert_eq!(rate_fn.rate(5.1), 0.0);
-    }
-
-    #[test]
-    fn test_read_rate_function_file() {
-        let mut context = setup_context(1, 1.0);
-        let file = PathBuf::from("./tests/data/one_rate_function.csv");
-        add_rate_fns_from_file(&mut context, file).unwrap();
-        let rate_fn_id = context.get_random_rate_fn();
-        let rate_fn = context.get_rate_fn(rate_fn_id);
-        assert_eq!(rate_fn.rate(0.0), 1.0);
-        assert_eq!(rate_fn.rate(1.0), 2.0);
     }
 
     #[test]
