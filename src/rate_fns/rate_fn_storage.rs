@@ -24,7 +24,7 @@ define_rng!(InfectiousnessRateRng);
 
 pub trait InfectiousnessRateExt {
     fn add_rate_fn(&mut self, dist: Box<dyn InfectiousnessRateFn>) -> RateFnId;
-    fn get_random_rate_fn(&mut self) -> RateFnId;
+    fn get_random_rate_fn(&self) -> RateFnId;
     fn get_rate_fn(&self, index: RateFnId) -> &dyn InfectiousnessRateFn;
 }
 
@@ -35,14 +35,18 @@ impl InfectiousnessRateExt for Context {
         RateFnId(container.rates.len() - 1)
     }
 
-    fn get_random_rate_fn(&mut self) -> RateFnId {
-        let max = self.get_data_container_mut(RateFnPlugin).rates.len();
+    fn get_random_rate_fn(&self) -> RateFnId {
+        let max = self
+            .get_data_container(RateFnPlugin)
+            .expect("Expected rate functions to be loaded.")
+            .rates
+            .len();
         RateFnId(self.sample_range(InfectiousnessRateRng, 0..max))
     }
 
     fn get_rate_fn(&self, index: RateFnId) -> &dyn InfectiousnessRateFn {
         self.get_data_container(RateFnPlugin)
-            .expect("Expected rate function to exist")
+            .expect("Expected rate functions to be loaded.")
             .rates[index.0]
             .as_ref()
     }
