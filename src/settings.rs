@@ -1,7 +1,6 @@
 use ixa::people::PersonId;
-use ixa::{define_data_plugin, define_rng, Context, ContextPeopleExt, ContextRandomExt, IxaError};
+use ixa::{define_data_plugin, define_rng, Context, ContextRandomExt, IxaError};
 use std::any::{Any, TypeId};
-use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::hash::Hash;
@@ -17,10 +16,16 @@ pub struct SettingProperties {
 
 pub trait SettingType {
     fn calculate_multiplier(
-        &self,
+        &self,        
         members: &Vec<PersonId>,
         setting_properties: &SettingProperties,
     ) -> f64;
+    fn get_contact(
+        &self,
+        context: &Context,
+        person_id: PersonId,
+        members: &Vec<PersonId>,
+    ) -> Option<PersonId>;
 }
 
 #[derive(Hash, Eq, PartialEq, Ord, PartialOrd)]
@@ -98,10 +103,25 @@ impl SettingDataContainer {
             }
         }
     }
+    fn sample_from_itinerary<F>(&self, context: &Context, person_id: PersonId, mut callback: F)
+    where
+        F: FnMut(&dyn SettingType, &Context, PersonId, &Vec<PersonId>),
+    {
+        if let Some(itinerary) = self.itineraries.get(&person_id) {
+            for entry in itinerary {
+                let setting_type = self.setting_types.get(&entry.setting_type).unwrap();
+                let setting_props = self.setting_properties.get(&entry.setting_type).unwrap();
+                let members = self.get_setting_members(
+                    &entry.setting_type,
+                    &entry.setting_id).unwrap();
+                callback(setting_type.as_ref(), context, person_id, members);
+            }
+        }
+    }
 }
 
 // Define a home setting
-#[derive(Default, Hash, Eq, PartialEq)]
+#[derive(Default,Debug, Hash, Eq, PartialEq)]
 pub struct Home {}
 
 impl SettingType for Home {
@@ -114,9 +134,24 @@ impl SettingType for Home {
         let n_members = members.len();
         return ((n_members - 1) as f64).powf(setting_properties.alpha);
     }
+    fn get_contact(
+        &self,
+        context: &Context,
+        person_id: PersonId,
+        members: &Vec<PersonId>,
+    ) -> Option<PersonId> {
+        if members.len() <= 1 {
+            return None;
+        }
+        let mut contact_id = person_id;
+        while contact_id == person_id {
+            contact_id = members[context.sample_range(SettingsRng, 0..members.len())];
+        }
+        Some(contact_id)        
+    }
 }
 
-#[derive(Default, Hash, Eq, PartialEq)]
+#[derive(Default,Debug,  Hash, Eq, PartialEq)]
 pub struct CensusTract {}
 impl SettingType for CensusTract {
     fn calculate_multiplier(
@@ -126,6 +161,21 @@ impl SettingType for CensusTract {
     ) -> f64 {
         let n_members = members.len();
         return ((n_members - 1) as f64).powf(setting_properties.alpha);
+    }
+    fn get_contact(
+        &self,
+        context: &Context,
+        person_id: PersonId,
+        members: &Vec<PersonId>,
+    ) -> Option<PersonId> {
+        if members.len() <= 1 {
+            return None;
+        }
+        let mut contact_id = person_id;
+        while contact_id == person_id {
+            contact_id = members[context.sample_range(SettingsRng, 0..members.len())];
+        }
+        Some(contact_id)        
     }
 }
 
@@ -153,6 +203,10 @@ pub trait ContextSettingExt {
         &self,
         person_id: PersonId,
         setting_id: SettingId<T>,
+    ) -> Option<PersonId>;
+    fn draw_contact_from_itinerary(
+        &self,
+        person_id: PersonId,
     ) -> Option<PersonId>;
 }
 
@@ -255,11 +309,40 @@ impl ContextSettingExt for Context {
             None
         }
     }
+    fn draw_contact_from_itinerary(
+        &self,
+        person_id: PersonId,
+    ) -> Option<PersonId> {
+        let container = self.get_data_container(SettingDataPlugin).unwrap();
+        let mut itinerary_multiplier = Vec::new();
+        let mut collector = 0.0;
+        container.with_itinerary(person_id, |setting_type, setting_props, members, ratio| {
+            let multiplier = setting_type.calculate_multiplier(members, setting_props);
+            collector += ratio * multiplier;
+            itinerary_multiplier.push(ratio * multiplier);
+            println!("SETTINGS::ITINERARY:: setting_type - multiplier {:?} - members {:?}, alpha {:?}", ratio * multiplier, members.len(), setting_props.alpha);
+        });
+        let setting_index = self.sample_weighted(SettingsRng, &itinerary_multiplier);
+        let itinerary = self.get_itinerary(person_id);
+        if let Some(itinerary) = self.get_itinerary(person_id) {
+            let itinerary_entry = &itinerary[setting_index];
+            let setting_type = container.setting_types.get(&itinerary_entry.setting_type).unwrap();
+//            println!("SETTINGS ITINERARY SAMPLED:: {:?}, itinerary_entry.setting_id");
+            println!("SETTINGS::ITINERARY:: setting  - ID {:?} -  index: {setting_index} - multipliers {:#?}",  itinerary_entry.setting_id, itinerary_multiplier);
+            self.get_contact::<setting_type>(person_id, SettingId::<setting_type>::new(0))
+        } else {
+            None
+        }
+        //let contact = container.draw_from_setting(person_id, setting_ind) {
+        //}
+
+    }
 }
 
 #[cfg(test)]
 mod test {
     use super::*;
+    use ixa::ContextPeopleExt;
     use crate::settings::ContextSettingExt;
     #[test]
     fn test_setting_type_creation() {
@@ -427,7 +510,7 @@ mod test {
     }
 
     #[test]
-    fn test_get_contacts() {
+    fn test_get_contact_from_setting() {
         // Register two people to a setting and make sure that the person chosen is the other one
         // Attempt to draw a contact from a setting with only the person trying to get a contact
         // TODO: What happens if the person isn't registered in the setting?
@@ -440,7 +523,7 @@ mod test {
         let person_b = context.add_person(()).unwrap();
         let itinerary_a = vec![
             ItineraryEntry::new(SettingId::<Home>::new(0), 0.5),
-            ItineraryEntry::new(SettingId::<Home>::new(0), 0.5),
+            ItineraryEntry::new(SettingId::<CensusTract>::new(0), 0.5),
         ];
         let itinerary_b = vec![
             ItineraryEntry::new(SettingId::<Home>::new(0), 1.0),
@@ -450,6 +533,40 @@ mod test {
         
         assert_eq!(person_b, context.get_contact::<Home>(person_a, SettingId::<Home>::new(0)).unwrap());
         assert!(context.get_contact::<CensusTract>(person_a, SettingId::<CensusTract>::new(0)).is_none());
+    }
+
+    #[test]
+    fn test_draw_contact_from_itinerary() {
+        /*
+        - Create 10 people at home. 5 people at  5 people at censustract
+        - Call "draw contact from itinerary":
+          + Compute total infectiousness 
+          + Draw a setting weighted by total infectiousness
+          + Sample contact from chosen setting
+         */
+        let mut context = Context::new();
+        context.init_random(42);
+        context.register_setting_type(Home {}, SettingProperties { alpha: 0.1 });
+        context.register_setting_type(CensusTract {}, SettingProperties { alpha: 0.01 });
+
+        for _ in 0..5 {
+            let person = context.add_person(()).unwrap();
+            let itinerary = vec![
+                ItineraryEntry::new(SettingId::<Home>::new(0), 0.5),
+                ItineraryEntry::new(SettingId::<CensusTract>::new(0), 0.5),
+            ];
+            let _  = context.add_itinerary(person, itinerary);
+        }
+
+        let person = context.add_person(()).unwrap();
+        let itinerary_complete = vec![
+            ItineraryEntry::new(SettingId::<Home>::new(0), 1.0),
+            ItineraryEntry::new(SettingId::<CensusTract>::new(0), 0.1),
+        ];
+        let _ = context.add_itinerary(person, itinerary_complete);
+        
+        let contact_id = context.draw_contact_from_itinerary(person);
+        println!("SETTINGS:: CONTACT {:#?}", contact_id);
     }
     /*TODO:
     Test failure of getting properties if not initialized
