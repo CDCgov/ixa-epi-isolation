@@ -4,9 +4,9 @@ mod infectiousness_manager;
 mod parameters;
 mod population_loader;
 pub mod rate_fns;
+mod settings;
 mod transmission_report;
 pub mod utils;
-mod settings;
 
 use infectiousness_manager::InfectionStatus;
 use ixa::runner::run_with_args;
