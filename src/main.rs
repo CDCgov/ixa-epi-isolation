@@ -6,6 +6,7 @@ mod population_loader;
 pub mod rate_fns;
 mod transmission_report;
 pub mod utils;
+mod infection_clinical_status_manager;
 
 use infectiousness_manager::InfectionStatus;
 use ixa::runner::run_with_args;
