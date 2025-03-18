@@ -1,12 +1,13 @@
 mod contact;
+mod infection_clinical_status_manager;
 mod infection_propagation_loop;
 mod infectiousness_manager;
 mod parameters;
 mod population_loader;
 pub mod rate_fns;
+mod symptom_progression;
 mod transmission_report;
 pub mod utils;
-mod infection_clinical_status_manager;
 
 use infectiousness_manager::InfectionStatus;
 use ixa::runner::run_with_args;
@@ -53,6 +54,7 @@ fn main() {
 
         infection_propagation_loop::init(context);
         transmission_report::init(context)?;
+        symptom_progression::init(context);
 
         Ok(())
     })
