@@ -1,55 +1,30 @@
-// I want two things: one that moves the patient between states, and one that tells us what's next
-// for that patient
+use ixa::{Context, ContextPeopleExt, PersonProperty, PersonPropertyChangeEvent};
 
-use ixa::{define_person_property_with_default, Context, ContextPeopleExt, PersonProperty, PersonPropertyChangeEvent};
-use serde::Serialize;
-
-pub trait ClinicalDiseaseHistory {
+pub trait ClinicalHealthStatus {
     type Value;
     fn next(&self, last: &Self::Value) -> Option<(Self::Value, f64)>;
 }
 
-#[derive(PartialEq, Copy, Clone, Debug, Serialize)]
-pub enum CovidStatusValue {
-    Presymptomatic,
-    Asymptomatic,
-    Mild,
-}
-
-define_person_property_with_default!(CovidStatus, Option<CovidStatusValue>, None);
-
-pub struct CovidHistory {
-    pub states: Vec<Option<CovidStatusValue>>,
-    pub time_to_next: Vec<f64>
-}
-
-impl ClinicalDiseaseHistory for CovidHistory {
-    type Value = Option<CovidStatusValue>;
-    fn next(&self, last: &Option<CovidStatusValue>) -> Option<(Option<CovidStatusValue>, f64)> {
-        let mut iter = self.states.iter().enumerate();
-        while let Some((_, status)) = iter.next() {
-            if status == last {
-                return iter.next().map(|(i, status)| {
-                    (*status, self.time_to_next[i - 1])
-                });
-            }
-        }
-        None
-    }
-}
-
 pub trait ContextClinicalExt {
-    fn register_progressor<T: PersonProperty + 'static>(&mut self, property: T, progressor: impl ClinicalDiseaseHistory<Value = T::Value> + 'static);
+    fn register_clinical_progression<T: PersonProperty + 'static>(
+        &mut self,
+        property: T,
+        tracer: impl ClinicalHealthStatus<Value = T::Value> + 'static,
+    );
 }
 
 impl ContextClinicalExt for Context {
-    fn register_progressor<T: PersonProperty + 'static>(&mut self, property: T, progressor: impl ClinicalDiseaseHistory<Value = T::Value> + 'static) {
+    fn register_clinical_progression<T: PersonProperty + 'static>(
+        &mut self,
+        property: T,
+        tracer: impl ClinicalHealthStatus<Value = T::Value> + 'static,
+    ) {
         self.subscribe_to_event(move |context, event: PersonPropertyChangeEvent<T>| {
-            if let Some((value, t)) = progressor.next(&event.current) {
+            if let Some((value, t)) = tracer.next(&event.current) {
                 let current_time = context.get_current_time();
                 context.add_plan(current_time + t, move |c| {
-                c.set_person_property(event.person_id, property, value);
-            });
+                    c.set_person_property(event.person_id, property, value);
+                });
             }
         });
     }
@@ -61,31 +36,35 @@ mod test {
     use ixa::{Context, ContextPeopleExt};
     use statrs::assert_almost_eq;
 
-    use super::{ClinicalDiseaseHistory, ContextClinicalExt, CovidHistory, CovidStatus, CovidStatusValue};
+    use crate::symptom_progression::{
+        DiseaseSeverity, DiseaseSeverityProgression, DiseaseSeverityValue,
+    };
+
+    use super::ContextClinicalExt;
 
     #[test]
-    fn test_covid_history() {
-        let history = CovidHistory {
-            states: vec![Some(CovidStatusValue::Presymptomatic), Some(CovidStatusValue::Asymptomatic), Some(CovidStatusValue::Mild)],
-            time_to_next: vec![1.0, 2.0]
-        };
-        assert_eq!(history.next(&Some(CovidStatusValue::Presymptomatic)), Some((Some(CovidStatusValue::Asymptomatic), 1.0)));
-        assert_eq!(history.next(&Some(CovidStatusValue::Asymptomatic)), Some((Some(CovidStatusValue::Mild), 2.0)));
-        assert_eq!(history.next(&Some(CovidStatusValue::Mild)), None);
-    }
-
-    #[test]
-    fn test_covid_progressor() {
-        let history = CovidHistory {
-            states: vec![Some(CovidStatusValue::Presymptomatic), Some(CovidStatusValue::Asymptomatic), Some(CovidStatusValue::Mild)],
-            time_to_next: vec![1.0, 2.0]
-        };
+    fn test_register_clinical_progression_automates_moves() {
+        let progression = DiseaseSeverityProgression::new(
+            vec![
+                Some(DiseaseSeverityValue::Presymptomatic),
+                Some(DiseaseSeverityValue::Asymptomatic),
+                Some(DiseaseSeverityValue::Mild),
+            ],
+            vec![1.0, 2.0],
+        );
         let mut context = Context::new();
-        context.register_progressor(CovidStatus, history);
+        context.register_clinical_progression(DiseaseSeverity, progression);
         let person_id = context.add_person(()).unwrap();
-        context.set_person_property(person_id, CovidStatus, Some(CovidStatusValue::Presymptomatic));
+        context.set_person_property(
+            person_id,
+            DiseaseSeverity,
+            Some(DiseaseSeverityValue::Presymptomatic),
+        );
         context.execute();
         assert_almost_eq!(context.get_current_time(), 3.0, 0.0);
-        assert_eq!(context.get_person_property(person_id, CovidStatus), Some(CovidStatusValue::Mild));
+        assert_eq!(
+            context.get_person_property(person_id, DiseaseSeverity),
+            Some(DiseaseSeverityValue::Mild)
+        );
     }
 }
