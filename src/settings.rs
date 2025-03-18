@@ -103,21 +103,6 @@ impl SettingDataContainer {
             }
         }
     }
-    fn sample_from_itinerary<F>(&self, context: &Context, person_id: PersonId, mut callback: F)
-    where
-        F: FnMut(&dyn SettingType, &Context, PersonId, &Vec<PersonId>),
-    {
-        if let Some(itinerary) = self.itineraries.get(&person_id) {
-            for entry in itinerary {
-                let setting_type = self.setting_types.get(&entry.setting_type).unwrap();
-                let setting_props = self.setting_properties.get(&entry.setting_type).unwrap();
-                let members = self.get_setting_members(
-                    &entry.setting_type,
-                    &entry.setting_id).unwrap();
-                callback(setting_type.as_ref(), context, person_id, members);
-            }
-        }
-    }
 }
 
 // Define a home setting
@@ -203,11 +188,45 @@ pub trait ContextSettingExt {
         &self,
         person_id: PersonId,
         setting_id: SettingId<T>,
-    ) -> Option<PersonId>;
+    ) -> Option<PersonId>;    
     fn draw_contact_from_itinerary(
         &self,
         person_id: PersonId,
     ) -> Option<PersonId>;
+}
+
+trait ContextSettingInternalExt {
+    fn get_contact_internal(&self, person_id: PersonId, setting_type: TypeId, setting_id: usize) -> Option<PersonId>;
+    fn get_setting_members_internal(
+        &self,
+        setting_type: TypeId,
+        setting_id: usize,        
+    ) -> Option<&Vec<PersonId>>;
+}
+
+impl ContextSettingInternalExt for Context {
+    fn get_contact_internal(&self, person_id: PersonId, setting_type: TypeId, setting_id: usize) -> Option<PersonId> {     
+        if let Some(members) = self.get_setting_members_internal(setting_type, setting_id) {
+            if members.len() == 1 {
+                return None;
+            }
+            let mut contact_id = person_id;
+            while contact_id == person_id {
+                contact_id = members[self.sample_range(SettingsRng, 0..members.len())];
+            }
+            Some(contact_id)
+        } else {
+            None
+        }
+    }
+    fn get_setting_members_internal(
+        &self,
+        setting_type: TypeId,
+        setting_id: usize,        
+    ) -> Option<&Vec<PersonId>> {
+        self.get_data_container(SettingDataPlugin)?
+            .get_setting_members(&setting_type, &setting_id)
+    }
 }
 
 impl ContextSettingExt for Context {
@@ -315,27 +334,24 @@ impl ContextSettingExt for Context {
     ) -> Option<PersonId> {
         let container = self.get_data_container(SettingDataPlugin).unwrap();
         let mut itinerary_multiplier = Vec::new();
-        let mut collector = 0.0;
         container.with_itinerary(person_id, |setting_type, setting_props, members, ratio| {
             let multiplier = setting_type.calculate_multiplier(members, setting_props);
-            collector += ratio * multiplier;
             itinerary_multiplier.push(ratio * multiplier);
             println!("SETTINGS::ITINERARY:: setting_type - multiplier {:?} - members {:?}, alpha {:?}", ratio * multiplier, members.len(), setting_props.alpha);
         });
-        let setting_index = self.sample_weighted(SettingsRng, &itinerary_multiplier);
-        let itinerary = self.get_itinerary(person_id);
+        
+        let setting_index = self.sample_weighted(SettingsRng, &itinerary_multiplier);        
+        
         if let Some(itinerary) = self.get_itinerary(person_id) {
-            let itinerary_entry = &itinerary[setting_index];
-            let setting_type = container.setting_types.get(&itinerary_entry.setting_type).unwrap();
-//            println!("SETTINGS ITINERARY SAMPLED:: {:?}, itinerary_entry.setting_id");
+            let itinerary_entry = &itinerary[setting_index];                       
             println!("SETTINGS::ITINERARY:: setting  - ID {:?} -  index: {setting_index} - multipliers {:#?}",  itinerary_entry.setting_id, itinerary_multiplier);
-            self.get_contact::<setting_type>(person_id, SettingId::<setting_type>::new(0))
+
+            // Can´t call this because don´t know what type T is
+            // create a get contact internal that hides the generic 
+            self.get_contact_internal(person_id, itinerary_entry.setting_type, itinerary_entry.setting_id)
         } else {
             None
         }
-        //let contact = container.draw_from_setting(person_id, setting_ind) {
-        //}
-
     }
 }
 
@@ -549,18 +565,25 @@ mod test {
         context.register_setting_type(Home {}, SettingProperties { alpha: 0.1 });
         context.register_setting_type(CensusTract {}, SettingProperties { alpha: 0.01 });
 
-        for _ in 0..5 {
+        for _ in 0..3 {
             let person = context.add_person(()).unwrap();
             let itinerary = vec![
-                ItineraryEntry::new(SettingId::<Home>::new(0), 0.5),
-                ItineraryEntry::new(SettingId::<CensusTract>::new(0), 0.5),
+                ItineraryEntry::new(SettingId::<Home>::new(0), 1.0),
+            ];
+            let _  = context.add_itinerary(person, itinerary);
+        }
+
+        for _ in 0..3 {
+            let person = context.add_person(()).unwrap();
+            let itinerary = vec![
+                ItineraryEntry::new(SettingId::<CensusTract>::new(0), 1.0),
             ];
             let _  = context.add_itinerary(person, itinerary);
         }
 
         let person = context.add_person(()).unwrap();
         let itinerary_complete = vec![
-            ItineraryEntry::new(SettingId::<Home>::new(0), 1.0),
+            ItineraryEntry::new(SettingId::<Home>::new(0), 0.9),
             ItineraryEntry::new(SettingId::<CensusTract>::new(0), 0.1),
         ];
         let _ = context.add_itinerary(person, itinerary_complete);
