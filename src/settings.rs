@@ -20,12 +20,6 @@ pub trait SettingType {
         members: &Vec<PersonId>,
         setting_properties: &SettingProperties,
     ) -> f64;
-    fn get_contact(
-        &self,
-        context: &Context,
-        person_id: PersonId,
-        members: &Vec<PersonId>,
-    ) -> Option<PersonId>;
 }
 
 #[derive(Hash, Eq, PartialEq, Ord, PartialOrd)]
@@ -86,7 +80,7 @@ impl SettingDataContainer {
         self
             .members
             .get(setting_type)?
-            .get(&setting_id)
+            .get(setting_id)
     }
     fn with_itinerary<F>(&self, person_id: PersonId, mut callback: F)
     where
@@ -119,21 +113,6 @@ impl SettingType for Home {
         let n_members = members.len();
         return ((n_members - 1) as f64).powf(setting_properties.alpha);
     }
-    fn get_contact(
-        &self,
-        context: &Context,
-        person_id: PersonId,
-        members: &Vec<PersonId>,
-    ) -> Option<PersonId> {
-        if members.len() <= 1 {
-            return None;
-        }
-        let mut contact_id = person_id;
-        while contact_id == person_id {
-            contact_id = members[context.sample_range(SettingsRng, 0..members.len())];
-        }
-        Some(contact_id)        
-    }
 }
 
 #[derive(Default,Debug,  Hash, Eq, PartialEq)]
@@ -146,21 +125,6 @@ impl SettingType for CensusTract {
     ) -> f64 {
         let n_members = members.len();
         return ((n_members - 1) as f64).powf(setting_properties.alpha);
-    }
-    fn get_contact(
-        &self,
-        context: &Context,
-        person_id: PersonId,
-        members: &Vec<PersonId>,
-    ) -> Option<PersonId> {
-        if members.len() <= 1 {
-            return None;
-        }
-        let mut contact_id = person_id;
-        while contact_id == person_id {
-            contact_id = members[context.sample_range(SettingsRng, 0..members.len())];
-        }
-        Some(contact_id)        
     }
 }
 
@@ -337,17 +301,12 @@ impl ContextSettingExt for Context {
         container.with_itinerary(person_id, |setting_type, setting_props, members, ratio| {
             let multiplier = setting_type.calculate_multiplier(members, setting_props);
             itinerary_multiplier.push(ratio * multiplier);
-            println!("SETTINGS::ITINERARY:: setting_type - multiplier {:?} - members {:?}, alpha {:?}", ratio * multiplier, members.len(), setting_props.alpha);
         });
         
         let setting_index = self.sample_weighted(SettingsRng, &itinerary_multiplier);        
         
         if let Some(itinerary) = self.get_itinerary(person_id) {
             let itinerary_entry = &itinerary[setting_index];                       
-            println!("SETTINGS::ITINERARY:: setting  - ID {:?} -  index: {setting_index} - multipliers {:#?}",  itinerary_entry.setting_id, itinerary_multiplier);
-
-            // Can´t call this because don´t know what type T is
-            // create a get contact internal that hides the generic 
             self.get_contact_internal(person_id, itinerary_entry.setting_type, itinerary_entry.setting_id)
         } else {
             None
@@ -554,42 +513,58 @@ mod test {
     #[test]
     fn test_draw_contact_from_itinerary() {
         /*
-        - Create 10 people at home. 5 people at  5 people at censustract
+        Run 100 times
+        - Create 3 people at home, and 3 people at censustract
+        - Create 7th person with itinerary at home and census tract
         - Call "draw contact from itinerary":
           + Compute total infectiousness 
           + Draw a setting weighted by total infectiousness
           + Sample contact from chosen setting
+         - Test 1 Itinerary with 0 proportion at census tract, contacts drawn should be from home (0-2)
+         - Test 2 Itinerary with 0 proportion at home, contacts should be drawn from census tract (3-6)
          */
-        let mut context = Context::new();
-        context.init_random(42);
-        context.register_setting_type(Home {}, SettingProperties { alpha: 0.1 });
-        context.register_setting_type(CensusTract {}, SettingProperties { alpha: 0.01 });
+        for seed in 0..100 {
+            let mut context = Context::new();
+            context.init_random(seed);
+            context.register_setting_type(Home {}, SettingProperties { alpha: 0.1 });
+            context.register_setting_type(CensusTract {}, SettingProperties { alpha: 0.01 });
 
-        for _ in 0..3 {
+            for _ in 0..3 {
+                let person = context.add_person(()).unwrap();
+                let itinerary = vec![
+                    ItineraryEntry::new(SettingId::<Home>::new(0), 1.0),
+                ];
+                let _  = context.add_itinerary(person, itinerary);
+            }
+
+            for _ in 0..3 {
+                let person = context.add_person(()).unwrap();
+                let itinerary = vec![
+                    ItineraryEntry::new(SettingId::<CensusTract>::new(0), 1.0),
+                ];
+                let _  = context.add_itinerary(person, itinerary);
+            }
+        
             let person = context.add_person(()).unwrap();
-            let itinerary = vec![
+            let itinerary_home = vec![
                 ItineraryEntry::new(SettingId::<Home>::new(0), 1.0),
+                ItineraryEntry::new(SettingId::<CensusTract>::new(0), 0.0),
             ];
-            let _  = context.add_itinerary(person, itinerary);
-        }
-
-        for _ in 0..3 {
-            let person = context.add_person(()).unwrap();
-            let itinerary = vec![
+            let itinerary_censustract = vec![
+                ItineraryEntry::new(SettingId::<Home>::new(0), 0.0),
                 ItineraryEntry::new(SettingId::<CensusTract>::new(0), 1.0),
             ];
-            let _  = context.add_itinerary(person, itinerary);
-        }
-
-        let person = context.add_person(()).unwrap();
-        let itinerary_complete = vec![
-            ItineraryEntry::new(SettingId::<Home>::new(0), 0.9),
-            ItineraryEntry::new(SettingId::<CensusTract>::new(0), 0.1),
-        ];
-        let _ = context.add_itinerary(person, itinerary_complete);
+            let home_members = context.get_setting_members::<Home>(SettingId::<Home>::new(0)).unwrap().clone();
+            let tract_members = context.get_setting_members::<CensusTract>(SettingId::<CensusTract>::new(0)).unwrap().clone();
         
-        let contact_id = context.draw_contact_from_itinerary(person);
-        println!("SETTINGS:: CONTACT {:#?}", contact_id);
+            let _ = context.add_itinerary(person, itinerary_home);        
+            let contact_id_home = context.draw_contact_from_itinerary(person);
+            assert!(home_members.contains(&contact_id_home.unwrap()));
+
+            let _ = context.add_itinerary(person, itinerary_censustract);        
+            let contact_id_tract = context.draw_contact_from_itinerary(person);
+            assert!(tract_members.contains(&contact_id_tract.unwrap()));
+        }
     }
     /*TODO:
     Test failure of getting properties if not initialized
