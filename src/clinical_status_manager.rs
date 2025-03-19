@@ -8,12 +8,13 @@ use ixa::{
 };
 
 pub trait ClinicalHealthStatus {
-    fn next(&self, last: Box<dyn Any>) -> Option<(Box<dyn Any>, f64)>;
+    type Value;
+    fn next(&self, last: &Self::Value) -> Option<(Self::Value, f64)>;
 }
 
 #[derive(Default)]
 struct ClinicalProgressionContainer {
-    progressions: HashMap<TypeId, Vec<Box<dyn ClinicalHealthStatus>>>,
+    progressions: HashMap<TypeId, Vec<Box<dyn Any>>>,
 }
 
 define_data_plugin!(
@@ -26,7 +27,7 @@ pub trait ContextClinicalExt {
     fn register_clinical_progression<T: PersonProperty + 'static>(
         &mut self,
         property: T,
-        tracer: impl ClinicalHealthStatus + 'static,
+        tracer: impl ClinicalHealthStatus<Value = T::Value> + 'static,
     );
 }
 
@@ -34,28 +35,28 @@ impl ContextClinicalExt for Context {
     fn register_clinical_progression<T: PersonProperty + 'static>(
         &mut self,
         property: T,
-        tracer: impl ClinicalHealthStatus + 'static,
+        tracer: impl ClinicalHealthStatus<Value = T::Value> + 'static,
     ) {
         // Add tracer to data container
         // Subscribe to event if hashmap has not yet considered this person property
         // Make sure to get the right tracer out for the person
         let container = self.get_data_container_mut(ClinicalProgression);
         let progressions = container.progressions.entry(TypeId::of::<T>()).or_default();
-        progressions.push(Box::new(tracer));
+        let boxed_tracer = Box::new(tracer) as Box<dyn ClinicalHealthStatus<Value = T::Value>>;
+        progressions.push(Box::new(boxed_tracer));
         if progressions.len() == 1 {
             self.subscribe_to_event(move |context, event: PersonPropertyChangeEvent<T>| {
                 let container = context.get_data_container(ClinicalProgression).unwrap();
                 let progressions = container.progressions.get(&TypeId::of::<T>()).unwrap();
                 // Just for argument's sake, let's only ever take the first tracer.
-                let tcr = &progressions[0];
-                if let Some((next_value, time_to_next)) = tcr.next(Box::new(event.current)) {
+                let tcr = progressions[0]
+                    .downcast_ref::<Box<dyn ClinicalHealthStatus<Value = T::Value>>>()
+                    .unwrap()
+                    .as_ref();
+                if let Some((next_value, time_to_next)) = tcr.next(&event.current) {
                     let current_time = context.get_current_time();
                     context.add_plan(current_time + time_to_next, move |ctx| {
-                        ctx.set_person_property(
-                            event.person_id,
-                            property,
-                            *next_value.downcast_ref::<T::Value>().unwrap(),
-                        );
+                        ctx.set_person_property(event.person_id, property, next_value);
                     });
                 }
             });
