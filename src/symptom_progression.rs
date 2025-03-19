@@ -1,5 +1,3 @@
-use std::any::Any;
-
 use ixa::{define_person_property_with_default, Context};
 use serde::Serialize;
 
@@ -39,14 +37,15 @@ impl DiseaseSeverityProgression {
 }
 
 impl ClinicalHealthStatus for DiseaseSeverityProgression {
-    fn next(&self, last: Box<dyn Any>) -> Option<(Box<dyn Any>, f64)> {
+    type Value = DiseaseSeverityValue;
+    fn next(&self, last: &Self::Value) -> Option<(Self::Value, f64)> {
         let mut iter = self.states.iter().enumerate();
-        let last_value = last.downcast_ref::<DiseaseSeverityValue>().unwrap();
+        //let last_value = last.downcast_ref::<DiseaseSeverityValue>().unwrap();
         while let Some((_, status)) = iter.next() {
-            if status == last_value {
+            if status == last {
                 return iter
                     .next()
-                    .map(|(i, next)| (Box::new(*next) as Box<dyn Any>, self.time_to_next[i - 1]));
+                    .map(|(i, next)| (*next, self.time_to_next[i - 1]));
             }
         }
         None
@@ -71,7 +70,6 @@ pub fn init(context: &mut Context) {
 mod test {
     use super::{DiseaseSeverityProgression, DiseaseSeverityValue};
     use crate::clinical_status_manager::ClinicalHealthStatus;
-    use std::any::Any;
 
     use statrs::assert_almost_eq;
 
@@ -85,24 +83,18 @@ mod test {
             ],
             vec![1.0, 2.0],
         );
-        let initial_state = Box::new(DiseaseSeverityValue::Presymptomatic) as Box<dyn Any>;
-        let (next_state, time) = progression.next(initial_state).unwrap();
-        assert_eq!(
-            *next_state.downcast_ref::<DiseaseSeverityValue>().unwrap(),
-            DiseaseSeverityValue::Asymptomatic
-        );
+        let initial_state = DiseaseSeverityValue::Presymptomatic;
+        let (next_state, time) = progression.next(&initial_state).unwrap();
+        assert_eq!(next_state, DiseaseSeverityValue::Asymptomatic);
         assert_almost_eq!(time, 1.0, 0.0);
 
-        let initial_state = Box::new(DiseaseSeverityValue::Asymptomatic) as Box<dyn Any>;
-        let (next_state, time) = progression.next(initial_state).unwrap();
-        assert_eq!(
-            *next_state.downcast_ref::<DiseaseSeverityValue>().unwrap(),
-            DiseaseSeverityValue::Mild
-        );
+        let initial_state = DiseaseSeverityValue::Asymptomatic;
+        let (next_state, time) = progression.next(&initial_state).unwrap();
+        assert_eq!(next_state, DiseaseSeverityValue::Mild);
         assert_almost_eq!(time, 2.0, 0.0);
 
-        let initial_state = Box::new(DiseaseSeverityValue::Mild) as Box<dyn Any>;
-        let next_state = progression.next(initial_state);
+        let initial_state = DiseaseSeverityValue::Mild;
+        let next_state = progression.next(&initial_state);
         assert!(next_state.is_none());
     }
 }
