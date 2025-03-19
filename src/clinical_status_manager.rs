@@ -4,15 +4,15 @@ use std::{
 };
 
 use ixa::{
-    define_data_plugin, define_rng, Context, ContextPeopleExt, ContextRandomExt, PersonProperty,
-    PersonPropertyChangeEvent,
+    define_data_plugin, define_rng, Context, ContextPeopleExt, ContextRandomExt, PersonId,
+    PersonProperty, PersonPropertyChangeEvent,
 };
 
 define_rng!(ClinicalRng);
 
 pub trait ClinicalHealthStatus {
     type Value;
-    fn next(&self, last: &Self::Value) -> Option<(Self::Value, f64)>;
+    fn next(&self, context: &Context, last: &Self::Value) -> Option<(Self::Value, f64)>;
 }
 
 #[derive(Default)]
@@ -32,6 +32,11 @@ pub trait ContextClinicalExt {
         property: T,
         tracer: impl ClinicalHealthStatus<Value = T::Value> + 'static,
     );
+    fn manual_update<T: PersonProperty + 'static>(
+        &mut self,
+        person: PersonId,
+        property: T,
+    ) -> Option<T::Value>;
 }
 
 impl ContextClinicalExt for Context {
@@ -58,7 +63,7 @@ impl ContextClinicalExt for Context {
                     .downcast_ref::<Box<dyn ClinicalHealthStatus<Value = T::Value>>>()
                     .unwrap()
                     .as_ref();
-                if let Some((next_value, time_to_next)) = tcr.next(&event.current) {
+                if let Some((next_value, time_to_next)) = tcr.next(context, &event.current) {
                     let current_time = context.get_current_time();
                     context.add_plan(current_time + time_to_next, move |ctx| {
                         ctx.set_person_property(event.person_id, property, next_value);
@@ -66,6 +71,25 @@ impl ContextClinicalExt for Context {
                 }
             });
         }
+    }
+
+    fn manual_update<T: PersonProperty + 'static>(
+        &mut self,
+        person: PersonId,
+        property: T,
+    ) -> Option<T::Value> {
+        let container = self.get_data_container(ClinicalProgression).unwrap();
+        let progressions = container.progressions.get(&TypeId::of::<T>()).unwrap();
+        let id = self.sample_range(ClinicalRng, 0..progressions.len());
+        let tcr = progressions[id]
+            .downcast_ref::<Box<dyn ClinicalHealthStatus<Value = T::Value>>>()
+            .unwrap()
+            .as_ref();
+        if let Some((next_value, _)) = tcr.next(self, &self.get_person_property(person, property)) {
+            self.set_person_property(person, property, next_value);
+            return Some(next_value);
+        }
+        None
     }
 }
 

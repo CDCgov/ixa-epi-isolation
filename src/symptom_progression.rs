@@ -38,7 +38,7 @@ impl DiseaseSeverityProgression {
 
 impl ClinicalHealthStatus for DiseaseSeverityProgression {
     type Value = DiseaseSeverityValue;
-    fn next(&self, last: &Self::Value) -> Option<(Self::Value, f64)> {
+    fn next(&self, _context: &Context, last: &Self::Value) -> Option<(Self::Value, f64)> {
         let mut iter = self.states.iter().enumerate();
         //let last_value = last.downcast_ref::<DiseaseSeverityValue>().unwrap();
         while let Some((_, status)) = iter.next() {
@@ -71,10 +71,12 @@ mod test {
     use super::{DiseaseSeverityProgression, DiseaseSeverityValue};
     use crate::clinical_status_manager::ClinicalHealthStatus;
 
+    use ixa::Context;
     use statrs::assert_almost_eq;
 
     #[test]
     fn test_disease_progression() {
+        let context = Context::new();
         let progression = DiseaseSeverityProgression::new(
             vec![
                 DiseaseSeverityValue::Presymptomatic,
@@ -84,17 +86,17 @@ mod test {
             vec![1.0, 2.0],
         );
         let initial_state = DiseaseSeverityValue::Presymptomatic;
-        let (next_state, time) = progression.next(&initial_state).unwrap();
+        let (next_state, time) = progression.next(&context, &initial_state).unwrap();
         assert_eq!(next_state, DiseaseSeverityValue::Asymptomatic);
         assert_almost_eq!(time, 1.0, 0.0);
 
         let initial_state = DiseaseSeverityValue::Asymptomatic;
-        let (next_state, time) = progression.next(&initial_state).unwrap();
+        let (next_state, time) = progression.next(&context, &initial_state).unwrap();
         assert_eq!(next_state, DiseaseSeverityValue::Mild);
         assert_almost_eq!(time, 2.0, 0.0);
 
         let initial_state = DiseaseSeverityValue::Mild;
-        let next_state = progression.next(&initial_state);
+        let next_state = progression.next(&context, &initial_state);
         assert!(next_state.is_none());
     }
 }
