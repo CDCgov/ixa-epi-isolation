@@ -1,10 +1,16 @@
+#[allow(unused_imports)]
+use crate::clinical_status_manager::ContextClinicalExt;
+use crate::immunity_tracker::Immunity;
 use crate::infectiousness_manager::{
     evaluate_forecast, get_forecast, select_next_contact, Forecast, InfectionContextExt,
     InfectionStatus, InfectionStatusValue,
 };
 use crate::parameters::{ContextParametersExt, Params};
 use crate::rate_fns::{ConstantRate, InfectiousnessRateExt};
-use ixa::{define_rng, trace, Context, ContextPeopleExt, PersonId, PersonPropertyChangeEvent};
+use ixa::{
+    define_rng, trace, Context, ContextPeopleExt, ContextRandomExt, PersonId,
+    PersonPropertyChangeEvent,
+};
 
 define_rng!(InfectionRng);
 
@@ -18,8 +24,12 @@ fn schedule_next_forecasted_infection(context: &mut Context, person: PersonId) {
             // TODO<ryl8@cc.gov>: We will choose a setting here
             if evaluate_forecast(context, person, forecasted_total_infectiousness) {
                 if let Some(next_contact) = select_next_contact(context, person) {
-                    trace!("Person {person}: Forecast accepted, infecting {next_contact}");
-                    context.infect_person(next_contact, Some(person));
+                    //context.manual_update(person, Immunity).unwrap();
+                    let prob_immune = context.get_person_property(person, Immunity).prob_immune;
+                    if !context.sample_bool(InfectionRng, prob_immune) {
+                        trace!("Person {person}: Forecast accepted, infecting {next_contact}");
+                        context.infect_person(next_contact, Some(person));
+                    }
                 }
             }
             // Continue scheduling forecasts until the person recovers.

@@ -1,7 +1,10 @@
 use ixa::{define_person_property_with_default, Context};
 use serde::Serialize;
 
-use crate::clinical_status_manager::{ClinicalHealthStatus, ContextClinicalExt};
+use crate::{
+    clinical_status_manager::{ClinicalHealthStatus, ContextClinicalExt},
+    infectiousness_manager::{InfectionData, InfectionDataValue},
+};
 
 #[derive(PartialEq, Copy, Clone, Debug, Serialize)]
 pub enum DiseaseSeverityValue {
@@ -51,6 +54,29 @@ impl<T: PartialEq + Copy> ClinicalHealthStatus for EmpiricalProgression<T> {
     }
 }
 
+pub struct InfectionImmunityAllOrNone {
+    time_to_wane: f64,
+}
+
+impl InfectionImmunityAllOrNone {
+    pub fn new(time_to_wane: f64) -> InfectionImmunityAllOrNone {
+        InfectionImmunityAllOrNone { time_to_wane }
+    }
+}
+
+impl ClinicalHealthStatus for InfectionImmunityAllOrNone {
+    type Value = InfectionDataValue;
+    fn next(&self, _context: &Context, last: &Self::Value) -> Option<(Self::Value, f64)> {
+        match last {
+            InfectionDataValue::Recovered {
+                infection_time: _,
+                recovery_time: _,
+            } => Some((InfectionDataValue::Susceptible, self.time_to_wane)),
+            _ => None,
+        }
+    }
+}
+
 pub fn init(context: &mut Context) {
     // Todo(kzs9): We will read these progressions from a file from our isolation guidance modeling
     let progression1 = EmpiricalProgression::new(
@@ -87,10 +113,15 @@ pub fn init(context: &mut Context) {
 
 #[cfg(test)]
 mod test {
-    use super::{EmpiricalProgression, DiseaseSeverityValue};
-    use crate::clinical_status_manager::ClinicalHealthStatus;
+    use super::{EmpiricalProgression, DiseaseSeverityValue, InfectionImmunityAllOrNone};
+    use crate::{
+        clinical_status_manager::{ClinicalHealthStatus, ContextClinicalExt},
+        infectiousness_manager::{
+            InfectionData, InfectionDataValue, InfectionStatus, InfectionStatusValue,
+        },
+    };
 
-    use ixa::Context;
+    use ixa::{Context, ContextPeopleExt, ContextRandomExt};
     use statrs::assert_almost_eq;
 
     #[test]
@@ -117,5 +148,32 @@ mod test {
         let initial_state = DiseaseSeverityValue::Mild;
         let next_state = progression.next(&context, &initial_state);
         assert!(next_state.is_none());
+    }
+
+    #[test]
+    fn test_recovery_progression() {
+        let mut context = Context::new();
+        context.init_random(0);
+        let progression = InfectionImmunityAllOrNone::new(30.0);
+        context.register_clinical_progression(InfectionData, progression);
+        let person = context.add_person(()).unwrap();
+        context.set_person_property(
+            person,
+            InfectionData,
+            InfectionDataValue::Recovered {
+                infection_time: 0.0,
+                recovery_time: 0.0,
+            },
+        );
+        context.execute();
+        assert_almost_eq!(context.get_current_time(), 30.0, 0.0);
+        assert_eq!(
+            context.get_person_property(person, InfectionData),
+            InfectionDataValue::Susceptible
+        );
+        assert_eq!(
+            context.get_person_property(person, InfectionStatus),
+            InfectionStatusValue::Susceptible
+        );
     }
 }

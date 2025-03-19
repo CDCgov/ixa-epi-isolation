@@ -1,5 +1,6 @@
 mod clinical_status_manager;
 mod contact;
+mod immunity_tracker;
 mod infection_propagation_loop;
 mod infectiousness_manager;
 mod parameters;
@@ -55,6 +56,7 @@ fn main() {
         infection_propagation_loop::init(context);
         transmission_report::init(context)?;
         symptom_progression::init(context);
+        immunity_tracker::init(context);
 
         Ok(())
     })

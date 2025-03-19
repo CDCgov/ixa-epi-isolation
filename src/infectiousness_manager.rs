@@ -7,6 +7,7 @@ use statrs::distribution::Exp;
 
 use crate::{
     contact::ContextContactExt,
+    immunity_tracker::{Immunity, ImmunityValue},
     population_loader::Alive,
     rate_fns::{InfectiousnessRateExt, InfectiousnessRateFn, RateFnId, ScaledRateFn},
 };
@@ -190,6 +191,14 @@ impl InfectionContextExt for Context {
             InfectionDataValue::Recovered {
                 recovery_time,
                 infection_time,
+            },
+        );
+        self.set_person_property(
+            person_id,
+            Immunity,
+            ImmunityValue {
+                prob_immune: 1.0,
+                time_last_updated: recovery_time,
             },
         );
     }

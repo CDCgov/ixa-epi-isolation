@@ -32,6 +32,7 @@ pub trait ContextClinicalExt {
         property: T,
         tracer: impl ClinicalHealthStatus<Value = T::Value> + 'static,
     );
+    #[allow(dead_code)]
     fn manual_update<T: PersonProperty + 'static>(
         &mut self,
         person: PersonId,
