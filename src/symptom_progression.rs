@@ -19,28 +19,27 @@ define_person_property_with_default!(
     DiseaseSeverityValue::Healthy
 );
 
-pub struct DiseaseSeverityProgression {
-    states: Vec<DiseaseSeverityValue>,
+pub struct EmpiricalProgression<T: PartialEq + Copy> {
+    states: Vec<T>,
     time_to_next: Vec<f64>,
 }
 
-impl DiseaseSeverityProgression {
+impl<T: PartialEq + Copy> EmpiricalProgression<T> {
     pub fn new(
-        states: Vec<DiseaseSeverityValue>,
+        states: Vec<T>,
         time_to_next: Vec<f64>,
-    ) -> DiseaseSeverityProgression {
-        DiseaseSeverityProgression {
+    ) -> EmpiricalProgression<T> {
+        EmpiricalProgression {
             states,
             time_to_next,
         }
     }
 }
 
-impl ClinicalHealthStatus for DiseaseSeverityProgression {
-    type Value = DiseaseSeverityValue;
+impl<T: PartialEq + Copy> ClinicalHealthStatus for EmpiricalProgression<T> {
+    type Value = T;
     fn next(&self, _context: &Context, last: &Self::Value) -> Option<(Self::Value, f64)> {
         let mut iter = self.states.iter().enumerate();
-        //let last_value = last.downcast_ref::<DiseaseSeverityValue>().unwrap();
         while let Some((_, status)) = iter.next() {
             if status == last {
                 return iter
@@ -53,7 +52,7 @@ impl ClinicalHealthStatus for DiseaseSeverityProgression {
 }
 
 pub fn init(context: &mut Context) {
-    let progression = DiseaseSeverityProgression::new(
+    let progression = EmpiricalProgression::new(
         vec![
             DiseaseSeverityValue::Presymptomatic,
             DiseaseSeverityValue::Asymptomatic,
@@ -68,7 +67,7 @@ pub fn init(context: &mut Context) {
 
 #[cfg(test)]
 mod test {
-    use super::{DiseaseSeverityProgression, DiseaseSeverityValue};
+    use super::{EmpiricalProgression, DiseaseSeverityValue};
     use crate::clinical_status_manager::ClinicalHealthStatus;
 
     use ixa::Context;
@@ -77,7 +76,7 @@ mod test {
     #[test]
     fn test_disease_progression() {
         let context = Context::new();
-        let progression = DiseaseSeverityProgression::new(
+        let progression = EmpiricalProgression::new(
             vec![
                 DiseaseSeverityValue::Presymptomatic,
                 DiseaseSeverityValue::Asymptomatic,
