@@ -79,9 +79,9 @@ mod test {
     fn test_register_clinical_progression_automates_moves() {
         let progression = DiseaseSeverityProgression::new(
             vec![
-                Some(DiseaseSeverityValue::Presymptomatic),
-                Some(DiseaseSeverityValue::Asymptomatic),
-                Some(DiseaseSeverityValue::Mild),
+                DiseaseSeverityValue::Presymptomatic,
+                DiseaseSeverityValue::Asymptomatic,
+                DiseaseSeverityValue::Mild,
             ],
             vec![1.0, 2.0],
         );
@@ -91,13 +91,13 @@ mod test {
         context.set_person_property(
             person_id,
             DiseaseSeverity,
-            Some(DiseaseSeverityValue::Presymptomatic),
+            DiseaseSeverityValue::Presymptomatic,
         );
         context.execute();
         assert_almost_eq!(context.get_current_time(), 3.0, 0.0);
         assert_eq!(
             context.get_person_property(person_id, DiseaseSeverity),
-            Some(DiseaseSeverityValue::Mild)
+            DiseaseSeverityValue::Mild
         );
     }
 }

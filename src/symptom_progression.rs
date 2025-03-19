@@ -7,6 +7,7 @@ use crate::clinical_status_manager::{ClinicalHealthStatus, ContextClinicalExt};
 
 #[derive(PartialEq, Copy, Clone, Debug, Serialize)]
 pub enum DiseaseSeverityValue {
+    Healthy,
     Presymptomatic,
     Asymptomatic,
     Mild,
@@ -14,16 +15,20 @@ pub enum DiseaseSeverityValue {
     Severe,
 }
 
-define_person_property_with_default!(DiseaseSeverity, Option<DiseaseSeverityValue>, None);
+define_person_property_with_default!(
+    DiseaseSeverity,
+    DiseaseSeverityValue,
+    DiseaseSeverityValue::Healthy
+);
 
 pub struct DiseaseSeverityProgression {
-    states: Vec<Option<DiseaseSeverityValue>>,
+    states: Vec<DiseaseSeverityValue>,
     time_to_next: Vec<f64>,
 }
 
 impl DiseaseSeverityProgression {
     pub fn new(
-        states: Vec<Option<DiseaseSeverityValue>>,
+        states: Vec<DiseaseSeverityValue>,
         time_to_next: Vec<f64>,
     ) -> DiseaseSeverityProgression {
         DiseaseSeverityProgression {
@@ -36,7 +41,7 @@ impl DiseaseSeverityProgression {
 impl ClinicalHealthStatus for DiseaseSeverityProgression {
     fn next(&self, last: Box<dyn Any>) -> Option<(Box<dyn Any>, f64)> {
         let mut iter = self.states.iter().enumerate();
-        let last_value = last.downcast_ref::<Option<DiseaseSeverityValue>>().unwrap();
+        let last_value = last.downcast_ref::<DiseaseSeverityValue>().unwrap();
         while let Some((_, status)) = iter.next() {
             if status == last_value {
                 return iter
@@ -51,11 +56,11 @@ impl ClinicalHealthStatus for DiseaseSeverityProgression {
 pub fn init(context: &mut Context) {
     let progression = DiseaseSeverityProgression::new(
         vec![
-            Some(DiseaseSeverityValue::Presymptomatic),
-            Some(DiseaseSeverityValue::Asymptomatic),
-            Some(DiseaseSeverityValue::Mild),
-            Some(DiseaseSeverityValue::Moderate),
-            Some(DiseaseSeverityValue::Severe),
+            DiseaseSeverityValue::Presymptomatic,
+            DiseaseSeverityValue::Asymptomatic,
+            DiseaseSeverityValue::Mild,
+            DiseaseSeverityValue::Moderate,
+            DiseaseSeverityValue::Severe,
         ],
         vec![1.0, 2.0, 1.0, 1.0],
     );
@@ -74,33 +79,29 @@ mod test {
     fn test_disease_progression() {
         let progression = DiseaseSeverityProgression::new(
             vec![
-                Some(DiseaseSeverityValue::Presymptomatic),
-                Some(DiseaseSeverityValue::Asymptomatic),
-                Some(DiseaseSeverityValue::Mild),
+                DiseaseSeverityValue::Presymptomatic,
+                DiseaseSeverityValue::Asymptomatic,
+                DiseaseSeverityValue::Mild,
             ],
             vec![1.0, 2.0],
         );
-        let initial_state = Box::new(Some(DiseaseSeverityValue::Presymptomatic)) as Box<dyn Any>;
+        let initial_state = Box::new(DiseaseSeverityValue::Presymptomatic) as Box<dyn Any>;
         let (next_state, time) = progression.next(initial_state).unwrap();
         assert_eq!(
-            *next_state
-                .downcast_ref::<Option<DiseaseSeverityValue>>()
-                .unwrap(),
-            Some(DiseaseSeverityValue::Asymptomatic)
+            *next_state.downcast_ref::<DiseaseSeverityValue>().unwrap(),
+            DiseaseSeverityValue::Asymptomatic
         );
         assert_almost_eq!(time, 1.0, 0.0);
 
-        let initial_state = Box::new(Some(DiseaseSeverityValue::Asymptomatic)) as Box<dyn Any>;
+        let initial_state = Box::new(DiseaseSeverityValue::Asymptomatic) as Box<dyn Any>;
         let (next_state, time) = progression.next(initial_state).unwrap();
         assert_eq!(
-            *next_state
-                .downcast_ref::<Option<DiseaseSeverityValue>>()
-                .unwrap(),
-            Some(DiseaseSeverityValue::Mild)
+            *next_state.downcast_ref::<DiseaseSeverityValue>().unwrap(),
+            DiseaseSeverityValue::Mild
         );
         assert_almost_eq!(time, 2.0, 0.0);
 
-        let initial_state = Box::new(Some(DiseaseSeverityValue::Mild)) as Box<dyn Any>;
+        let initial_state = Box::new(DiseaseSeverityValue::Mild) as Box<dyn Any>;
         let next_state = progression.next(initial_state);
         assert!(next_state.is_none());
     }
