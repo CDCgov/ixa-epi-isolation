@@ -4,8 +4,11 @@ use std::{
 };
 
 use ixa::{
-    define_data_plugin, Context, ContextPeopleExt, PersonProperty, PersonPropertyChangeEvent,
+    define_data_plugin, define_rng, Context, ContextPeopleExt, ContextRandomExt, PersonProperty,
+    PersonPropertyChangeEvent,
 };
+
+define_rng!(ClinicalRng);
 
 pub trait ClinicalHealthStatus {
     type Value;
@@ -48,8 +51,10 @@ impl ContextClinicalExt for Context {
             self.subscribe_to_event(move |context, event: PersonPropertyChangeEvent<T>| {
                 let container = context.get_data_container(ClinicalProgression).unwrap();
                 let progressions = container.progressions.get(&TypeId::of::<T>()).unwrap();
-                // Just for argument's sake, let's only ever take the first tracer.
-                let tcr = progressions[0]
+                // Todo(kzs9): Make this not random but rather we pick the same index as the rate
+                // function id/some way of correlation between natural history
+                let id = context.sample_range(ClinicalRng, 0..progressions.len());
+                let tcr = progressions[id]
                     .downcast_ref::<Box<dyn ClinicalHealthStatus<Value = T::Value>>>()
                     .unwrap()
                     .as_ref();
@@ -67,7 +72,7 @@ impl ContextClinicalExt for Context {
 #[cfg(test)]
 mod test {
 
-    use ixa::{Context, ContextPeopleExt};
+    use ixa::{Context, ContextPeopleExt, ContextRandomExt};
     use statrs::assert_almost_eq;
 
     use crate::symptom_progression::{
@@ -87,6 +92,7 @@ mod test {
             vec![1.0, 2.0],
         );
         let mut context = Context::new();
+        context.init_random(0);
         context.register_clinical_progression(DiseaseSeverity, progression);
         let person_id = context.add_person(()).unwrap();
         context.set_person_property(
