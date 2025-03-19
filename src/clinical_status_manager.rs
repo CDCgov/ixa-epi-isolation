@@ -22,8 +22,8 @@ impl ContextClinicalExt for Context {
         self.subscribe_to_event(move |context, event: PersonPropertyChangeEvent<T>| {
             if let Some((value, t)) = tracer.next(&event.current) {
                 let current_time = context.get_current_time();
-                context.add_plan(current_time + t, move |c| {
-                    c.set_person_property(event.person_id, property, value);
+                context.add_plan(current_time + t, move |ctx| {
+                    ctx.set_person_property(event.person_id, property, value);
                 });
             }
         });
