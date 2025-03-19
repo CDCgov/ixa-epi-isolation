@@ -100,14 +100,14 @@ mod test {
     use statrs::assert_almost_eq;
 
     use crate::symptom_progression::{
-        DiseaseSeverity, DiseaseSeverityProgression, DiseaseSeverityValue,
+        DiseaseSeverity, EmpiricalProgression, DiseaseSeverityValue,
     };
 
     use super::ContextClinicalExt;
 
     #[test]
     fn test_register_clinical_progression_automates_moves() {
-        let progression = DiseaseSeverityProgression::new(
+        let progression = EmpiricalProgression::new(
             vec![
                 DiseaseSeverityValue::Presymptomatic,
                 DiseaseSeverityValue::Asymptomatic,
