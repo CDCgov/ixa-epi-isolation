@@ -1,7 +1,7 @@
 use ixa::{define_person_property_with_default, Context};
 use serde::Serialize;
 
-use crate::infection_clinical_status_manager::{ClinicalHealthStatus, ContextClinicalExt};
+use crate::clinical_status_manager::{ClinicalHealthStatus, ContextClinicalExt};
 
 #[derive(PartialEq, Copy, Clone, Debug, Serialize)]
 pub enum DiseaseSeverityValue {
@@ -66,7 +66,7 @@ pub fn init(context: &mut Context) {
 #[cfg(test)]
 mod test {
     use super::{DiseaseSeverityProgression, DiseaseSeverityValue};
-    use crate::infection_clinical_status_manager::ClinicalHealthStatus;
+    use crate::clinical_status_manager::ClinicalHealthStatus;
 
     #[test]
     fn test_disease_progression() {
