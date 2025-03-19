@@ -52,17 +52,37 @@ impl<T: PartialEq + Copy> ClinicalHealthStatus for EmpiricalProgression<T> {
 }
 
 pub fn init(context: &mut Context) {
-    let progression = EmpiricalProgression::new(
+    // Todo(kzs9): We will read these progressions from a file from our isolation guidance modeling
+    let progression1 = EmpiricalProgression::new(
         vec![
             DiseaseSeverityValue::Presymptomatic,
-            DiseaseSeverityValue::Asymptomatic,
             DiseaseSeverityValue::Mild,
             DiseaseSeverityValue::Moderate,
             DiseaseSeverityValue::Severe,
+            DiseaseSeverityValue::Healthy,
         ],
-        vec![1.0, 2.0, 1.0, 1.0],
+        vec![1.0, 2.0, 1.0, 4.0],
     );
-    context.register_clinical_progression(DiseaseSeverity, progression);
+    context.register_clinical_progression(DiseaseSeverity, progression1);
+
+    let progression2 = EmpiricalProgression::new(
+        vec![
+            DiseaseSeverityValue::Asymptomatic,
+            DiseaseSeverityValue::Healthy,
+        ],
+        vec![2.0],
+    );
+    context.register_clinical_progression(DiseaseSeverity, progression2);
+
+    let progression3 = EmpiricalProgression::new(
+        vec![
+            DiseaseSeverityValue::Presymptomatic,
+            DiseaseSeverityValue::Mild,
+            DiseaseSeverityValue::Healthy,
+        ],
+        vec![2.0, 3.0],
+    );
+    context.register_clinical_progression(DiseaseSeverity, progression3);
 }
 
 #[cfg(test)]

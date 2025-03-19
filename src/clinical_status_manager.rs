@@ -54,6 +54,9 @@ impl ContextClinicalExt for Context {
         progressions.push(Box::new(boxed_tracer));
         if progressions.len() == 1 {
             self.subscribe_to_event(move |context, event: PersonPropertyChangeEvent<T>| {
+                if event.current == event.previous {
+                    return;
+                }
                 let container = context.get_data_container(ClinicalProgression).unwrap();
                 let progressions = container.progressions.get(&TypeId::of::<T>()).unwrap();
                 // Todo(kzs9): Make this not random but rather we pick the same index as the rate
