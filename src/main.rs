@@ -1,5 +1,5 @@
+mod clinical_status_manager;
 mod contact;
-mod infection_clinical_status_manager;
 mod infection_propagation_loop;
 mod infectiousness_manager;
 mod parameters;
