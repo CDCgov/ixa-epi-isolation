@@ -10,8 +10,11 @@ use ixa::{
 
 define_rng!(ClinicalRng);
 
+/// Defines a semi-Markovian method for getting the next person property value based on the last.
 pub trait ClinicalHealthStatus {
+    /// The value of the person property that is being tracked by the clinical progression.
     type Value;
+    /// Returns the next value and the time to the next value given the current value and `Context`.
     fn next(&self, context: &Context, last: &Self::Value) -> Option<(Self::Value, f64)>;
 }
 
@@ -27,6 +30,8 @@ define_data_plugin!(
 );
 
 pub trait ContextClinicalExt {
+    /// Registers a method that provides a sequence of person property values and automatically
+    /// changes the values of person properties according to that sequence.
     fn register_clinical_progression<T: PersonProperty + 'static>(
         &mut self,
         property: T,
@@ -41,12 +46,12 @@ impl ContextClinicalExt for Context {
         tracer: impl ClinicalHealthStatus<Value = T::Value> + 'static,
     ) {
         // Add tracer to data container
-        // Subscribe to event if hashmap has not yet considered this person property
-        // Make sure to get the right tracer out for the person
         let container = self.get_data_container_mut(ClinicalProgression);
         let progressions = container.progressions.entry(TypeId::of::<T>()).or_default();
         let boxed_tracer = Box::new(tracer) as Box<dyn ClinicalHealthStatus<Value = T::Value>>;
         progressions.push(Box::new(boxed_tracer));
+        // Subscribe to change events if we have not yet already seen a progression that controls
+        // flow for this property
         if progressions.len() == 1 {
             self.subscribe_to_event(move |context, event: PersonPropertyChangeEvent<T>| {
                 let container = context.get_data_container(ClinicalProgression).unwrap();
@@ -72,37 +77,149 @@ impl ContextClinicalExt for Context {
 #[cfg(test)]
 mod test {
 
-    use ixa::{Context, ContextPeopleExt, ContextRandomExt};
-    use statrs::assert_almost_eq;
+    use ixa::{Context, ContextPeopleExt, ContextRandomExt, ExecutionPhase};
 
-    use crate::symptom_progression::{DiseaseSeverity, DiseaseSeverityValue, EmpiricalProgression};
+    use crate::{
+        population_loader::Age,
+        symptom_progression::{DiseaseSeverity, DiseaseSeverityValue, EmpiricalProgression},
+    };
 
-    use super::ContextClinicalExt;
+    use super::{ClinicalHealthStatus, ClinicalProgression, ContextClinicalExt};
+
+    struct AgeProgression {
+        time_to_next_age: f64,
+    }
+
+    impl ClinicalHealthStatus for AgeProgression {
+        type Value = u8;
+        fn next(&self, _context: &Context, last: &Self::Value) -> Option<(Self::Value, f64)> {
+            Some((*last + 1, self.time_to_next_age))
+        }
+    }
 
     #[test]
     fn test_register_clinical_progression_automates_moves() {
-        let progression = EmpiricalProgression::new(
+        let mut context = Context::new();
+        context.init_random(0);
+        let symptom_progression = EmpiricalProgression::new(
             vec![
                 DiseaseSeverityValue::Presymptomatic,
                 DiseaseSeverityValue::Asymptomatic,
                 DiseaseSeverityValue::Mild,
             ],
             vec![1.0, 2.0],
+        )
+        .unwrap();
+        context.register_clinical_progression(DiseaseSeverity, symptom_progression);
+        context.register_clinical_progression(
+            Age,
+            AgeProgression {
+                time_to_next_age: 1.0,
+            },
         );
-        let mut context = Context::new();
-        context.init_random(0);
-        context.register_clinical_progression(DiseaseSeverity, progression);
-        let person_id = context.add_person(()).unwrap();
+        let person_id = context.add_person((Age, 0)).unwrap();
         context.set_person_property(
             person_id,
             DiseaseSeverity,
             DiseaseSeverityValue::Presymptomatic,
         );
-        context.execute();
-        assert_almost_eq!(context.get_current_time(), 3.0, 0.0);
-        assert_eq!(
-            context.get_person_property(person_id, DiseaseSeverity),
-            DiseaseSeverityValue::Mild
+        context.set_person_property(person_id, Age, 0);
+        context.add_plan_with_phase(
+            1.0,
+            move |ctx| {
+                let age = ctx.get_person_property(person_id, Age);
+                assert_eq!(age, 1);
+                let severity = ctx.get_person_property(person_id, DiseaseSeverity);
+                assert_eq!(severity, DiseaseSeverityValue::Asymptomatic);
+            },
+            ExecutionPhase::Last,
         );
+        context.add_plan_with_phase(
+            2.0,
+            move |ctx| {
+                let age = ctx.get_person_property(person_id, Age);
+                assert_eq!(age, 2);
+                let severity = ctx.get_person_property(person_id, DiseaseSeverity);
+                assert_eq!(severity, DiseaseSeverityValue::Asymptomatic);
+            },
+            ExecutionPhase::Last,
+        );
+        context.add_plan_with_phase(
+            3.0,
+            move |ctx| {
+                let age = ctx.get_person_property(person_id, Age);
+                assert_eq!(age, 3);
+                let severity = ctx.get_person_property(person_id, DiseaseSeverity);
+                assert_eq!(severity, DiseaseSeverityValue::Mild);
+            },
+            ExecutionPhase::Last,
+        );
+        // Since age increases never stop (just keep on +1-ing), we need a plan to shutdown context.
+        context.add_plan_with_phase(3.0, Context::shutdown, ExecutionPhase::Last);
+        context.execute();
+    }
+
+    #[test]
+    fn test_multiple_progressions_registered() {
+        let mut context = Context::new();
+        context.init_random(0);
+        let progression_asymptomatic = EmpiricalProgression::new(
+            vec![
+                DiseaseSeverityValue::Presymptomatic,
+                DiseaseSeverityValue::Asymptomatic,
+                DiseaseSeverityValue::Mild,
+            ],
+            vec![1.0, 2.0],
+        )
+        .unwrap();
+        let progression_moderate = EmpiricalProgression::new(
+            vec![
+                DiseaseSeverityValue::Presymptomatic,
+                DiseaseSeverityValue::Moderate,
+                DiseaseSeverityValue::Healthy,
+            ],
+            vec![2.0, 4.0],
+        )
+        .unwrap();
+        context.register_clinical_progression(DiseaseSeverity, progression_asymptomatic);
+        context.register_clinical_progression(DiseaseSeverity, progression_moderate);
+        // Get out the registered progressions.
+        let container = context.get_data_container(ClinicalProgression).unwrap();
+        let progressions = container
+            .progressions
+            .get(&std::any::TypeId::of::<DiseaseSeverity>())
+            .unwrap();
+        assert_eq!(progressions.len(), 2);
+        // Inspect the first progression
+        let tcr = progressions[0]
+            .downcast_ref::<Box<dyn ClinicalHealthStatus<Value = DiseaseSeverityValue>>>()
+            .unwrap()
+            .as_ref();
+        assert_eq!(
+            tcr.next(&context, &DiseaseSeverityValue::Presymptomatic)
+                .unwrap(),
+            (DiseaseSeverityValue::Asymptomatic, 1.0)
+        );
+        assert_eq!(
+            tcr.next(&context, &DiseaseSeverityValue::Asymptomatic)
+                .unwrap(),
+            (DiseaseSeverityValue::Mild, 2.0)
+        );
+        assert!(tcr.next(&context, &DiseaseSeverityValue::Mild).is_none());
+        // Same for the second
+        let tcr = progressions[1]
+            .downcast_ref::<Box<dyn ClinicalHealthStatus<Value = DiseaseSeverityValue>>>()
+            .unwrap()
+            .as_ref();
+        assert_eq!(
+            tcr.next(&context, &DiseaseSeverityValue::Presymptomatic)
+                .unwrap(),
+            (DiseaseSeverityValue::Moderate, 2.0)
+        );
+        assert_eq!(
+            tcr.next(&context, &DiseaseSeverityValue::Moderate).unwrap(),
+            (DiseaseSeverityValue::Healthy, 4.0)
+        );
+        assert!(tcr.next(&context, &DiseaseSeverityValue::Healthy).is_none());
     }
 }
