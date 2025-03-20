@@ -25,10 +25,7 @@ pub struct EmpiricalProgression<T: PartialEq + Copy> {
 }
 
 impl<T: PartialEq + Copy> EmpiricalProgression<T> {
-    pub fn new(
-        states: Vec<T>,
-        time_to_next: Vec<f64>,
-    ) -> EmpiricalProgression<T> {
+    pub fn new(states: Vec<T>, time_to_next: Vec<f64>) -> EmpiricalProgression<T> {
         EmpiricalProgression {
             states,
             time_to_next,
@@ -87,7 +84,7 @@ pub fn init(context: &mut Context) {
 
 #[cfg(test)]
 mod test {
-    use super::{EmpiricalProgression, DiseaseSeverityValue};
+    use super::{DiseaseSeverityValue, EmpiricalProgression};
     use crate::clinical_status_manager::ClinicalHealthStatus;
 
     use ixa::Context;
