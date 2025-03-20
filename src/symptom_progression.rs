@@ -78,6 +78,9 @@ impl ClinicalHealthStatus for InfectionImmunityAllOrNone {
 }
 
 pub fn init(context: &mut Context) {
+    let immunity = InfectionImmunityAllOrNone::new(10.0);
+    context.register_clinical_progression(InfectionData, immunity);
+
     // Todo(kzs9): We will read these progressions from a file from our isolation guidance modeling
     let progression1 = EmpiricalProgression::new(
         vec![
