@@ -98,13 +98,16 @@ mod test {
 
     use super::{schedule_recovery, seed_infections};
 
-    fn setup_context(seed: u64, rate_of_infection: f64) -> Context {
+    fn setup_context(seed: u64, rate: f64) -> Context {
         let mut context = Context::new();
         let parameters = Params {
             initial_infections: 3,
             max_time: 100.0,
             seed,
-            infectiousness_rate_fn: RateFnType::Constant(rate_of_infection, 5.0),
+            infectiousness_rate_fn: RateFnType::Constant {
+                rate,
+                duration: 5.0,
+            },
             report_period: 1.0,
             synth_population_file: PathBuf::from("."),
             transmission_report_name: None,

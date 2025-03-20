@@ -241,7 +241,10 @@ mod test {
                     initial_infections: 1,
                     max_time: 10.0,
                     seed: 0,
-                    infectiousness_rate_fn: RateFnType::Constant(1.0, 5.0),
+                    infectiousness_rate_fn: RateFnType::Constant {
+                        rate: 1.0,
+                        duration: 5.0,
+                    },
                     report_period: 1.0,
                     synth_population_file: PathBuf::from("."),
                     transmission_report_name: None,

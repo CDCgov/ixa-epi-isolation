@@ -61,10 +61,10 @@ pub fn load_rate_fns(context: &mut Context) -> Result<(), IxaError> {
     let rate_of_infection = context.get_params().infectiousness_rate_fn.clone();
 
     match rate_of_infection {
-        RateFnType::Constant(rate, infection_duration) => {
-            context.add_rate_fn(Box::new(ConstantRate::new(rate, infection_duration)?));
+        RateFnType::Constant { rate, duration } => {
+            context.add_rate_fn(Box::new(ConstantRate::new(rate, duration)?));
         }
-        RateFnType::EmpiricalFromFile(file) => {
+        RateFnType::EmpiricalFromFile { file } => {
             add_rate_fns_from_file(context, file)?;
         }
     }
@@ -161,7 +161,10 @@ mod tests {
             initial_infections: 3,
             max_time: 100.0,
             seed: 0,
-            infectiousness_rate_fn: RateFnType::Constant(1.0, 5.0),
+            infectiousness_rate_fn: RateFnType::Constant {
+                rate: 1.0,
+                duration: 5.0,
+            },
             report_period: 1.0,
             synth_population_file: PathBuf::from("."),
             transmission_report_name: None,

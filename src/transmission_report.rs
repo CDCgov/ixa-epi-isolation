@@ -102,7 +102,7 @@ mod test {
                 "epi_isolation.GlobalParams": {
                 "max_time": 200.0,
                 "seed": 123,
-                "infectiousness_rate_fn": {"Constant": [1.0, 5.0]},
+                "infectiousness_rate_fn": {"Constant": {"rate": 1.0, "duration": 5.0}},
                 "initial_infections": 1,
                 "report_period": 1.0,
                 "synth_population_file": "input/people_test.csv"
@@ -121,7 +121,7 @@ mod test {
                 "epi_isolation.GlobalParams": {
                 "max_time": 200.0,
                 "seed": 123,
-                "infectiousness_rate_fn": {"Constant": [1.0, 5.0]},
+                "infectiousness_rate_fn": {"Constant": {"rate": 1.0, "duration": 5.0}},
                 "initial_infections": 1,
                 "report_period": 1.0,
                 "synth_population_file": "input/people_test.csv",
@@ -142,7 +142,7 @@ mod test {
                 "epi_isolation.GlobalParams": {
                 "max_time": 200.0,
                 "seed": 123,
-                "infectiousness_rate_fn": {"Constant": [1.0, 5.0]},
+                "infectiousness_rate_fn": {"Constant": {"rate": 1.0, "duration": 5.0}},
                 "initial_infections": 1,
                 "report_period": 1.0,
                 "synth_population_file": "input/people_test.csv",
