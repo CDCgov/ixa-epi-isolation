@@ -4,8 +4,8 @@ use std::{
 };
 
 use ixa::{
-    define_data_plugin, define_rng, Context, ContextPeopleExt, ContextRandomExt,
-    PersonProperty, PersonPropertyChangeEvent,
+    define_data_plugin, define_rng, Context, ContextPeopleExt, ContextRandomExt, PersonProperty,
+    PersonPropertyChangeEvent,
 };
 
 define_rng!(ClinicalRng);
@@ -75,9 +75,7 @@ mod test {
     use ixa::{Context, ContextPeopleExt, ContextRandomExt};
     use statrs::assert_almost_eq;
 
-    use crate::symptom_progression::{
-        DiseaseSeverity, EmpiricalProgression, DiseaseSeverityValue,
-    };
+    use crate::symptom_progression::{DiseaseSeverity, DiseaseSeverityValue, EmpiricalProgression};
 
     use super::ContextClinicalExt;
 
