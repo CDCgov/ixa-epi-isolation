@@ -11,7 +11,7 @@ use ixa::{
 define_rng!(ClinicalRng);
 
 /// Defines a semi-Markovian method for getting the next person property value based on the last.
-pub trait ClinicalHealthStatus {
+pub trait PropertyProgression {
     /// The value of the person property that is being tracked by the clinical progression.
     type Value;
     /// Returns the next value and the time to the next value given the current value and `Context`.
@@ -19,48 +19,48 @@ pub trait ClinicalHealthStatus {
 }
 
 #[derive(Default)]
-struct ClinicalProgressionContainer {
+struct ProgressionsContainer {
     progressions: HashMap<TypeId, Vec<Box<dyn Any>>>,
 }
 
 define_data_plugin!(
-    ClinicalProgression,
-    ClinicalProgressionContainer,
-    ClinicalProgressionContainer::default()
+    Progressions,
+    ProgressionsContainer,
+    ProgressionsContainer::default()
 );
 
-pub trait ContextClinicalExt {
+pub trait ContextPropertyProgressionExt {
     /// Registers a method that provides a sequence of person property values and automatically
     /// changes the values of person properties according to that sequence.
-    fn register_clinical_progression<T: PersonProperty + 'static>(
+    fn register_property_progression<T: PersonProperty + 'static>(
         &mut self,
         property: T,
-        tracer: impl ClinicalHealthStatus<Value = T::Value> + 'static,
+        tracer: impl PropertyProgression<Value = T::Value> + 'static,
     );
 }
 
-impl ContextClinicalExt for Context {
-    fn register_clinical_progression<T: PersonProperty + 'static>(
+impl ContextPropertyProgressionExt for Context {
+    fn register_property_progression<T: PersonProperty + 'static>(
         &mut self,
         property: T,
-        tracer: impl ClinicalHealthStatus<Value = T::Value> + 'static,
+        tracer: impl PropertyProgression<Value = T::Value> + 'static,
     ) {
         // Add tracer to data container
-        let container = self.get_data_container_mut(ClinicalProgression);
+        let container = self.get_data_container_mut(Progressions);
         let progressions = container.progressions.entry(TypeId::of::<T>()).or_default();
-        let boxed_tracer = Box::new(tracer) as Box<dyn ClinicalHealthStatus<Value = T::Value>>;
+        let boxed_tracer = Box::new(tracer) as Box<dyn PropertyProgression<Value = T::Value>>;
         progressions.push(Box::new(boxed_tracer));
         // Subscribe to change events if we have not yet already seen a progression that controls
         // flow for this property
         if progressions.len() == 1 {
             self.subscribe_to_event(move |context, event: PersonPropertyChangeEvent<T>| {
-                let container = context.get_data_container(ClinicalProgression).unwrap();
+                let container = context.get_data_container(Progressions).unwrap();
                 let progressions = container.progressions.get(&TypeId::of::<T>()).unwrap();
                 // Todo(kzs9): Make this not random but rather we pick the same index as the rate
                 // function id/some way of correlation between natural history
                 let id = context.sample_range(ClinicalRng, 0..progressions.len());
                 let tcr = progressions[id]
-                    .downcast_ref::<Box<dyn ClinicalHealthStatus<Value = T::Value>>>()
+                    .downcast_ref::<Box<dyn PropertyProgression<Value = T::Value>>>()
                     .unwrap()
                     .as_ref();
                 if let Some((next_value, time_to_next)) = tcr.next(context, &event.current) {
@@ -84,13 +84,13 @@ mod test {
         symptom_progression::{DiseaseSeverity, DiseaseSeverityValue, EmpiricalProgression},
     };
 
-    use super::{ClinicalHealthStatus, ClinicalProgression, ContextClinicalExt};
+    use super::{ContextPropertyProgressionExt, Progressions, PropertyProgression};
 
     struct AgeProgression {
         time_to_next_age: f64,
     }
 
-    impl ClinicalHealthStatus for AgeProgression {
+    impl PropertyProgression for AgeProgression {
         type Value = u8;
         fn next(&self, _context: &Context, last: &Self::Value) -> Option<(Self::Value, f64)> {
             Some((*last + 1, self.time_to_next_age))
@@ -110,8 +110,8 @@ mod test {
             vec![1.0, 2.0],
         )
         .unwrap();
-        context.register_clinical_progression(DiseaseSeverity, symptom_progression);
-        context.register_clinical_progression(
+        context.register_property_progression(DiseaseSeverity, symptom_progression);
+        context.register_property_progression(
             Age,
             AgeProgression {
                 time_to_next_age: 1.0,
@@ -181,10 +181,10 @@ mod test {
             vec![2.0, 4.0],
         )
         .unwrap();
-        context.register_clinical_progression(DiseaseSeverity, progression_asymptomatic);
-        context.register_clinical_progression(DiseaseSeverity, progression_moderate);
+        context.register_property_progression(DiseaseSeverity, progression_asymptomatic);
+        context.register_property_progression(DiseaseSeverity, progression_moderate);
         // Get out the registered progressions.
-        let container = context.get_data_container(ClinicalProgression).unwrap();
+        let container = context.get_data_container(Progressions).unwrap();
         let progressions = container
             .progressions
             .get(&std::any::TypeId::of::<DiseaseSeverity>())
@@ -192,7 +192,7 @@ mod test {
         assert_eq!(progressions.len(), 2);
         // Inspect the first progression
         let tcr = progressions[0]
-            .downcast_ref::<Box<dyn ClinicalHealthStatus<Value = DiseaseSeverityValue>>>()
+            .downcast_ref::<Box<dyn PropertyProgression<Value = DiseaseSeverityValue>>>()
             .unwrap()
             .as_ref();
         assert_eq!(
@@ -208,7 +208,7 @@ mod test {
         assert!(tcr.next(&context, &DiseaseSeverityValue::Mild).is_none());
         // Same for the second
         let tcr = progressions[1]
-            .downcast_ref::<Box<dyn ClinicalHealthStatus<Value = DiseaseSeverityValue>>>()
+            .downcast_ref::<Box<dyn PropertyProgression<Value = DiseaseSeverityValue>>>()
             .unwrap()
             .as_ref();
         assert_eq!(

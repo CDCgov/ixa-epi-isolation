@@ -1,7 +1,7 @@
 use ixa::{define_person_property_with_default, warn, Context, IxaError};
 use serde::Serialize;
 
-use crate::clinical_status_manager::{ClinicalHealthStatus, ContextClinicalExt};
+use crate::clinical_status_manager::{ContextPropertyProgressionExt, PropertyProgression};
 
 #[derive(PartialEq, Copy, Clone, Debug, Serialize)]
 pub enum DiseaseSeverityValue {
@@ -58,7 +58,7 @@ impl<T: PartialEq + Copy> EmpiricalProgression<T> {
     }
 }
 
-impl<T: PartialEq + Copy> ClinicalHealthStatus for EmpiricalProgression<T> {
+impl<T: PartialEq + Copy> PropertyProgression for EmpiricalProgression<T> {
     type Value = T;
     fn next(&self, _context: &Context, last: &Self::Value) -> Option<(Self::Value, f64)> {
         let mut iter = self.states.iter().enumerate();
@@ -84,7 +84,7 @@ pub fn init(context: &mut Context) -> Result<(), IxaError> {
         ],
         vec![1.0, 4.0],
     )?;
-    context.register_clinical_progression(DiseaseSeverity, example_progression_cat1);
+    context.register_property_progression(DiseaseSeverity, example_progression_cat1);
 
     let example_progression_cat2 = EmpiricalProgression::new(
         vec![
@@ -92,18 +92,18 @@ pub fn init(context: &mut Context) -> Result<(), IxaError> {
             DiseaseSeverityValue::Mild,
             DiseaseSeverityValue::Healthy,
         ],
-        vec![2.0],
+        vec![2.0, 4.0],
     )?;
-    context.register_clinical_progression(DiseaseSeverity, example_progression_cat2);
+    context.register_property_progression(DiseaseSeverity, example_progression_cat2);
 
     let example_progression_asymptomatic = EmpiricalProgression::new(
         vec![
             DiseaseSeverityValue::Asymptomatic,
             DiseaseSeverityValue::Healthy,
         ],
-        vec![2.0, 3.0],
+        vec![2.0],
     )?;
-    context.register_clinical_progression(DiseaseSeverity, example_progression_asymptomatic);
+    context.register_property_progression(DiseaseSeverity, example_progression_asymptomatic);
 
     Ok(())
 }
@@ -111,7 +111,7 @@ pub fn init(context: &mut Context) -> Result<(), IxaError> {
 #[cfg(test)]
 mod test {
     use super::{DiseaseSeverityValue, EmpiricalProgression};
-    use crate::clinical_status_manager::ClinicalHealthStatus;
+    use crate::clinical_status_manager::PropertyProgression;
 
     use ixa::{Context, IxaError};
     use statrs::assert_almost_eq;
