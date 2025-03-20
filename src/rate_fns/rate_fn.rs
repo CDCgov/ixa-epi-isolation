@@ -93,7 +93,7 @@ mod tests {
 
     #[test]
     fn test_scale_rate_fn() {
-        let rate_fn = ConstantRate::new(2.0, 5.0);
+        let rate_fn = ConstantRate::new(2.0, 5.0).unwrap();
         let scaled_rate_fn = ScaledRateFn {
             base: &rate_fn,
             scale: 2.0,
@@ -104,7 +104,7 @@ mod tests {
     }
     #[test]
     fn test_scale_rate_fn_with_elapsed() {
-        let rate_fn = ConstantRate::new(2.0, 5.0);
+        let rate_fn = ConstantRate::new(2.0, 5.0).unwrap();
         let scaled_rate_fn = ScaledRateFn {
             base: &rate_fn,
             scale: 2.0,
@@ -117,7 +117,7 @@ mod tests {
     }
     #[test]
     fn test_scale_rate_fn_cum_rate() {
-        let rate_fn = ConstantRate::new(2.0, 5.0);
+        let rate_fn = ConstantRate::new(2.0, 5.0).unwrap();
         let scaled_rate_fn = ScaledRateFn {
             base: &rate_fn,
             scale: 2.0,
@@ -131,7 +131,7 @@ mod tests {
     }
     #[test]
     fn test_scale_rate_fn_inverse_cum_rate() {
-        let rate_fn = ConstantRate::new(2.0, 5.0);
+        let rate_fn = ConstantRate::new(2.0, 5.0).unwrap();
         let scaled_rate_fn = ScaledRateFn {
             base: &rate_fn,
             scale: 2.0,
@@ -144,7 +144,7 @@ mod tests {
 
     #[test]
     fn test_scale_rate_fn_infection_duration() {
-        let rate_fn = ConstantRate::new(2.0, 5.0);
+        let rate_fn = ConstantRate::new(2.0, 5.0).unwrap();
         let scaled_rate_fn = ScaledRateFn {
             base: &rate_fn,
             scale: 2.0,

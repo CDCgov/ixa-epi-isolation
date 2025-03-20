@@ -38,6 +38,7 @@
 # !your_data_file.csv
 # !your_data_directory/
 !input/people_test.csv
+!tests/data/*
 
 #####
 # Python

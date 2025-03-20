@@ -117,7 +117,7 @@ pub fn evaluate_forecast(
     let current_infectiousness = total_rate_fn.rate(elapsed_t);
 
     assert!(
-        (current_infectiousness <= forecasted_total_infectiousness),
+        (f64::abs(current_infectiousness - forecasted_total_infectiousness) <= f64::EPSILON),
         "Person {person_id}: Forecasted infectiousness must always be greater than or equal to current infectiousness. Current: {current_infectiousness}, Forecasted: {forecasted_total_infectiousness}"
     );
 
@@ -164,7 +164,7 @@ impl InfectionContextExt for Context {
     // calculate intrinsic infectiousness
     fn infect_person(&mut self, target_id: PersonId, source_id: Option<PersonId>) {
         let infection_time = self.get_current_time();
-        let rate_fn_id = self.get_random_rate_function();
+        let rate_fn_id = self.get_random_rate_fn();
         trace!("Person {target_id}: Infected at {infection_time}");
         self.set_person_property(
             target_id,
@@ -226,8 +226,8 @@ mod test {
             InfectionData, InfectionDataValue, InfectionStatus, InfectionStatusValue,
             TOTAL_INFECTIOUSNESS_MULTIPLIER,
         },
-        parameters::{GlobalParams, Params},
-        rate_fns::{ConstantRate, InfectiousnessRateExt},
+        parameters::{GlobalParams, Params, RateFnType},
+        rate_fns::load_rate_fns,
     };
     use ixa::{Context, ContextGlobalPropertiesExt, ContextPeopleExt, ContextRandomExt};
 
@@ -241,15 +241,17 @@ mod test {
                     initial_infections: 1,
                     max_time: 10.0,
                     seed: 0,
-                    rate_of_infection: 1.0,
-                    infection_duration: 5.0,
+                    infectiousness_rate_fn: RateFnType::Constant {
+                        rate: 1.0,
+                        duration: 5.0,
+                    },
                     report_period: 1.0,
                     synth_population_file: PathBuf::from("."),
                     transmission_report_name: None,
                 },
             )
             .unwrap();
-        context.add_rate_fn(Box::new(ConstantRate::new(1.0, 5.0)));
+        load_rate_fns(&mut context).unwrap();
         context
     }
 

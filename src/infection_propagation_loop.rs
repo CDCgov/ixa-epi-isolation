@@ -3,8 +3,10 @@ use crate::infectiousness_manager::{
     InfectionStatus, InfectionStatusValue,
 };
 use crate::parameters::{ContextParametersExt, Params};
-use crate::rate_fns::{ConstantRate, InfectiousnessRateExt};
-use ixa::{define_rng, trace, Context, ContextPeopleExt, PersonId, PersonPropertyChangeEvent};
+use crate::rate_fns::rate_fn_storage::load_rate_fns;
+use ixa::{
+    define_rng, trace, Context, ContextPeopleExt, IxaError, PersonId, PersonPropertyChangeEvent,
+};
 
 define_rng!(InfectionRng);
 
@@ -37,22 +39,6 @@ fn schedule_recovery(context: &mut Context, person: PersonId) {
     });
 }
 
-/// Load a rate function.
-/// TODO<ryl8@cdc.gov>: Eventually, we will load multiple values from a file / files
-/// and randomly assign them to people
-pub fn load_rate_fns(context: &mut Context) {
-    let &Params {
-        rate_of_infection,
-        infection_duration,
-        ..
-    } = context.get_params();
-
-    context.add_rate_fn(Box::new(ConstantRate::new(
-        rate_of_infection,
-        infection_duration,
-    )));
-}
-
 /// Seeds the initial population with a number of infectious people.
 fn seed_infections(context: &mut Context, initial_infections: usize) {
     // First, seed an infectious population
@@ -62,12 +48,12 @@ fn seed_infections(context: &mut Context, initial_infections: usize) {
     }
 }
 
-pub fn init(context: &mut Context) {
+pub fn init(context: &mut Context) -> Result<(), IxaError> {
     let &Params {
         initial_infections, ..
     } = context.get_params();
 
-    load_rate_fns(context);
+    load_rate_fns(context)?;
 
     // Seed the initial population
     context.add_plan(0.0, move |context| {
@@ -81,6 +67,7 @@ pub fn init(context: &mut Context) {
         schedule_next_forecasted_infection(context, event.person_id);
         schedule_recovery(context, event.person_id);
     });
+    Ok(())
 }
 
 #[cfg(test)]
@@ -99,26 +86,28 @@ mod test {
 
     use crate::{
         infection_propagation_loop::{
-            init, load_rate_fns, schedule_next_forecasted_infection, InfectionStatus,
-            InfectionStatusValue,
+            init, schedule_next_forecasted_infection, InfectionStatus, InfectionStatusValue,
         },
         infectiousness_manager::{
             max_total_infectiousness_multiplier, InfectionContextExt, InfectionData,
             InfectionDataValue,
         },
-        parameters::{ContextParametersExt, GlobalParams, Params},
+        parameters::{ContextParametersExt, GlobalParams, Params, RateFnType},
+        rate_fns::load_rate_fns,
     };
 
     use super::{schedule_recovery, seed_infections};
 
-    fn setup_context(seed: u64, rate_of_infection: f64) -> Context {
+    fn setup_context(seed: u64, rate: f64) -> Context {
         let mut context = Context::new();
         let parameters = Params {
             initial_infections: 3,
             max_time: 100.0,
             seed,
-            rate_of_infection,
-            infection_duration: 5.0,
+            infectiousness_rate_fn: RateFnType::Constant {
+                rate,
+                duration: 5.0,
+            },
             report_period: 1.0,
             synth_population_file: PathBuf::from("."),
             transmission_report_name: None,
@@ -136,7 +125,7 @@ mod test {
         for _ in 0..10 {
             context.add_person(()).unwrap();
         }
-        load_rate_fns(&mut context);
+        load_rate_fns(&mut context).unwrap();
         seed_infections(&mut context, 5);
         let infectious_count = context
             .query_people((InfectionStatus, InfectionStatusValue::Infectious))
@@ -146,12 +135,12 @@ mod test {
 
     #[test]
     fn test_init_loop() {
-        let mut context = setup_context(0, 1.0);
+        let mut context = setup_context(42, 1.0);
         for _ in 0..10 {
             context.add_person(()).unwrap();
         }
 
-        init(&mut context);
+        init(&mut context).unwrap();
 
         let &Params {
             initial_infections: expected_infectious,
@@ -190,7 +179,7 @@ mod test {
             context.add_person(()).unwrap();
         }
 
-        init(&mut context);
+        init(&mut context).unwrap();
 
         let num_new_infections = Rc::new(RefCell::new(0usize));
         let num_new_infections_clone = Rc::clone(&num_new_infections);
@@ -245,7 +234,7 @@ mod test {
             // We don't want infectious people beyond our index case to be able to transmit, so we
             // have to do setup on our own since just calling `init` will trigger a watcher for
             // people becoming infectious that lets them transmit.
-            load_rate_fns(&mut context);
+            load_rate_fns(&mut context).unwrap();
             // Add our infectious fellow.
             let infectious_person = context.add_person(()).unwrap();
             context.infect_person(infectious_person, None);
@@ -314,7 +303,7 @@ mod test {
     #[test]
     fn test_schedule_recovery() {
         let mut context = setup_context(0, 0.0);
-        load_rate_fns(&mut context);
+        load_rate_fns(&mut context).unwrap();
         let person = context.add_person(()).unwrap();
         seed_infections(&mut context, 1);
         // For later, we need to get the recovery time from the rate function.

@@ -68,9 +68,8 @@ pub fn init(context: &mut Context) -> Result<(), IxaError> {
 mod test {
 
     use crate::{
-        infectiousness_manager::InfectionContextExt,
-        parameters::ContextParametersExt,
-        rate_fns::{rate_fn_storage::InfectiousnessRateExt, ConstantRate},
+        infectiousness_manager::InfectionContextExt, parameters::ContextParametersExt,
+        rate_fns::load_rate_fns,
     };
     use ixa::{
         Context, ContextGlobalPropertiesExt, ContextPeopleExt, ContextRandomExt, ContextReportExt,
@@ -92,7 +91,7 @@ mod test {
         let mut context = Context::new();
         context.load_global_properties(&file_path).unwrap();
         context.init_random(context.get_params().seed);
-        context.add_rate_fn(Box::new(ConstantRate::new(1.0, 5.0)));
+        load_rate_fns(&mut context).unwrap();
         context
     }
 
@@ -103,9 +102,8 @@ mod test {
                 "epi_isolation.GlobalParams": {
                 "max_time": 200.0,
                 "seed": 123,
-                "rate_of_infection": 1.0,
+                "infectiousness_rate_fn": {"Constant": {"rate": 1.0, "duration": 5.0}},
                 "initial_infections": 1,
-                "infection_duration": 5.0,
                 "report_period": 1.0,
                 "synth_population_file": "input/people_test.csv"
                 }
@@ -123,9 +121,8 @@ mod test {
                 "epi_isolation.GlobalParams": {
                 "max_time": 200.0,
                 "seed": 123,
-                "rate_of_infection": 1.0,
+                "infectiousness_rate_fn": {"Constant": {"rate": 1.0, "duration": 5.0}},
                 "initial_infections": 1,
-                "infection_duration": 5.0,
                 "report_period": 1.0,
                 "synth_population_file": "input/people_test.csv",
                 "transmission_report_name": "output.csv"
@@ -145,9 +142,8 @@ mod test {
                 "epi_isolation.GlobalParams": {
                 "max_time": 200.0,
                 "seed": 123,
-                "rate_of_infection": 1.0,
+                "infectiousness_rate_fn": {"Constant": {"rate": 1.0, "duration": 5.0}},
                 "initial_infections": 1,
-                "infection_duration": 5.0,
                 "report_period": 1.0,
                 "synth_population_file": "input/people_test.csv",
                 "transmission_report_name": "output.csv"

@@ -50,7 +50,7 @@ fn main() {
         context.index_property(Age);
         context.index_property(CensusTract);
 
-        infection_propagation_loop::init(context);
+        infection_propagation_loop::init(context)?;
         transmission_report::init(context)?;
 
         Ok(())
