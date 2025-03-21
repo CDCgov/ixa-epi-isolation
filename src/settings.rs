@@ -17,7 +17,7 @@ pub struct SettingProperties {
 pub trait SettingType {
     fn calculate_multiplier(
         &self,
-        members: &Vec<PersonId>,
+        members: &[PersonId],
         setting_properties: &SettingProperties,
     ) -> f64;
 }
@@ -106,10 +106,11 @@ impl SettingType for Home {
     // Read members and setting_properties as arguments
     fn calculate_multiplier(
         &self,
-        members: &Vec<PersonId>,
+        members: &[PersonId],
         setting_properties: &SettingProperties,
     ) -> f64 {
         let n_members = members.len();
+        #[allow(clippy::cast_precision_loss)]
         ((n_members - 1) as f64).powf(setting_properties.alpha)
     }
 }
@@ -119,10 +120,11 @@ pub struct CensusTract {}
 impl SettingType for CensusTract {
     fn calculate_multiplier(
         &self,
-        members: &Vec<PersonId>,
+        members: &[PersonId],
         setting_properties: &SettingProperties,
     ) -> f64 {
         let n_members = members.len();
+        #[allow(clippy::cast_precision_loss)]
         ((n_members - 1) as f64).powf(setting_properties.alpha)
     }
 }
@@ -347,8 +349,8 @@ mod test {
         let home_props = context.get_setting_properties::<Home>();
         let tract_props = context.get_setting_properties::<CensusTract>();
 
-        assert_eq!(0.1, home_props.alpha);
-        assert_eq!(0.001, tract_props.alpha);
+        assert_almost_eq!(0.1, home_props.alpha, 0.0);
+        assert_almost_eq!(0.001, tract_props.alpha, 0.0);
     }
 
     #[test]
