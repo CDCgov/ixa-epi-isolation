@@ -243,15 +243,17 @@ impl ContextSettingExt for Context {
             let setting_type = itinerary_entry.setting_type;
             if let Some(setting_count_set) = setting_counts.get(&setting_type) {
                 if setting_count_set.contains(&setting_id) {
-                    return Err(IxaError::from(format!("Duplicated setting")));
+                    return Err(IxaError::from("Duplicated setting".to_string()));
                 }
             }
+            #[allow(clippy::redundant_closure)]
             setting_counts
                 .entry(setting_type)
                 .or_insert_with(|| HashSet::new())
                 .insert(setting_id);
             // TODO: If we are changing a person's itinerary, the person_id should be removed from vector
             // This isn't the same as the concept of being present or not.
+            #[allow(clippy::redundant_closure)]
             container
                 .members
                 .entry(itinerary_entry.setting_type)
@@ -336,6 +338,7 @@ mod test {
     use super::*;
     use crate::settings::ContextSettingExt;
     use ixa::ContextPeopleExt;
+    use statrs::assert_almost_eq;
     #[test]
     fn test_setting_type_creation() {
         let mut context = Context::new();
@@ -448,7 +451,7 @@ mod test {
             setting_type.calculate_multiplier(members, &SettingProperties { alpha: 0.1 });
 
         // This is assuming we know what the function for Home is (N - 1) ^ alpha
-        assert_eq!(inf_multiplier, f64::from(6 - 1).powf(0.1));
+        assert_almost_eq!(inf_multiplier, f64::from(6 - 1).powf(0.1), 0.0);
     }
 
     #[test]
@@ -475,7 +478,7 @@ mod test {
 
         // If only registered at home, total infectiousness multiplier should be (6 - 1) ^ (alpha)
         let inf_multiplier = context.calculate_total_infectiousness_multiplier_for_person(person);
-        assert_eq!(inf_multiplier, f64::from(6 - 1).powf(0.1));
+        assert_almost_eq!(inf_multiplier, f64::from(6 - 1).powf(0.1), 0.0);
 
         // If person's itinerary is changed for two settings,
         // CensusTract 0 should have 6 members, Home 0 should have 7 members
@@ -498,9 +501,10 @@ mod test {
         let inf_multiplier_two_settings =
             context.calculate_total_infectiousness_multiplier_for_person(person);
 
-        assert_eq!(
+        assert_almost_eq!(
             inf_multiplier_two_settings,
-            (f64::from(7 - 1).powf(0.1)) * 0.5 + (f64::from(6 - 1).powf(0.01)) * 0.5
+            (f64::from(7 - 1).powf(0.1)) * 0.5 + (f64::from(6 - 1).powf(0.01)) * 0.5,
+            0.0
         );
     }
 
