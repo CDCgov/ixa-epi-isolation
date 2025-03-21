@@ -4,6 +4,7 @@ mod infectiousness_manager;
 mod parameters;
 mod population_loader;
 pub mod rate_fns;
+mod settings;
 mod transmission_report;
 pub mod utils;
 
