@@ -1,6 +1,6 @@
 use ixa::people::PersonId;
 use ixa::{define_data_plugin, define_rng, Context, ContextRandomExt, IxaError};
-use std::any::{Any, TypeId};
+use std::any::TypeId;
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::hash::Hash;
@@ -29,6 +29,7 @@ pub struct SettingId<T: SettingType + 'static> {
     pub setting_type: PhantomData<*const T>,
 }
 
+#[allow(dead_code)]
 impl<T: SettingType + 'static> SettingId<T> {
     pub fn new(id: usize) -> SettingId<T> {
         SettingId {
@@ -38,12 +39,13 @@ impl<T: SettingType + 'static> SettingId<T> {
     }
 }
 
-struct ItineraryEntry {
+pub struct ItineraryEntry {
     setting_type: TypeId,
     setting_id: usize,
     ratio: f64,
 }
 
+#[allow(dead_code)]
 impl ItineraryEntry {
     fn new<T: SettingType>(setting_id: SettingId<T>, ratio: f64) -> ItineraryEntry {
         ItineraryEntry {
@@ -111,7 +113,7 @@ impl SettingType for Home {
         setting_properties: &SettingProperties,
     ) -> f64 {
         let n_members = members.len();
-        return ((n_members - 1) as f64).powf(setting_properties.alpha);
+        ((n_members - 1) as f64).powf(setting_properties.alpha)
     }
 }
 
@@ -124,7 +126,7 @@ impl SettingType for CensusTract {
         setting_properties: &SettingProperties,
     ) -> f64 {
         let n_members = members.len();
-        return ((n_members - 1) as f64).powf(setting_properties.alpha);
+        ((n_members - 1) as f64).powf(setting_properties.alpha)
     }
 }
 
@@ -134,6 +136,7 @@ define_data_plugin!(
     SettingDataContainer::new()
 );
 
+#[allow(dead_code)]
 pub trait ContextSettingExt {
     fn get_setting_properties<T: SettingType + 'static>(&self) -> SettingProperties;
     fn register_setting_type<T: SettingType + 'static>(
@@ -201,7 +204,7 @@ impl ContextSettingExt for Context {
             .setting_properties
             .get(&TypeId::of::<T>())
             .unwrap();
-        return *data_container;
+        *data_container
     }
     fn register_setting_type<T: SettingType + 'static>(
         &mut self,
@@ -428,7 +431,7 @@ mod test {
         let inf_multiplier = setting_type.calculate_multiplier(members, &SettingProperties { alpha: 0.1 });
         
         // This is assuming we know what the function for Home is (N - 1) ^ alpha
-        assert_eq!(inf_multiplier, ((6.0 - 1.0) as f64).powf(0.1));
+        assert_eq!(inf_multiplier, ((6 - 1) as f64).powf(0.1));
     }
 
 
@@ -459,7 +462,7 @@ mod test {
         // If only registered at home, total infectiousness multiplier should be (6 - 1) ^ (alpha)
         let inf_multiplier = context
             .calculate_total_infectiousness_multiplier_for_person(person);
-        assert_eq!(inf_multiplier, ((6.0 - 1.0) as f64).powf(0.1));
+        assert_eq!(inf_multiplier, ((6 - 1) as f64).powf(0.1));
         
         // If person's itinerary is changed for two settings,
         // CensusTract 0 should have 6 members, Home 0 should have 7 members
@@ -480,7 +483,7 @@ mod test {
 
         assert_eq!(
             inf_multiplier_two_settings,
-            (((7.0 - 1.0) as f64).powf(0.1)) * 0.5 + (((6.0 - 1.0) as f64).powf(0.01))*0.5
+            (((7 - 1) as f64).powf(0.1)) * 0.5 + (((6 - 1) as f64).powf(0.01))*0.5
         );
     }
 
