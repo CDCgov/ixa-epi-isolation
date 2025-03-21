@@ -1,7 +1,13 @@
-use ixa::{define_person_property_with_default, warn, Context, IxaError};
+use ixa::{
+    define_person_property_with_default, warn, Context, ContextPeopleExt, IxaError,
+    PersonPropertyChangeEvent,
+};
 use serde::Serialize;
 
-use crate::clinical_status_manager::{ContextPropertyProgressionExt, PropertyProgression};
+use crate::{
+    clinical_status_manager::{ContextPropertyProgressionExt, PropertyProgression},
+    infectiousness_manager::{InfectionStatus, InfectionStatusValue},
+};
 
 #[derive(PartialEq, Copy, Clone, Debug, Serialize)]
 pub enum DiseaseSeverityValue {
@@ -105,20 +111,62 @@ pub fn init(context: &mut Context) -> Result<(), IxaError> {
     )?;
     context.register_property_progression(DiseaseSeverity, example_progression_asymptomatic);
 
+    event_subscriptions(context);
+
     Ok(())
+}
+
+fn event_subscriptions(context: &mut Context) {
+    context.subscribe_to_event(
+        |context, event: PersonPropertyChangeEvent<InfectionStatus>| {
+            if event.current == InfectionStatusValue::Infectious {
+                context.set_person_property(
+                    event.person_id,
+                    DiseaseSeverity,
+                    DiseaseSeverityValue::Presymptomatic,
+                );
+            }
+        },
+    );
 }
 
 #[cfg(test)]
 mod test {
-    use super::{DiseaseSeverityValue, EmpiricalProgression};
-    use crate::clinical_status_manager::PropertyProgression;
+    use std::path::PathBuf;
 
-    use ixa::{Context, IxaError};
+    use super::{event_subscriptions, DiseaseSeverityValue, EmpiricalProgression};
+    use crate::{
+        clinical_status_manager::{ContextPropertyProgressionExt, PropertyProgression},
+        infectiousness_manager::InfectionContextExt,
+        parameters::{GlobalParams, RateFnType},
+        rate_fns::load_rate_fns,
+        symptom_progression::DiseaseSeverity,
+        Params,
+    };
+
+    use ixa::{Context, ContextGlobalPropertiesExt, ContextPeopleExt, ContextRandomExt, IxaError};
     use statrs::assert_almost_eq;
 
     #[test]
     fn test_disease_progression() {
-        let context = Context::new();
+        let mut context = Context::new();
+        let parameters = Params {
+            initial_infections: 3,
+            max_time: 100.0,
+            seed: 0,
+            infectiousness_rate_fn: RateFnType::Constant {
+                rate: 1.0,
+                duration: 5.0,
+            },
+            report_period: 1.0,
+            synth_population_file: PathBuf::from("."),
+            transmission_report_name: None,
+        };
+        context.init_random(parameters.seed);
+        context
+            .set_global_property_value(GlobalParams, parameters)
+            .unwrap();
+        load_rate_fns(&mut context).unwrap();
         let progression = EmpiricalProgression::new(
             vec![
                 DiseaseSeverityValue::Presymptomatic,
@@ -141,6 +189,18 @@ mod test {
         let initial_state = DiseaseSeverityValue::Mild;
         let next_state = progression.next(&context, &initial_state);
         assert!(next_state.is_none());
+
+        // Test that the infectious --> presymptomatic trigger works and sets off the progression.
+        let person = context.add_person(()).unwrap();
+        context.register_property_progression(DiseaseSeverity, progression);
+        event_subscriptions(&mut context);
+        context.infect_person(person, None);
+        context.execute();
+        assert_eq!(
+            DiseaseSeverityValue::Mild,
+            context.get_person_property(person, DiseaseSeverity)
+        );
+        assert_almost_eq!(context.get_current_time(), 3.0, 0.0);
     }
 
     #[test]
