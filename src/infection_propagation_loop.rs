@@ -40,12 +40,23 @@ fn schedule_recovery(context: &mut Context, person: PersonId) {
 }
 
 /// Seeds the initial population with a number of infectious people.
-fn seed_infections(context: &mut Context, initial_infections: usize) {
-    // First, seed an infectious population
-    for _ in 0..initial_infections {
-        let person = context.sample_person(InfectionRng, ()).unwrap();
-        context.infect_person(person, None);
+/// # Errors
+/// - If `initial_infections` is greater than the population size.
+fn seed_infections(context: &mut Context, initial_infections: usize) -> Result<(), IxaError> {
+    if context.get_current_population() < initial_infections {
+        return Err(IxaError::IxaError("The number of initial infections to seed is greater than the population size. ".to_string() + &format!("The population size is {}, and the number of initial infections to seed is {}.", context.get_current_population(), initial_infections)));
     }
+    // Seed an infectious population
+    let mut num_infections_seeded = 0;
+    while num_infections_seeded < initial_infections {
+        let person = context.sample_person(InfectionRng, ()).unwrap();
+        if context.get_person_property(person, InfectionStatus) == InfectionStatusValue::Susceptible
+        {
+            context.infect_person(person, None);
+            num_infections_seeded += 1;
+        }
+    }
+    Ok(())
 }
 
 pub fn init(context: &mut Context) -> Result<(), IxaError> {
@@ -57,7 +68,7 @@ pub fn init(context: &mut Context) -> Result<(), IxaError> {
 
     // Seed the initial population
     context.add_plan(0.0, move |context| {
-        seed_infections(context, initial_infections);
+        seed_infections(context, initial_infections).unwrap();
     });
 
     context.subscribe_to_event::<PersonPropertyChangeEvent<InfectionStatus>>(|context, event| {
@@ -77,7 +88,7 @@ mod test {
 
     use ixa::{
         Context, ContextGlobalPropertiesExt, ContextPeopleExt, ContextRandomExt, ExecutionPhase,
-        PersonPropertyChangeEvent,
+        IxaError, PersonPropertyChangeEvent,
     };
     use statrs::{
         assert_almost_eq,
@@ -126,6 +137,29 @@ mod test {
     }
 
     #[test]
+    fn test_seed_infections_errors() {
+        let mut context = setup_context(0, 1.0, 1.0);
+        for _ in 0..3 {
+            context.add_person(()).unwrap();
+        }
+        load_rate_fns(&mut context).unwrap();
+        let e = seed_infections(&mut context, 5).err();
+        match e {
+            Some(IxaError::IxaError(msg)) => {
+                assert_eq!(
+                    msg,
+                    "The number of initial infections to seed is greater than the population size. The population size is 3, and the number of initial infections to seed is 5."
+                );
+            }
+            Some(ue) => panic!(
+                "Expected an error that seeding infections should fail because the population size is too small. Instead got {:?}",
+                ue.to_string()
+            ),
+            None => panic!("Expected an error. Instead, seeded infections with no errors."),
+        }
+    }
+
+    #[test]
     fn test_seed_infections() {
         let mut context = setup_context(0, 1.0, 1.0);
         for _ in 0..10 {
@@ -133,7 +167,7 @@ mod test {
         }
 
         load_rate_fns(&mut context).unwrap();
-        seed_infections(&mut context, 5);
+        seed_infections(&mut context, 5).unwrap();
         let infectious_count = context
             .query_people((InfectionStatus, InfectionStatusValue::Infectious))
             .len();
@@ -319,8 +353,7 @@ mod test {
         let mut context = setup_context(0, 0.0, 1.0);
         load_rate_fns(&mut context).unwrap();
         let person = context.add_person(()).unwrap();
-
-        seed_infections(&mut context, 1);
+        seed_infections(&mut context, 1).unwrap();
         // For later, we need to get the recovery time from the rate function.
         let recovery_time = context.get_person_rate_fn(person).infection_duration();
         schedule_recovery(&mut context, person);
