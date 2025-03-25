@@ -1,4 +1,5 @@
 use ixa::{define_rng, people::Query, Context, ContextPeopleExt, ContextRandomExt, PersonId};
+use crate::settings::ContextSettingExt;
 
 define_rng!(ContactRng);
 
@@ -6,7 +7,13 @@ pub trait ContextContactExt {
     /// Returns a potential contact for the transmitter given a query of people
     /// properties, for example `(Alive, true)`.
     /// Returns None if there are no eligible contacts.
+    #[allow(dead_code)]
     fn get_contact<Q: Query>(&self, transmitter_id: PersonId, query: Q) -> Option<PersonId>;
+
+    /// Returns a potential contact from the transmitter give a pre-specified itinerary
+    /// Returns None if there aren't eligible contacts
+    // TODO: include a query
+    fn get_contact_from_settings(&self, transmitter_id: PersonId) -> Option<PersonId>;
 }
 
 impl ContextContactExt for Context {
@@ -26,6 +33,9 @@ impl ContextContactExt for Context {
                 possible_contacts[self.sample_range(ContactRng, 0..possible_contacts.len())];
         }
         Some(contact_id)
+    }    
+    fn get_contact_from_settings(&self, transmitter_id: PersonId) -> Option<PersonId> {
+        self.draw_contact_from_itinerary(transmitter_id)
     }
 }
 
