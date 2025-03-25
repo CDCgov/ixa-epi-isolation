@@ -50,19 +50,25 @@ tracts_st <- tracts(state = state_synth)
 puma_codes <- pumas_st$PUMACE20
 synth_school_df <- tibble()
 n_schools <- ceiling(school_per_pop_ratio * population_size)
-for(n in seq_len(n_schools)) {
-  school_tmp <-  as_tibble(pumas_st)
+for (n in seq_len(n_schools)) {
+  school_tmp <- as_tibble(pumas_st)
   school_tmp <- school_tmp |>
     dplyr::sample_n(1) |>
     dplyr::select(STATEFP20, PUMACE20, INTPTLAT20, INTPTLON20) |>
     mutate(
-      census_tract_id = sprintf("%02d%09d", as.numeric(STATEFP20), as.numeric(PUMACE20)),
+      census_tract_id = sprintf(
+        "%02d%09d",
+        as.numeric(STATEFP20), as.numeric(PUMACE20)
+      ),
       school_id = sprintf(
         "%02d%09d%06d",
         as.numeric(STATEFP20), as.numeric(PUMACE20), n
-      )) |>
-    dplyr::rename(lat = INTPTLAT20,
-                  lon = INTPTLON20) |>
+      )
+    ) |>
+    dplyr::rename(
+      lat = INTPTLAT20,
+      lon = INTPTLON20
+    ) |>
     dplyr::select(school_id, lat, lon) |>
     mutate(enrolled = 0)
   synth_school_df <- bind_rows(synth_school_df, school_tmp)
@@ -73,19 +79,28 @@ for(n in seq_len(n_schools)) {
 ## =================================#
 synth_workplace_df <- tibble()
 n_workplaces <- ceiling(work_per_pop_ratio * population_size)
-for(n in seq_len(n_workplaces)) {
-  work_tmp <-  as_tibble(pumas_st)
+for (n in seq_len(n_workplaces)) {
+  work_tmp <- as_tibble(pumas_st)
   work_tmp <- work_tmp |>
     dplyr::sample_n(1) |>
     dplyr::select(STATEFP20, PUMACE20, INTPTLAT20, INTPTLON20) |>
     mutate(
-      census_tract_id = sprintf("%02d%09d", as.numeric(STATEFP20), as.numeric(PUMACE20)),
+      census_tract_id = sprintf(
+        "%02d%09d",
+        as.numeric(STATEFP20),
+        as.numeric(PUMACE20)
+      ),
       workplace_id = sprintf(
         "%02d%09d%06d",
-        as.numeric(STATEFP20), as.numeric(PUMACE20), n
-      )) |>
-    dplyr::rename(lat = INTPTLAT20,
-                  lon = INTPTLON20) |>
+        as.numeric(STATEFP20),
+        as.numeric(PUMACE20),
+        n
+      )
+    ) |>
+    dplyr::rename(
+      lat = INTPTLAT20,
+      lon = INTPTLON20
+    ) |>
     dplyr::select(workplace_id, lat, lon) |>
     mutate(enrolled = 0)
   synth_workplace_df <- bind_rows(synth_workplace_df, work_tmp)
@@ -104,11 +119,11 @@ while (nrow(synth_pop_df) < population_size) {
     sample_n(1, weight = WGTP) |>
     left_join(sample_pums, by = (c("SERIALNO", "WGTP", "NP"))) |>
     mutate(house_number = house_counter)
-  ##Assign schools
+  ## Assign schools
 
   ## Assign workplaces
   work_id_list <- map_chr(house_sample$WRK, function(x) {
-    if(x %in% c("1")){
+    if (x %in% c("1")) {
       return(sample(synth_workplace_df$workplace_id, size = 1))
     } else {
       return(NA)
@@ -116,7 +131,7 @@ while (nrow(synth_pop_df) < population_size) {
   })
 
   school_id_list <- map_chr(house_sample$SCH, function(x) {
-    if(x %in% c("2", "3")){
+    if (x %in% c("2", "3")) {
       return(sample(synth_school_df$school_id, size = 1))
     } else {
       return(NA)
@@ -124,7 +139,11 @@ while (nrow(synth_pop_df) < population_size) {
   })
   synth_pop_df <- bind_rows(
     synth_pop_df,
-    house_sample |> mutate(school_id = school_id_list, workplace_id = work_id_list)
+    house_sample |>
+      mutate(
+        school_id = school_id_list,
+        workplace_id = work_id_list
+      )
   )
 }
 
@@ -139,7 +158,10 @@ synth_pop_region_df <- synth_pop_df |>
   ) |>
   dplyr::select(-geometry) |>
   mutate(
-    census_tract_id = sprintf("%02d%09d", as.numeric(STATE), as.numeric(PUMA)),
+    census_tract_id = sprintf(
+      "%02d%09d",
+      as.numeric(STATE), as.numeric(PUMA)
+    ),
     home_id = sprintf(
       "%02d%09d%06d",
       as.numeric(STATE), as.numeric(PUMA), house_number
@@ -151,10 +173,12 @@ synth_pop_region_df <- synth_pop_df |>
 ## People columns: age, homeId
 people_df <- synth_pop_region_df |>
   dplyr::select(AGEP, home_id, school_id, workplace_id) |>
-  dplyr::rename(age = AGEP,
-                homeId = home_id,
-                schoolId = school_id,
-                workplaceId = workplace_id) 
+  dplyr::rename(
+    age = AGEP,
+    homeId = home_id,
+    schoolId = school_id,
+    workplaceId = workplace_id
+  )
 
 
 ## Region columns: region_id, lat, lon
@@ -168,7 +192,7 @@ region_df <- synth_pop_region_df |>
 ## =================================#
 write_csv(
   region_df,
-  file.path("input", sprintf("synth_pop_region_%s.csv", state_synth)),  
+  file.path("input", sprintf("synth_pop_region_%s.csv", state_synth)),
   na = ""
 )
 write_csv(
