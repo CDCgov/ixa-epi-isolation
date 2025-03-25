@@ -7,6 +7,11 @@ use serde::Deserialize;
 use std::path::PathBuf;
 
 use crate::parameters::ContextParametersExt;
+use crate::settings::{
+    ContextSettingExt,
+    ItineraryEntry,SettingId,
+    Home, Workplace, School, CensusTract
+};
 
 #[derive(Deserialize, Debug)]
 #[allow(non_snake_case)]
@@ -21,7 +26,10 @@ define_person_property!(Age, u8);
 define_person_property_with_default!(Alive, bool, true);
 
 define_person_property!(Household, usize);
-define_person_property!(CensusTract, usize);
+define_person_property!(CensusTractId, usize);
+define_person_property!(SchoolId, Option<usize>);
+define_person_property!(WorkplaceId, Option<usize>);
+
 
 define_person_property_with_default!(SchoolId, Option<usize>, None);
 define_person_property_with_default!(WorkplaceId, Option<usize>, None);
@@ -38,21 +46,27 @@ fn create_person_from_record(
     context: &mut Context,
     person_record: &PeopleRecord,
 ) -> Result<(), IxaError> {
+    let mut itinerary_person = Vec::<ItineraryEntry>::new();
     let tract: String = String::from_utf8(person_record.homeId[..11].to_owned())?;
     let home_id: String = String::from_utf8(person_record.homeId.to_owned())?;
     let school_string: String = String::from_utf8(person_record.schoolId.to_owned())?;
     let workplace_string: String = String::from_utf8(person_record.workplaceId.to_owned())?;
-
-    let school_id = option_from_string(&school_string);
-    let workplace_id = option_from_string(&workplace_string);
-
-    let _person_id = context.add_person((
-        (Age, person_record.age),
-        (Household, home_id.parse()?),
-        (CensusTract, tract.parse()?),
-        (SchoolId, school_id),
-        (WorkplaceId, workplace_id),
-    ))?;
+    // First, build itinerary
+    itinerary_person.push(ItineraryEntry::new(&SettingId::<Home>::new(home_id.parse()?), 0.25));
+    if !school_string.is_empty() {
+        itinerary_person.push(ItineraryEntry::new(&SettingId::<School>::new(school_string.parse()?), 0.25));
+    }
+    if !workplace_string.is_empty() {
+        itinerary_person.push(ItineraryEntry::new(&SettingId::<Workplace>::new(workplace_string.parse()?), 0.25));
+    }
+    itinerary_person.push(ItineraryEntry::new(&SettingId::<CensusTract>::new(tract.parse()?), 0.25));
+    
+   
+    let person_id = context.add_person(
+        (Age, person_record.age)
+    )?;
+    
+    context.add_itinerary(person_id, itinerary_person)?;
 
     Ok(())
 }
@@ -71,6 +85,12 @@ fn load_synth_population(context: &mut Context, synth_input_file: PathBuf) -> Re
 
 pub fn init(context: &mut Context) -> Result<(), IxaError> {
     let parameters = context.get_params();
+
+    context.register_setting_type(Home {}, SettingProperties { alpha: 0.1 });
+    context.register_setting_type(CensusTract {}, SettingProperties { alpha: 0.01 });
+    context.register_setting_type(Workplace {}, SettingProperties { alpha: 0.05 });
+    context.register_setting_type(School {}, SettingProperties { alpha: 0.01 });
+
     load_synth_population(context, parameters.synth_population_file.clone())
 }
 
@@ -108,7 +128,7 @@ mod test {
                 1,
                 context.query_people_count((
                     (Age, age[i]),
-                    (CensusTract, tract[i]),
+                    (CensusTractId, tract[i]),
                     (Household, home_id[i]),
                 ))
             );
