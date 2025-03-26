@@ -44,9 +44,11 @@ fn schedule_recovery(context: &mut Context, person: PersonId) {
 /// - If `initial_infections` is greater than the population size.
 fn seed_infections(context: &mut Context, initial_infections: usize) -> Result<(), IxaError> {
     for _ in 0..initial_infections {
-        // Need to get the value of the derived person property so that its entry in the person
-        // properties hash map is created prior to sampling...
-        // let _ = context.get_person_property(context.sample_person(InfectionRng, ()).unwrap(), InfectionStatus);
+        // Need to get the value of the derived person property first?
+        let _ = context.get_person_property(
+            context.sample_person(InfectionRng, ()).unwrap(),
+            InfectionStatus,
+        );
         let person = context.sample_person(
             InfectionRng,
             (InfectionStatus, InfectionStatusValue::Susceptible),
