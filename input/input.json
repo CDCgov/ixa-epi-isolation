@@ -2,7 +2,7 @@
   "epi_isolation.GlobalParams": {
     "max_time": 200.0,
     "seed": 123,
-    "infectiousness_rate_fn": {"Constant": {"rate": 1.0, "duration": 5.0}},
+    "infectiousness_rate_fn": {"EmpiricalFromFile": {"file": "input/library_empirical_rate_fns.csv"}},
     "initial_infections": 1,
     "report_period": 1.0,
     "synth_population_file": "input/people_test.csv"
