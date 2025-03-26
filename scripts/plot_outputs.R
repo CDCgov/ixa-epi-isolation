@@ -9,7 +9,7 @@ ggplot2::theme_set(ggplot2::theme_classic())
 ## Read person properties reports
 ## ===============================#
 
-infections <- readr::read_csv(file.path(
+person_property_report <- readr::read_csv(file.path(
   "output",
   "person_property_count.csv"
 ))
@@ -19,7 +19,7 @@ infections <- readr::read_csv(file.path(
 ## ===============================#
 
 # Infectious curves
-infections |>
+person_property_report |>
   group_by(t, InfectionStatus) |>
   summarise(count = sum(count), .groups = "drop") |>
   ggplot(aes(x = t, y = count)) +

@@ -6,6 +6,8 @@ use serde::Serialize;
 use statrs::distribution::Exp;
 
 use crate::{
+    contact::ContextContactExt,
+    parameters::{ContextParametersExt, RateFnType},
     population_loader::Alive,
     rate_fns::{InfectiousnessRateExt, InfectiousnessRateFn, RateFnId, ScaledRateFn},
     settings::ContextSettingExt,
@@ -101,7 +103,10 @@ pub fn get_forecast(context: &Context, person_id: PersonId) -> Option<Forecast> 
     let t = total_rate_fn.inverse_cum_rate(e)?;
 
     let next_time = context.get_current_time() + t;
-    let forecasted_total_infectiousness = total_rate_fn.rate(t);
+    let forecasted_total_infectiousness = match context.get_params().infectiousness_rate_fn {
+        RateFnType::EmpiricalFromFile { scale, .. } => total_rate_fn.rate(t) * scale,
+        _ => total_rate_fn.rate(t),
+    };
 
     Some(Forecast {
         next_time,
@@ -122,7 +127,10 @@ pub fn evaluate_forecast(
     let total_rate_fn = ScaledRateFn::new(rate_fn, total_multiplier, 0.0);
 
     let elapsed_t = context.get_elapsed_infection_time(person_id);
-    let current_infectiousness = total_rate_fn.rate(elapsed_t);
+    let current_infectiousness = match context.get_params().infectiousness_rate_fn {
+        RateFnType::EmpiricalFromFile { scale, .. } => total_rate_fn.rate(elapsed_t) * scale,
+        _ => total_rate_fn.rate(elapsed_t),
+    };
 
     assert!(
         (current_infectiousness <= forecasted_total_infectiousness),
