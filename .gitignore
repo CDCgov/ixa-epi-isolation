@@ -40,6 +40,7 @@
 !input/people_test.csv
 !tests/data/*
 !input/library_empirical_rate_parameters.csv
+!input/library_empirical_rate_fns.csv
 
 #####
 # Python
