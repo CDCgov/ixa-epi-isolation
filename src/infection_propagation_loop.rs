@@ -43,17 +43,21 @@ fn schedule_recovery(context: &mut Context, person: PersonId) {
 /// # Errors
 /// - If `initial_infections` is greater than the population size.
 fn seed_infections(context: &mut Context, initial_infections: usize) -> Result<(), IxaError> {
-    if context.get_current_population() < initial_infections {
-        return Err(IxaError::IxaError("The number of initial infections to seed is greater than the population size. ".to_string() + &format!("The population size is {}, and the number of initial infections to seed is {}.", context.get_current_population(), initial_infections)));
-    }
-    // Seed an infectious population
-    let mut num_infections_seeded = 0;
-    while num_infections_seeded < initial_infections {
-        let person = context.sample_person(InfectionRng, ()).unwrap();
-        if context.get_person_property(person, InfectionStatus) == InfectionStatusValue::Susceptible
-        {
-            context.infect_person(person, None);
-            num_infections_seeded += 1;
+    for _ in 0..initial_infections {
+        // Need to get the value of the derived person property so that its entry in the person
+        // properties hash map is created prior to sampling...
+        // let _ = context.get_person_property(context.sample_person(InfectionRng, ()).unwrap(), InfectionStatus);
+        let person = context.sample_person(
+            InfectionRng,
+            (InfectionStatus, InfectionStatusValue::Susceptible),
+        );
+        match person {
+            Some(person) => {
+                context.infect_person(person, None);
+            }
+            None => {
+                return Err(IxaError::IxaError("The number of initial infections to seed is greater than the population size. ".to_string() + &format!("The population size is {}, and the number of initial infections to seed is {}. Instead, the entire population was infected.", context.get_current_population(), initial_infections)));
+            }
         }
     }
     Ok(())
@@ -148,7 +152,7 @@ mod test {
             Some(IxaError::IxaError(msg)) => {
                 assert_eq!(
                     msg,
-                    "The number of initial infections to seed is greater than the population size. The population size is 3, and the number of initial infections to seed is 5."
+                    "The number of initial infections to seed is greater than the population size. The population size is 3, and the number of initial infections to seed is 5. Instead, the entire population was infected."
                 );
             }
             Some(ue) => panic!(
