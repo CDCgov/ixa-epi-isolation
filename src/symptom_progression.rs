@@ -6,10 +6,10 @@ use serde::Serialize;
 use statrs::distribution::Exp;
 
 use crate::{
-    clinical_status_manager::{
+    infectiousness_manager::{InfectionStatus, InfectionStatusValue},
+    property_progression_manager::{
         ContextPropertyProgressionExt, EmpiricalProgression, PropertyProgression,
     },
-    infectiousness_manager::{InfectionStatus, InfectionStatusValue},
 };
 
 define_rng!(SymptomRng);
@@ -182,9 +182,9 @@ mod test {
 
     use super::{event_subscriptions, init, DiseaseSeverityValue};
     use crate::{
-        clinical_status_manager::{ContextPropertyProgressionExt, EmpiricalProgression},
         infectiousness_manager::InfectionContextExt,
         parameters::{GlobalParams, RateFnType},
+        property_progression_manager::{ContextPropertyProgressionExt, EmpiricalProgression},
         rate_fns::load_rate_fns,
         symptom_progression::DiseaseSeverity,
         Params,
