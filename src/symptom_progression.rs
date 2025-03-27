@@ -1,12 +1,14 @@
 use ixa::{
-    define_person_property_with_default, define_rng, warn, Context, ContextPeopleExt,
-    ContextRandomExt, IxaError, PersonPropertyChangeEvent,
+    define_person_property_with_default, define_rng, Context, ContextPeopleExt, ContextRandomExt,
+    IxaError, PersonPropertyChangeEvent,
 };
 use serde::Serialize;
 use statrs::distribution::Exp;
 
 use crate::{
-    clinical_status_manager::{ContextPropertyProgressionExt, PropertyProgression},
+    clinical_status_manager::{
+        ContextPropertyProgressionExt, EmpiricalProgression, PropertyProgression,
+    },
     infectiousness_manager::{InfectionStatus, InfectionStatusValue},
 };
 
@@ -37,61 +39,6 @@ pub enum DiseaseSeverityValue {
 }
 
 define_person_property_with_default!(DiseaseSeverity, Option<DiseaseSeverityValue>, None);
-
-/// Holds a sequence of unique states and times between subsequent states for changing a person's
-/// person property values accordingly. Since all person properties that have Markovian transitions
-/// may want to have their progressions defined empirically, we make this a general struct that can
-/// hold any type `T` that implements `PartialEq` and `Copy`.
-pub struct EmpiricalProgression<T: PartialEq + Copy> {
-    states: Vec<T>,
-    time_to_next: Vec<f64>,
-}
-
-impl<T: PartialEq + Copy> EmpiricalProgression<T> {
-    /// Makes a new `EmpiricalProgression<T>` struct that holds a sequence of states of value `T`.
-    /// Assumes values in `states` are unique.
-    /// # Errors
-    /// - If `states` is not one element longer than `time_to_next`.
-    pub fn new(
-        states: Vec<T>,
-        time_to_next: Vec<f64>,
-    ) -> Result<EmpiricalProgression<T>, IxaError> {
-        if states.len() != time_to_next.len() + 1 {
-            return Err(IxaError::IxaError(
-                "Size mismatch: states must be one element longer than time_to_next. Instead, "
-                    .to_string()
-                    + &format!(
-                        "states has length {} and time_to_next has length {}.",
-                        states.len(),
-                        time_to_next.len()
-                    ),
-            ));
-        }
-        warn!(
-            "Adding an EmpiricalProgression. At this time, we do not check whether values in
-        states are unique."
-        );
-        Ok(EmpiricalProgression {
-            states,
-            time_to_next,
-        })
-    }
-}
-
-impl<T: PartialEq + Copy> PropertyProgression for EmpiricalProgression<T> {
-    type Value = T;
-    fn next(&self, _context: &Context, last: &Self::Value) -> Option<(Self::Value, f64)> {
-        let mut iter = self.states.iter().enumerate();
-        while let Some((_, status)) = iter.next() {
-            if status == last {
-                return iter
-                    .next()
-                    .map(|(i, next)| (*next, self.time_to_next[i - 1]));
-            }
-        }
-        None
-    }
-}
 
 pub struct DiseaseSeverityProgression {
     pub mild_to_moderate: f64,
@@ -233,9 +180,9 @@ fn event_subscriptions(context: &mut Context) {
 mod test {
     use std::path::PathBuf;
 
-    use super::{event_subscriptions, init, DiseaseSeverityValue, EmpiricalProgression};
+    use super::{event_subscriptions, init, DiseaseSeverityValue};
     use crate::{
-        clinical_status_manager::{ContextPropertyProgressionExt, PropertyProgression},
+        clinical_status_manager::{ContextPropertyProgressionExt, EmpiricalProgression},
         infectiousness_manager::InfectionContextExt,
         parameters::{GlobalParams, RateFnType},
         rate_fns::load_rate_fns,
@@ -245,9 +192,7 @@ mod test {
 
     use ixa::{
         Context, ContextGlobalPropertiesExt, ContextPeopleExt, ContextRandomExt, ExecutionPhase,
-        IxaError,
     };
-    use statrs::assert_almost_eq;
 
     fn setup() -> Context {
         let mut context = Context::new();
@@ -282,14 +227,6 @@ mod test {
             vec![1.0],
         )
         .unwrap();
-        let initial_state = Some(DiseaseSeverityValue::Mild);
-        let (next_state, time) = progression.next(&context, &initial_state).unwrap();
-        assert_eq!(next_state, Some(DiseaseSeverityValue::Moderate));
-        assert_almost_eq!(time, 1.0, 0.0);
-
-        let initial_state = Some(DiseaseSeverityValue::Moderate);
-        let next_state = progression.next(&context, &initial_state);
-        assert!(next_state.is_none());
 
         // Test that the infectious --> presymptomatic trigger works and sets off the progression.
         let person = context.add_person(()).unwrap();
@@ -321,28 +258,5 @@ mod test {
             Some(DiseaseSeverityValue::Recovered),
             context.get_person_property(person, DiseaseSeverity)
         );
-    }
-
-    #[test]
-    fn test_empirical_progression_errors_len() {
-        let progression = EmpiricalProgression::new(
-            vec![
-                DiseaseSeverityValue::Mild,
-                DiseaseSeverityValue::Moderate,
-                DiseaseSeverityValue::Mild,
-            ],
-            vec![1.0, 2.0, 3.0],
-        );
-        let e = progression.err();
-        match e {
-            Some(IxaError::IxaError(msg)) => {
-                assert_eq!(msg, "Size mismatch: states must be one element longer than time_to_next. Instead, states has length 3 and time_to_next has length 3.".to_string());
-            }
-            Some(ue) => panic!(
-                "Expected an error that states and time_to_next have incompatible sizes. Instead got {:?}",
-                ue.to_string()
-            ),
-            None => panic!("Expected an error. Instead, validation passed with no errors."),
-        }
     }
 }
