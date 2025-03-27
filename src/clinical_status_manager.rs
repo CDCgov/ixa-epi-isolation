@@ -77,6 +77,8 @@ impl ContextPropertyProgressionExt for Context {
 #[cfg(test)]
 mod test {
 
+    use std::any::TypeId;
+
     use ixa::{Context, ContextPeopleExt, ContextRandomExt, ExecutionPhase};
 
     use crate::{
@@ -103,9 +105,9 @@ mod test {
         context.init_random(0);
         let symptom_progression = EmpiricalProgression::new(
             vec![
-                DiseaseSeverityValue::Presymptomatic,
-                DiseaseSeverityValue::Asymptomatic,
-                DiseaseSeverityValue::Mild,
+                Some(DiseaseSeverityValue::Mild),
+                Some(DiseaseSeverityValue::Moderate),
+                Some(DiseaseSeverityValue::Severe),
             ],
             vec![1.0, 2.0],
         )
@@ -118,11 +120,7 @@ mod test {
             },
         );
         let person_id = context.add_person((Age, 0)).unwrap();
-        context.set_person_property(
-            person_id,
-            DiseaseSeverity,
-            DiseaseSeverityValue::Presymptomatic,
-        );
+        context.set_person_property(person_id, DiseaseSeverity, Some(DiseaseSeverityValue::Mild));
         context.set_person_property(person_id, Age, 0);
         context.add_plan_with_phase(
             1.0,
@@ -130,7 +128,7 @@ mod test {
                 let age = ctx.get_person_property(person_id, Age);
                 assert_eq!(age, 1);
                 let severity = ctx.get_person_property(person_id, DiseaseSeverity);
-                assert_eq!(severity, DiseaseSeverityValue::Asymptomatic);
+                assert_eq!(severity, Some(DiseaseSeverityValue::Moderate));
             },
             ExecutionPhase::Last,
         );
@@ -140,7 +138,7 @@ mod test {
                 let age = ctx.get_person_property(person_id, Age);
                 assert_eq!(age, 2);
                 let severity = ctx.get_person_property(person_id, DiseaseSeverity);
-                assert_eq!(severity, DiseaseSeverityValue::Asymptomatic);
+                assert_eq!(severity, Some(DiseaseSeverityValue::Moderate));
             },
             ExecutionPhase::Last,
         );
@@ -150,7 +148,7 @@ mod test {
                 let age = ctx.get_person_property(person_id, Age);
                 assert_eq!(age, 3);
                 let severity = ctx.get_person_property(person_id, DiseaseSeverity);
-                assert_eq!(severity, DiseaseSeverityValue::Mild);
+                assert_eq!(severity, Some(DiseaseSeverityValue::Severe));
             },
             ExecutionPhase::Last,
         );
@@ -163,63 +161,62 @@ mod test {
     fn test_multiple_progressions_registered() {
         let mut context = Context::new();
         context.init_random(0);
-        let progression_asymptomatic = EmpiricalProgression::new(
+        let progression_to_severe = EmpiricalProgression::new(
             vec![
-                DiseaseSeverityValue::Presymptomatic,
-                DiseaseSeverityValue::Asymptomatic,
-                DiseaseSeverityValue::Mild,
+                Some(DiseaseSeverityValue::Mild),
+                Some(DiseaseSeverityValue::Moderate),
+                Some(DiseaseSeverityValue::Severe),
             ],
             vec![1.0, 2.0],
         )
         .unwrap();
         let progression_moderate = EmpiricalProgression::new(
             vec![
-                DiseaseSeverityValue::Presymptomatic,
-                DiseaseSeverityValue::Moderate,
-                DiseaseSeverityValue::Healthy,
+                Some(DiseaseSeverityValue::Mild),
+                Some(DiseaseSeverityValue::Moderate),
             ],
-            vec![2.0, 4.0],
+            vec![2.0],
         )
         .unwrap();
-        context.register_property_progression(DiseaseSeverity, progression_asymptomatic);
+        context.register_property_progression(DiseaseSeverity, progression_to_severe);
         context.register_property_progression(DiseaseSeverity, progression_moderate);
         // Get out the registered progressions.
         let container = context.get_data_container(Progressions).unwrap();
         let progressions = container
             .progressions
-            .get(&std::any::TypeId::of::<DiseaseSeverity>())
+            .get(&TypeId::of::<DiseaseSeverity>())
             .unwrap();
         assert_eq!(progressions.len(), 2);
         // Inspect the first progression
         let tcr = progressions[0]
-            .downcast_ref::<Box<dyn PropertyProgression<Value = DiseaseSeverityValue>>>()
+            .downcast_ref::<Box<dyn PropertyProgression<Value = Option<DiseaseSeverityValue>>>>()
             .unwrap()
             .as_ref();
         assert_eq!(
-            tcr.next(&context, &DiseaseSeverityValue::Presymptomatic)
+            tcr.next(&context, &Some(DiseaseSeverityValue::Mild))
                 .unwrap(),
-            (DiseaseSeverityValue::Asymptomatic, 1.0)
+            (Some(DiseaseSeverityValue::Moderate), 1.0)
         );
         assert_eq!(
-            tcr.next(&context, &DiseaseSeverityValue::Asymptomatic)
+            tcr.next(&context, &Some(DiseaseSeverityValue::Moderate))
                 .unwrap(),
-            (DiseaseSeverityValue::Mild, 2.0)
+            (Some(DiseaseSeverityValue::Severe), 2.0)
         );
-        assert!(tcr.next(&context, &DiseaseSeverityValue::Mild).is_none());
+        assert!(tcr
+            .next(&context, &Some(DiseaseSeverityValue::Severe))
+            .is_none());
         // Same for the second
         let tcr = progressions[1]
-            .downcast_ref::<Box<dyn PropertyProgression<Value = DiseaseSeverityValue>>>()
+            .downcast_ref::<Box<dyn PropertyProgression<Value = Option<DiseaseSeverityValue>>>>()
             .unwrap()
             .as_ref();
         assert_eq!(
-            tcr.next(&context, &DiseaseSeverityValue::Presymptomatic)
+            tcr.next(&context, &Some(DiseaseSeverityValue::Mild))
                 .unwrap(),
-            (DiseaseSeverityValue::Moderate, 2.0)
+            (Some(DiseaseSeverityValue::Moderate), 2.0)
         );
-        assert_eq!(
-            tcr.next(&context, &DiseaseSeverityValue::Moderate).unwrap(),
-            (DiseaseSeverityValue::Healthy, 4.0)
-        );
-        assert!(tcr.next(&context, &DiseaseSeverityValue::Healthy).is_none());
+        assert!(tcr
+            .next(&context, &Some(DiseaseSeverityValue::Moderate))
+            .is_none());
     }
 }
