@@ -115,13 +115,17 @@ pub fn evaluate_forecast(
     let rate_fn = context.get_person_rate_fn(person_id);
 
     let total_multiplier = calc_total_infectiousness_multiplier(context, person_id);
-    let total_rate_fn = ScaledRateFn::new(rate_fn, total_multiplier, 0.0);
 
     let elapsed_t = context.get_elapsed_infection_time(person_id);
-    let current_infectiousness = match context.get_params().infectiousness_rate_fn {
-        RateFnType::EmpiricalFromFile { scale, .. } => total_rate_fn.rate(elapsed_t) * scale,
-        _ => total_rate_fn.rate(elapsed_t),
+
+    let total_rate_fn = match context.get_params().infectiousness_rate_fn {
+        RateFnType::EmpiricalFromFile { scale, .. } => {
+            ScaledRateFn::new(rate_fn, total_multiplier * scale, 0.0)
+        }
+        _ => ScaledRateFn::new(rate_fn, total_multiplier, 0.0),
     };
+
+    let current_infectiousness = total_rate_fn.rate(elapsed_t);
 
     assert!(
         (f64::abs(current_infectiousness - forecasted_total_infectiousness) <= 2.0 * f64::EPSILON),
@@ -223,6 +227,7 @@ impl InfectionContextExt for Context {
 #[cfg(test)]
 #[allow(clippy::float_cmp)]
 mod test {
+    use statrs::assert_almost_eq;
     use std::path::PathBuf;
 
     use super::{
@@ -234,7 +239,7 @@ mod test {
             TOTAL_INFECTIOUSNESS_MULTIPLIER,
         },
         parameters::{GlobalParams, Params, RateFnType},
-        rate_fns::load_rate_fns,
+        rate_fns::{load_rate_fns, EmpiricalRate, InfectiousnessRateExt},
     };
     use ixa::{Context, ContextGlobalPropertiesExt, ContextPeopleExt, ContextRandomExt};
 
@@ -330,11 +335,12 @@ mod test {
         // Add two additional contacts, which should make the factor 2
         context.add_person(()).unwrap();
         context.add_person(()).unwrap();
+        context.add_person(()).unwrap();
 
         context.infect_person(p1, None);
 
         let f = get_forecast(&context, p1).expect("Forecast should be returned");
-        // The expected rate is 2.0, because intrinsic is 1.0 and there are 2 contacts.
+        // The expected rate is 2.0, because intrinsic is 1.0 and global infectiousness multiplier is 2.0.
         // TODO<ryl8@cdc>: Check if the times are reasonable
         assert_eq!(f.forecasted_total_infectiousness, 2.0);
     }
@@ -348,6 +354,49 @@ mod test {
 
         let invalid_forecast = TOTAL_INFECTIOUSNESS_MULTIPLIER - 0.1;
         evaluate_forecast(&mut context, p1, invalid_forecast);
+    }
+
+    #[test]
+    fn test_evaluate_forecast_empirical() {
+        let mut context = setup_context();
+
+        let p1 = context.add_person(()).unwrap();
+        context.infect_person(p1, None);
+
+        let rate_fn_id = context.add_rate_fn(Box::new(
+            EmpiricalRate::new(
+                vec![0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0],
+                vec![0.5, 1.5, 1.5, 2.5, 3.5, 2.5, 1.0, 1.0],
+            )
+            .unwrap(),
+        ));
+
+        context.set_person_property(
+            p1,
+            InfectionData,
+            InfectionDataValue::Infectious {
+                infection_time: 0.0,
+                rate_fn_id,
+                infected_by: None,
+            },
+        );
+
+        context.add_person(()).unwrap();
+
+        let forecast = get_forecast(&context, p1).unwrap();
+        context.add_plan(forecast.next_time, move |context| {
+            evaluate_forecast(context, p1, forecast.forecasted_total_infectiousness);
+        });
+        context.execute();
+
+        let rate_fn = context.get_rate_fn(rate_fn_id);
+        let scale = max_total_infectiousness_multiplier(&context, p1);
+        assert_almost_eq!(context.get_current_time(), forecast.next_time, 0.0);
+        assert_almost_eq!(
+            forecast.forecasted_total_infectiousness,
+            rate_fn.rate(forecast.next_time) * scale,
+            0.0
+        );
     }
 
     #[test]

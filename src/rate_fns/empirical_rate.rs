@@ -277,7 +277,7 @@ mod test {
     use statrs::assert_almost_eq;
 
     use super::{get_lower_index, EmpiricalRate};
-    use crate::rate_fns::InfectiousnessRateFn;
+    use crate::rate_fns::{InfectiousnessRateFn, ScaledRateFn};
 
     #[test]
     fn test_get_lower_index_not_included_but_inclusive() {
@@ -526,5 +526,42 @@ mod test {
         )
         .unwrap();
         assert_almost_eq!(empirical.infection_duration(), 5.0, 0.0);
+    }
+
+    #[test]
+    fn test_inverse_equals_time() {
+        let empirical = EmpiricalRate::new(
+            vec![0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0],
+            vec![0.5, 0.5, 1.5, 2.5, 3.5, 2.5, 1.0, 1.0],
+        )
+        .unwrap();
+        let t = 5.59;
+        assert_almost_eq!(
+            t,
+            empirical.inverse_cum_rate(empirical.cum_rate(t)).unwrap(),
+            0.0
+        );
+    }
+
+    #[test]
+    fn test_scaled_inverse() {
+        let empirical = EmpiricalRate::new(
+            vec![0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0],
+            vec![0.5, 0.5, 1.5, 2.5, 3.5, 2.5, 1.0, 1.0],
+        )
+        .unwrap();
+        let scaled_rate_fn = ScaledRateFn {
+            base: &empirical,
+            scale: 2.0,
+            elapsed: 0.0,
+        };
+        let t = 5.59;
+        assert_almost_eq!(
+            t,
+            scaled_rate_fn
+                .inverse_cum_rate(scaled_rate_fn.cum_rate(t))
+                .unwrap(),
+            0.0
+        );
     }
 }
