@@ -22,8 +22,17 @@ define_person_property_with_default!(Alive, bool, true);
 
 define_person_property!(Household, usize);
 define_person_property!(CensusTract, usize);
-define_person_property!(SchoolId, Option<usize>);
-define_person_property!(WorkplaceId, Option<usize>);
+
+define_person_property_with_default!(SchoolId, Option<usize>, None);
+define_person_property_with_default!(WorkplaceId, Option<usize>, None);
+
+fn option_from_string(s: &str) -> Option<usize> {
+    if s.is_empty() {
+        None
+    } else {
+        Some(s.parse().unwrap())
+    }
+}
 
 fn create_person_from_record(
     context: &mut Context,
@@ -34,17 +43,8 @@ fn create_person_from_record(
     let school_string: String = String::from_utf8(person_record.schoolId.to_owned())?;
     let workplace_string: String = String::from_utf8(person_record.workplaceId.to_owned())?;
 
-    let school_id = if school_string.is_empty() {
-        None
-    } else {
-        Some(school_string.parse()?)
-    };
-
-    let workplace_id = if workplace_string.is_empty() {
-        None
-    } else {
-        Some(workplace_string.parse()?)
-    };
+    let school_id = option_from_string(&school_string);
+    let workplace_id = option_from_string(&workplace_string);
 
     let _person_id = context.add_person((
         (Age, person_record.age),
