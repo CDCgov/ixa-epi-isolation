@@ -47,7 +47,7 @@ pub struct ItineraryEntry {
 
 #[allow(dead_code)]
 impl ItineraryEntry {
-    fn new<T: SettingType>(setting_id: &SettingId<T>, ratio: f64) -> ItineraryEntry {
+    pub fn new<T: SettingType>(setting_id: &SettingId<T>, ratio: f64) -> ItineraryEntry {
         ItineraryEntry {
             setting_type: TypeId::of::<T>(),
             setting_id: setting_id.id,
@@ -118,6 +118,40 @@ impl SettingType for Home {
 #[derive(Default, Debug, Hash, Eq, PartialEq)]
 pub struct CensusTract {}
 impl SettingType for CensusTract {
+    fn calculate_multiplier(
+        &self,
+        members: &[PersonId],
+        setting_properties: SettingProperties,
+    ) -> f64 {
+        let n_members = members.len();
+        #[allow(clippy::cast_precision_loss)]
+        ((n_members - 1) as f64).powf(setting_properties.alpha)
+    }
+}
+
+// Define a home setting
+#[derive(Default, Debug, Hash, Eq, PartialEq)]
+pub struct School {}
+
+impl SettingType for School {
+    // Read members and setting_properties as arguments
+    fn calculate_multiplier(
+        &self,
+        members: &[PersonId],
+        setting_properties: SettingProperties,
+    ) -> f64 {
+        let n_members = members.len();
+        #[allow(clippy::cast_precision_loss)]
+        ((n_members - 1) as f64).powf(setting_properties.alpha)
+    }
+}
+
+// Define a home setting
+#[derive(Default, Debug, Hash, Eq, PartialEq)]
+pub struct Workplace {}
+
+impl SettingType for Workplace {
+    // Read members and setting_properties as arguments
     fn calculate_multiplier(
         &self,
         members: &[PersonId],

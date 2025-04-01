@@ -141,7 +141,8 @@ pub fn evaluate_forecast(
 /// Choose a the next contact for a given transmitter.
 /// Returns None if the contact is not susceptible.
 pub fn select_next_contact(context: &Context, person_id: PersonId) -> Option<PersonId> {
-    let next_contact = context.get_contact(person_id, ((Alive, true),))?;
+    //let next_contact = context.get_contact(person_id, ((Alive, true),))?;
+    let next_contact = context.get_contact_from_settings(person_id)?;
 
     if context.get_person_property(next_contact, InfectionStatus)
         != InfectionStatusValue::Susceptible
