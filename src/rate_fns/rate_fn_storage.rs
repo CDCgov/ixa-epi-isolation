@@ -64,7 +64,7 @@ pub fn load_rate_fns(context: &mut Context) -> Result<(), IxaError> {
         RateFnType::Constant { rate, duration } => {
             context.add_rate_fn(Box::new(ConstantRate::new(rate, duration)?));
         }
-        RateFnType::EmpiricalFromFile { file } => {
+        RateFnType::EmpiricalFromFile { file, .. } => {
             add_rate_fns_from_file(context, file)?;
         }
     }
