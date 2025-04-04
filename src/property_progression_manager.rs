@@ -129,21 +129,32 @@ impl<T: PartialEq + Copy> PropertyProgression for EmpiricalProgression<T> {
     }
 }
 #[cfg(test)]
-mod test {
-
+mod test {    
     use std::any::TypeId;
-
-    use ixa::{Context, ContextPeopleExt, ContextRandomExt, ExecutionPhase, IxaError};
-
-    use crate::{
-        population_loader::Age,
-        symptom_progression::{DiseaseSeverity, DiseaseSeverityValue},
-    };
+    use ixa::{Context,
+        define_person_property_with_default, 
+        ContextPeopleExt, ContextRandomExt, ExecutionPhase, IxaError};
+    use serde::Serialize;
+    use crate:: population_loader::Age;
 
     use super::{
         ContextPropertyProgressionExt, EmpiricalProgression, Progressions, PropertyProgression,
     };
 
+    
+    define_person_property_with_default!(
+        DiseaseSeverity,
+        Option<DiseaseSeverityValue>,
+        None
+    );
+    
+    #[derive(PartialEq, Copy, Clone, Debug, Serialize)]
+    pub enum DiseaseSeverityValue {
+        Mild,
+        Moderate,
+        Severe,
+        Recovered,
+    }
     struct AgeProgression {
         time_to_next_age: f64,
     }
