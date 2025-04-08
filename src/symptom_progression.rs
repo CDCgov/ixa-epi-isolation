@@ -1,18 +1,13 @@
 use ixa::{
-    define_person_property_with_default, define_rng, Context, ContextPeopleExt, ContextRandomExt,
-    IxaError, PersonPropertyChangeEvent,
+    define_person_property_with_default, Context, ContextPeopleExt, IxaError,
+    PersonPropertyChangeEvent,
 };
 use serde::Serialize;
-use statrs::distribution::Exp;
 
 use crate::{
     infectiousness_manager::{InfectionStatus, InfectionStatusValue},
-    property_progression_manager::{
-        ContextPropertyProgressionExt, EmpiricalProgression, PropertyProgression,
-    },
+    property_progression_manager::{ContextPropertyProgressionExt, EmpiricalProgression},
 };
-
-define_rng!(SymptomRng);
 
 #[derive(PartialEq, Copy, Clone, Debug, Serialize)]
 pub enum IsolationGuidanceSymptomValue {
@@ -30,70 +25,11 @@ define_person_property_with_default!(
     None
 );
 
-#[derive(PartialEq, Copy, Clone, Debug, Serialize)]
-pub enum DiseaseSeverityValue {
-    Mild,
-    Moderate,
-    Severe,
-    Recovered,
-}
-
-define_person_property_with_default!(DiseaseSeverity, Option<DiseaseSeverityValue>, None);
-
-pub struct DiseaseSeverityProgression {
-    pub mild_to_moderate: f64,
-    pub moderate_to_severe: f64,
-    pub mild_time: f64,
-    pub moderate_time: f64,
-    pub severe_time: f64,
-}
-
-impl PropertyProgression for DiseaseSeverityProgression {
-    type Value = Option<DiseaseSeverityValue>;
-    fn next(&self, context: &Context, last: &Self::Value) -> Option<(Self::Value, f64)> {
-        match last {
-            Some(DiseaseSeverityValue::Mild) => {
-                // With some probability, the person moves to moderate, otherwise they recover
-                if context.sample_bool(SymptomRng, self.mild_to_moderate) {
-                    Some((
-                        Some(DiseaseSeverityValue::Moderate),
-                        context.sample_distr(SymptomRng, Exp::new(1.0 / self.mild_time).unwrap()),
-                    ))
-                } else {
-                    Some((
-                        Some(DiseaseSeverityValue::Recovered),
-                        context.sample_distr(SymptomRng, Exp::new(1.0 / self.mild_time).unwrap()),
-                    ))
-                }
-            }
-            Some(DiseaseSeverityValue::Moderate) => {
-                // With some probability, the person moves to severe, otherwise they recover
-                if context.sample_bool(SymptomRng, self.moderate_to_severe) {
-                    Some((
-                        Some(DiseaseSeverityValue::Severe),
-                        context
-                            .sample_distr(SymptomRng, Exp::new(1.0 / self.moderate_time).unwrap()),
-                    ))
-                } else {
-                    Some((
-                        Some(DiseaseSeverityValue::Recovered),
-                        context
-                            .sample_distr(SymptomRng, Exp::new(1.0 / self.moderate_time).unwrap()),
-                    ))
-                }
-            }
-            Some(DiseaseSeverityValue::Severe) => Some((
-                Some(DiseaseSeverityValue::Recovered),
-                context.sample_distr(SymptomRng, Exp::new(1.0 / self.severe_time).unwrap()),
-            )),
-            Some(DiseaseSeverityValue::Recovered) | None => None,
-        }
-    }
-}
-
 pub fn init(context: &mut Context) -> Result<(), IxaError> {
-    // Todo(kzs9): We will read these progressions from a file from our isolation guidance modeling
-    // For now, these are example possible progressions based on our isolation guidance modeling
+    // Todo(kzs9): We will read a library of symptom progressions (no symptoms for an incubation
+    // period, some symptom category for Stan-calculated symptom improvement time, then improved)
+    // from our isolation guidance Stan modeling. This is a follow-up PR and filed as an issue.
+    // For now, I provide a few examples of symptom progressions to show how they will be structured
     let example_progression_cat1 = EmpiricalProgression::new(
         vec![
             Some(IsolationGuidanceSymptomValue::NoSymptoms),
@@ -135,22 +71,14 @@ pub fn init(context: &mut Context) -> Result<(), IxaError> {
     context.register_property_progression(IsolationGuidanceSymptom, example_progression_cat4);
 
     let example_progression_asymptomatic = EmpiricalProgression::new(
-        vec![Some(IsolationGuidanceSymptomValue::NoSymptoms)],
-        vec![],
+        vec![
+            Some(IsolationGuidanceSymptomValue::NoSymptoms),
+            Some(IsolationGuidanceSymptomValue::Improved),
+        ],
+        vec![4.0],
     )?;
     context
         .register_property_progression(IsolationGuidanceSymptom, example_progression_asymptomatic);
-
-    // For disease severity, we register a progression with made up values for now.
-    // Todo(kzs9): make these real values set by parameters as we decide how to model symptoms
-    let disease_severity_progression = DiseaseSeverityProgression {
-        mild_to_moderate: 0.5,
-        moderate_to_severe: 0.5,
-        mild_time: 1.0,
-        moderate_time: 2.0,
-        severe_time: 3.0,
-    };
-    context.register_property_progression(DiseaseSeverity, disease_severity_progression);
 
     event_subscriptions(context);
 
@@ -166,11 +94,6 @@ fn event_subscriptions(context: &mut Context) {
                     IsolationGuidanceSymptom,
                     Some(IsolationGuidanceSymptomValue::NoSymptoms),
                 );
-                context.set_person_property(
-                    event.person_id,
-                    DiseaseSeverity,
-                    Some(DiseaseSeverityValue::Mild),
-                );
             }
         },
     );
@@ -180,19 +103,16 @@ fn event_subscriptions(context: &mut Context) {
 mod test {
     use std::path::PathBuf;
 
-    use super::{event_subscriptions, init, DiseaseSeverityValue};
+    use super::init;
     use crate::{
         infectiousness_manager::InfectionContextExt,
         parameters::{GlobalParams, RateFnType},
-        property_progression_manager::{ContextPropertyProgressionExt, EmpiricalProgression},
         rate_fns::load_rate_fns,
-        symptom_progression::DiseaseSeverity,
+        symptom_progression::{IsolationGuidanceSymptom, IsolationGuidanceSymptomValue},
         Params,
     };
 
-    use ixa::{
-        Context, ContextGlobalPropertiesExt, ContextPeopleExt, ContextRandomExt, ExecutionPhase,
-    };
+    use ixa::{Context, ContextGlobalPropertiesExt, ContextPeopleExt, ContextRandomExt};
 
     fn setup() -> Context {
         let mut context = Context::new();
@@ -217,46 +137,20 @@ mod test {
     }
 
     #[test]
-    fn test_disease_progression() {
-        let mut context = setup();
-        let progression = EmpiricalProgression::new(
-            vec![
-                Some(DiseaseSeverityValue::Mild),
-                Some(DiseaseSeverityValue::Moderate),
-            ],
-            vec![1.0],
-        )
-        .unwrap();
-
-        // Test that the infectious --> presymptomatic trigger works and sets off the progression.
-        let person = context.add_person(()).unwrap();
-        context.register_property_progression(DiseaseSeverity, progression);
-        event_subscriptions(&mut context);
-        context.infect_person(person, None);
-        context.add_plan_with_phase(
-            1.0,
-            move |context| {
-                assert_eq!(
-                    Some(DiseaseSeverityValue::Moderate),
-                    context.get_person_property(person, DiseaseSeverity)
-                );
-            },
-            ExecutionPhase::Last,
-        );
-        context.execute();
-    }
-
-    #[test]
     fn test_init() {
         let mut context = setup();
         let person = context.add_person(()).unwrap();
         init(&mut context).unwrap();
         context.infect_person(person, None);
         context.execute();
-        // The only progression that we know for certainty is the disease severity one.
-        assert_eq!(
-            Some(DiseaseSeverityValue::Recovered),
-            context.get_person_property(person, DiseaseSeverity)
+        // The only progression that we know for certainty is that the person will not be
+        // `NoSymptoms` at the end of the simulation.
+        assert!(context
+            .get_person_property(person, IsolationGuidanceSymptom)
+            .is_some());
+        assert!(
+            Some(IsolationGuidanceSymptomValue::NoSymptoms)
+                != context.get_person_property(person, IsolationGuidanceSymptom)
         );
     }
 }

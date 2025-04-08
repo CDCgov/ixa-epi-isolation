@@ -133,16 +133,26 @@ mod test {
 
     use std::any::TypeId;
 
-    use ixa::{Context, ContextPeopleExt, ContextRandomExt, ExecutionPhase, IxaError};
-
-    use crate::{
-        population_loader::Age,
-        symptom_progression::{DiseaseSeverity, DiseaseSeverityValue},
+    use ixa::{
+        define_person_property_with_default, Context, ContextPeopleExt, ContextRandomExt,
+        ExecutionPhase, IxaError,
     };
+    use serde::Serialize;
+
+    use crate::population_loader::Age;
 
     use super::{
         ContextPropertyProgressionExt, EmpiricalProgression, Progressions, PropertyProgression,
     };
+
+    #[derive(PartialEq, Copy, Clone, Debug, Serialize)]
+    pub enum DiseaseSeverityValue {
+        Mild,
+        Moderate,
+        Severe,
+    }
+
+    define_person_property_with_default!(DiseaseSeverity, Option<DiseaseSeverityValue>, None);
 
     struct AgeProgression {
         time_to_next_age: f64,
