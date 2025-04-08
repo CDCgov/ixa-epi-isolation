@@ -1,9 +1,11 @@
 # Modeling an individual's clinical disease manifestation
 
-We use the automated property progression manager in defined in `mod clinical_status_manager` to
-model an individual's symptoms as relevant for isolation guidance. We model two person properties
-related to symptoms -- an individual's "isolation guidance" symptoms and their actual disease
-severity/how badly they are feeling the symptoms.
+We use the automated property progression manager in defined in `mod property_progression_manager`
+to model an individual's symptoms as relevant for isolation guidance. This manager automates the
+progression of an individual through a set of person properties: this manager is helpful for
+modeling symptoms because an individual moves through various symptom states throughout the course
+of their infection. For our particular example of isolation guidance, we model an individual's
+"isolation guidance".
 
 An individual's "isolation guidance" symptoms entail what category they are in and whether they are
 "improved".
@@ -24,39 +26,21 @@ define_person_property_with_default!(
     None
 );
 ```
+Since
 
-Isolation guidance symptoms are separate from an individual's actual disease severity. This is how
-"badly" an individual is feeling the effects of the disease. This is the kind of person property
-that we would use to determine whether a person seeks treatment, medical attention, hospitalization,
-etc. In a future iteration, we may add some concept of "hospital beds" as a resource by region and
-use the value of this property along with the hospitalization rate and whether hospital beds are
-available to determine whether a person can be hospitalized.
+We model the progression of an individual through isolation guidance symptom values using an
+implementation of the `PropertyProgression` trait (the trait that must be implemented to register a
+progression with the property progression manager). We feed in the symptom improvement times
+generated from the Stan model (each associated with a particular infectiousness curve) and imputed
+incubation periods based on the Stan-estimated proliferation time. Since these are paired values
+that do not necessarily follow a well-known probability distribution, we think about modeling the
+progression through symptoms as based of empirical values for both the states and the times.
 
-```rust
-#[derive(PartialEq, Copy, Clone, Debug, Serialize)]
-pub enum DiseaseSeverityValue {
-    Mild,
-    Moderate,
-    Severe,
-}
-
-define_person_property_with_default!(
-    DiseaseSeverity,
-    Option<DiseaseSeverityValue>,
-    None
-);
-```
-
-In reality, the two person properties are correlated. Someone likely does not have severe symptoms
-if they are in category four, for example. We will introduce a general way to model correlation
-between person properties in the future. For now, we conceptualize the progressions of the two
-person properties using different implementations of the `PropertyProgression` trait. For the case
-of an individual's isolation guidance symptoms, we know the progression from our isolation guidance
-modeling and have empirical values to feed into the model. Comparatively, f the case of an
-individual's disease severity, we will use a simple Markov chain model to model the progression.
-
-The case of an empirical symptom progression -- in other words, having a defined set of states and
-times between those states -- that we implement it as a generic for any type `T`.
+This idea of an empirical progression is generic enough that we implement it for any type `T` that
+can be held as a person property. We provide this struct in the ixa-epi crate because it is so
+useful for multiple applications, but a user can always implement their own version of the
+`PropertyProgression` trait on any struct that makes sense based on however it is best to store
+information about their particular property and use case.
 
 ```rust
 pub struct EmpiricalProgression<T: PartialEq + Copy> {
@@ -88,7 +72,7 @@ tells us the time between successive values. `states` is always one element long
 let p = EmpiricalProgression{ states: vec![Some(IsolationGuidanceSymptomValue::Presymptomatic),
                                            Some(IsolationGuidanceSymptomValue::Category1),
                                            Some(IsolationGuidanceSymptomValue::Improved)],
-                              time_to_next: vec![2.0, 3.0]}
+                              time_to_next: vec![2.0, 3.0] };
 ```
 
 This means that the person spends 2.0 time units as presymptomatic and then transitions to category
@@ -106,49 +90,9 @@ we will introduce a way of including correlations between natural history parame
 a person is assigned a rate function characteristic of category 1, they are also assigned an
 associated symptom progression.
 
-On the other hand, for our disease severity property, this empirical way of implementing its
-progression no longer makes much sense. Let's consider the data that we may have to parameterize
-this quantity: perhaps we have the fraction of individuals who make it from mild to moderate, and
-the fraction of individuals who make it from moderate to severe. We may also have a distribution of
-the amount of time an individual spends in each of these states. This setup does not lend itself to
-explicit empirical progressions but rather a Markov chain:
-
-```rust
-pub struct DiseaseSeverityProgression {
-    pub mild_to_moderate: f64,
-    pub moderate_to_severe: f64,
-    pub mild_time: f64,
-    pub moderate_time: f64,
-    pub severe_time: f64,
-}
-
-impl PropertyProgression for DiseaseSeverityProgression {
-    type Value = Option<DiseaseSeverityValue>;
-    fn next(&self, context: &Context, last: &Self::Value) -> Option<(Self::Value, f64)> {
-        match last {
-            Some(DiseaseSeverityValue::Mild) => {
-                // With some probability, the person moves to moderate, otherwise they recover
-                if context.sample_bool(SymptomRng, self.mild_to_moderate) {
-                    Some((Some(DiseaseSeverityValue::Moderate), context.sample_distr(SymptomRng, Exp::new(1.0 / self.mild_time).unwrap())))
-                } else {
-                    Some((Some(DiseaseSeverityValue::Recovered), context.sample_distr(SymptomRng, Exp::new(1.0 / self.mild_time).unwrap())))
-                }
-            },
-            Some(DiseaseSeverityValue::Moderate) => {
-                // With some probability, the person moves to severe, otherwise they recover
-                if context.sample_bool(SymptomRng, self.moderate_to_severe) {
-                    Some((Some(DiseaseSeverityValue::Severe), context.sample_distr(SymptomRng, Exp::new(1.0 / self.moderate_time).unwrap())))
-                } else {
-                    Some((Some(DiseaseSeverityValue::Recovered), context.sample_distr(SymptomRng, Exp::new(1.0 / self.moderate_time).unwrap())))
-                }
-            },
-            Some(DiseaseSeverityValue::Severe) => Some((Some(DiseaseSeverityValue::Recovered), context.sample_distr(SymptomRng, Exp::new(1.0 / self.severe_time).unwrap()))),
-            Some(DiseaseSeverityValue::Recovered) | None => None,
-        }
-    }
-}
-```
-
-We can use values from the rich COVID literature to parameterize this progression. This shows how
-by only requiring that we implement the trait `PropertyProgression`, we can define a wide array of
-different ways in which a person property may progress through states.
+The abstract nature of the property progression manager is that its use case is not limited to
+clinical symptoms but can be expanded to even include someone's state when following an individual-
+level policy or any sort of progression where an individual moves through states. Likewise, the
+manager only requires an implementation of the `PropertyProgression` trait, so a user can figure out
+what struct works best for their particular use case (for instance, if it is not the
+`EmpiricalProgression` struct) and implement accordingly.
