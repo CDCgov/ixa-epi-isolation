@@ -3,13 +3,14 @@ mod infection_propagation_loop;
 mod infectiousness_manager;
 mod parameters;
 mod population_loader;
-mod property_progression_manager;
+
 pub mod rate_fns;
 mod symptom_progression;
 mod transmission_report;
 pub mod utils;
 
 use infectiousness_manager::InfectionStatus;
+use symptom_progression::ClinicalSymptoms;
 use ixa::runner::run_with_args;
 use ixa::{ContextPeopleExt, ContextRandomExt, ContextReportExt};
 use parameters::{ContextParametersExt, Params};
@@ -43,7 +44,7 @@ fn main() {
         context.add_periodic_report(
             "person_property_count",
             report_period,
-            (Age, CensusTract, InfectionStatus),
+            (Age, CensusTract, InfectionStatus, ClinicalSymptoms),
         )?;
 
         // Load the synthetic population from the `synthetic_population_file`
@@ -54,7 +55,7 @@ fn main() {
 
         infection_propagation_loop::init(context)?;
         transmission_report::init(context)?;
-        symptom_progression::init(context)?;
+        symptom_progression::init(context);
 
         Ok(())
     })
