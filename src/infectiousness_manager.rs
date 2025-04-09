@@ -83,7 +83,11 @@ pub fn get_forecast(context: &Context, person_id: PersonId) -> Option<Forecast> 
     // Get the person's individual infectiousness
     let rate_fn = context.get_person_rate_fn(person_id);
     // This scales infectiousness by the maximum possible infectiousness across all settings
-    let scale = max_total_infectiousness_multiplier(context, person_id);
+    let total_multiplier = max_total_infectiousness_multiplier(context, person_id);
+    let scale = match context.get_params().infectiousness_rate_fn {
+        RateFnType::EmpiricalFromFile { scale, .. } => scale * total_multiplier,
+        _ => total_multiplier,
+    };
     let elapsed = context.get_elapsed_infection_time(person_id);
     let total_rate_fn = ScaledRateFn::new(rate_fn, scale, elapsed);
 
@@ -94,10 +98,7 @@ pub fn get_forecast(context: &Context, person_id: PersonId) -> Option<Forecast> 
     let t = total_rate_fn.inverse_cum_rate(e)?;
 
     let next_time = context.get_current_time() + t;
-    let forecasted_total_infectiousness = match context.get_params().infectiousness_rate_fn {
-        RateFnType::EmpiricalFromFile { scale, .. } => total_rate_fn.rate(t) * scale,
-        _ => total_rate_fn.rate(t),
-    };
+    let forecasted_total_infectiousness = total_rate_fn.rate(t);
 
     Some(Forecast {
         next_time,
