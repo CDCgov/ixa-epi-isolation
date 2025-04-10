@@ -129,14 +129,15 @@ fn schedule_symptoms(context: &mut Context, person: PersonId) {
 mod test {
     use std::path::PathBuf;
 
-    use super::{ClinicalCategoryExt, ClinicalCategoryPlugin, SymptomValue};
+    use super::{ClinicalCategoryExt, ClinicalCategoryPlugin, SymptomValue, ClinicalSymptoms, schedule_symptoms};
     use crate::{
         parameters::{GlobalParams, RateFnType},
         rate_fns::load_rate_fns,
         Params,
     };
 
-    use ixa::{Context, ContextGlobalPropertiesExt, ContextRandomExt};
+    use ixa::{Context, ContextGlobalPropertiesExt, ContextPeopleExt, ContextRandomExt};
+    use statrs::assert_almost_eq;
 
     fn setup() -> Context {
         let mut context = Context::new();
@@ -188,5 +189,30 @@ mod test {
                 .incubation_distributions[0],
             2.0
         );
+    }
+
+    #[test]
+    fn test_schedule_symptoms() {
+        let mut context = setup();
+        let cat1_prop = 0.2;
+        let cat2_prop = 0.8;
+        context.add_category(SymptomValue::Category1, 1.0, 2.0, cat1_prop);
+        context.add_category(SymptomValue::Category2, 1.0, 2.0, cat2_prop);
+
+        let pop_size = 1_000;
+        for _ in 0..pop_size {
+            let i = context.add_person(()).unwrap();
+            schedule_symptoms(&mut context, i);
+        }
+        context.execute();
+
+        let cat1_count = context.query_people_count((ClinicalSymptoms, Some(SymptomValue::Category1)));
+        let cat2_count = context.query_people_count((ClinicalSymptoms, Some(SymptomValue::Category2)));
+
+        let cat1_actual_prop = cat1_count as f64 / pop_size as f64;
+        let cat2_actual_prop = cat2_count as f64 / pop_size as f64;
+
+        assert_almost_eq!(cat1_actual_prop, cat1_prop, 0.05);
+        assert_almost_eq!(cat2_actual_prop, cat2_prop, 0.05);
     }
 }
