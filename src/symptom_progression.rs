@@ -129,7 +129,10 @@ fn schedule_symptoms(context: &mut Context, person: PersonId) {
 mod test {
     use std::path::PathBuf;
 
-    use super::{ClinicalCategoryExt, ClinicalCategoryPlugin, SymptomValue, ClinicalSymptoms, schedule_symptoms};
+    use super::{
+        schedule_symptoms, ClinicalCategoryExt, ClinicalCategoryPlugin, ClinicalSymptoms,
+        SymptomValue,
+    };
     use crate::{
         parameters::{GlobalParams, RateFnType},
         rate_fns::load_rate_fns,
@@ -192,6 +195,7 @@ mod test {
     }
 
     #[test]
+    #[allow(clippy::cast_lossless, clippy::cast_precision_loss)]
     fn test_schedule_symptoms() {
         let mut context = setup();
         let cat1_prop = 0.2;
@@ -206,8 +210,10 @@ mod test {
         }
         context.execute();
 
-        let cat1_count = context.query_people_count((ClinicalSymptoms, Some(SymptomValue::Category1)));
-        let cat2_count = context.query_people_count((ClinicalSymptoms, Some(SymptomValue::Category2)));
+        let cat1_count =
+            context.query_people_count((ClinicalSymptoms, Some(SymptomValue::Category1)));
+        let cat2_count =
+            context.query_people_count((ClinicalSymptoms, Some(SymptomValue::Category2)));
 
         let cat1_actual_prop = cat1_count as f64 / pop_size as f64;
         let cat2_actual_prop = cat2_count as f64 / pop_size as f64;
