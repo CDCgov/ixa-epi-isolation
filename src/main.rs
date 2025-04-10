@@ -10,11 +10,11 @@ mod transmission_report;
 pub mod utils;
 
 use infectiousness_manager::InfectionStatus;
-use symptom_progression::ClinicalSymptoms;
 use ixa::runner::run_with_args;
 use ixa::{ContextPeopleExt, ContextRandomExt, ContextReportExt};
 use parameters::{ContextParametersExt, Params};
 use population_loader::{Age, CensusTract};
+use symptom_progression::ClinicalSymptoms;
 
 // You must run this with a parameters file:
 // cargo run -- --config input/input.json
