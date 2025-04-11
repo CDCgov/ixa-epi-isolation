@@ -6,7 +6,7 @@ use serde::Serialize;
 use statrs::distribution::Exp;
 
 use crate::{
-    contact::ContextContactExt,
+    contact::ContextContactExt, settings::ContextSettingExt,
     population_loader::Alive,
     rate_fns::{InfectiousnessRateExt, InfectiousnessRateFn, RateFnId, ScaledRateFn},
 };
@@ -49,24 +49,22 @@ define_derived_property!(
     }
 );
 
-const TOTAL_INFECTIOUSNESS_MULTIPLIER: f64 = 2.0;
 
 /// Calculate the scaling factor that accounts for the total infectiousness
 /// for a person, given factors related to their environment, such as the number of people
 /// they come in contact with or how close they are.
 /// This is used to scale the intrinsic infectiousness function of that person.
-pub fn calc_total_infectiousness_multiplier(_context: &Context, _person_id: PersonId) -> f64 {
-    // TODO<ryl8@cdc.gov> This is a placeholder until we have an implementation
-    // of settings and itineraries
-    TOTAL_INFECTIOUSNESS_MULTIPLIER
+pub fn calc_total_infectiousness_multiplier(context: &Context, person_id: PersonId) -> f64 {
+    // TODO: calculate current vs total infectiousness. This depends on interventions.
+    context.calculate_total_infectiousness_multiplier_for_person(person_id)
 }
 
 /// Calculate the maximum possible scaling factor for total infectiousness
 /// for a person, given information we know at the time of a forecast.
-pub fn max_total_infectiousness_multiplier(_context: &Context, _person_id: PersonId) -> f64 {
-    // TODO<ryl8@cdc.gov> This is a placeholder until we have an implementation
-    // of settings and itineraries
-    TOTAL_INFECTIOUSNESS_MULTIPLIER
+pub fn max_total_infectiousness_multiplier(context: &Context, person_id: PersonId) -> f64 {
+    // TODO: Max and current total infectiousness are the same for now until the notion of
+    // being present in a setting is implemented
+    context.calculate_total_infectiousness_multiplier_for_person(person_id)    
 }
 
 define_rng!(ForecastRng);
