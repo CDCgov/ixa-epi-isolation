@@ -34,9 +34,8 @@ pub fn init(context: &mut Context) {
     );
     context.subscribe_to_event(
         |context, event: PersonPropertyChangeEvent<ClinicalSymptoms>| {
-            match event.current  {
-                Some(_category) => schedule_recovery(context, event.person_id),
-                None => (),
+            if let Some(_category) = event.current  {
+                schedule_recovery(context, event.person_id)
             }
         }
     );
