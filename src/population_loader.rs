@@ -6,11 +6,9 @@ use ixa::{
 use serde::Deserialize;
 use std::path::PathBuf;
 
-use crate::parameters::ContextParametersExt;
+use crate::parameters::{ContextParametersExt, Params};
 use crate::settings::{
-    ContextSettingExt,
-    ItineraryEntry,SettingId,
-    Home, Workplace, School, CensusTract
+    CensusTract, ContextSettingExt, Home, ItineraryEntry, School, SettingId, SettingProperties, Workplace
 };
 
 #[derive(Deserialize, Debug)]
@@ -25,14 +23,6 @@ pub struct PeopleRecord<'a> {
 define_person_property!(Age, u8);
 define_person_property_with_default!(Alive, bool, true);
 
-define_person_property!(Household, usize);
-define_person_property!(CensusTractId, usize);
-define_person_property!(SchoolId, Option<usize>);
-define_person_property!(WorkplaceId, Option<usize>);
-
-
-define_person_property_with_default!(SchoolId, Option<usize>, None);
-define_person_property_with_default!(WorkplaceId, Option<usize>, None);
 
 fn option_from_string(s: &str) -> Option<usize> {
     if s.is_empty() {
@@ -51,7 +41,8 @@ fn create_person_from_record(
     let home_id: String = String::from_utf8(person_record.homeId.to_owned())?;
     let school_string: String = String::from_utf8(person_record.schoolId.to_owned())?;
     let workplace_string: String = String::from_utf8(person_record.workplaceId.to_owned())?;
-    // First, build itinerary
+
+    // TODO: itinerary ratios should come from parameters
     itinerary_person.push(ItineraryEntry::new(&SettingId::<Home>::new(home_id.parse()?), 0.25));
     if !school_string.is_empty() {
         itinerary_person.push(ItineraryEntry::new(&SettingId::<School>::new(school_string.parse()?), 0.25));
@@ -84,14 +75,19 @@ fn load_synth_population(context: &mut Context, synth_input_file: PathBuf) -> Re
 }
 
 pub fn init(context: &mut Context) -> Result<(), IxaError> {
-    let parameters = context.get_params();
+    let Params {
+        synth_population_file, ..
+    } = context.get_params().clone();
 
+    // TODO: These properties should come from somewhere and
+    // registering setting type should look different with expandable setting properties
     context.register_setting_type(Home {}, SettingProperties { alpha: 0.1 });
     context.register_setting_type(CensusTract {}, SettingProperties { alpha: 0.01 });
     context.register_setting_type(Workplace {}, SettingProperties { alpha: 0.05 });
     context.register_setting_type(School {}, SettingProperties { alpha: 0.01 });
 
-    load_synth_population(context, parameters.synth_population_file.clone())
+    load_synth_population(context, synth_population_file.clone())?;
+    Ok(())
 }
 
 #[cfg(test)]
