@@ -11,7 +11,7 @@ define_rng!(SettingsRng);
 // This is not the most flexible structure but would work for now
 #[derive(Debug, Clone, Copy)]
 pub struct SettingProperties {
-    alpha: f64,
+    pub alpha: f64,
 }
 
 pub trait SettingType {
