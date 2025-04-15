@@ -88,6 +88,7 @@ impl<T: PartialEq + Copy> EmpiricalProgression<T> {
     /// Assumes values in `states` are unique.
     /// # Errors
     /// - If `states` is not one element longer than `time_to_next`.
+    #[allow(dead_code)]
     pub fn new(
         states: Vec<T>,
         time_to_next: Vec<f64>,

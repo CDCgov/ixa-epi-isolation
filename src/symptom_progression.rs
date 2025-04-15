@@ -1,13 +1,15 @@
 use ixa::{
-    define_person_property_with_default, Context, ContextPeopleExt, IxaError,
+    define_person_property_with_default, define_rng, Context, ContextPeopleExt, ContextRandomExt,
     PersonPropertyChangeEvent,
 };
 use serde::Serialize;
 
 use crate::{
     infectiousness_manager::{InfectionStatus, InfectionStatusValue},
-    property_progression_manager::{ContextPropertyProgressionExt, EmpiricalProgression},
+    property_progression_manager::{ContextPropertyProgressionExt, PropertyProgression},
 };
+
+define_rng!(SymptomRng);
 
 #[derive(PartialEq, Copy, Clone, Debug, Serialize)]
 pub enum IsolationGuidanceSymptomValue {
@@ -24,42 +26,63 @@ define_person_property_with_default!(
     None
 );
 
-pub fn init(context: &mut Context) -> Result<(), IxaError> {
-    // Todo(kzs9): We will read a library of symptom progressions from a file based on our Stan
-    // modeling. That file will contain a set of possible symptom progressions -- a sequence of
-    // symptom categories and times. This is a follow-up PR and filed as an issue.
-    // For now, we demonstrate how these progressions would be constructed and registered.
-    for cat in 0..5 {
-        let cat_name = match cat {
-            0 => IsolationGuidanceSymptomValue::Presymptomatic,
-            1 => IsolationGuidanceSymptomValue::Category1,
-            2 => IsolationGuidanceSymptomValue::Category2,
-            3 => IsolationGuidanceSymptomValue::Category3,
-            4 => IsolationGuidanceSymptomValue::Category4,
-            _ => unreachable!(),
-        };
-        let incubation_period = 4.0;
-        let symptom_duration = 5.0;
-        let progression = EmpiricalProgression::new(
-            vec![
-                Some(IsolationGuidanceSymptomValue::Presymptomatic),
-                Some(cat_name),
-                None,
-            ],
-            vec![incubation_period, symptom_duration],
-        )?;
-        context.register_property_progression(IsolationGuidanceSymptom, progression);
-    }
+struct IsolationGuidanceSymptomProgression {
+    symptom_category_weights: Vec<f64>,
+    // We can generalize these to Vec<f64> or Vec<Distributions> to allow for category-specific
+    // distributions
+    incubation_period: f64,
+    time_to_symptom_improvement: f64,
+}
 
-    let asymptomatic_progression = EmpiricalProgression::new(
-        vec![Some(IsolationGuidanceSymptomValue::Presymptomatic), None],
-        vec![4.0],
-    )?;
-    context.register_property_progression(IsolationGuidanceSymptom, asymptomatic_progression);
+impl PropertyProgression for IsolationGuidanceSymptomProgression {
+    type Value = Option<IsolationGuidanceSymptomValue>;
+
+    fn next(&self, context: &Context, last: &Self::Value) -> Option<(Self::Value, f64)> {
+        if let Some(symptoms) = last {
+            if symptoms == &IsolationGuidanceSymptomValue::Presymptomatic {
+                return Some(schedule_symptoms(self, context));
+            }
+            return Some(schedule_recovery(self));
+        }
+        None
+    }
+}
+
+fn schedule_symptoms(
+    progression: &IsolationGuidanceSymptomProgression,
+    context: &Context,
+) -> (Option<IsolationGuidanceSymptomValue>, f64) {
+    let category = match context.sample_weighted(SymptomRng, &progression.symptom_category_weights)
+    {
+        0 => IsolationGuidanceSymptomValue::Category1,
+        1 => IsolationGuidanceSymptomValue::Category2,
+        2 => IsolationGuidanceSymptomValue::Category3,
+        3 => IsolationGuidanceSymptomValue::Category4,
+        _ => unreachable!(),
+    };
+    (Some(category), progression.incubation_period)
+}
+
+fn schedule_recovery(
+    progression: &IsolationGuidanceSymptomProgression,
+) -> (Option<IsolationGuidanceSymptomValue>, f64) {
+    let time_to_symptom_improvement = progression.time_to_symptom_improvement;
+    (None, time_to_symptom_improvement)
+}
+
+pub fn init(context: &mut Context) {
+    let isolation_guidance_symptom_progression = IsolationGuidanceSymptomProgression {
+        symptom_category_weights: vec![0.25, 0.25, 0.25, 0.25],
+        incubation_period: 1.0,
+        time_to_symptom_improvement: 1.0,
+    };
+
+    context.register_property_progression(
+        IsolationGuidanceSymptom,
+        isolation_guidance_symptom_progression,
+    );
 
     event_subscriptions(context);
-
-    Ok(())
 }
 
 fn event_subscriptions(context: &mut Context) {
@@ -85,7 +108,7 @@ mod test {
         infectiousness_manager::InfectionContextExt,
         parameters::{GlobalParams, RateFnType},
         rate_fns::load_rate_fns,
-        symptom_progression::{IsolationGuidanceSymptom, IsolationGuidanceSymptomValue},
+        symptom_progression::IsolationGuidanceSymptom,
         Params,
     };
 
@@ -117,17 +140,11 @@ mod test {
     fn test_init() {
         let mut context = setup();
         let person = context.add_person(()).unwrap();
-        init(&mut context).unwrap();
+        init(&mut context);
         context.infect_person(person, None);
         context.execute();
-        // The only progression that we know for certainty is that the person will not be
-        // `Presymptomatic` at the end of the simulation.
         assert!(context
             .get_person_property(person, IsolationGuidanceSymptom)
-            .is_some());
-        assert!(
-            Some(IsolationGuidanceSymptomValue::Presymptomatic)
-                != context.get_person_property(person, IsolationGuidanceSymptom)
-        );
+            .is_none());
     }
 }
