@@ -148,6 +148,7 @@ pub trait ContextSettingExt {
         person_id: PersonId,
         itinerary: Vec<ItineraryEntry>,
     ) -> Result<(), IxaError>;
+    fn validate_itinerary(&self, itinerary: &[ItineraryEntry]) -> Result<(), IxaError>;
     fn get_setting_members<T: SettingType + 'static>(
         &self,
         setting_id: SettingId<T>,
@@ -238,9 +239,27 @@ impl ContextSettingExt for Context {
         person_id: PersonId,
         itinerary: Vec<ItineraryEntry>,
     ) -> Result<(), IxaError> {
+        self.validate_itinerary(&itinerary)?;
         let container = self.get_data_container_mut(SettingDataPlugin);
-        let mut setting_counts: HashMap<TypeId, HashSet<usize>> = HashMap::new();
         for itinerary_entry in &itinerary {
+            // TODO: If we are changing a person's itinerary, the person_id should be removed from vector
+            // This isn't the same as the concept of being present or not.
+            #[allow(clippy::redundant_closure)]
+            container
+                .members
+                .entry(itinerary_entry.setting_type)
+                .or_insert_with(|| HashMap::new())
+                .entry(itinerary_entry.setting_id)
+                .or_insert_with(|| Vec::new())
+                .push(person_id);
+        }
+        container.itineraries.insert(person_id, itinerary);
+        Ok(())
+    }
+
+    fn validate_itinerary(&self, itinerary: &[ItineraryEntry]) -> Result<(), IxaError> {
+        let mut setting_counts: HashMap<TypeId, HashSet<usize>> = HashMap::new();
+        for itinerary_entry in itinerary {
             let setting_id = itinerary_entry.setting_id;
             let setting_type = itinerary_entry.setting_type;
             if let Some(setting_count_set) = setting_counts.get(&setting_type) {
@@ -253,18 +272,14 @@ impl ContextSettingExt for Context {
                 .entry(setting_type)
                 .or_insert_with(|| HashSet::new())
                 .insert(setting_id);
-            // TODO: If we are changing a person's itinerary, the person_id should be removed from vector
-            // This isn't the same as the concept of being present or not.
-            #[allow(clippy::redundant_closure)]
-            container
-                .members
-                .entry(itinerary_entry.setting_type)
-                .or_insert_with(|| HashMap::new())
-                .entry(setting_id)
-                .or_insert_with(|| Vec::new())
-                .push(person_id);
+
+            let setting_ratio = itinerary_entry.ratio;
+            if setting_ratio < 0.0 {
+                return Err(IxaError::from(
+                    "Setting ratio must be greater than or equal to 0".to_string(),
+                ));
+            }
         }
-        container.itineraries.insert(person_id, itinerary);
         Ok(())
     }
 
@@ -367,6 +382,22 @@ mod test {
         match context.add_itinerary(person, itinerary) {
             Err(IxaError::IxaError(msg)) => {
                 assert_eq!(msg, "Duplicated setting");
+            }
+            _ => panic!("Unexpected error in itinerary"),
+        }
+    }
+
+    #[test]
+    fn test_feasible_itinterary() {
+        let mut context = Context::new();
+        context.register_setting_type(Home {}, SettingProperties { alpha: 1.0 });
+
+        let person = context.add_person(()).unwrap();
+        let itinerary = vec![ItineraryEntry::new(&SettingId::<Home>::new(1), -0.5)];
+
+        match context.add_itinerary(person, itinerary) {
+            Err(IxaError::IxaError(msg)) => {
+                assert_eq!(msg, "Setting ratio must be greater than or equal to 0");
             }
             _ => panic!("Unexpected error in itinerary"),
         }
