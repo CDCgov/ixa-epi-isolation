@@ -4,8 +4,8 @@ use std::{
 };
 
 use ixa::{
-    define_data_plugin, define_rng, warn, Context, ContextPeopleExt, ContextRandomExt, IxaError,
-    PersonProperty, PersonPropertyChangeEvent,
+    define_data_plugin, define_rng, Context, ContextPeopleExt, ContextRandomExt, PersonProperty,
+    PersonPropertyChangeEvent,
 };
 
 define_rng!(ProgressionRng);
@@ -74,85 +74,16 @@ impl ContextPropertyProgressionExt for Context {
     }
 }
 
-/// Holds a sequence of unique states and times between subsequent states for changing a person's
-/// person property values accordingly. Since all person properties that have Markovian transitions
-/// may want to have their progressions defined empirically, we make this a general struct that can
-/// hold any type `T` that implements `PartialEq` and `Copy`.
-pub struct EmpiricalProgression<T: PartialEq + Copy> {
-    states: Vec<T>,
-    time_to_next: Vec<f64>,
-}
-
-impl<T: PartialEq + Copy> EmpiricalProgression<T> {
-    /// Makes a new `EmpiricalProgression<T>` struct that holds a sequence of states of value `T`.
-    /// Assumes values in `states` are unique.
-    /// # Errors
-    /// - If `states` is not one element longer than `time_to_next`.
-    pub fn new(
-        states: Vec<T>,
-        time_to_next: Vec<f64>,
-    ) -> Result<EmpiricalProgression<T>, IxaError> {
-        if states.len() != time_to_next.len() + 1 {
-            return Err(IxaError::IxaError(
-                "Size mismatch: states must be one element longer than time_to_next. Instead, "
-                    .to_string()
-                    + &format!(
-                        "states has length {} and time_to_next has length {}.",
-                        states.len(),
-                        time_to_next.len()
-                    ),
-            ));
-        }
-        warn!(
-            "Adding an EmpiricalProgression. At this time, we do not check whether values in
-        states are unique."
-        );
-        Ok(EmpiricalProgression {
-            states,
-            time_to_next,
-        })
-    }
-}
-
-impl<T: PartialEq + Copy> PropertyProgression for EmpiricalProgression<T> {
-    type Value = T;
-    fn next(&self, _context: &Context, last: &Self::Value) -> Option<(Self::Value, f64)> {
-        let mut iter = self.states.iter().enumerate();
-        while let Some((_, status)) = iter.next() {
-            if status == last {
-                return iter
-                    .next()
-                    .map(|(i, next)| (*next, self.time_to_next[i - 1]));
-            }
-        }
-        None
-    }
-}
 #[cfg(test)]
 mod test {
 
     use std::any::TypeId;
 
-    use ixa::{
-        define_person_property_with_default, Context, ContextPeopleExt, ContextRandomExt,
-        ExecutionPhase, IxaError,
-    };
-    use serde::Serialize;
+    use ixa::{Context, ContextPeopleExt, ContextRandomExt, ExecutionPhase};
 
     use crate::population_loader::Age;
 
-    use super::{
-        ContextPropertyProgressionExt, EmpiricalProgression, Progressions, PropertyProgression,
-    };
-
-    #[derive(PartialEq, Copy, Clone, Debug, Serialize)]
-    pub enum DiseaseSeverityValue {
-        Mild,
-        Moderate,
-        Severe,
-    }
-
-    define_person_property_with_default!(DiseaseSeverity, Option<DiseaseSeverityValue>, None);
+    use super::{ContextPropertyProgressionExt, Progressions, PropertyProgression};
 
     struct AgeProgression {
         time_to_next_age: f64,
@@ -169,16 +100,6 @@ mod test {
     fn test_register_property_progression_automates_moves() {
         let mut context = Context::new();
         context.init_random(0);
-        let symptom_progression = EmpiricalProgression::new(
-            vec![
-                Some(DiseaseSeverityValue::Mild),
-                Some(DiseaseSeverityValue::Moderate),
-                Some(DiseaseSeverityValue::Severe),
-            ],
-            vec![1.0, 2.0],
-        )
-        .unwrap();
-        context.register_property_progression(DiseaseSeverity, symptom_progression);
         context.register_property_progression(
             Age,
             AgeProgression {
@@ -186,15 +107,12 @@ mod test {
             },
         );
         let person_id = context.add_person((Age, 0)).unwrap();
-        context.set_person_property(person_id, DiseaseSeverity, Some(DiseaseSeverityValue::Mild));
         context.set_person_property(person_id, Age, 0);
         context.add_plan_with_phase(
             1.0,
             move |ctx| {
                 let age = ctx.get_person_property(person_id, Age);
                 assert_eq!(age, 1);
-                let severity = ctx.get_person_property(person_id, DiseaseSeverity);
-                assert_eq!(severity, Some(DiseaseSeverityValue::Moderate));
             },
             ExecutionPhase::Last,
         );
@@ -203,8 +121,6 @@ mod test {
             move |ctx| {
                 let age = ctx.get_person_property(person_id, Age);
                 assert_eq!(age, 2);
-                let severity = ctx.get_person_property(person_id, DiseaseSeverity);
-                assert_eq!(severity, Some(DiseaseSeverityValue::Moderate));
             },
             ExecutionPhase::Last,
         );
@@ -213,8 +129,6 @@ mod test {
             move |ctx| {
                 let age = ctx.get_person_property(person_id, Age);
                 assert_eq!(age, 3);
-                let severity = ctx.get_person_property(person_id, DiseaseSeverity);
-                assert_eq!(severity, Some(DiseaseSeverityValue::Severe));
             },
             ExecutionPhase::Last,
         );
@@ -227,85 +141,29 @@ mod test {
     fn test_multiple_progressions_registered() {
         let mut context = Context::new();
         context.init_random(0);
-        let progression_to_severe = EmpiricalProgression::new(
-            vec![
-                Some(DiseaseSeverityValue::Mild),
-                Some(DiseaseSeverityValue::Moderate),
-                Some(DiseaseSeverityValue::Severe),
-            ],
-            vec![1.0, 2.0],
-        )
-        .unwrap();
-        let progression_moderate = EmpiricalProgression::new(
-            vec![
-                Some(DiseaseSeverityValue::Mild),
-                Some(DiseaseSeverityValue::Moderate),
-            ],
-            vec![2.0],
-        )
-        .unwrap();
-        context.register_property_progression(DiseaseSeverity, progression_to_severe);
-        context.register_property_progression(DiseaseSeverity, progression_moderate);
+        let one_yr_progression = AgeProgression {
+            time_to_next_age: 1.0,
+        };
+        let two_yr_progression = AgeProgression {
+            time_to_next_age: 2.0,
+        };
+        context.register_property_progression(Age, one_yr_progression);
+        context.register_property_progression(Age, two_yr_progression);
         // Get out the registered progressions.
         let container = context.get_data_container(Progressions).unwrap();
-        let progressions = container
-            .progressions
-            .get(&TypeId::of::<DiseaseSeverity>())
-            .unwrap();
+        let progressions = container.progressions.get(&TypeId::of::<Age>()).unwrap();
         assert_eq!(progressions.len(), 2);
         // Inspect the first progression
         let tcr = progressions[0]
-            .downcast_ref::<Box<dyn PropertyProgression<Value = Option<DiseaseSeverityValue>>>>()
+            .downcast_ref::<Box<dyn PropertyProgression<Value = u8>>>()
             .unwrap()
             .as_ref();
-        assert_eq!(
-            tcr.next(&context, &Some(DiseaseSeverityValue::Mild))
-                .unwrap(),
-            (Some(DiseaseSeverityValue::Moderate), 1.0)
-        );
-        assert_eq!(
-            tcr.next(&context, &Some(DiseaseSeverityValue::Moderate))
-                .unwrap(),
-            (Some(DiseaseSeverityValue::Severe), 2.0)
-        );
-        assert!(tcr
-            .next(&context, &Some(DiseaseSeverityValue::Severe))
-            .is_none());
+        assert_eq!(tcr.next(&context, &0_u8).unwrap(), (1_u8, 1.0));
         // Same for the second
         let tcr = progressions[1]
-            .downcast_ref::<Box<dyn PropertyProgression<Value = Option<DiseaseSeverityValue>>>>()
+            .downcast_ref::<Box<dyn PropertyProgression<Value = u8>>>()
             .unwrap()
             .as_ref();
-        assert_eq!(
-            tcr.next(&context, &Some(DiseaseSeverityValue::Mild))
-                .unwrap(),
-            (Some(DiseaseSeverityValue::Moderate), 2.0)
-        );
-        assert!(tcr
-            .next(&context, &Some(DiseaseSeverityValue::Moderate))
-            .is_none());
-    }
-
-    #[test]
-    fn test_empirical_progression_errors_len() {
-        let progression = EmpiricalProgression::new(
-            vec![
-                DiseaseSeverityValue::Mild,
-                DiseaseSeverityValue::Moderate,
-                DiseaseSeverityValue::Mild,
-            ],
-            vec![1.0, 2.0, 3.0],
-        );
-        let e = progression.err();
-        match e {
-            Some(IxaError::IxaError(msg)) => {
-                assert_eq!(msg, "Size mismatch: states must be one element longer than time_to_next. Instead, states has length 3 and time_to_next has length 3.".to_string());
-            }
-            Some(ue) => panic!(
-                "Expected an error that states and time_to_next have incompatible sizes. Instead got {:?}",
-                ue.to_string()
-            ),
-            None => panic!("Expected an error. Instead, validation passed with no errors."),
-        }
+        assert_eq!(tcr.next(&context, &0_u8).unwrap(), (1_u8, 2.0));
     }
 }
