@@ -369,7 +369,7 @@ mod test {
     }
 
     #[test]
-    fn test_duplicated_itinterary() {
+    fn test_duplicated_itinerary() {
         let mut context = Context::new();
         context.register_setting_type(Home {}, SettingProperties { alpha: 1.0 });
 
@@ -388,7 +388,7 @@ mod test {
     }
 
     #[test]
-    fn test_feasible_itinterary() {
+    fn test_feasible_itinerary() {
         let mut context = Context::new();
         context.register_setting_type(Home {}, SettingProperties { alpha: 1.0 });
 
@@ -404,7 +404,7 @@ mod test {
     }
 
     #[test]
-    fn test_add_itinterary() {
+    fn test_add_itinerary() {
         let mut context = Context::new();
         context.register_setting_type(Home {}, SettingProperties { alpha: 1.0 });
 
