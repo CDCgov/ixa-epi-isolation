@@ -23,15 +23,15 @@ define_data_plugin!(
 define_rng!(InfectiousnessRateRng);
 
 pub trait InfectiousnessRateExt {
-    fn add_rate_fn(&mut self, dist: Box<dyn InfectiousnessRateFn>) -> RateFnId;
+    fn add_rate_fn(&mut self, dist: impl InfectiousnessRateFn + 'static) -> RateFnId;
     fn get_random_rate_fn(&self) -> RateFnId;
     fn get_rate_fn(&self, index: RateFnId) -> &dyn InfectiousnessRateFn;
 }
 
 impl InfectiousnessRateExt for Context {
-    fn add_rate_fn(&mut self, dist: Box<dyn InfectiousnessRateFn>) -> RateFnId {
+    fn add_rate_fn(&mut self, dist: impl InfectiousnessRateFn + 'static) -> RateFnId {
         let container = self.get_data_container_mut(RateFnPlugin);
-        container.rates.push(dist);
+        container.rates.push(Box::new(dist));
         RateFnId(container.rates.len() - 1)
     }
 
@@ -62,7 +62,7 @@ pub fn load_rate_fns(context: &mut Context) -> Result<(), IxaError> {
 
     match rate_of_infection {
         RateFnType::Constant { rate, duration } => {
-            context.add_rate_fn(Box::new(ConstantRate::new(rate, duration)?));
+            context.add_rate_fn(ConstantRate::new(rate, duration)?);
         }
         RateFnType::EmpiricalFromFile { file, .. } => {
             add_rate_fns_from_file(context, file)?;
@@ -96,7 +96,7 @@ fn add_rate_fns_from_file(context: &mut Context, file: PathBuf) -> Result<(), Ix
         } else {
             // Take the last values of times and values and make them into a rate function
             if !times.is_empty() {
-                let fcn = Box::new(EmpiricalRate::new(times, values)?);
+                let fcn = EmpiricalRate::new(times, values)?;
                 context.add_rate_fn(fcn);
                 last_id = record.id;
             }
@@ -106,7 +106,7 @@ fn add_rate_fns_from_file(context: &mut Context, file: PathBuf) -> Result<(), Ix
         }
     }
     // Add the last rate function in the CSV
-    let fcn = Box::new(EmpiricalRate::new(times, values)?);
+    let fcn = EmpiricalRate::new(times, values)?;
     context.add_rate_fn(fcn);
     Ok(())
 }
@@ -147,7 +147,7 @@ mod tests {
         let mut context = init_context();
 
         let rate_fn = TestRateFn {};
-        context.add_rate_fn(Box::new(rate_fn));
+        context.add_rate_fn(rate_fn);
 
         let i = context.get_random_rate_fn();
         assert!(i.0 == 0);
