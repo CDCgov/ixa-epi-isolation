@@ -98,16 +98,17 @@ impl SettingDataContainer {
     }
 }
 
+#[macro_export]
 macro_rules! define_setting_type {
     ($name:ident) => {
         #[derive(Default, Debug, Hash, Eq, PartialEq)]
         pub struct $name {}
 
-        impl SettingType for $name {
+        impl $crate::settings::SettingType for $name {
             fn calculate_multiplier(
                 &self,
-                members: &[PersonId],
-                setting_properties: SettingProperties,
+                members: &[ixa::PersonId],
+                setting_properties: $crate::settings::SettingProperties,
             ) -> f64 {
                 let n_members = members.len();
                 #[allow(clippy::cast_precision_loss)]
@@ -116,6 +117,7 @@ macro_rules! define_setting_type {
         }
     };
 }
+pub use define_setting_type;
 
 define_setting_type!(Home);
 define_setting_type!(CensusTract);

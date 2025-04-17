@@ -225,6 +225,9 @@ mod test {
         },
         parameters::{GlobalParams, Params, RateFnType},
         rate_fns::load_rate_fns,
+        settings::{
+            define_setting_type, ContextSettingExt, ItineraryEntry, SettingId, SettingProperties,
+        },
     };
     use ixa::{Context, ContextGlobalPropertiesExt, ContextPeopleExt, ContextRandomExt};
 
@@ -250,6 +253,15 @@ mod test {
             .unwrap();
         load_rate_fns(&mut context).unwrap();
         context
+    }
+
+    define_setting_type!(Test);
+    fn global_mixing_itinerary(context: &mut Context, alpha: f64) {
+        for i in context.query_people(()) {
+            let itinerary = vec![ItineraryEntry::new(&SettingId::<Test>::new(0), 1.0)];
+            context.add_itinerary(i, itinerary).unwrap();
+        }
+        context.register_setting_type(Test {}, SettingProperties { alpha });
     }
 
     #[test]
@@ -307,7 +319,10 @@ mod test {
     fn test_calc_total_infectiousness_multiplier() {
         let mut context = setup_context();
         let p1 = context.add_person(()).unwrap();
-        assert_eq!(max_total_infectiousness_multiplier(&context, p1), 1.0);
+
+        global_mixing_itinerary(&mut context, 1.0);
+
+        assert_eq!(max_total_infectiousness_multiplier(&context, p1), 0.0);
     }
 
     #[test]
@@ -318,6 +333,8 @@ mod test {
         context.add_person(()).unwrap();
         context.add_person(()).unwrap();
 
+        global_mixing_itinerary(&mut context, 1.0);
+
         context.infect_person(p1, None);
 
         let f = get_forecast(&context, p1).expect("Forecast should be returned");
@@ -327,11 +344,13 @@ mod test {
     }
 
     #[test]
-    #[should_panic = "Person 0: Forecasted infectiousness must always be greater than or equal to current infectiousness. Current: 2, Forecasted: 1.9"]
+    #[should_panic = "Person 0: Forecasted infectiousness must always be greater than or equal to current infectiousness. Current: 0, Forecasted: 0.9"]
     fn test_assert_evaluate_fails_when_forecast_smaller() {
         let mut context = setup_context();
         let p1 = context.add_person(()).unwrap();
         context.infect_person(p1, None);
+
+        global_mixing_itinerary(&mut context, 1.0);
 
         let invalid_forecast = 1.0 - 0.1;
         evaluate_forecast(&mut context, p1, invalid_forecast);
@@ -342,6 +361,8 @@ mod test {
         let mut context = setup_context();
         let index = context.add_person(()).unwrap();
         let contact = context.add_person(()).unwrap();
+
+        global_mixing_itinerary(&mut context, 1.0);
 
         context.infect_person(contact, Some(index));
         context.execute();
