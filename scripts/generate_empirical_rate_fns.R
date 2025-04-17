@@ -5,35 +5,33 @@ library(tidyverse)
 library(sjmisc)
 source("scripts/functions.R")
 
-num_trajectories <- 10
 dt <- 0.2
 max_time <- 28
 
 posterior_sampled_path <- file.path(
   "input",
-  "library_empirical_rate_parameters.csv"
+  "isolation_guidance_stan_parameters.csv"
 )
 
 sampled_params <- readr::read_csv(,
   file = posterior_sampled_path
 )
 
+# Our isolation guidance parameters provide the viral load _with respect to_
+# time since symptom. We need to convert times to be with respect to _infection_
+# onset.
+# Todo (kzs9): Use Sang Woo Park (PNAS, 2022) incubation period and
+# proliferation times to develop a principled way to get incubation
+# periods consistent with proliferation times.
+# For now, we use a bogus incubation period. We know that the incubation
+# period must be longer than proliferation period - time of symptom onset.
+# We add one as a buffer, and we negate to be wrt to symptom onset.
 sampled_params <- sampled_params |>
-  # subsample
-  dplyr::slice_sample(n = num_trajectories) |>
-  dplyr::filter(symp_type_cat != 4) |>
-  # for now, let's set some bogus infectiousness start times to shift us from
-  # a space that is in terms of peak VL to in terms of time since infection
-  # these times are with respect to when the peak viral load occurs
-  # these are the shortest times + 1 day that allows the period
-  # logVL > 0 to not be truncated
   dplyr::mutate(infectiousness_start_time = -(wp - tp + 1))
 
-sampled_params <- sampled_params |>
-  dplyr::select(
-    tp, dp, wp, wr, infectiousness_start_time, si_time, symp_type_cat
-  )
-
+# Our triangle_vl function from our isolation guidance work (copied and put in
+# `functions.R` for now) is defined in terms of the time since symptom onset.
+# This function is defined in terms of the time since infection.
 triangle_vl_wrt_infected_time <- function(
     tp, dp, wp, wr, infectiousness_start_time, max_time, dt) {
   curve <- pmax(triangle_vl(
@@ -43,6 +41,7 @@ triangle_vl_wrt_infected_time <- function(
   return(list(unnormalized_pdf_to_hazard(curve, dt)))
 }
 
+# For every parameter set, make a vector of the viral load over time trajectory.
 trajectories <- purrr::pmap_vec(
   list(
     tp = sampled_params$tp,
@@ -56,17 +55,19 @@ trajectories <- purrr::pmap_vec(
   .progress = TRUE
 )
 
+# Prepare the data for long format.
+# Turn the list of vectors into a matrix.
 trajectories <- as_tibble(trajectories, .name_repair = "minimal") |>
   sjmisc::rotate_df()
-
-# subsample
-times <- seq(dt / 2, max_time, dt)
-names(trajectories) <- times
+times <- seq(dt / 2, max_time, dt) # Add the times for each value
+names(trajectories) <- times # As column names
 
 trajectories <- trajectories |>
   dplyr::mutate(id = row_number()) |>
   pivot_longer(cols = -c("id"), names_to = "time", values_to = "value") |>
-  dplyr::filter(value != 0 & !is.na(value) & is.finite(value))
+  # Due to numerical instability, it is possible to have the rate go to infinity
+  # at the end of a timeseries -- we need to remove these.
+  dplyr::filter(is.finite(value))
 
 write_csv(trajectories,
   file.path(
