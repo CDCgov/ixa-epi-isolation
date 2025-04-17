@@ -98,70 +98,29 @@ impl SettingDataContainer {
     }
 }
 
-// Define a home setting
-#[derive(Default, Debug, Hash, Eq, PartialEq)]
-pub struct Home {}
+macro_rules! define_setting_type {
+    ($name:ident) => {
+        #[derive(Default, Debug, Hash, Eq, PartialEq)]
+        pub struct $name {}
 
-impl SettingType for Home {
-    // Read members and setting_properties as arguments
-    fn calculate_multiplier(
-        &self,
-        members: &[PersonId],
-        setting_properties: SettingProperties,
-    ) -> f64 {
-        let n_members = members.len();
-        #[allow(clippy::cast_precision_loss)]
-        ((n_members - 1) as f64).powf(setting_properties.alpha)
-    }
+        impl SettingType for $name {
+            fn calculate_multiplier(
+                &self,
+                members: &[PersonId],
+                setting_properties: SettingProperties,
+            ) -> f64 {
+                let n_members = members.len();
+                #[allow(clippy::cast_precision_loss)]
+                ((n_members - 1) as f64).powf(setting_properties.alpha)
+            }
+        }
+    };
 }
 
-#[derive(Default, Debug, Hash, Eq, PartialEq)]
-pub struct CensusTract {}
-impl SettingType for CensusTract {
-    fn calculate_multiplier(
-        &self,
-        members: &[PersonId],
-        setting_properties: SettingProperties,
-    ) -> f64 {
-        let n_members = members.len();
-        #[allow(clippy::cast_precision_loss)]
-        ((n_members - 1) as f64).powf(setting_properties.alpha)
-    }
-}
-
-// Define a home setting
-#[derive(Default, Debug, Hash, Eq, PartialEq)]
-pub struct School {}
-
-impl SettingType for School {
-    // Read members and setting_properties as arguments
-    fn calculate_multiplier(
-        &self,
-        members: &[PersonId],
-        setting_properties: SettingProperties,
-    ) -> f64 {
-        let n_members = members.len();
-        #[allow(clippy::cast_precision_loss)]
-        ((n_members - 1) as f64).powf(setting_properties.alpha)
-    }
-}
-
-// Define a home setting
-#[derive(Default, Debug, Hash, Eq, PartialEq)]
-pub struct Workplace {}
-
-impl SettingType for Workplace {
-    // Read members and setting_properties as arguments
-    fn calculate_multiplier(
-        &self,
-        members: &[PersonId],
-        setting_properties: SettingProperties,
-    ) -> f64 {
-        let n_members = members.len();
-        #[allow(clippy::cast_precision_loss)]
-        ((n_members - 1) as f64).powf(setting_properties.alpha)
-    }
-}
+define_setting_type!(Home);
+define_setting_type!(CensusTract);
+define_setting_type!(School);
+define_setting_type!(Workplace);
 
 define_data_plugin!(
     SettingDataPlugin,

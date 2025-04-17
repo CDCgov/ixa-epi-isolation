@@ -6,9 +6,9 @@ use serde::Serialize;
 use statrs::distribution::Exp;
 
 use crate::{
-    contact::ContextContactExt, settings::ContextSettingExt,
-    population_loader::Alive,
+    contact::ContextContactExt,
     rate_fns::{InfectiousnessRateExt, InfectiousnessRateFn, RateFnId, ScaledRateFn},
+    settings::ContextSettingExt,
 };
 
 #[derive(Serialize, PartialEq, Debug, Clone, Copy)]
@@ -49,7 +49,6 @@ define_derived_property!(
     }
 );
 
-
 /// Calculate the scaling factor that accounts for the total infectiousness
 /// for a person, given factors related to their environment, such as the number of people
 /// they come in contact with or how close they are.
@@ -64,7 +63,7 @@ pub fn calc_total_infectiousness_multiplier(context: &Context, person_id: Person
 pub fn max_total_infectiousness_multiplier(context: &Context, person_id: PersonId) -> f64 {
     // TODO: Max and current total infectiousness are the same for now until the notion of
     // being present in a setting is implemented
-    context.calculate_total_infectiousness_multiplier_for_person(person_id)    
+    context.calculate_total_infectiousness_multiplier_for_person(person_id)
 }
 
 define_rng!(ForecastRng);
@@ -223,7 +222,6 @@ mod test {
     use crate::{
         infectiousness_manager::{
             InfectionData, InfectionDataValue, InfectionStatus, InfectionStatusValue,
-            TOTAL_INFECTIOUSNESS_MULTIPLIER,
         },
         parameters::{GlobalParams, Params, RateFnType},
         rate_fns::load_rate_fns,
@@ -309,10 +307,7 @@ mod test {
     fn test_calc_total_infectiousness_multiplier() {
         let mut context = setup_context();
         let p1 = context.add_person(()).unwrap();
-        assert_eq!(
-            max_total_infectiousness_multiplier(&context, p1),
-            TOTAL_INFECTIOUSNESS_MULTIPLIER
-        );
+        assert_eq!(max_total_infectiousness_multiplier(&context, p1), 1.0);
     }
 
     #[test]
@@ -338,7 +333,7 @@ mod test {
         let p1 = context.add_person(()).unwrap();
         context.infect_person(p1, None);
 
-        let invalid_forecast = TOTAL_INFECTIOUSNESS_MULTIPLIER - 0.1;
+        let invalid_forecast = 1.0 - 0.1;
         evaluate_forecast(&mut context, p1, invalid_forecast);
     }
 
