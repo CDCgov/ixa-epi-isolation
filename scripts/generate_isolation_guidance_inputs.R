@@ -76,3 +76,27 @@ write_csv(trajectories,
   ),
   col_names = TRUE
 )
+
+sampled_params <- sampled_params |>
+  dplyr::mutate(
+    si_scale =
+      calculate_weibull_scale(
+        sampled_params$si_beta_0_exponentiated,
+        sampled_params$si_beta_wr,
+        sampled_params$wr,
+        sampled_params$wr_mean,
+        sampled_params$wr_std
+      )
+  )
+
+symptom_parameters <- sampled_params |>
+  dplyr::mutate(id = row_number()) |>
+  dplyr::select(id, symp_type_cat, si_shape, si_scale)
+
+write_csv(symptom_parameters,
+  file.path(
+    "..", "ixa-epi-isolation", "input",
+    "library_symptom_parameters.csv"
+  ),
+  col_names = TRUE
+)
