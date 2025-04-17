@@ -8,8 +8,8 @@ use std::path::PathBuf;
 
 use crate::parameters::{ContextParametersExt, Params};
 use crate::settings::{
-    CensusTract, ContextSettingExt, Home, ItineraryEntry, School, SettingId, SettingProperties,
-    Workplace,
+    CensusTract, ContextSettingExt, Home, ItineraryEntry, School, SettingId,
+    Workplace
 };
 
 #[derive(Deserialize, Debug)]
@@ -80,13 +80,6 @@ pub fn init(context: &mut Context) -> Result<(), IxaError> {
         synth_population_file,
         ..
     } = context.get_params().clone();
-
-    // TODO: These properties should come from somewhere and
-    // registering setting type should look different with expandable setting properties
-    context.register_setting_type(Home {}, SettingProperties { alpha: 0.1 });
-    context.register_setting_type(CensusTract {}, SettingProperties { alpha: 0.01 });
-    context.register_setting_type(Workplace {}, SettingProperties { alpha: 0.05 });
-    context.register_setting_type(School {}, SettingProperties { alpha: 0.01 });
 
     load_synth_population(context, synth_population_file.clone())?;
     Ok(())

@@ -114,6 +114,7 @@ mod test {
             report_period: 1.0,
             synth_population_file: PathBuf::from("."),
             transmission_report_name: None,
+            settings_properties: vec![],
         };
         context.init_random(parameters.seed);
         context
@@ -252,7 +253,9 @@ mod test {
             load_rate_fns(&mut context).unwrap();
             // Add our infectious fellow.
             let infectious_person = context.add_person(()).unwrap();
+
             global_mixing_itinerary(&mut context, 1.0);
+
             context.infect_person(infectious_person, None);
             // Get the total infectiousness multiplier for comparison to total number of infections.
             if total_infectiousness_multiplier.is_none() {

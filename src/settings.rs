@@ -5,6 +5,7 @@ use std::collections::HashMap;
 use std::collections::HashSet;
 use std::hash::Hash;
 use std::marker::PhantomData;
+use crate::parameters::{ContextParametersExt, Params};
 
 define_rng!(SettingsRng);
 
@@ -326,6 +327,23 @@ impl ContextSettingExt for Context {
             )
         } else {
             None
+        }
+    }
+}
+
+pub fn init(context: &mut Context) {
+    let &Params {
+        settings_properties,
+        ..
+    } = context.get_params();
+
+    for (setting_name, alpha) in settings_properties {
+        match setting_name.as_ref() {
+            "Home" => context.register_setting_type(Home {}, SettingProperties { alpha }),
+            "CensusTract" => context.register_setting_type(CensusTract {}, SettingProperties { alpha }),
+            "School" => context.register_setting_type(School {}, SettingProperties { alpha }),
+            "Workplace" => context.register_setting_type(Workplace {}, SettingProperties { alpha }),
+            _ => panic!("Unknown setting type: {}", setting_name),
         }
     }
 }

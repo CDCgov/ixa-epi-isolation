@@ -47,6 +47,7 @@ fn main() {
 
         // Load the synthetic population from the `synthetic_population_file`
         // specified in input.json.
+        settings::init(context);
         population_loader::init(context)?;
         context.index_property(Age);
 
