@@ -4,6 +4,12 @@
     "seed": 123,
     "infectiousness_rate_fn": {"Constant": {"rate": 1.0, "duration": 5.0}},
     "initial_infections": 1,
+    "settings_properties": [
+      ["Home", 0.1],
+      ["Workplace", 0.1],
+      ["School", 0.1],
+      ["CensusTract", 0.1]
+    ],
     "report_period": 1.0,
     "synth_population_file": "input/people_test.csv"
   }

@@ -105,6 +105,7 @@ mod test {
                 "infectiousness_rate_fn": {"Constant": {"rate": 1.0, "duration": 5.0}},
                 "initial_infections": 1,
                 "report_period": 1.0,
+                "settings_properties": [],
                 "synth_population_file": "input/people_test.csv"
                 }
             }
@@ -124,6 +125,7 @@ mod test {
                 "infectiousness_rate_fn": {"Constant": {"rate": 1.0, "duration": 5.0}},
                 "initial_infections": 1,
                 "report_period": 1.0,
+                "settings_properties": [],
                 "synth_population_file": "input/people_test.csv",
                 "transmission_report_name": "output.csv"
                 }
@@ -145,6 +147,7 @@ mod test {
                 "infectiousness_rate_fn": {"Constant": {"rate": 1.0, "duration": 5.0}},
                 "initial_infections": 1,
                 "report_period": 1.0,
+                "settings_properties": [],
                 "synth_population_file": "input/people_test.csv",
                 "transmission_report_name": "output.csv"
                 }
