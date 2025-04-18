@@ -111,18 +111,25 @@ fn event_subscriptions(context: &mut Context) {
 
 #[cfg(test)]
 mod test {
-    use std::path::PathBuf;
+    use std::{cell::RefCell, path::PathBuf, rc::Rc};
 
-    use super::init;
+    use super::{init, SymptomData, SymptomValue};
     use crate::{
         infectiousness_manager::InfectionContextExt,
         parameters::{GlobalParams, RateFnType},
+        property_progression_manager::Progression,
         rate_fns::load_rate_fns,
-        symptom_progression::Symptoms,
+        symptom_progression::{
+            event_subscriptions, schedule_recovery, schedule_symptoms, Symptoms,
+        },
         Params,
     };
 
-    use ixa::{Context, ContextGlobalPropertiesExt, ContextPeopleExt, ContextRandomExt};
+    use ixa::{
+        Context, ContextGlobalPropertiesExt, ContextPeopleExt, ContextRandomExt,
+        PersonPropertyChangeEvent,
+    };
+    use statrs::distribution::{Exp, Weibull};
 
     fn setup() -> Context {
         let mut context = Context::new();
@@ -147,13 +154,97 @@ mod test {
     }
 
     #[test]
+    fn test_schedule_symptoms() {
+        let context = setup();
+        let symptom_data = SymptomData {
+            category: SymptomValue::Category1,
+            incubation_period: Exp::new(5.0).unwrap(),
+            time_to_symptom_improvement: Weibull::new(2.0, 3.0).unwrap(),
+        };
+        let symptoms = schedule_symptoms(&symptom_data, &context);
+        assert_eq!(symptoms.0, Some(SymptomValue::Category1));
+        assert!(symptoms.1 > 0.0); // Check that the time to symptoms is positive
+    }
+
+    #[test]
+    fn test_schedule_recovery() {
+        let context = setup();
+        let symptom_data = SymptomData {
+            category: SymptomValue::Category1,
+            incubation_period: Exp::new(5.0).unwrap(),
+            time_to_symptom_improvement: Weibull::new(2.0, 3.0).unwrap(),
+        };
+        let recovery = schedule_recovery(&symptom_data, &context);
+        assert_eq!(recovery.0, None);
+        assert!(recovery.1 > 0.0); // Check that the time to recovery is positive
+    }
+
+    #[test]
+    fn test_progression_impl_symptom_data() {
+        let symptom_data = SymptomData {
+            category: SymptomValue::Category1,
+            incubation_period: Exp::new(5.0).unwrap(),
+            time_to_symptom_improvement: Weibull::new(2.0, 3.0).unwrap(),
+        };
+        let context = setup();
+        let presymptomatic_next = symptom_data.next(&context, &Some(SymptomValue::Presymptomatic));
+        assert_eq!(
+            presymptomatic_next.unwrap().0,
+            Some(SymptomValue::Category1)
+        );
+        assert!(presymptomatic_next.unwrap().1 > 0.0); // Check that the time to symptoms is positive
+        let category1_next = symptom_data.next(&context, &Some(SymptomValue::Category1));
+        assert!(category1_next.unwrap().0.is_none());
+        assert!(category1_next.unwrap().1 > 0.0); // Check that the time to recovery is positive
+        let none_next = symptom_data.next(&context, &None);
+        assert!(none_next.is_none());
+    }
+
+    #[test]
+    fn test_event_subscriptions() {
+        let mut context = setup();
+        let person = context.add_person(()).unwrap();
+        event_subscriptions(&mut context);
+        context.infect_person(person, None);
+        context.execute();
+        // The person should be presymptomatic
+        assert_eq!(
+            context.get_person_property(person, Symptoms),
+            Some(SymptomValue::Presymptomatic)
+        );
+    }
+
+    #[test]
     fn test_init() {
         let mut context = setup();
         let person = context.add_person(()).unwrap();
         init(&mut context);
         context.infect_person(person, None);
+        // At time 0, the person should become presymptomatic (because `event_subscriptions`)
+        context.add_plan(0.0, move |ctx| {
+            assert_eq!(
+                ctx.get_person_property(person, Symptoms),
+                Some(SymptomValue::Presymptomatic)
+            );
+        });
+        // At some time, the person should be in one of the symptom categories. They should only
+        // ever pass through one of the symptom categories. We don't know which one, because we
+        // don't know what property progression the person is assigned.
+        let assigned_category: Rc<RefCell<Option<SymptomValue>>> = Rc::new(RefCell::new(None));
+        context.subscribe_to_event(move |_, event: PersonPropertyChangeEvent<Symptoms>| {
+            if let Some(symptoms) = event.current {
+                if symptoms == SymptomValue::Presymptomatic {
+                    // Person must be coming from None and going to Presymptomatic
+                    assert!(event.previous.is_none());
+                } else {
+                    assert_eq!(event.previous, Some(SymptomValue::Presymptomatic));
+                    *assigned_category.borrow_mut() = Some(symptoms);
+                }
+            } else if event.current.is_none() {
+                assert!(event.previous != Some(SymptomValue::Presymptomatic));
+                assert_eq!(event.previous, *assigned_category.borrow());
+            }
+        });
         context.execute();
-        // The person should be through their symptom progression
-        assert!(context.get_person_property(person, Symptoms).is_none());
     }
 }
