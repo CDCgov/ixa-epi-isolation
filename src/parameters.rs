@@ -1,6 +1,6 @@
-use std::fmt::Debug;
-use std::path::PathBuf;
+use std::{fmt::Debug, path::PathBuf};
 
+use crate::settings::CoreSettingsTypes;
 use ixa::{define_global_property, ContextGlobalPropertiesExt, IxaError};
 use serde::{Deserialize, Serialize};
 
@@ -23,6 +23,8 @@ pub struct Params {
     pub infectiousness_rate_fn: RateFnType,
     /// The period at which to report tabulated values
     pub report_period: f64,
+    /// Setting properties, currently only the transmission modifier alpha values for each setting
+    pub settings_properties: Vec<(CoreSettingsTypes, f64)>,
     /// The path to the synthetic population file loaded in `population_loader`
     pub synth_population_file: PathBuf,
     /// The path to the transmission report file
@@ -89,6 +91,7 @@ mod test {
             report_period: 1.0,
             synth_population_file: PathBuf::from("."),
             transmission_report_name: None,
+            settings_properties: vec![],
         };
         context
             .set_global_property_value(GlobalParams, parameters)
@@ -113,6 +116,7 @@ mod test {
             report_period: 1.0,
             synth_population_file: PathBuf::from("."),
             transmission_report_name: None,
+            settings_properties: vec![],
         };
         let e = validate_inputs(&parameters).err();
         match e {
