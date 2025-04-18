@@ -1,11 +1,12 @@
+use crate::parameters::{ContextParametersExt, Params};
 use ixa::people::PersonId;
 use ixa::{define_data_plugin, define_rng, Context, ContextRandomExt, IxaError};
+use serde::{Deserialize, Serialize};
 use std::any::TypeId;
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::hash::Hash;
 use std::marker::PhantomData;
-use crate::parameters::{ContextParametersExt, Params};
 
 define_rng!(SettingsRng);
 
@@ -124,6 +125,14 @@ define_setting_type!(Home);
 define_setting_type!(CensusTract);
 define_setting_type!(School);
 define_setting_type!(Workplace);
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub enum CoreSettingsTypes {
+    Home,
+    CensusTract,
+    School,
+    Workplace,
+}
 
 define_data_plugin!(
     SettingDataPlugin,
@@ -332,18 +341,27 @@ impl ContextSettingExt for Context {
 }
 
 pub fn init(context: &mut Context) {
-    let &Params {
+    let Params {
         settings_properties,
         ..
     } = context.get_params();
 
+    let settings_properties = settings_properties.clone();
+
     for (setting_name, alpha) in settings_properties {
-        match setting_name.as_ref() {
-            "Home" => context.register_setting_type(Home {}, SettingProperties { alpha }),
-            "CensusTract" => context.register_setting_type(CensusTract {}, SettingProperties { alpha }),
-            "School" => context.register_setting_type(School {}, SettingProperties { alpha }),
-            "Workplace" => context.register_setting_type(Workplace {}, SettingProperties { alpha }),
-            _ => panic!("Unknown setting type: {}", setting_name),
+        match setting_name {
+            CoreSettingsTypes::Home => {
+                context.register_setting_type(Home {}, SettingProperties { alpha });
+            }
+            CoreSettingsTypes::CensusTract => {
+                context.register_setting_type(CensusTract {}, SettingProperties { alpha });
+            }
+            CoreSettingsTypes::School => {
+                context.register_setting_type(School {}, SettingProperties { alpha });
+            }
+            CoreSettingsTypes::Workplace => {
+                context.register_setting_type(Workplace {}, SettingProperties { alpha });
+            }
         }
     }
 }

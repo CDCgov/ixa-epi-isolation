@@ -8,8 +8,7 @@ use std::path::PathBuf;
 
 use crate::parameters::{ContextParametersExt, Params};
 use crate::settings::{
-    CensusTract, ContextSettingExt, Home, ItineraryEntry, School, SettingId,
-    Workplace
+    CensusTract, ContextSettingExt, Home, ItineraryEntry, School, SettingId, Workplace,
 };
 
 #[derive(Deserialize, Debug)]

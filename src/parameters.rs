@@ -1,6 +1,6 @@
-use std::fmt::Debug;
-use std::path::PathBuf;
+use std::{fmt::Debug, path::PathBuf};
 
+use crate::settings::CoreSettingsTypes;
 use ixa::{define_global_property, ContextGlobalPropertiesExt, IxaError};
 use serde::{Deserialize, Serialize};
 
@@ -24,7 +24,7 @@ pub struct Params {
     /// The period at which to report tabulated values
     pub report_period: f64,
     /// Setting properties, currently only the transmission modifier alpha values for each setting
-    pub settings_properties: Vec<(String, f64)>,
+    pub settings_properties: Vec<(CoreSettingsTypes, f64)>,
     /// The path to the synthetic population file loaded in `population_loader`
     pub synth_population_file: PathBuf,
     /// The path to the transmission report file
