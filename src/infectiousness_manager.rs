@@ -345,11 +345,12 @@ mod test {
     }
 
     #[test]
-    #[should_panic = "Person 0: Forecasted infectiousness must always be greater than or equal to current infectiousness. Current: 0, Forecasted: 0.9"]
+    #[should_panic = "Person 0: Forecasted infectiousness must always be greater than or equal to current infectiousness. Current: 1, Forecasted: 0.9"]
     fn test_assert_evaluate_fails_when_forecast_smaller() {
         let mut context = setup_context();
         let p1 = context.add_person(()).unwrap();
         context.infect_person(p1, None);
+        let _ = context.add_person(()).unwrap();
 
         global_mixing_itinerary(&mut context, 1.0);
 
