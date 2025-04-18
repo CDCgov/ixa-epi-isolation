@@ -1,6 +1,6 @@
 use ixa::{
     define_person_property_with_default, define_rng, Context, ContextPeopleExt, ContextRandomExt,
-    PersonPropertyChangeEvent,
+    PersonId, PersonPropertyChangeEvent,
 };
 use serde::Serialize;
 use statrs::distribution::{Exp, Weibull};
@@ -33,12 +33,17 @@ struct SymptomData {
 
 impl Progression for SymptomData {
     type Value = Option<SymptomValue>;
-    fn next(&self, context: &Context, last: &Self::Value) -> Option<(Self::Value, f64)> {
+    fn next(
+        &self,
+        context: &Context,
+        _person_id: PersonId,
+        last: Self::Value,
+    ) -> Option<(Self::Value, f64)> {
         // People are `None` until they are infected and after their symptoms have improved.
         if let Some(symptoms) = last {
             // People become presymptomatic when they are infected.
             // If they are presymptomatic, we schedule their symptom development.
-            if symptoms == &SymptomValue::Presymptomatic {
+            if symptoms == SymptomValue::Presymptomatic {
                 return Some(schedule_symptoms(self, context));
             }
             // Otherwise, person is currently experiencing symptoms, so schedule recovery.
@@ -186,17 +191,19 @@ mod test {
             incubation_period: Exp::new(5.0).unwrap(),
             time_to_symptom_improvement: Weibull::new(2.0, 3.0).unwrap(),
         };
-        let context = setup();
-        let presymptomatic_next = symptom_data.next(&context, &Some(SymptomValue::Presymptomatic));
+        let mut context = setup();
+        let person = context.add_person(()).unwrap();
+        let presymptomatic_next =
+            symptom_data.next(&context, person, Some(SymptomValue::Presymptomatic));
         assert_eq!(
             presymptomatic_next.unwrap().0,
             Some(SymptomValue::Category1)
         );
         assert!(presymptomatic_next.unwrap().1 > 0.0); // Check that the time to symptoms is positive
-        let category1_next = symptom_data.next(&context, &Some(SymptomValue::Category1));
+        let category1_next = symptom_data.next(&context, person, Some(SymptomValue::Category1));
         assert!(category1_next.unwrap().0.is_none());
         assert!(category1_next.unwrap().1 > 0.0); // Check that the time to recovery is positive
-        let none_next = symptom_data.next(&context, &None);
+        let none_next = symptom_data.next(&context, person, None);
         assert!(none_next.is_none());
     }
 
