@@ -134,40 +134,6 @@ pub enum CoreSettingsTypes {
     Workplace,
 }
 
-// Define a home setting
-#[derive(Default, Debug, Hash, Eq, PartialEq)]
-pub struct School {}
-
-impl SettingType for School {
-    // Read members and setting_properties as arguments
-    fn calculate_multiplier(
-        &self,
-        members: &[PersonId],
-        setting_properties: SettingProperties,
-    ) -> f64 {
-        let n_members = members.len();
-        #[allow(clippy::cast_precision_loss)]
-        ((n_members - 1) as f64).powf(setting_properties.alpha)
-    }
-}
-
-// Define a home setting
-#[derive(Default, Debug, Hash, Eq, PartialEq)]
-pub struct Workplace {}
-
-impl SettingType for Workplace {
-    // Read members and setting_properties as arguments
-    fn calculate_multiplier(
-        &self,
-        members: &[PersonId],
-        setting_properties: SettingProperties,
-    ) -> f64 {
-        let n_members = members.len();
-        #[allow(clippy::cast_precision_loss)]
-        ((n_members - 1) as f64).powf(setting_properties.alpha)
-    }
-}
-
 define_data_plugin!(
     SettingDataPlugin,
     SettingDataContainer,
