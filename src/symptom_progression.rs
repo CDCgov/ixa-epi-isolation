@@ -7,7 +7,7 @@ use statrs::distribution::{Exp, Weibull};
 
 use crate::{
     infectiousness_manager::{InfectionStatus, InfectionStatusValue},
-    property_progression_manager::{ContextPropertyProgressionExt, PropertyProgression},
+    property_progression_manager::{ContextPropertyProgressionExt, Progression},
 };
 
 define_rng!(SymptomRng);
@@ -31,7 +31,7 @@ struct SymptomData {
     time_to_symptom_improvement: Weibull,
 }
 
-impl PropertyProgression for SymptomData {
+impl Progression for SymptomData {
     type Value = Option<SymptomValue>;
     fn next(&self, context: &Context, last: &Self::Value) -> Option<(Self::Value, f64)> {
         // People are `None` until they are infected and after their symptoms have improved.

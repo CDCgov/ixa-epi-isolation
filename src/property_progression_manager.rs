@@ -10,32 +10,32 @@ use ixa::{
 
 define_rng!(ProgressionRng);
 
-/// Defines a semi-Markovian method for getting the next person property value based on the last.
-pub trait PropertyProgression {
-    /// The value of the person property that is being tracked by the progression.
+/// Defines a semi-Markovian method for getting the next value based on the last.
+pub trait Progression {
+    /// The value being tracked by the progression: usually a person property'es value.
     type Value;
     /// Returns the next value and the time to the next value given the current value and `Context`.
     fn next(&self, context: &Context, last: &Self::Value) -> Option<(Self::Value, f64)>;
 }
 
 #[derive(Default)]
-struct ProgressionsContainer {
+struct PropertyProgressionsContainer {
     progressions: HashMap<TypeId, Vec<Box<dyn Any>>>,
 }
 
 define_data_plugin!(
-    Progressions,
-    ProgressionsContainer,
-    ProgressionsContainer::default()
+    PropertyProgressions,
+    PropertyProgressionsContainer,
+    PropertyProgressionsContainer::default()
 );
 
 pub trait ContextPropertyProgressionExt {
-    /// Registers a method that provides a sequence of person property values and automatically
-    /// changes the values of person properties according to that sequence.
+    /// Registers a method that provides a sequence of person property values and times, and
+    /// automatically changes the values of person properties according to that sequence.
     fn register_property_progression<T: PersonProperty + 'static>(
         &mut self,
         property: T,
-        tracer: impl PropertyProgression<Value = T::Value> + 'static,
+        tracer: impl Progression<Value = T::Value> + 'static,
     );
 }
 
@@ -43,24 +43,24 @@ impl ContextPropertyProgressionExt for Context {
     fn register_property_progression<T: PersonProperty + 'static>(
         &mut self,
         property: T,
-        tracer: impl PropertyProgression<Value = T::Value> + 'static,
+        tracer: impl Progression<Value = T::Value> + 'static,
     ) {
         // Add tracer to data container
-        let container = self.get_data_container_mut(Progressions);
+        let container = self.get_data_container_mut(PropertyProgressions);
         let progressions = container.progressions.entry(TypeId::of::<T>()).or_default();
-        let boxed_tracer = Box::new(tracer) as Box<dyn PropertyProgression<Value = T::Value>>;
+        let boxed_tracer = Box::new(tracer) as Box<dyn Progression<Value = T::Value>>;
         progressions.push(Box::new(boxed_tracer));
         // Subscribe to change events if we have not yet already seen a progression that controls
         // flow for this property
         if progressions.len() == 1 {
             self.subscribe_to_event(move |context, event: PersonPropertyChangeEvent<T>| {
-                let container = context.get_data_container(Progressions).unwrap();
+                let container = context.get_data_container(PropertyProgressions).unwrap();
                 let progressions = container.progressions.get(&TypeId::of::<T>()).unwrap();
                 // Todo(kzs9): Make this not random but rather we pick the same index as the rate
                 // function id/some way of correlation between natural history
                 let id = context.sample_range(ProgressionRng, 0..progressions.len());
                 let tcr = progressions[id]
-                    .downcast_ref::<Box<dyn PropertyProgression<Value = T::Value>>>()
+                    .downcast_ref::<Box<dyn Progression<Value = T::Value>>>()
                     .unwrap()
                     .as_ref();
                 if let Some((next_value, time_to_next)) = tcr.next(context, &event.current) {
@@ -83,13 +83,13 @@ mod test {
 
     use crate::population_loader::Age;
 
-    use super::{ContextPropertyProgressionExt, Progressions, PropertyProgression};
+    use super::{ContextPropertyProgressionExt, Progression, PropertyProgressions};
 
     struct AgeProgression {
         time_to_next_age: f64,
     }
 
-    impl PropertyProgression for AgeProgression {
+    impl Progression for AgeProgression {
         type Value = u8;
         fn next(&self, _context: &Context, last: &Self::Value) -> Option<(Self::Value, f64)> {
             Some((*last + 1, self.time_to_next_age))
@@ -150,18 +150,18 @@ mod test {
         context.register_property_progression(Age, one_yr_progression);
         context.register_property_progression(Age, two_yr_progression);
         // Get out the registered progressions.
-        let container = context.get_data_container(Progressions).unwrap();
+        let container = context.get_data_container(PropertyProgressions).unwrap();
         let progressions = container.progressions.get(&TypeId::of::<Age>()).unwrap();
         assert_eq!(progressions.len(), 2);
         // Inspect the first progression
         let tcr = progressions[0]
-            .downcast_ref::<Box<dyn PropertyProgression<Value = u8>>>()
+            .downcast_ref::<Box<dyn Progression<Value = u8>>>()
             .unwrap()
             .as_ref();
         assert_eq!(tcr.next(&context, &0_u8).unwrap(), (1_u8, 1.0));
         // Same for the second
         let tcr = progressions[1]
-            .downcast_ref::<Box<dyn PropertyProgression<Value = u8>>>()
+            .downcast_ref::<Box<dyn Progression<Value = u8>>>()
             .unwrap()
             .as_ref();
         assert_eq!(tcr.next(&context, &0_u8).unwrap(), (1_u8, 2.0));
