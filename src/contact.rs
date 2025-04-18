@@ -1,5 +1,5 @@
-use ixa::{define_rng, people::Query, Context, ContextPeopleExt, ContextRandomExt, PersonId};
 use crate::settings::ContextSettingExt;
+use ixa::{define_rng, people::Query, Context, ContextPeopleExt, ContextRandomExt, PersonId};
 
 define_rng!(ContactRng);
 
@@ -33,7 +33,7 @@ impl ContextContactExt for Context {
                 possible_contacts[self.sample_range(ContactRng, 0..possible_contacts.len())];
         }
         Some(contact_id)
-    }    
+    }
     fn get_contact_from_settings(&self, transmitter_id: PersonId) -> Option<PersonId> {
         self.draw_contact_from_itinerary(transmitter_id)
     }

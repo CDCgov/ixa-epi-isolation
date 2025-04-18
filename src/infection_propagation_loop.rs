@@ -94,6 +94,9 @@ mod test {
         },
         parameters::{ContextParametersExt, GlobalParams, Params, RateFnType},
         rate_fns::load_rate_fns,
+        settings::{
+            define_setting_type, ContextSettingExt, ItineraryEntry, SettingId, SettingProperties,
+        },
     };
 
     use super::{schedule_recovery, seed_infections};
@@ -111,6 +114,7 @@ mod test {
             report_period: 1.0,
             synth_population_file: PathBuf::from("."),
             transmission_report_name: None,
+            settings_properties: vec![],
         };
         context.init_random(parameters.seed);
         context
@@ -119,12 +123,22 @@ mod test {
         context
     }
 
+    define_setting_type!(Test);
+    fn global_mixing_itinerary(context: &mut Context, alpha: f64) {
+        for i in context.query_people(()) {
+            let itinerary = vec![ItineraryEntry::new(&SettingId::<Test>::new(0), 1.0)];
+            context.add_itinerary(i, itinerary).unwrap();
+        }
+        context.register_setting_type(Test {}, SettingProperties { alpha });
+    }
+
     #[test]
     fn test_seed_infections() {
         let mut context = setup_context(0, 1.0);
         for _ in 0..10 {
             context.add_person(()).unwrap();
         }
+        global_mixing_itinerary(&mut context, 1.0);
         load_rate_fns(&mut context).unwrap();
         seed_infections(&mut context, 5);
         let infectious_count = context
@@ -139,6 +153,7 @@ mod test {
         for _ in 0..10 {
             context.add_person(()).unwrap();
         }
+        global_mixing_itinerary(&mut context, 1.0);
 
         init(&mut context).unwrap();
 
@@ -178,6 +193,7 @@ mod test {
         for _ in 0..=context.get_params().initial_infections {
             context.add_person(()).unwrap();
         }
+        global_mixing_itinerary(&mut context, 1.0);
 
         init(&mut context).unwrap();
 
@@ -216,7 +232,7 @@ mod test {
         // attempt happens quickly, that increases the chance we see another in 1.0 time units, and
         // because there is basically this compensating relationship between the time and the number
         // of events, they "cancel" each other out to give a uniform distribution (handwavingly).
-        let num_sims: u64 = 10000;
+        let num_sims: u64 = 20_000;
         let rate = 1.5;
         // We need the total infectiousness multiplier for the person.
         let mut total_infectiousness_multiplier = None;
@@ -237,6 +253,9 @@ mod test {
             load_rate_fns(&mut context).unwrap();
             // Add our infectious fellow.
             let infectious_person = context.add_person(()).unwrap();
+
+            global_mixing_itinerary(&mut context, 1.0);
+
             context.infect_person(infectious_person, None);
             // Get the total infectiousness multiplier for comparison to total number of infections.
             if total_infectiousness_multiplier.is_none() {
@@ -305,6 +324,7 @@ mod test {
         let mut context = setup_context(0, 0.0);
         load_rate_fns(&mut context).unwrap();
         let person = context.add_person(()).unwrap();
+
         seed_infections(&mut context, 1);
         // For later, we need to get the recovery time from the rate function.
         let recovery_time = context.get_person_rate_fn(person).infection_duration();

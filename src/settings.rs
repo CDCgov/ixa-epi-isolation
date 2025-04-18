@@ -1,5 +1,7 @@
+use crate::parameters::{ContextParametersExt, Params};
 use ixa::people::PersonId;
 use ixa::{define_data_plugin, define_rng, Context, ContextRandomExt, IxaError};
+use serde::{Deserialize, Serialize};
 use std::any::TypeId;
 use std::collections::HashMap;
 use std::collections::HashSet;
@@ -98,69 +100,38 @@ impl SettingDataContainer {
     }
 }
 
-// Define a home setting
-#[derive(Default, Debug, Hash, Eq, PartialEq)]
-pub struct Home {}
+#[macro_export]
+macro_rules! define_setting_type {
+    ($name:ident) => {
+        #[derive(Default, Debug, Hash, Eq, PartialEq)]
+        pub struct $name {}
 
-impl SettingType for Home {
-    // Read members and setting_properties as arguments
-    fn calculate_multiplier(
-        &self,
-        members: &[PersonId],
-        setting_properties: SettingProperties,
-    ) -> f64 {
-        let n_members = members.len();
-        #[allow(clippy::cast_precision_loss)]
-        ((n_members - 1) as f64).powf(setting_properties.alpha)
-    }
+        impl $crate::settings::SettingType for $name {
+            fn calculate_multiplier(
+                &self,
+                members: &[ixa::PersonId],
+                setting_properties: $crate::settings::SettingProperties,
+            ) -> f64 {
+                let n_members = members.len();
+                #[allow(clippy::cast_precision_loss)]
+                ((n_members - 1) as f64).powf(setting_properties.alpha)
+            }
+        }
+    };
 }
+pub use define_setting_type;
 
-#[derive(Default, Debug, Hash, Eq, PartialEq)]
-pub struct CensusTract {}
-impl SettingType for CensusTract {
-    fn calculate_multiplier(
-        &self,
-        members: &[PersonId],
-        setting_properties: SettingProperties,
-    ) -> f64 {
-        let n_members = members.len();
-        #[allow(clippy::cast_precision_loss)]
-        ((n_members - 1) as f64).powf(setting_properties.alpha)
-    }
-}
+define_setting_type!(Home);
+define_setting_type!(CensusTract);
+define_setting_type!(School);
+define_setting_type!(Workplace);
 
-// Define a home setting
-#[derive(Default, Debug, Hash, Eq, PartialEq)]
-pub struct School {}
-
-impl SettingType for School {
-    // Read members and setting_properties as arguments
-    fn calculate_multiplier(
-        &self,
-        members: &[PersonId],
-        setting_properties: SettingProperties,
-    ) -> f64 {
-        let n_members = members.len();
-        #[allow(clippy::cast_precision_loss)]
-        ((n_members - 1) as f64).powf(setting_properties.alpha)
-    }
-}
-
-// Define a home setting
-#[derive(Default, Debug, Hash, Eq, PartialEq)]
-pub struct Workplace {}
-
-impl SettingType for Workplace {
-    // Read members and setting_properties as arguments
-    fn calculate_multiplier(
-        &self,
-        members: &[PersonId],
-        setting_properties: SettingProperties,
-    ) -> f64 {
-        let n_members = members.len();
-        #[allow(clippy::cast_precision_loss)]
-        ((n_members - 1) as f64).powf(setting_properties.alpha)
-    }
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub enum CoreSettingsTypes {
+    Home,
+    CensusTract,
+    School,
+    Workplace,
 }
 
 define_data_plugin!(
@@ -378,6 +349,32 @@ impl ContextSettingExt for Context {
             )
         } else {
             None
+        }
+    }
+}
+
+pub fn init(context: &mut Context) {
+    let Params {
+        settings_properties,
+        ..
+    } = context.get_params();
+
+    let settings_properties = settings_properties.clone();
+
+    for (setting_name, alpha) in settings_properties {
+        match setting_name {
+            CoreSettingsTypes::Home => {
+                context.register_setting_type(Home {}, SettingProperties { alpha });
+            }
+            CoreSettingsTypes::CensusTract => {
+                context.register_setting_type(CensusTract {}, SettingProperties { alpha });
+            }
+            CoreSettingsTypes::School => {
+                context.register_setting_type(School {}, SettingProperties { alpha });
+            }
+            CoreSettingsTypes::Workplace => {
+                context.register_setting_type(Workplace {}, SettingProperties { alpha });
+            }
         }
     }
 }
