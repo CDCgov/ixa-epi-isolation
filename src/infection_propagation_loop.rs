@@ -3,7 +3,7 @@ use crate::infectiousness_manager::{
     InfectionStatus, InfectionStatusValue,
 };
 use crate::parameters::{ContextParametersExt, Params};
-use crate::rate_fns::rate_fn_storage::load_rate_fns;
+use crate::rate_fns::{load_rate_fns, InfectiousnessRateExt};
 use ixa::{
     define_rng, trace, Context, ContextPeopleExt, IxaError, PersonId, PersonPropertyChangeEvent,
 };
@@ -108,7 +108,7 @@ mod test {
         parameters::{
             ContextParametersExt, GlobalParams, ItinerarySpecificationType, Params, RateFnType,
         },
-        rate_fns::load_rate_fns,
+        rate_fns::{load_rate_fns, InfectiousnessRateExt},
         settings::{ContextSettingExt, ItineraryEntry, SettingId, SettingProperties},
     };
 
