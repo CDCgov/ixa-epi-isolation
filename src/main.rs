@@ -3,8 +3,10 @@ mod infection_propagation_loop;
 mod infectiousness_manager;
 mod parameters;
 mod population_loader;
+mod property_progression_manager;
 pub mod rate_fns;
 mod settings;
+mod symptom_progression;
 mod transmission_report;
 pub mod utils;
 
@@ -53,6 +55,7 @@ fn main() {
 
         infection_propagation_loop::init(context)?;
         transmission_report::init(context)?;
+        symptom_progression::init(context);
 
         Ok(())
     })
