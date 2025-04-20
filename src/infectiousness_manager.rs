@@ -8,7 +8,7 @@ use statrs::distribution::Exp;
 use crate::{
     parameters::{ContextParametersExt, RateFnType},
     population_loader::Alive,
-    rate_fns::{InfectiousnessRateExt, InfectiousnessRateFn, RateFnId, ScaledRateFn},
+    rate_fns::{InfectiousnessRateExt, InfectiousnessRateFn, ScaledRateFn},
     settings::ContextSettingExt,
 };
 
@@ -17,7 +17,6 @@ pub enum InfectionDataValue {
     Susceptible,
     Infectious {
         infection_time: f64,
-        rate_fn_id: RateFnId,
         infected_by: Option<PersonId>,
     },
     Recovered {
@@ -157,7 +156,6 @@ pub trait InfectionContextExt {
     fn infect_person(&mut self, target_id: PersonId, source_id: Option<PersonId>);
     fn recover_person(&mut self, person_id: PersonId);
     fn get_elapsed_infection_time(&self, person_id: PersonId) -> f64;
-    fn get_person_rate_fn(&self, person_id: PersonId) -> &dyn InfectiousnessRateFn;
 }
 
 impl InfectionContextExt for Context {
@@ -166,14 +164,12 @@ impl InfectionContextExt for Context {
     // calculate intrinsic infectiousness
     fn infect_person(&mut self, target_id: PersonId, source_id: Option<PersonId>) {
         let infection_time = self.get_current_time();
-        let rate_fn_id = self.get_random_rate_fn();
         trace!("Person {target_id}: Infected at {infection_time}");
         self.set_person_property(
             target_id,
             InfectionData,
             InfectionDataValue::Infectious {
                 infection_time,
-                rate_fn_id,
                 infected_by: source_id,
             },
         );
@@ -194,15 +190,6 @@ impl InfectionContextExt for Context {
                 infection_time,
             },
         );
-    }
-
-    fn get_person_rate_fn(&self, person_id: PersonId) -> &dyn InfectiousnessRateFn {
-        let InfectionDataValue::Infectious { rate_fn_id, .. } =
-            self.get_person_property(person_id, InfectionData)
-        else {
-            panic!("Person {person_id} is not infectious")
-        };
-        self.get_rate_fn(rate_fn_id)
     }
 
     fn get_elapsed_infection_time(&self, person_id: PersonId) -> f64 {
@@ -228,9 +215,9 @@ mod test {
         infectiousness_manager::{
             InfectionData, InfectionDataValue, InfectionStatus, InfectionStatusValue,
         },
-        parameters::{GlobalParams, ItinerarySpecificationType, Params, RateFnType},
-        rate_fns::load_rate_fns,
-        settings::{ContextSettingExt, ItineraryEntry, SettingId, SettingProperties},
+        parameters::{ItinerarySpecificationType, GlobalParams, Params, RateFnType},
+        rate_fns::{load_rate_fns, InfectiousnessRateExt},
+        settings::{ItineraryEntry, SettingId, ContextSettingExt, SettingProperties},
     };
     use ixa::{
         Context, ContextGlobalPropertiesExt, ContextPeopleExt, ContextRandomExt, IxaError, PersonId,
