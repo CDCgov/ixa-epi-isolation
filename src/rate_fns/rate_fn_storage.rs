@@ -1,17 +1,27 @@
 use std::path::PathBuf;
 
-use ixa::{define_data_plugin, define_rng, Context, ContextRandomExt, IxaError};
-use serde::{Deserialize, Serialize};
+use ixa::{define_data_plugin, define_rng, Context, ContextRandomExt, IxaError, PersonId};
+use serde::Deserialize;
 
-use crate::parameters::{ContextParametersExt, Params, RateFnType};
+use crate::{
+    natural_history_parameters_manager::{ContextNaturalHistoryParametersExt, NaturalHistoryParameter},
+    parameters::{ContextParametersExt, Params, RateFnType}
+};
 
 use super::{rate_fn::InfectiousnessRateFn, ConstantRate, EmpiricalRate};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
-pub struct RateFnId(usize);
+define_rng!(InfectiousnessRng);
 
 struct RateFnContainer {
     rates: Vec<Box<dyn InfectiousnessRateFn>>,
+}
+
+pub struct RateFn;
+
+impl NaturalHistoryParameter for RateFn {
+    fn library_size(&self, context: &Context) -> usize {
+        context.get_data_container(RateFnPlugin).unwrap().rates.len()
+    }
 }
 
 define_data_plugin!(
@@ -20,34 +30,22 @@ define_data_plugin!(
     RateFnContainer { rates: Vec::new() }
 );
 
-define_rng!(InfectiousnessRateRng);
-
 pub trait InfectiousnessRateExt {
-    fn add_rate_fn(&mut self, dist: impl InfectiousnessRateFn + 'static) -> RateFnId;
-    fn get_random_rate_fn(&self) -> RateFnId;
-    fn get_rate_fn(&self, index: RateFnId) -> &dyn InfectiousnessRateFn;
+    fn add_rate_fn(&mut self, dist: impl InfectiousnessRateFn + 'static);
+    fn get_person_rate_fn(&self, person_id: PersonId) -> &dyn InfectiousnessRateFn;
 }
 
 impl InfectiousnessRateExt for Context {
-    fn add_rate_fn(&mut self, dist: impl InfectiousnessRateFn + 'static) -> RateFnId {
+    fn add_rate_fn(&mut self, dist: impl InfectiousnessRateFn + 'static) {
         let container = self.get_data_container_mut(RateFnPlugin);
         container.rates.push(Box::new(dist));
-        RateFnId(container.rates.len() - 1)
     }
 
-    fn get_random_rate_fn(&self) -> RateFnId {
-        let max = self
-            .get_data_container(RateFnPlugin)
-            .expect("Expected rate functions to be loaded.")
-            .rates
-            .len();
-        RateFnId(self.sample_range(InfectiousnessRateRng, 0..max))
-    }
-
-    fn get_rate_fn(&self, index: RateFnId) -> &dyn InfectiousnessRateFn {
+    fn get_person_rate_fn(&self, person_id: PersonId) -> &dyn InfectiousnessRateFn {
+        let id = self.get_parameter_id(RateFn, person_id);
         self.get_data_container(RateFnPlugin)
             .expect("Expected rate functions to be loaded.")
-            .rates[index.0]
+            .rates[id]
             .as_ref()
     }
 }
@@ -68,6 +66,12 @@ pub fn load_rate_fns(context: &mut Context) -> Result<(), IxaError> {
             add_rate_fns_from_file(context, file)?;
         }
     }
+
+    context.register_parameter_id_assignment(RateFn, |context, _| {
+        let container = context.get_data_container(RateFnPlugin).unwrap();
+        let len = container.rates.len();
+        context.sample_range(InfectiousnessRng, 0..len)
+    })?;
     Ok(())
 }
 
@@ -126,7 +130,7 @@ mod tests {
     use crate::parameters::{GlobalParams, Params};
 
     use super::*;
-    use ixa::{Context, ContextGlobalPropertiesExt};
+    use ixa::{Context, ContextGlobalPropertiesExt, ContextPeopleExt};
     use statrs::assert_almost_eq;
 
     struct TestRateFn;
@@ -149,19 +153,25 @@ mod tests {
     fn init_context() -> Context {
         let mut context = Context::new();
         context.init_random(0);
+        context.register_parameter_id_assignment(RateFn, |context, _| {
+            let container = context.get_data_container(RateFnPlugin).unwrap();
+            let len = container.rates.len();
+            context.sample_range(InfectiousnessRng, 0..len)
+        }).unwrap();
         context
     }
 
     #[test]
     fn test_add_rate_fn_and_get_random() {
         let mut context = init_context();
+        let person = context.add_person(()).unwrap();
 
         let rate_fn = TestRateFn {};
         context.add_rate_fn(rate_fn);
-
-        let i = context.get_random_rate_fn();
-        assert!(i.0 == 0);
-        assert_almost_eq!(context.get_rate_fn(i).rate(0.0), 1.0, 0.0);
+        let rate_fns = context.get_data_container(RateFnPlugin).unwrap();
+        assert_eq!(rate_fns.rates.len(), 1);
+        
+        assert_almost_eq!(context.get_person_rate_fn(person).rate(0.0), 1.0, 0.0);
     }
 
     #[test]
