@@ -8,9 +8,9 @@ use ixa::{
 use serde::{Deserialize, Serialize};
 use statrs::distribution::Weibull;
 
+use crate::parameters::ContextParametersExt;
 use crate::{
     infectiousness_manager::{InfectionStatus, InfectionStatusValue},
-    parameters::ContextParametersExt,
     property_progression_manager::{load_progressions, ContextPropertyProgressionExt, Progression},
 };
 
