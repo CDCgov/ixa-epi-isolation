@@ -38,10 +38,10 @@ define_data_plugin!(
 );
 
 pub trait ContextNaturalHistoryParametersExt {
-    fn register_parameter_assignment<T, S, I>(
+    fn register_parameter_id_assignment<T, S, I>(
         &mut self,
         parameter: T,
-        setter: S,
+        assignment_fn: S,
     ) -> Result<(), IxaError>
     where
         T: NaturalHistoryParameter + 'static,
@@ -53,10 +53,10 @@ pub trait ContextNaturalHistoryParametersExt {
 }
 
 impl ContextNaturalHistoryParametersExt for Context {
-    fn register_parameter_assignment<T, S, I>(
+    fn register_parameter_id_assignment<T, S, I>(
         &mut self,
         _parameter: T,
-        setter: S,
+        assignment_fn: S,
     ) -> Result<(), IxaError>
     where
         T: NaturalHistoryParameter + 'static,
@@ -64,17 +64,35 @@ impl ContextNaturalHistoryParametersExt for Context {
         I: NaturalHistoryId + 'static,
     {
         let container = self.get_data_container_mut(NaturalHistoryParameters);
+        
+        // We shouldn't be registering assignment functions for parameters where we've already been
+        // asked to provide an id and defaulted to random assignment. In this case, the assignment
+        // function does not apply to all ids, so the id assignment is ambiguous.
+        if container
+            .ids
+            .borrow()
+            .contains_key(&TypeId::of::<T>())
+        {
+            return Err(IxaError::IxaError(
+                "An id for this parameter has been previously queried, so a new assignment function cannot be specified.
+                If this is desired behavior, register an assignment function that changes from random to the specified
+                behavior at the time at which this assignment is registered.".to_string(),
+            ));
+        }
+        
+        // Only register this assignment function if this parameter does not have a previously
+        // registered assignment function.
         match container.parameter_assignments.entry(TypeId::of::<T>()) {
             Entry::Vacant(_) => {
                 container.parameter_assignments.insert(
                     TypeId::of::<T>(),
-                    Box::new(move |ctx, person_id| Box::new(setter(ctx, person_id))),
+                    Box::new(move |ctx, person_id| Box::new(assignment_fn(ctx, person_id))),
                 );
             }
 
             Entry::Occupied(_) => {
                 return Err(IxaError::IxaError(
-                    "Parameter assignment already registered.".to_string(),
+                    "An assignment function for this parameter has already been registered.".to_string(),
                 ));
             }
         }
@@ -95,7 +113,8 @@ impl ContextNaturalHistoryParametersExt for Context {
         {
             return *potential_id;
         }
-        // Is there an assignment for this parameter?
+
+        // Is there an assignment function for this parameter?
         if let Some(assigner) = container.parameter_assignments.get(&TypeId::of::<T>()) {
             // Get the id from the assignment
             let id = assigner(self, person_id).id();
@@ -108,8 +127,10 @@ impl ContextNaturalHistoryParametersExt for Context {
                 .insert(person_id, id);
             return id;
         }
+
         // Else make a default random assignment and store it
-        let id = self.sample_range(NaturalHistoryParametersRng, 0..parameter.library_size());
+        let library_size = parameter.library_size();
+        let id = self.sample_range(NaturalHistoryParametersRng, 0..library_size);
         container
             .ids
             .borrow_mut()
@@ -137,16 +158,42 @@ mod test {
     }
 
     #[test]
-    fn init() {
-        let mut context = Context::new();
-        context
-            .register_parameter_assignment(ViralLoad, |_ctx, _person_id| 0)
-            .unwrap();
+    fn test_register_vanilla_parameter_id_assignment() {
 
-        context
-            .register_parameter_assignment(ViralLoad, |ctx, person_id| {
-                ctx.get_person_property(person_id, Age) as usize
-            })
-            .unwrap();
+    }
+
+    #[test]
+    fn test_error_register_two_assignments_same_parameter() {
+
+    }
+
+    #[test]
+    fn test_error_register_assignment_after_querying() {
+
+    }
+
+    #[test]
+    fn test_register_multiple_parameter_id_assignments() {
+
+    }
+
+    #[test]
+    fn test_get_parameter_id_registered_assignment() {
+
+    }
+
+    #[test]
+    fn test_get_parameter_id_already_set() {
+
+    }
+
+    #[test]
+    fn test_get_parameter_id_random_assignment() {
+
+    }
+
+    #[test]
+    fn test_get_parameter_id_assignment_has_dependencies() {
+
     }
 }
