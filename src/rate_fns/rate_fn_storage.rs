@@ -3,7 +3,12 @@ use std::path::PathBuf;
 use ixa::{define_data_plugin, define_rng, Context, ContextRandomExt, IxaError, PersonId};
 use serde::Deserialize;
 
-use crate::{natural_history_parameters_manager::{ContextNaturalHistoryParametersExt, NaturalHistoryParameter}, parameters::{ContextParametersExt, RateFnType}};
+use crate::{
+    natural_history_parameter_manager::{
+        ContextNaturalHistoryParameterExt, NaturalHistoryParameter,
+    },
+    parameters::{ContextParametersExt, RateFnType},
+};
 
 use super::{rate_fn::InfectiousnessRateFn, ConstantRate, EmpiricalRate};
 
@@ -17,7 +22,11 @@ pub struct RateFn;
 
 impl NaturalHistoryParameter for RateFn {
     fn library_size(&self, context: &Context) -> usize {
-        context.get_data_container(RateFnPlugin).unwrap().rates.len()
+        context
+            .get_data_container(RateFnPlugin)
+            .unwrap()
+            .rates
+            .len()
     }
 }
 
@@ -47,6 +56,7 @@ impl InfectiousnessRateExt for Context {
     }
 }
 
+#[allow(clippy::missing_panics_doc)]
 /// Turn the information specified in the global parameter `infectiousness_rate_fn` into actual
 /// infectiousness rate functions for the simulation.
 /// # Errors
@@ -142,11 +152,13 @@ mod tests {
     fn init_context() -> Context {
         let mut context = Context::new();
         context.init_random(0);
-        context.register_parameter_id_assignment(RateFn, |context, _| {
-            let container = context.get_data_container(RateFnPlugin).unwrap();
-            let len = container.rates.len();
-            context.sample_range(InfectiousnessRng, 0..len)
-        }).unwrap();
+        context
+            .register_parameter_id_assignment(RateFn, |context, _| {
+                let container = context.get_data_container(RateFnPlugin).unwrap();
+                let len = container.rates.len();
+                context.sample_range(InfectiousnessRng, 0..len)
+            })
+            .unwrap();
         context
     }
 
@@ -159,7 +171,7 @@ mod tests {
         context.add_rate_fn(Box::new(rate_fn));
         let rate_fns = context.get_data_container(RateFnPlugin).unwrap();
         assert_eq!(rate_fns.rates.len(), 1);
-        
+
         assert_almost_eq!(context.get_person_rate_fn(person).rate(0.0), 1.0, 0.0);
     }
 
