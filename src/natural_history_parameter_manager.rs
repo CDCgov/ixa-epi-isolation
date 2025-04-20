@@ -6,7 +6,7 @@ use std::{
 
 use ixa::{define_data_plugin, define_rng, Context, ContextRandomExt, IxaError, PersonId};
 
-define_rng!(NaturalHistoryParametersRng);
+define_rng!(NaturalHistoryParameterRng);
 
 pub trait NaturalHistoryParameter {
     fn library_size(&self, context: &Context) -> usize;
@@ -25,18 +25,18 @@ impl NaturalHistoryId for usize {
 type IdAssigner<I> = dyn Fn(&Context, PersonId) -> I;
 
 #[derive(Default)]
-struct NaturalHistoryParametersContainer {
+struct NaturalHistoryParameterContainer {
     parameter_id_assigners: HashMap<TypeId, Box<IdAssigner<Box<dyn NaturalHistoryId>>>>,
     ids: RefCell<HashMap<TypeId, HashMap<PersonId, usize>>>,
 }
 
 define_data_plugin!(
     NaturalHistoryParameters,
-    NaturalHistoryParametersContainer,
-    NaturalHistoryParametersContainer::default()
+    NaturalHistoryParameterContainer,
+    NaturalHistoryParameterContainer::default()
 );
 
-pub trait ContextNaturalHistoryParametersExt {
+pub trait ContextNaturalHistoryParameterExt {
     fn register_parameter_id_assignment<T, S, I>(
         &mut self,
         parameter: T,
@@ -51,7 +51,7 @@ pub trait ContextNaturalHistoryParametersExt {
         T: NaturalHistoryParameter + 'static;
 }
 
-impl ContextNaturalHistoryParametersExt for Context {
+impl ContextNaturalHistoryParameterExt for Context {
     fn register_parameter_id_assignment<T, S, I>(
         &mut self,
         _parameter: T,
@@ -63,37 +63,32 @@ impl ContextNaturalHistoryParametersExt for Context {
         I: NaturalHistoryId + 'static,
     {
         let container = self.get_data_container_mut(NaturalHistoryParameters);
-        
+
         // We shouldn't be registering assignment functions for parameters where we've already been
         // asked to provide an id and defaulted to random assignment. In this case, the assignment
         // function does not apply to all ids, so the id assignment is ambiguous.
-        if container
-            .ids
-            .borrow()
-            .contains_key(&TypeId::of::<T>())
-        {
+        if container.ids.borrow().contains_key(&TypeId::of::<T>()) {
             return Err(IxaError::IxaError(
                 "An id for this parameter has been previously queried, so a new assignment function cannot be specified.
                 If this is desired behavior, register an assignment function that changes from random to the specified
                 behavior at the time at which this assignment is registered.".to_string(),
             ));
         }
-        
+
         // Only register this assignment function if this parameter does not have a previously
         // registered assignment function.
         match container.parameter_id_assigners.entry(TypeId::of::<T>()) {
             Entry::Vacant(entry) => {
-                entry.insert(
-                    Box::new(move |ctx, person_id| Box::new(assignment_fn(ctx, person_id))),
-                );
+                entry.insert(Box::new(move |ctx, person_id| {
+                    Box::new(assignment_fn(ctx, person_id))
+                }));
                 Ok(())
             }
 
-            Entry::Occupied(_) => {
-                Err(IxaError::IxaError(
-                    "An assignment function for this parameter has already been registered.".to_string(),
-                ))
-            }
+            Entry::Occupied(_) => Err(IxaError::IxaError(
+                "An assignment function for this parameter has already been registered."
+                    .to_string(),
+            )),
         }
     }
 
@@ -128,7 +123,7 @@ impl ContextNaturalHistoryParametersExt for Context {
 
         // Else make a default random assignment and store it
         let library_size = parameter.library_size(self);
-        let id = self.sample_range(NaturalHistoryParametersRng, 0..library_size);
+        let id = self.sample_range(NaturalHistoryParameterRng, 0..library_size);
         container
             .ids
             .borrow_mut()
@@ -145,7 +140,9 @@ mod test {
 
     use ixa::{context::Context, ContextPeopleExt, ContextRandomExt, IxaError};
 
-    use super::{ContextNaturalHistoryParametersExt, NaturalHistoryParameter, NaturalHistoryParameters};
+    use super::{
+        ContextNaturalHistoryParameterExt, NaturalHistoryParameter, NaturalHistoryParameters,
+    };
 
     struct ViralLoad;
 
@@ -168,9 +165,14 @@ mod test {
         context
             .register_parameter_id_assignment(ViralLoad, |_, _| 0)
             .unwrap();
-        let container = context.get_data_container(NaturalHistoryParameters).unwrap();
+        let container = context
+            .get_data_container(NaturalHistoryParameters)
+            .unwrap();
         assert_eq!(container.parameter_id_assigners.len(), 1);
-        let assigner = container.parameter_id_assigners.get(&TypeId::of::<ViralLoad>()).unwrap();
+        let assigner = container
+            .parameter_id_assigners
+            .get(&TypeId::of::<ViralLoad>())
+            .unwrap();
         assert_eq!(assigner(&context, person).id(), 0);
     }
 
@@ -200,7 +202,6 @@ mod test {
         fn library_size(&self, _context: &Context) -> usize {
             1
         }
-        
     }
 
     #[test]
@@ -211,7 +212,7 @@ mod test {
         context
             .register_parameter_id_assignment(ViralLoad, |_, _| 0)
             .unwrap();
-        // This section also tests 
+        // This section also tests
         let result = context.get_parameter_id(AntigenPositivity, person);
         assert_eq!(result, 0);
         let result = context.register_parameter_id_assignment(AntigenPositivity, |_, _| 1);
@@ -231,9 +232,7 @@ mod test {
     }
 
     #[test]
-    fn test_register_multiple_parameter_id_assignments() {
-
-    }
+    fn test_register_multiple_parameter_id_assignments() {}
 
     #[test]
     fn test_get_parameter_id_registered_assignment() {
@@ -250,8 +249,7 @@ mod test {
     fn test_get_parameter_id_already_set() {
         let mut context = init_context();
         let person = context.add_person(()).unwrap();
-        let container = context
-            .get_data_container_mut(NaturalHistoryParameters);
+        let container = context.get_data_container_mut(NaturalHistoryParameters);
         container.ids.borrow_mut().insert(
             TypeId::of::<ViralLoad>(),
             vec![(person, 0)].into_iter().collect(),

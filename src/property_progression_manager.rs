@@ -5,13 +5,16 @@ use std::{
 };
 
 use ixa::{
-    define_data_plugin, Context, ContextPeopleExt, IxaError, PersonId, PersonProperty, PersonPropertyChangeEvent
+    define_data_plugin, Context, ContextPeopleExt, IxaError, PersonId,
+    PersonProperty, PersonPropertyChangeEvent,
 };
 use serde::Deserialize;
 
 use crate::{parameters::ProgressionLibraryType, symptom_progression::SymptomData};
 
-use crate::natural_history_parameters_manager::{ContextNaturalHistoryParametersExt, NaturalHistoryParameter};
+use crate::natural_history_parameter_manager::{
+    ContextNaturalHistoryParameterExt, NaturalHistoryParameter,
+};
 
 /// Defines a semi-Markovian method for getting the next value based on the last.
 /// `T` is the person property being mapped in the progression.
@@ -55,7 +58,10 @@ where
 {
     fn library_size(&self, context: &Context) -> usize {
         let container = context.get_data_container(PropertyProgressions).unwrap();
-        let progressions = container.progressions.get(&TypeId::of::<T>()).expect("Property");
+        let progressions = container
+            .progressions
+            .get(&TypeId::of::<T>())
+            .expect("Property");
         progressions.len()
     }
 }
@@ -77,7 +83,7 @@ impl ContextPropertyProgressionExt for Context {
             self.subscribe_to_event(move |context, event: PersonPropertyChangeEvent<T>| {
                 let container = context.get_data_container(PropertyProgressions).unwrap();
                 let progressions = container.progressions.get(&TypeId::of::<T>()).unwrap();
-                let id = context.get_parameter_id( property, event.person_id);
+                let id = context.get_parameter_id(property, event.person_id);
                 let tcr = progressions[id]
                     .downcast_ref::<Box<dyn Progression<T>>>()
                     .unwrap()
@@ -182,12 +188,10 @@ mod test {
     };
     use statrs::assert_almost_eq;
 
-    use crate::{
-        natural_history_parameters_manager::ContextNaturalHistoryParametersExt,
+    use crate::{natural_history_parameter_manager::ContextNaturalHistoryParameterExt,
         parameters::ProgressionLibraryType,
         population_loader::Age,
-        symptom_progression::{SymptomValue, Symptoms},
-    };
+        symptom_progression::{SymptomValue, Symptoms}};
 
     use super::{
         load_progressions, ContextPropertyProgressionExt, Progression, PropertyProgressions,
@@ -227,7 +231,9 @@ mod test {
     fn test_register_property_progression_automates_moves() {
         let mut context = Context::new();
         context.init_random(0);
-        context.register_parameter_id_assignment(Age, |_, _| 0).unwrap();
+        context
+            .register_parameter_id_assignment(Age, |_, _| 0)
+            .unwrap();
         context.register_property_progression(
             Age,
             AgeProgression {
@@ -320,7 +326,9 @@ mod test {
     fn test_multiple_properties_registered() {
         let mut context = Context::new();
         context.init_random(0);
-        context.register_parameter_id_assignment(Age, |_, _| 0).unwrap();
+        context
+            .register_parameter_id_assignment(Age, |_, _| 0)
+            .unwrap();
         let age_progression = AgeProgression {
             time_to_next_age: 1.0,
         };
