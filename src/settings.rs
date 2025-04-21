@@ -244,13 +244,12 @@ impl ContextSettingExt for Context {
         for itinerary_entry in &itinerary {
             // TODO: If we are changing a person's itinerary, the person_id should be removed from vector
             // This isn't the same as the concept of being present or not.
-            #[allow(clippy::redundant_closure)]
             container
                 .members
                 .entry(itinerary_entry.setting_type)
-                .or_insert_with(|| HashMap::new())
+                .or_default()
                 .entry(itinerary_entry.setting_id)
-                .or_insert_with(|| Vec::new())
+                .or_default()
                 .push(person_id);
         }
         container.itineraries.insert(person_id, itinerary);
@@ -267,10 +266,9 @@ impl ContextSettingExt for Context {
                     return Err(IxaError::from("Duplicated setting".to_string()));
                 }
             }
-            #[allow(clippy::redundant_closure)]
             setting_counts
                 .entry(setting_type)
-                .or_insert_with(|| HashSet::new())
+                .or_default()
                 .insert(setting_id);
 
             let setting_ratio = itinerary_entry.ratio;
@@ -378,12 +376,16 @@ mod test {
             ItineraryEntry::new(&SettingId::<Home>::new(2), 0.5),
             ItineraryEntry::new(&SettingId::<Home>::new(2), 0.5),
         ];
-
-        match context.add_itinerary(person, itinerary) {
-            Err(IxaError::IxaError(msg)) => {
+        let e = context.add_itinerary(person, itinerary).err();
+        match e {
+            Some(IxaError::IxaError(msg)) => {
                 assert_eq!(msg, "Duplicated setting");
             }
-            _ => panic!("Unexpected error in itinerary"),
+            Some(ue) => panic!(
+                "Expected an error that there are duplicate settings. Instead got: {:?}",
+                ue.to_string()
+            ),
+            None => panic!("Expected an error. Instead, validation passed with no errors."),
         }
     }
 
@@ -395,11 +397,13 @@ mod test {
         let person = context.add_person(()).unwrap();
         let itinerary = vec![ItineraryEntry::new(&SettingId::<Home>::new(1), -0.5)];
 
-        match context.add_itinerary(person, itinerary) {
-            Err(IxaError::IxaError(msg)) => {
+        let e = context.add_itinerary(person, itinerary).err();
+        match e {
+            Some(IxaError::IxaError(msg)) => {
                 assert_eq!(msg, "Setting ratio must be greater than or equal to 0");
             }
-            _ => panic!("Unexpected error in itinerary"),
+            Some(ue) => panic!("Expected an error setting ratios should be greater than or equal to 0. Instead got: {:?}", ue.to_string()),
+            None => panic!("Expected an error. Instead, validation passed with no errors."),
         }
     }
 
