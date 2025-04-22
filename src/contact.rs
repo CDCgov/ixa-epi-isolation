@@ -1,4 +1,3 @@
-use crate::settings::ContextSettingExt;
 use ixa::{define_rng, people::Query, Context, ContextPeopleExt, ContextRandomExt, PersonId};
 
 define_rng!(ContactRng);
@@ -8,16 +7,19 @@ pub trait ContextContactExt {
     /// properties, for example `(Alive, true)`.
     /// Returns None if there are no eligible contacts.
     #[allow(dead_code)]
-    fn get_contact<Q: Query>(&self, transmitter_id: PersonId, query: Q) -> Option<PersonId>;
-
-    /// Returns a potential contact from the transmitter give a pre-specified itinerary
-    /// Returns None if there aren't eligible contacts
-    // TODO: include a query
-    fn get_contact_from_settings(&self, transmitter_id: PersonId) -> Option<PersonId>;
+    fn get_population_contact<Q: Query>(
+        &self,
+        transmitter_id: PersonId,
+        query: Q,
+    ) -> Option<PersonId>;
 }
 
 impl ContextContactExt for Context {
-    fn get_contact<Q: Query>(&self, transmitter_id: PersonId, query: Q) -> Option<PersonId> {
+    fn get_population_contact<Q: Query>(
+        &self,
+        transmitter_id: PersonId,
+        query: Q,
+    ) -> Option<PersonId> {
         // Get list of eligible people given the provided query
         let possible_contacts = self.query_people(query);
         if possible_contacts.is_empty()
@@ -34,9 +36,6 @@ impl ContextContactExt for Context {
         }
         Some(contact_id)
     }
-    fn get_contact_from_settings(&self, transmitter_id: PersonId) -> Option<PersonId> {
-        self.draw_contact_from_itinerary(transmitter_id)
-    }
 }
 
 #[cfg(test)]
@@ -52,7 +51,7 @@ mod test {
         let mut context = Context::new();
         context.init_random(108);
         let transmitter = context.add_person((Alive, true)).unwrap();
-        let result = context.get_contact(transmitter, ());
+        let result = context.get_population_contact(transmitter, ());
         assert!(result.is_none());
     }
 
@@ -62,7 +61,7 @@ mod test {
         context.init_random(108);
         let transmitter = context.add_person((IsRunner, false)).unwrap();
         let contact = context.add_person((IsRunner, true)).unwrap();
-        let result = context.get_contact(transmitter, (IsRunner, true));
+        let result = context.get_population_contact(transmitter, (IsRunner, true));
         assert_eq!(result, Some(contact));
     }
 
@@ -74,7 +73,7 @@ mod test {
         context.add_person((Alive, false)).unwrap();
         context.add_person((Alive, false)).unwrap();
 
-        let observed_contact = context.get_contact(transmitter, (Alive, true));
+        let observed_contact = context.get_population_contact(transmitter, (Alive, true));
         assert!(observed_contact.is_none());
     }
 
@@ -89,7 +88,9 @@ mod test {
         context.add_person((Alive, false)).unwrap();
         context.add_person((Alive, false)).unwrap();
 
-        let observed_contact = context.get_contact(transmitter, (Alive, true)).unwrap();
+        let observed_contact = context
+            .get_population_contact(transmitter, (Alive, true))
+            .unwrap();
         assert_eq!(observed_contact, presumed_contact);
     }
 }
