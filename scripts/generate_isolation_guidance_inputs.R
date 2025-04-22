@@ -89,6 +89,7 @@ sampled_params <- sampled_params |>
       )
   )
 
+# This output format is still a WIP based on what formatting I land in Rust
 symptom_parameters <- sampled_params |>
   dplyr::mutate(id = row_number()) |>
   dplyr::select(id, symp_type_cat, si_shape, si_scale)
