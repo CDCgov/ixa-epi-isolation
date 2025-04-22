@@ -1,12 +1,16 @@
 use std::{
     any::{Any, TypeId},
     collections::HashMap,
+    path::PathBuf,
 };
 
 use ixa::{
-    define_data_plugin, define_rng, Context, ContextPeopleExt, ContextRandomExt, PersonId,
-    PersonProperty, PersonPropertyChangeEvent,
+    define_data_plugin, define_rng, Context, ContextPeopleExt, ContextRandomExt, IxaError,
+    PersonId, PersonProperty, PersonPropertyChangeEvent,
 };
+use serde::Deserialize;
+
+use crate::symptom_progression::SymptomData;
 
 define_rng!(ProgressionRng);
 
@@ -79,6 +83,65 @@ impl ContextPropertyProgressionExt for Context {
                     });
                 }
             });
+        }
+    }
+}
+
+#[derive(Deserialize, PartialEq, Debug)]
+enum ProgressionType {
+    SymptomCategoryData,
+}
+
+#[derive(Deserialize)]
+struct ProgressionRecord {
+    id: u8,
+    progression_type: ProgressionType,
+    parameter_name: String,
+    distribution_parameter: f64,
+}
+
+pub fn read_progression_library(context: &mut Context, file: PathBuf) -> Result<(), IxaError> {
+    let mut reader = csv::Reader::from_path(file)?;
+    let mut reader = reader.deserialize::<ProgressionRecord>();
+    // Pop out the first record so we can initialize the trackers
+    let record = reader.next().unwrap()?;
+    let mut last_id = record.id;
+    let mut last_progression_type = record.progression_type;
+    let mut parameter_names = vec![record.parameter_name];
+    let mut parameters = vec![record.distribution_parameter];
+    for record in reader {
+        let record = record?;
+        if record.id == last_id {
+            // Check if the distribution struct is the same
+            if record.progression_type != last_progression_type {
+                return Err(IxaError::IxaError(format!(
+                    "Progression type mismatch: expected {:?}, got {:?}",
+                    last_progression_type, record.progression_type
+                )));
+            }
+            // Add to the current parameter vector
+            parameter_names.push(record.parameter_name);
+            parameters.push(record.distribution_parameter);
+        } else {
+            // Take the last values of times and values and make them into a rate function
+            if !parameters.is_empty() {
+                match last_progression_type {
+                    ProgressionType::SymptomCategoryData => {
+                        SymptomData::register(context, &parameter_names, &parameters)?;
+                    }
+                };
+                last_id = record.id;
+                last_progression_type = record.progression_type;
+            }
+            // Start the new values off
+            parameter_names = vec![record.parameter_name];
+            parameters = vec![record.distribution_parameter];
+        }
+    }
+    // Add the last progression in the CSV
+    match last_progression_type {
+        ProgressionType::SymptomCategoryData => {
+            SymptomData::register(context, &parameter_names, &parameters)
         }
     }
 }

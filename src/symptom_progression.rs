@@ -1,18 +1,23 @@
 use ixa::{
     define_person_property_with_default, define_rng, Context, ContextPeopleExt, ContextRandomExt,
-    PersonId, PersonPropertyChangeEvent,
+    IxaError, PersonId, PersonPropertyChangeEvent,
 };
-use serde::Serialize;
-use statrs::distribution::{Exp, Weibull};
+use rand::Rng;
+use serde::{Deserialize, Serialize};
+use serde_json::from_str;
+use statrs::distribution::{ContinuousCDF, Weibull};
 
 use crate::{
     infectiousness_manager::{InfectionStatus, InfectionStatusValue},
-    property_progression_manager::{ContextPropertyProgressionExt, Progression},
+    parameters::ContextParametersExt,
+    property_progression_manager::{
+        read_progression_library, ContextPropertyProgressionExt, Progression,
+    },
 };
 
 define_rng!(SymptomRng);
 
-#[derive(PartialEq, Copy, Clone, Debug, Serialize)]
+#[derive(PartialEq, Copy, Clone, Debug, Serialize, Deserialize)]
 pub enum SymptomValue {
     Presymptomatic,
     Category1,
@@ -25,10 +30,111 @@ define_person_property_with_default!(Symptoms, Option<SymptomValue>, None);
 
 /// Stores information about a symptom progression (presymptomatic -> category{1..=4} -> None).
 /// Includes details about the incubation period and time to symptom improvement distributions.
-struct SymptomData {
+pub struct SymptomData {
     category: SymptomValue,
-    incubation_period: Exp,
-    time_to_symptom_improvement: Weibull,
+    incubation_period: LowerTruncatedLogNormal,
+    time_to_symptom_improvement: UpperTruncatedDiscreteWeibull,
+}
+
+#[derive(Copy, Clone)]
+struct LowerTruncatedLogNormal {
+    mean: f64,
+    std_dev: f64,
+    lower_bound: f64,
+}
+
+impl LowerTruncatedLogNormal {
+    fn new(mean: f64, std_dev: f64, lower_bound: f64) -> Result<Self, IxaError> {
+        if mean <= 0.0 {
+            return Err(IxaError::IxaError(
+                "Mean of log-normal distribution must be positive.".to_string(),
+            ));
+        }
+        if std_dev <= 0.0 {
+            return Err(IxaError::IxaError(
+                "Standard deviation of log-normal distribution must be positive.".to_string(),
+            ));
+        }
+        Ok(Self {
+            mean,
+            std_dev,
+            lower_bound,
+        })
+    }
+}
+
+#[derive(Copy, Clone)]
+struct UpperTruncatedDiscreteWeibull {
+    shape: f64,
+    scale: f64,
+    upper_bound: f64,
+}
+
+impl UpperTruncatedDiscreteWeibull {
+    fn new(shape: f64, scale: f64, upper_bound: f64) -> Result<Self, IxaError> {
+        if shape <= 0.0 {
+            return Err(IxaError::IxaError(
+                "Shape of Weibull distribution must be positive.".to_string(),
+            ));
+        }
+        if scale <= 0.0 {
+            return Err(IxaError::IxaError(
+                "Scale of Weibull distribution must be positive.".to_string(),
+            ));
+        }
+        Ok(Self {
+            shape,
+            scale,
+            upper_bound,
+        })
+    }
+}
+
+impl SymptomData {
+    pub fn register(
+        context: &mut Context,
+        parameter_names: &[String],
+        parameters: &[f64],
+    ) -> Result<(), IxaError> {
+        assert_eq!(
+            parameter_names.len(),
+            parameters.len(),
+            "Parameter names and parameters must be of the same length."
+        );
+        // The first parameter is the symptom category name, the next three are the
+        // parameters for the incubation period distribution, and the final three are
+        // the parameters for the Weibull distribution.
+        if parameter_names.len() != 7 {
+            return Err(IxaError::IxaError(format!(
+                "Parameters should be of length 7, but got {}",
+                parameter_names.len()
+            )));
+        }
+
+        // Get out the symptom category name
+        let category: SymptomValue = from_str(&parameter_names[0])?;
+        if !parameters[0].is_nan() {
+            return Err(IxaError::IxaError(format!(
+                            "Parameter associated with specifying the symptom category name should be NaN, but got {}",
+                            parameters[0]
+                        )));
+        }
+
+        // Get out the incubation period parameters
+        let incubation_period =
+            LowerTruncatedLogNormal::new(parameters[1], parameters[2], parameters[3])?;
+
+        // Get out the Weibull parameters
+        let time_to_symptom_improvement =
+            UpperTruncatedDiscreteWeibull::new(parameters[4], parameters[5], parameters[6])?;
+        let progression = SymptomData {
+            category,
+            incubation_period,
+            time_to_symptom_improvement,
+        };
+        context.register_property_progression(Symptoms, progression);
+        Ok(())
+    }
 }
 
 impl Progression<Symptoms> for SymptomData {
@@ -54,49 +160,52 @@ impl Progression<Symptoms> for SymptomData {
 
 fn schedule_symptoms(data: &SymptomData, context: &Context) -> (Option<SymptomValue>, f64) {
     // Draw from the incubation period
-    let time = context.sample_distr(SymptomRng, data.incubation_period);
+    let time = context.sample(SymptomRng, |rng| {
+        let i = data.incubation_period;
+        if i.lower_bound < 0.0 {
+            // Just draw from the vanilla log-normal
+            let log_normal = statrs::distribution::LogNormal::new(i.mean, i.std_dev).unwrap();
+            return rng.sample(log_normal);
+        }
+        // To be filled in...
+        rng.gen_range(0.0..1.0)
+    });
     // Assign this person the corresponding symptom category at the given time
     (Some(data.category), time)
 }
 
 fn schedule_recovery(data: &SymptomData, context: &Context) -> (Option<SymptomValue>, f64) {
     // Draw from the time to symptom improvement distribution
-    let time = context.sample_distr(SymptomRng, data.time_to_symptom_improvement);
+    let time = context.sample(SymptomRng, |rng| {
+        let w = data.time_to_symptom_improvement;
+        let random_cdf_value = rng.gen_range(0.0..1.0);
+        // Convert a uniform value to a Weibull sample using inverse transform sampling
+        // We do exactly this analysis in our Stan model.
+        // See function `discrete_weibull_truncated_rng` in the Stan model. For completeness, here's
+        // the sampling code (recall beta = shape, si_scale_inv = 1 / scale):
+        // real log_q = -(si_scale_inv ^ beta);
+        // real days = (log1m_exp(log(random_cdf_value) + discrete_weibull_lcdf(max_si | si_scale_inv, beta)) / log_q) ^ (1 / beta);
+        // return ceil(days);
+        let log_q = -((1.0 / w.scale).powf(w.shape));
+        let days = (f64::ln_1p(
+            -random_cdf_value
+                * Weibull::new(1.0 / w.scale, w.shape)
+                    .unwrap()
+                    .cdf(w.upper_bound),
+        ) / log_q)
+            .powf(1.0 / w.shape);
+        days.ceil()
+    });
     // Schedule the person to recover from their symptoms (`Symptoms` = `None`) at the given time
     (None, time)
 }
 
-pub fn init(context: &mut Context) {
-    // To do (kzs9): Read the symptom progression parameters from a file, more broadly think about
-    // how we can develop some general infrastructure that allows us to read any distributions in
-    // from an external file.
-    // For now, we pretend that we have read in a file that has the parameters and we iterate
-    // through them.
-    // The SymptomData struct lends itself to registering incubation period and time to symptom
-    // improvement distributions either for each symptom category or per-person.
-    let symptom_categories = [
-        SymptomValue::Category1,
-        SymptomValue::Category2,
-        SymptomValue::Category3,
-        SymptomValue::Category4,
-    ];
-    let incubation_period_parameters = [5.0; 4];
-    let time_to_symptom_improvement_parameters = [(2.0, 3.0); 4];
-
-    for idx in 0..symptom_categories.len() {
-        let category = symptom_categories[idx];
-        let incubation_period = Exp::new(incubation_period_parameters[idx]).unwrap();
-        let (shape, scale) = time_to_symptom_improvement_parameters[idx];
-        let time_to_symptom_improvement = Weibull::new(shape, scale).unwrap();
-        let symptom_data = SymptomData {
-            category,
-            incubation_period,
-            time_to_symptom_improvement,
-        };
-        context.register_property_progression(Symptoms, symptom_data);
-    }
+pub fn init(context: &mut Context) -> Result<(), IxaError> {
+    let params = context.get_params();
+    read_progression_library(context, params.synth_population_file.clone())?;
 
     event_subscriptions(context);
+    Ok(())
 }
 
 fn event_subscriptions(context: &mut Context) {
@@ -124,7 +233,8 @@ mod test {
         property_progression_manager::Progression,
         rate_fns::load_rate_fns,
         symptom_progression::{
-            event_subscriptions, schedule_recovery, schedule_symptoms, Symptoms,
+            event_subscriptions, schedule_recovery, schedule_symptoms, LowerTruncatedLogNormal,
+            Symptoms, UpperTruncatedDiscreteWeibull,
         },
         Params,
     };
@@ -133,7 +243,6 @@ mod test {
         Context, ContextGlobalPropertiesExt, ContextPeopleExt, ContextRandomExt,
         PersonPropertyChangeEvent,
     };
-    use statrs::distribution::{Exp, Weibull};
 
     fn setup() -> Context {
         let mut context = Context::new();
@@ -164,8 +273,9 @@ mod test {
         let context = setup();
         let symptom_data = SymptomData {
             category: SymptomValue::Category1,
-            incubation_period: Exp::new(5.0).unwrap(),
-            time_to_symptom_improvement: Weibull::new(2.0, 3.0).unwrap(),
+            incubation_period: LowerTruncatedLogNormal::new(5.0, 1.0, 1.0).unwrap(),
+            time_to_symptom_improvement: UpperTruncatedDiscreteWeibull::new(2.0, 3.0, 28.0)
+                .unwrap(),
         };
         let symptoms = schedule_symptoms(&symptom_data, &context);
         assert_eq!(symptoms.0, Some(SymptomValue::Category1));
@@ -177,8 +287,9 @@ mod test {
         let context = setup();
         let symptom_data = SymptomData {
             category: SymptomValue::Category1,
-            incubation_period: Exp::new(5.0).unwrap(),
-            time_to_symptom_improvement: Weibull::new(2.0, 3.0).unwrap(),
+            incubation_period: LowerTruncatedLogNormal::new(5.0, 1.0, 1.0).unwrap(),
+            time_to_symptom_improvement: UpperTruncatedDiscreteWeibull::new(2.0, 3.0, 28.0)
+                .unwrap(),
         };
         let recovery = schedule_recovery(&symptom_data, &context);
         assert_eq!(recovery.0, None);
@@ -189,8 +300,9 @@ mod test {
     fn test_progression_impl_symptom_data() {
         let symptom_data = SymptomData {
             category: SymptomValue::Category1,
-            incubation_period: Exp::new(5.0).unwrap(),
-            time_to_symptom_improvement: Weibull::new(2.0, 3.0).unwrap(),
+            incubation_period: LowerTruncatedLogNormal::new(5.0, 1.0, 1.0).unwrap(),
+            time_to_symptom_improvement: UpperTruncatedDiscreteWeibull::new(2.0, 3.0, 28.0)
+                .unwrap(),
         };
         let mut context = setup();
         let person = context.add_person(()).unwrap();
@@ -226,7 +338,7 @@ mod test {
     fn test_init() {
         let mut context = setup();
         let person = context.add_person(()).unwrap();
-        init(&mut context);
+        init(&mut context).unwrap();
         context.infect_person(person, None);
         // At time 0, the person should become presymptomatic (because `event_subscriptions`)
         context.add_plan(0.0, move |ctx| {
