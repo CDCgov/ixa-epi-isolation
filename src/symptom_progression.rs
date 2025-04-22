@@ -239,6 +239,7 @@ mod test {
         // ever pass through one of the symptom categories. We don't know which one, because we
         // don't know what property progression the person is assigned.
         let assigned_category: Rc<RefCell<Option<SymptomValue>>> = Rc::new(RefCell::new(None));
+        let assigned_category_clone = assigned_category.clone();
         context.subscribe_to_event(move |_, event: PersonPropertyChangeEvent<Symptoms>| {
             if let Some(symptoms) = event.current {
                 if symptoms == SymptomValue::Presymptomatic {
@@ -246,7 +247,7 @@ mod test {
                     assert!(event.previous.is_none());
                 } else {
                     assert_eq!(event.previous, Some(SymptomValue::Presymptomatic));
-                    *assigned_category.borrow_mut() = Some(symptoms);
+                    *assigned_category_clone.borrow_mut() = Some(symptoms);
                 }
             } else if event.current.is_none() {
                 assert!(event.previous != Some(SymptomValue::Presymptomatic));
