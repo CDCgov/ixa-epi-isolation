@@ -31,7 +31,7 @@ struct SymptomData {
     time_to_symptom_improvement: Weibull,
 }
 
-impl Progression<Option<SymptomValue>> for SymptomData {
+impl Progression<Symptoms> for SymptomData {
     fn next(
         &self,
         context: &Context,
