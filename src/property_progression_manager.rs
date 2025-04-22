@@ -11,16 +11,10 @@ use ixa::{
 define_rng!(ProgressionRng);
 
 /// Defines a semi-Markovian method for getting the next value based on the last.
-pub trait Progression {
-    /// The value being tracked by the progression: usually a person property'es value.
-    type Value;
+/// `V` is value being by the progression: usually the value type of a person property.
+pub trait Progression<V> {
     /// Returns the next value and the time to the next value given the current value and `Context`.
-    fn next(
-        &self,
-        context: &Context,
-        person_id: PersonId,
-        last: Self::Value,
-    ) -> Option<(Self::Value, f64)>;
+    fn next(&self, context: &Context, person_id: PersonId, last: V) -> Option<(V, f64)>;
 }
 
 #[derive(Default)]
@@ -40,7 +34,7 @@ pub trait ContextPropertyProgressionExt {
     fn register_property_progression<T: PersonProperty + 'static>(
         &mut self,
         property: T,
-        tracer: impl Progression<Value = T::Value> + 'static,
+        tracer: impl Progression<T::Value> + 'static,
     );
 }
 
@@ -48,12 +42,12 @@ impl ContextPropertyProgressionExt for Context {
     fn register_property_progression<T: PersonProperty + 'static>(
         &mut self,
         property: T,
-        tracer: impl Progression<Value = T::Value> + 'static,
+        tracer: impl Progression<T::Value> + 'static,
     ) {
         // Add tracer to data container
         let container = self.get_data_container_mut(PropertyProgressions);
         let progressions = container.progressions.entry(TypeId::of::<T>()).or_default();
-        let boxed_tracer = Box::new(tracer) as Box<dyn Progression<Value = T::Value>>;
+        let boxed_tracer = Box::new(tracer) as Box<dyn Progression<T::Value>>;
         progressions.push(Box::new(boxed_tracer));
         // Subscribe to change events if we have not yet already seen a progression that controls
         // flow for this property
@@ -65,7 +59,7 @@ impl ContextPropertyProgressionExt for Context {
                 // function id/some way of correlation between natural history
                 let id = context.sample_range(ProgressionRng, 0..progressions.len());
                 let tcr = progressions[id]
-                    .downcast_ref::<Box<dyn Progression<Value = T::Value>>>()
+                    .downcast_ref::<Box<dyn Progression<T::Value>>>()
                     .unwrap()
                     .as_ref();
                 if let Some((next_value, time_to_next)) =
@@ -100,14 +94,9 @@ mod test {
         time_to_next_age: f64,
     }
 
-    impl Progression for AgeProgression {
-        type Value = u8;
-        fn next(
-            &self,
-            _context: &Context,
-            _person: PersonId,
-            last: Self::Value,
-        ) -> Option<(Self::Value, f64)> {
+    // Age takes on u8 values
+    impl Progression<u8> for AgeProgression {
+        fn next(&self, _context: &Context, _person: PersonId, last: u8) -> Option<(u8, f64)> {
             Some((last + 1, self.time_to_next_age))
         }
     }
@@ -124,7 +113,7 @@ mod test {
         assert_eq!(next_value, 1);
         assert_almost_eq!(time_to_next, 1.0, 0.0);
 
-        let boxed = Box::new(progression) as Box<dyn Progression<Value = u8>>;
+        let boxed = Box::new(progression) as Box<dyn Progression<u8>>;
         let tcr = boxed.as_ref();
         let (next_value, time_to_next) = tcr.next(&context, person, 0).unwrap();
         assert_eq!(next_value, 1);
@@ -192,14 +181,14 @@ mod test {
         assert_eq!(progressions.len(), 2);
         // Inspect the first progression
         let tcr = progressions[0]
-            .downcast_ref::<Box<dyn Progression<Value = u8>>>()
+            .downcast_ref::<Box<dyn Progression<u8>>>()
             .unwrap()
             .as_ref();
         // This age progression has 1.0 time unit to the next age.
         assert_eq!(tcr.next(&context, person, 0).unwrap(), (1, 1.0));
         // Same for the second
         let tcr = progressions[1]
-            .downcast_ref::<Box<dyn Progression<Value = u8>>>()
+            .downcast_ref::<Box<dyn Progression<u8>>>()
             .unwrap()
             .as_ref();
         // This age progression has 2.0 time units to the next age.
@@ -214,14 +203,8 @@ mod test {
         time_to_next: f64,
     }
 
-    impl Progression for RunningShoesProgression {
-        type Value = u8;
-        fn next(
-            &self,
-            _context: &Context,
-            _person_id: PersonId,
-            last: Self::Value,
-        ) -> Option<(Self::Value, f64)> {
+    impl Progression<u8> for RunningShoesProgression {
+        fn next(&self, _context: &Context, _person_id: PersonId, last: u8) -> Option<(u8, f64)> {
             if last >= self.max {
                 return None;
             }
@@ -307,14 +290,8 @@ mod test {
         max_running_shoes: u8,
     }
 
-    impl Progression for ShoesMultiplyProgression {
-        type Value = u8;
-        fn next(
-            &self,
-            context: &Context,
-            person_id: PersonId,
-            last: Self::Value,
-        ) -> Option<(Self::Value, f64)> {
+    impl Progression<u8> for ShoesMultiplyProgression {
+        fn next(&self, context: &Context, person_id: PersonId, last: u8) -> Option<(u8, f64)> {
             let n = context.get_person_property(person_id, NumberRunningShoes);
             if n >= self.max_running_shoes {
                 return None;
@@ -354,13 +331,13 @@ mod test {
             // structs -- in other words, what matters is that they implement the same trait (`Progression`).
             // Inspect the first progression
             let tcr = shoes_progressions[0]
-                .downcast_ref::<Box<dyn Progression<Value = u8>>>()
+                .downcast_ref::<Box<dyn Progression<u8>>>()
                 .unwrap()
                 .as_ref();
             assert_eq!(tcr.next(&context, person, 0).unwrap(), (2, 0.5));
             // Same for the second
             let tcr = shoes_progressions[1]
-                .downcast_ref::<Box<dyn Progression<Value = u8>>>()
+                .downcast_ref::<Box<dyn Progression<u8>>>()
                 .unwrap()
                 .as_ref();
             assert_eq!(tcr.next(&context, person, 1).unwrap(), (2, 0.5));
@@ -374,7 +351,7 @@ mod test {
             .get(&TypeId::of::<NumberRunningShoes>())
             .unwrap();
         let tcr = shoes_progressions[1]
-            .downcast_ref::<Box<dyn Progression<Value = u8>>>()
+            .downcast_ref::<Box<dyn Progression<u8>>>()
             .unwrap()
             .as_ref();
         // Regardless of what we plug in as the last value, we get None because we changed the

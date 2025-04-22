@@ -31,14 +31,13 @@ struct SymptomData {
     time_to_symptom_improvement: Weibull,
 }
 
-impl Progression for SymptomData {
-    type Value = Option<SymptomValue>;
+impl Progression<Option<SymptomValue>> for SymptomData {
     fn next(
         &self,
         context: &Context,
         _person_id: PersonId,
-        last: Self::Value,
-    ) -> Option<(Self::Value, f64)> {
+        last: Option<SymptomValue>,
+    ) -> Option<(Option<SymptomValue>, f64)> {
         // People are `None` until they are infected and after their symptoms have improved.
         if let Some(symptoms) = last {
             // People become presymptomatic when they are infected.
