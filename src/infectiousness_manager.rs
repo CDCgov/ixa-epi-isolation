@@ -217,7 +217,7 @@ mod test {
         infectiousness_manager::{
             InfectionData, InfectionDataValue, InfectionStatus, InfectionStatusValue,
         },
-        parameters::{CoreSettingsTypes, GlobalParams, ItineraryWriteFnType, Params, RateFnType},
+        parameters::{CoreSettingsTypes, GlobalParams, ItineraryWriteFnType, Params, LibraryType},
         rate_fns::load_rate_fns,
     };
     use ixa::{Context, ContextGlobalPropertiesExt, ContextPeopleExt, ContextRandomExt};
@@ -232,7 +232,11 @@ mod test {
                     initial_infections: 1,
                     max_time: 10.0,
                     seed: 0,
-                    infectiousness_rate_fn: RateFnType::Constant {
+                    infectiousness_rate_fn: LibraryType::Constant {
+                        rate: 1.0,
+                        duration: 5.0,
+                    },
+                    symptom_progression_library: LibraryType::Constant {
                         rate: 1.0,
                         duration: 5.0,
                     },

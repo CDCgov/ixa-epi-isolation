@@ -10,7 +10,7 @@ use ixa::{
 };
 use serde::Deserialize;
 
-use crate::symptom_progression::SymptomData;
+use crate::{parameters::LibraryType, symptom_progression::SymptomData};
 
 define_rng!(ProgressionRng);
 
@@ -87,6 +87,39 @@ impl ContextPropertyProgressionExt for Context {
     }
 }
 
+impl<T> Progression<T> for ()
+where
+    T: PersonProperty + 'static,
+{
+    fn next(
+        &self,
+        _context: &Context,
+        _person_id: PersonId,
+        _last: T::Value,
+    ) -> Option<(T::Value, f64)> {
+        None
+    }
+}
+
+pub fn load_progression_library<T>(
+    context: &mut Context,
+    property: T,
+    library: LibraryType,
+) -> Result<(), IxaError>
+where
+    T: PersonProperty + 'static,
+{
+    match library {
+        LibraryType::EmpiricalFromFile { file } => {
+            add_progressions_from_file(context, file)?;
+        }
+        LibraryType::Constant { .. } => {
+            context.register_property_progression(property, ());
+        }
+    };
+    Ok(())
+}
+
 #[derive(Deserialize, PartialEq, Debug)]
 enum ProgressionType {
     SymptomCategoryData,
@@ -100,7 +133,7 @@ struct ProgressionRecord {
     distribution_parameter: f64,
 }
 
-pub fn read_progression_library(context: &mut Context, file: PathBuf) -> Result<(), IxaError> {
+fn add_progressions_from_file(context: &mut Context, file: PathBuf) -> Result<(), IxaError> {
     let mut reader = csv::Reader::from_path(file)?;
     let mut reader = reader.deserialize::<ProgressionRecord>();
     // Pop out the first record so we can initialize the trackers

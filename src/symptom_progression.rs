@@ -11,7 +11,7 @@ use crate::{
     infectiousness_manager::{InfectionStatus, InfectionStatusValue},
     parameters::ContextParametersExt,
     property_progression_manager::{
-        read_progression_library, ContextPropertyProgressionExt, Progression,
+        load_progression_library, ContextPropertyProgressionExt, Progression,
     },
 };
 
@@ -202,7 +202,11 @@ fn schedule_recovery(data: &SymptomData, context: &Context) -> (Option<SymptomVa
 
 pub fn init(context: &mut Context) -> Result<(), IxaError> {
     let params = context.get_params();
-    read_progression_library(context, params.synth_population_file.clone())?;
+    load_progression_library(
+        context,
+        Symptoms,
+        params.symptom_progression_library.clone(),
+    )?;
 
     event_subscriptions(context);
     Ok(())
@@ -229,7 +233,7 @@ mod test {
     use super::{init, SymptomData, SymptomValue};
     use crate::{
         infectiousness_manager::InfectionContextExt,
-        parameters::{GlobalParams, ItineraryWriteFnType, RateFnType},
+        parameters::{GlobalParams, ItineraryWriteFnType, LibraryType},
         property_progression_manager::Progression,
         rate_fns::load_rate_fns,
         symptom_progression::{
@@ -250,7 +254,11 @@ mod test {
             initial_infections: 3,
             max_time: 100.0,
             seed: 0,
-            infectiousness_rate_fn: RateFnType::Constant {
+            infectiousness_rate_fn: LibraryType::Constant {
+                rate: 1.0,
+                duration: 5.0,
+            },
+            symptom_progression_library: LibraryType::Constant {
                 rate: 1.0,
                 duration: 5.0,
             },

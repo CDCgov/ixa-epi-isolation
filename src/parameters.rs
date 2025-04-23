@@ -9,7 +9,7 @@ use ixa::{define_global_property, ContextGlobalPropertiesExt, IxaError};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub enum RateFnType {
+pub enum LibraryType {
     Constant { rate: f64, duration: f64 },
     EmpiricalFromFile { file: PathBuf },
 }
@@ -66,7 +66,9 @@ pub struct Params {
     /// The random seed for the simulation.
     pub seed: u64,
     /// A library of infection rates to assign to infected people.
-    pub infectiousness_rate_fn: RateFnType,
+    pub infectiousness_rate_fn: LibraryType,
+    /// A library of symptom progressions
+    pub symptom_progression_library: LibraryType,
     /// The period at which to report tabulated values
     pub report_period: f64,
     /// Setting properties, currently only the transmission modifier alpha values for each setting
@@ -129,7 +131,7 @@ mod test {
 
     use super::validate_inputs;
     use crate::parameters::{
-        ContextParametersExt, GlobalParams, ItineraryWriteFnType, Params, RateFnType,
+        ContextParametersExt, GlobalParams, ItineraryWriteFnType, Params, LibraryType,
     };
     use std::path::PathBuf;
 
@@ -150,7 +152,11 @@ mod test {
             initial_infections: 1,
             max_time: 100.0,
             seed: 0,
-            infectiousness_rate_fn: RateFnType::Constant {
+            infectiousness_rate_fn: LibraryType::Constant {
+                rate: 1.0,
+                duration: 5.0,
+            },
+            symptom_progression_library: LibraryType::Constant {
                 rate: 1.0,
                 duration: 5.0,
             },
@@ -176,7 +182,11 @@ mod test {
             initial_infections: 1,
             max_time: -100.0,
             seed: 0,
-            infectiousness_rate_fn: RateFnType::Constant {
+            infectiousness_rate_fn: LibraryType::Constant {
+                rate: 1.0,
+                duration: 5.0,
+            },
+            symptom_progression_library: LibraryType::Constant {
                 rate: 1.0,
                 duration: 5.0,
             },
@@ -201,13 +211,13 @@ mod test {
 
     #[test]
     fn test_deserialization_rates() {
-        let deserialized = serde_json::from_str::<RateFnType>(
+        let deserialized = serde_json::from_str::<LibraryType>(
             "{\"Constant\": {\"rate\": 1.0, \"duration\": 5.0}}",
         )
         .unwrap();
         assert_eq!(
             deserialized,
-            RateFnType::Constant {
+            LibraryType::Constant {
                 rate: 1.0,
                 duration: 5.0
             }
