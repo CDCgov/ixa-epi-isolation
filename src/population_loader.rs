@@ -78,7 +78,7 @@ pub fn init(context: &mut Context) -> Result<(), IxaError> {
     let Params {
         synth_population_file,
         ..
-    } = context.get_params().clone();
+    } = context.get_params();
     load_synth_population(context, synth_population_file.clone())?;
     Ok(())
 }

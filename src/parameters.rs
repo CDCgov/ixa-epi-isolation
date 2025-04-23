@@ -9,7 +9,8 @@ pub enum RateFnType {
     EmpiricalFromFile { file: PathBuf },
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
+pub const CORE_SETTING_VARIANTS: usize = 4;
+#[derive(Debug, Clone, Copy, Deserialize, Serialize)]
 pub enum CoreSettingsTypes {
     Home { alpha: f64 },
     School { alpha: f64 },
@@ -31,7 +32,7 @@ pub struct Params {
     /// The period at which to report tabulated values
     pub report_period: f64,
     /// Setting properties, currently only the transmission modifier alpha values for each setting
-    pub settings_properties: Vec<CoreSettingsTypes>,
+    pub settings_properties: [Option<CoreSettingsTypes>; CORE_SETTING_VARIANTS],
     /// The path to the synthetic population file loaded in `population_loader`
     pub synth_population_file: PathBuf,
     /// The path to the transmission report file
@@ -48,6 +49,44 @@ fn validate_inputs(parameters: &Params) -> Result<(), IxaError> {
         return Err(IxaError::IxaError(
             "The report writing period must be non-negative.".to_string(),
         ));
+    }
+
+    let mut variant_counts = [0; CORE_SETTING_VARIANTS];
+    for setting in &parameters.settings_properties {
+        let alpha_value;
+        if let Some(setting) = setting {
+            match setting {
+                CoreSettingsTypes::Home { alpha } => {
+                    alpha_value = *alpha;
+                    variant_counts[0] += 1;
+                }
+                CoreSettingsTypes::School { alpha } => {
+                    alpha_value = *alpha;
+                    variant_counts[1] += 1;
+                }
+                CoreSettingsTypes::Workplace { alpha } => {
+                    alpha_value = *alpha;
+                    variant_counts[2] += 1;
+                }
+                CoreSettingsTypes::CensusTract { alpha } => {
+                    alpha_value = *alpha;
+                    variant_counts[3] += 1;
+                }
+            }
+            if alpha_value < 0.0 {
+                return Err(IxaError::IxaError(
+                    "The alpha values for each setting must be non-negative.".to_string(),
+                ));
+            }
+        }
+    }
+
+    for count in variant_counts {
+        if count > 1 {
+            return Err(IxaError::IxaError(
+                "Each setting type can only have one alpha value.".to_string(),
+            ));
+        }
     }
     Ok(())
 }
@@ -72,7 +111,9 @@ mod test {
     use super::validate_inputs;
     use std::path::PathBuf;
 
-    use crate::parameters::{ContextParametersExt, GlobalParams, Params, RateFnType};
+    use crate::parameters::{
+        ContextParametersExt, GlobalParams, Params, RateFnType, CORE_SETTING_VARIANTS,
+    };
 
     #[test]
     fn test_default_input_file() {
@@ -98,7 +139,7 @@ mod test {
             report_period: 1.0,
             synth_population_file: PathBuf::from("."),
             transmission_report_name: None,
-            settings_properties: vec![],
+            settings_properties: [None; CORE_SETTING_VARIANTS],
         };
         context
             .set_global_property_value(GlobalParams, parameters)
@@ -123,7 +164,7 @@ mod test {
             report_period: 1.0,
             synth_population_file: PathBuf::from("."),
             transmission_report_name: None,
-            settings_properties: vec![],
+            settings_properties: [None; CORE_SETTING_VARIANTS],
         };
         let e = validate_inputs(&parameters).err();
         match e {

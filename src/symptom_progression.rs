@@ -121,7 +121,7 @@ mod test {
     use super::{init, SymptomData, SymptomValue};
     use crate::{
         infectiousness_manager::InfectionContextExt,
-        parameters::{GlobalParams, RateFnType},
+        parameters::{GlobalParams, RateFnType, CORE_SETTING_VARIANTS},
         property_progression_manager::Progression,
         rate_fns::load_rate_fns,
         symptom_progression::{
@@ -149,7 +149,7 @@ mod test {
             report_period: 1.0,
             synth_population_file: PathBuf::from("."),
             transmission_report_name: None,
-            settings_properties: vec![],
+            settings_properties: [None; CORE_SETTING_VARIANTS],
         };
         context.init_random(parameters.seed);
         context

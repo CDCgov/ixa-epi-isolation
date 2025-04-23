@@ -371,27 +371,28 @@ impl ContextSettingExt for Context {
 }
 
 pub fn init(context: &mut Context) {
-    let Params {
+    let &Params {
         settings_properties,
         ..
     } = context.get_params();
 
-    let settings_properties = settings_properties.clone();
-
     for setting in settings_properties {
         match setting {
-            CoreSettingsTypes::Home { alpha } => {
-                context.register_setting_type(Home {}, SettingProperties { alpha });
-            }
-            CoreSettingsTypes::CensusTract { alpha } => {
-                context.register_setting_type(CensusTract {}, SettingProperties { alpha });
-            }
-            CoreSettingsTypes::School { alpha } => {
-                context.register_setting_type(School {}, SettingProperties { alpha });
-            }
-            CoreSettingsTypes::Workplace { alpha } => {
-                context.register_setting_type(Workplace {}, SettingProperties { alpha });
-            }
+            None => {}
+            Some(variant) => match variant {
+                CoreSettingsTypes::Home { alpha } => {
+                    context.register_setting_type(Home {}, SettingProperties { alpha });
+                }
+                CoreSettingsTypes::CensusTract { alpha } => {
+                    context.register_setting_type(CensusTract {}, SettingProperties { alpha });
+                }
+                CoreSettingsTypes::School { alpha } => {
+                    context.register_setting_type(School {}, SettingProperties { alpha });
+                }
+                CoreSettingsTypes::Workplace { alpha } => {
+                    context.register_setting_type(Workplace {}, SettingProperties { alpha });
+                }
+            },
         }
     }
 }

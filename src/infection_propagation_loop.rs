@@ -92,7 +92,9 @@ mod test {
             max_total_infectiousness_multiplier, InfectionContextExt, InfectionData,
             InfectionDataValue,
         },
-        parameters::{ContextParametersExt, GlobalParams, Params, RateFnType},
+        parameters::{
+            ContextParametersExt, GlobalParams, Params, RateFnType, CORE_SETTING_VARIANTS,
+        },
         rate_fns::load_rate_fns,
         settings::{
             define_setting_type, ContextSettingExt, ItineraryEntry, SettingId, SettingProperties,
@@ -114,7 +116,7 @@ mod test {
             report_period: 1.0,
             synth_population_file: PathBuf::from("."),
             transmission_report_name: None,
-            settings_properties: vec![],
+            settings_properties: [None; CORE_SETTING_VARIANTS],
         };
         context.init_random(parameters.seed);
         context
