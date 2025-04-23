@@ -54,8 +54,8 @@ fn validate_inputs(parameters: &Params) -> Result<(), IxaError> {
     let mut variant_counts = [0; CORE_SETTING_VARIANTS];
     for setting in &parameters.settings_properties {
         let alpha_value;
-        if let Some(setting) = setting {
-            match setting {
+        if let Some(variant) = setting {
+            match variant {
                 CoreSettingsTypes::Home { alpha } => {
                     alpha_value = *alpha;
                     variant_counts[0] += 1;

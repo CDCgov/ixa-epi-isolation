@@ -377,9 +377,8 @@ pub fn init(context: &mut Context) {
     } = context.get_params();
 
     for setting in settings_properties {
-        match setting {
-            None => {}
-            Some(variant) => match variant {
+        if let Some(variant) = setting { 
+            match variant {
                 CoreSettingsTypes::Home { alpha } => {
                     context.register_setting_type(Home {}, SettingProperties { alpha });
                 }
@@ -392,7 +391,7 @@ pub fn init(context: &mut Context) {
                 CoreSettingsTypes::Workplace { alpha } => {
                     context.register_setting_type(Workplace {}, SettingProperties { alpha });
                 }
-            },
+            };
         }
     }
 }
