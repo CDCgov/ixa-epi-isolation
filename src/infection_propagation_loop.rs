@@ -123,13 +123,13 @@ mod test {
         context
     }
 
-    define_setting_type!(Test);
+    define_setting_type!(Global);
     fn global_mixing_itinerary(context: &mut Context, alpha: f64) {
         for i in context.query_people(()) {
-            let itinerary = vec![ItineraryEntry::new(&SettingId::<Test>::new(0), 1.0)];
+            let itinerary = vec![ItineraryEntry::new(&SettingId::<Global>::new(0), 1.0)];
             context.add_itinerary(i, itinerary).unwrap();
         }
-        context.register_setting_type(Test {}, SettingProperties { alpha });
+        context.register_setting_type(Global {}, SettingProperties { alpha });
     }
 
     #[test]

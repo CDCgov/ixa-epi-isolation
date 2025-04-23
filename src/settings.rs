@@ -174,7 +174,11 @@ pub trait ContextSettingExt {
         setting_id: SettingId<T>,
         q: Q,
     ) -> Option<PersonId>;
-    fn draw_contact_from_itinerary<Q: Query>(&self, person_id: PersonId, q: Q) -> Option<PersonId>;
+    fn draw_contact_from_transmitter_itinerary<Q: Query>(
+        &self,
+        person_id: PersonId,
+        q: Q,
+    ) -> Option<PersonId>;
 }
 
 trait ContextSettingInternalExt {
@@ -346,7 +350,11 @@ impl ContextSettingExt for Context {
             None
         }
     }
-    fn draw_contact_from_itinerary<Q: Query>(&self, person_id: PersonId, q: Q) -> Option<PersonId> {
+    fn draw_contact_from_transmitter_itinerary<Q: Query>(
+        &self,
+        person_id: PersonId,
+        q: Q,
+    ) -> Option<PersonId> {
         let container = self.get_data_container(SettingDataPlugin).unwrap();
         let mut itinerary_multiplier = Vec::new();
         container.with_itinerary(person_id, |setting_type, setting_props, members, ratio| {
@@ -625,7 +633,7 @@ mod test {
     }
 
     #[test]
-    fn test_draw_contact_from_itinerary() {
+    fn test_draw_contact_from_transmitter_itinerary() {
         /*
         Run 100 times
         - Create 3 people at home, and 3 people at censustract
@@ -674,11 +682,11 @@ mod test {
                 .clone();
 
             let _ = context.add_itinerary(person, itinerary_home);
-            let contact_id_home = context.draw_contact_from_itinerary(person, ());
+            let contact_id_home = context.draw_contact_from_transmitter_itinerary(person, ());
             assert!(home_members.contains(&contact_id_home.unwrap()));
 
             let _ = context.add_itinerary(person, itinerary_censustract);
-            let contact_id_tract = context.draw_contact_from_itinerary(person, ());
+            let contact_id_tract = context.draw_contact_from_transmitter_itinerary(person, ());
             assert!(tract_members.contains(&contact_id_tract.unwrap()));
         }
     }
@@ -686,7 +694,7 @@ mod test {
     define_person_property!(Age, usize);
 
     #[test]
-    fn test_draw_contact_from_itinerary_with_query() {
+    fn test_draw_contact_from_transmitter_itinerary_with_query() {
         /*
         Run 100 times
         - Create 3 people at home, and 3 people at censustract
@@ -736,7 +744,8 @@ mod test {
                 .clone();
 
             let _ = context.add_itinerary(person, itinerary_home);
-            let contact_id_home = context.draw_contact_from_itinerary(person, (Age, 42));
+            let contact_id_home =
+                context.draw_contact_from_transmitter_itinerary(person, (Age, 42));
             assert!(home_members.contains(&contact_id_home.unwrap()));
             assert_eq!(
                 context.get_person_property(contact_id_home.unwrap(), Age),
@@ -744,7 +753,8 @@ mod test {
             );
 
             let _ = context.add_itinerary(person, itinerary_censustract);
-            let contact_id_tract = context.draw_contact_from_itinerary(person, (Age, 42));
+            let contact_id_tract =
+                context.draw_contact_from_transmitter_itinerary(person, (Age, 42));
             assert!(tract_members.contains(&contact_id_tract.unwrap()));
             assert_eq!(
                 context.get_person_property(contact_id_tract.unwrap(), Age),
