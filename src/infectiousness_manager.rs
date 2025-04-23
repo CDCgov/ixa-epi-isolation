@@ -230,7 +230,7 @@ mod test {
             define_setting_type, ContextSettingExt, ItineraryEntry, SettingId, SettingProperties,
         },
     };
-    use ixa::{Context, ContextGlobalPropertiesExt, ContextPeopleExt, ContextRandomExt};
+    use ixa::{Context, ContextGlobalPropertiesExt, ContextPeopleExt, ContextRandomExt, IxaError};
 
     fn setup_context() -> Context {
         let mut context = Context::new();
@@ -258,12 +258,15 @@ mod test {
     }
 
     define_setting_type!(Global);
-    fn global_mixing_itinerary(context: &mut Context, alpha: f64) {
+    fn global_mixing_itinerary(context: &mut Context, alpha: f64) -> Result<(), IxaError> {
+        context.register_setting_type(Global {}, SettingProperties { alpha });
+
         for i in context.query_people(()) {
             let itinerary = vec![ItineraryEntry::new(&SettingId::<Global>::new(0), 1.0)];
-            context.add_itinerary(i, itinerary).unwrap();
+            context.add_itinerary(i, itinerary)?;
         }
-        context.register_setting_type(Global {}, SettingProperties { alpha });
+
+        Ok(())
     }
 
     #[test]
@@ -322,7 +325,7 @@ mod test {
         let mut context = setup_context();
         let p1 = context.add_person(()).unwrap();
 
-        global_mixing_itinerary(&mut context, 1.0);
+        global_mixing_itinerary(&mut context, 1.0).unwrap();
 
         assert_eq!(max_total_infectiousness_multiplier(&context, p1), 0.0);
     }
@@ -335,7 +338,7 @@ mod test {
         context.add_person(()).unwrap();
         context.add_person(()).unwrap();
 
-        global_mixing_itinerary(&mut context, 1.0);
+        global_mixing_itinerary(&mut context, 1.0).unwrap();
 
         context.infect_person(p1, None);
 
@@ -353,7 +356,7 @@ mod test {
         context.infect_person(p1, None);
         let _ = context.add_person(()).unwrap();
 
-        global_mixing_itinerary(&mut context, 1.0);
+        global_mixing_itinerary(&mut context, 1.0).unwrap();
 
         let invalid_forecast = 1.0 - 0.1;
         evaluate_forecast(&mut context, p1, invalid_forecast);
@@ -365,7 +368,7 @@ mod test {
         let index = context.add_person(()).unwrap();
         let contact = context.add_person(()).unwrap();
 
-        global_mixing_itinerary(&mut context, 1.0);
+        global_mixing_itinerary(&mut context, 1.0).unwrap();
 
         context.infect_person(contact, Some(index));
         context.execute();

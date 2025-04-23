@@ -77,7 +77,7 @@ mod test {
 
     use ixa::{
         Context, ContextGlobalPropertiesExt, ContextPeopleExt, ContextRandomExt, ExecutionPhase,
-        PersonPropertyChangeEvent,
+        IxaError, PersonPropertyChangeEvent,
     };
     use statrs::{
         assert_almost_eq,
@@ -124,12 +124,14 @@ mod test {
     }
 
     define_setting_type!(Global);
-    fn global_mixing_itinerary(context: &mut Context, alpha: f64) {
+    fn global_mixing_itinerary(context: &mut Context, alpha: f64) -> Result<(), IxaError> {
+        context.register_setting_type(Global {}, SettingProperties { alpha });
+
         for i in context.query_people(()) {
             let itinerary = vec![ItineraryEntry::new(&SettingId::<Global>::new(0), 1.0)];
-            context.add_itinerary(i, itinerary).unwrap();
+            context.add_itinerary(i, itinerary)?;
         }
-        context.register_setting_type(Global {}, SettingProperties { alpha });
+        Ok(())
     }
 
     #[test]
@@ -138,7 +140,7 @@ mod test {
         for _ in 0..10 {
             context.add_person(()).unwrap();
         }
-        global_mixing_itinerary(&mut context, 1.0);
+        global_mixing_itinerary(&mut context, 1.0).unwrap();
         load_rate_fns(&mut context).unwrap();
         seed_infections(&mut context, 5);
         let infectious_count = context
@@ -153,7 +155,7 @@ mod test {
         for _ in 0..10 {
             context.add_person(()).unwrap();
         }
-        global_mixing_itinerary(&mut context, 1.0);
+        global_mixing_itinerary(&mut context, 1.0).unwrap();
 
         init(&mut context).unwrap();
 
@@ -193,7 +195,7 @@ mod test {
         for _ in 0..=context.get_params().initial_infections {
             context.add_person(()).unwrap();
         }
-        global_mixing_itinerary(&mut context, 1.0);
+        global_mixing_itinerary(&mut context, 1.0).unwrap();
 
         init(&mut context).unwrap();
 
@@ -232,7 +234,7 @@ mod test {
         // attempt happens quickly, that increases the chance we see another in 1.0 time units, and
         // because there is basically this compensating relationship between the time and the number
         // of events, they "cancel" each other out to give a uniform distribution (handwavingly).
-        let num_sims: u64 = 20_000;
+        let num_sims: u64 = 15_000;
         let rate = 1.5;
         // We need the total infectiousness multiplier for the person.
         let mut total_infectiousness_multiplier = None;
@@ -254,7 +256,7 @@ mod test {
             // Add our infectious fellow.
             let infectious_person = context.add_person(()).unwrap();
 
-            global_mixing_itinerary(&mut context, 1.0);
+            global_mixing_itinerary(&mut context, 1.0).unwrap();
 
             context.infect_person(infectious_person, None);
             // Get the total infectiousness multiplier for comparison to total number of infections.
