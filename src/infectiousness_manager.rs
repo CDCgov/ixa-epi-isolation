@@ -317,6 +317,17 @@ mod test {
     }
 
     #[test]
+    fn test_calc_total_infectiousness_multiplier_with_contact() {
+        let mut context = setup_context();
+        let p1 = context.add_person(()).unwrap();
+        let p2 = context.add_person(()).unwrap();
+        global_mixing_itinerary(&mut context, 1.0, ()).unwrap();
+
+        assert_eq!(max_total_infectiousness_multiplier(&context, p1), 1.0);
+        assert_eq!(max_total_infectiousness_multiplier(&context, p2), 1.0);
+    }
+
+    #[test]
     fn test_forecast() {
         let mut context = setup_context();
         let p1 = context.add_person(()).unwrap();
