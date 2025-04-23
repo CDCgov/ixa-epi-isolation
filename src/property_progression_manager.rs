@@ -122,7 +122,7 @@ where
 
 #[derive(Deserialize, PartialEq, Debug)]
 enum ProgressionType {
-    SymptomCategoryData,
+    SymptomData,
 }
 
 #[derive(Deserialize)]
@@ -159,7 +159,7 @@ fn add_progressions_from_file(context: &mut Context, file: PathBuf) -> Result<()
             // Take the last values of times and values and make them into a rate function
             if !parameters.is_empty() {
                 match last_progression_type {
-                    ProgressionType::SymptomCategoryData => {
+                    ProgressionType::SymptomData => {
                         SymptomData::register(context, &parameter_names, &parameters)?;
                     }
                 };
@@ -173,7 +173,7 @@ fn add_progressions_from_file(context: &mut Context, file: PathBuf) -> Result<()
     }
     // Add the last progression in the CSV
     match last_progression_type {
-        ProgressionType::SymptomCategoryData => {
+        ProgressionType::SymptomData => {
             SymptomData::register(context, &parameter_names, &parameters)
         }
     }

@@ -5,7 +5,7 @@ use ixa::{
 use rand::Rng;
 use serde::{Deserialize, Serialize};
 use serde_json::from_str;
-use statrs::distribution::{ContinuousCDF, Weibull};
+use statrs::distribution::{ContinuousCDF, LogNormal, Normal, Weibull};
 
 use crate::{
     infectiousness_manager::{InfectionStatus, InfectionStatusValue},
@@ -167,8 +167,21 @@ fn schedule_symptoms(data: &SymptomData, context: &Context) -> (Option<SymptomVa
             let log_normal = statrs::distribution::LogNormal::new(i.mean, i.std_dev).unwrap();
             return rng.sample(log_normal);
         }
-        // To be filled in...
-        rng.gen_range(0.0..1.0)
+        // Use inverse transform sampling
+        // lognormal cdf is Phi((ln(x) - mu) / sigma)
+        // With lower bound truncation this becomes
+        // Phi((ln(x) - mu) / sigma) - Phi((ln(lower_bound) - mu) / sigma)
+        // We can easily see that this function is 0 at x = lower_bound
+        // We want to solve for x, setting this function equal to U(0, 1)
+        // Phi((ln(x) - mu) / sigma) = U(0, 1) + Phi((ln(lower_bound) - mu) / sigma)
+        // ln(x) = mu + sigma * Phi^-1(U(0, 1) + Phi((ln(lower_bound) - mu) / sigma))
+        // x = exp(mu + sigma * Phi^-1(U(0, 1) + Phi((ln(lower_bound) - mu) / sigma)))
+        let lower_bound_cdf = LogNormal::new(i.mean, i.std_dev)
+            .unwrap()
+            .cdf(i.lower_bound);
+        let random_cdf_value = rng.gen_range(0.0..1.0);
+        let phi_inversed = Normal::standard().inverse_cdf(random_cdf_value * lower_bound_cdf);
+        f64::exp(i.mean + i.std_dev * phi_inversed)
     });
     // Assign this person the corresponding symptom category at the given time
     (Some(data.category), time)
