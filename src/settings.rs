@@ -2,7 +2,7 @@ use crate::parameters::{ContextParametersExt, CoreSettingsTypes, Params};
 use ixa::people::PersonId;
 use ixa::{
     define_data_plugin, define_rng, people::Query, Context, ContextPeopleExt, ContextRandomExt,
-    IxaError,
+    IxaError, PersonCreatedEvent,
 };
 
 use std::any::TypeId;
@@ -133,6 +133,7 @@ define_setting_type!(Home);
 define_setting_type!(CensusTract);
 define_setting_type!(School);
 define_setting_type!(Workplace);
+define_setting_type!(Global);
 
 define_data_plugin!(
     SettingDataPlugin,
@@ -370,30 +371,63 @@ impl ContextSettingExt for Context {
     }
 }
 
-pub fn init(context: &mut Context) {
-    let &Params {
+/// Function to assign a Global itinerary item to all individuakls in a query
+/// If the query is empty, future people will be added by subscribing to the `PersonCreatedEvent`
+/// Function must be called after people are added if the simulation is not running and able to listen
+/// for events. People added after global itinerary is set but before `conterxt.execute()` will not have the global itinerary
+pub fn global_mixing_itinerary<Q: Query>(
+    context: &mut Context,
+    mixing_time_proportion: f64,
+    q: Q,
+) -> Result<(), IxaError> {
+    for i in context.query_people(q) {
+        let itinerary = vec![ItineraryEntry::new(
+            &SettingId::<Global>::new(0),
+            mixing_time_proportion,
+        )];
+        context.add_itinerary(i, itinerary)?;
+    }
+    let query = q.get_query();
+    if query.is_empty() {
+        context.subscribe_to_event::<PersonCreatedEvent>(move |context, event| {
+            let person_id = event.person_id;
+            let itinerary = vec![ItineraryEntry::new(
+                &SettingId::<Global>::new(0),
+                mixing_time_proportion,
+            )];
+            context.add_itinerary(person_id, itinerary).unwrap();
+        });
+    }
+    Ok(())
+}
+
+pub fn init(context: &mut Context) -> Result<(), IxaError> {
+    let Params {
         settings_properties,
         ..
     } = context.get_params();
 
-    for setting in settings_properties {
-        if let Some(variant) = setting { 
-            match variant {
-                CoreSettingsTypes::Home { alpha } => {
-                    context.register_setting_type(Home {}, SettingProperties { alpha });
-                }
-                CoreSettingsTypes::CensusTract { alpha } => {
-                    context.register_setting_type(CensusTract {}, SettingProperties { alpha });
-                }
-                CoreSettingsTypes::School { alpha } => {
-                    context.register_setting_type(School {}, SettingProperties { alpha });
-                }
-                CoreSettingsTypes::Workplace { alpha } => {
-                    context.register_setting_type(Workplace {}, SettingProperties { alpha });
-                }
-            };
-        }
+    for setting in &settings_properties.clone() {
+        match setting {
+            CoreSettingsTypes::Home { alpha } => {
+                context.register_setting_type(Home {}, SettingProperties { alpha: *alpha });
+            }
+            CoreSettingsTypes::CensusTract { alpha } => {
+                context.register_setting_type(CensusTract {}, SettingProperties { alpha: *alpha });
+            }
+            CoreSettingsTypes::School { alpha } => {
+                context.register_setting_type(School {}, SettingProperties { alpha: *alpha });
+            }
+            CoreSettingsTypes::Workplace { alpha } => {
+                context.register_setting_type(Workplace {}, SettingProperties { alpha: *alpha });
+            }
+            CoreSettingsTypes::Global { alpha } => {
+                context.register_setting_type(Global {}, SettingProperties { alpha: *alpha });
+                global_mixing_itinerary(context, 1.0, ())?;
+            }
+        };
     }
+    Ok(())
 }
 
 #[cfg(test)]

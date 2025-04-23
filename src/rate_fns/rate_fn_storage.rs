@@ -113,7 +113,7 @@ fn add_rate_fns_from_file(context: &mut Context, file: PathBuf) -> Result<(), Ix
 
 #[cfg(test)]
 mod tests {
-    use crate::parameters::{GlobalParams, Params, CORE_SETTING_VARIANTS};
+    use crate::parameters::{GlobalParams, Params};
 
     use super::*;
     use ixa::{Context, ContextGlobalPropertiesExt};
@@ -168,7 +168,7 @@ mod tests {
             report_period: 1.0,
             synth_population_file: PathBuf::from("."),
             transmission_report_name: None,
-            settings_properties: [None; CORE_SETTING_VARIANTS],
+            settings_properties: vec![],
         };
         context
             .set_global_property_value(GlobalParams, parameters)

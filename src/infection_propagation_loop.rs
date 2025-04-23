@@ -77,7 +77,7 @@ mod test {
 
     use ixa::{
         Context, ContextGlobalPropertiesExt, ContextPeopleExt, ContextRandomExt, ExecutionPhase,
-        IxaError, PersonPropertyChangeEvent,
+        PersonPropertyChangeEvent,
     };
     use statrs::{
         assert_almost_eq,
@@ -92,18 +92,14 @@ mod test {
             max_total_infectiousness_multiplier, InfectionContextExt, InfectionData,
             InfectionDataValue,
         },
-        parameters::{
-            ContextParametersExt, GlobalParams, Params, RateFnType, CORE_SETTING_VARIANTS,
-        },
+        parameters::{ContextParametersExt, CoreSettingsTypes, GlobalParams, Params, RateFnType},
         rate_fns::load_rate_fns,
-        settings::{
-            define_setting_type, ContextSettingExt, ItineraryEntry, SettingId, SettingProperties,
-        },
+        settings::{global_mixing_itinerary, ContextSettingExt, Global, SettingProperties},
     };
 
     use super::{schedule_recovery, seed_infections};
 
-    fn setup_context(seed: u64, rate: f64) -> Context {
+    fn setup_context(seed: u64, rate: f64, alpha: f64) -> Context {
         let mut context = Context::new();
         let parameters = Params {
             initial_infections: 3,
@@ -116,33 +112,23 @@ mod test {
             report_period: 1.0,
             synth_population_file: PathBuf::from("."),
             transmission_report_name: None,
-            settings_properties: [None; CORE_SETTING_VARIANTS],
+            settings_properties: vec![CoreSettingsTypes::Global { alpha }],
         };
         context.init_random(parameters.seed);
         context
             .set_global_property_value(GlobalParams, parameters)
             .unwrap();
-        context
-    }
-
-    define_setting_type!(Global);
-    fn global_mixing_itinerary(context: &mut Context, alpha: f64) -> Result<(), IxaError> {
         context.register_setting_type(Global {}, SettingProperties { alpha });
-
-        for i in context.query_people(()) {
-            let itinerary = vec![ItineraryEntry::new(&SettingId::<Global>::new(0), 1.0)];
-            context.add_itinerary(i, itinerary)?;
-        }
-        Ok(())
+        context
     }
 
     #[test]
     fn test_seed_infections() {
-        let mut context = setup_context(0, 1.0);
+        let mut context = setup_context(0, 1.0, 1.0);
         for _ in 0..10 {
             context.add_person(()).unwrap();
         }
-        global_mixing_itinerary(&mut context, 1.0).unwrap();
+
         load_rate_fns(&mut context).unwrap();
         seed_infections(&mut context, 5);
         let infectious_count = context
@@ -153,11 +139,11 @@ mod test {
 
     #[test]
     fn test_init_loop() {
-        let mut context = setup_context(42, 1.0);
+        let mut context = setup_context(42, 1.0, 1.0);
         for _ in 0..10 {
             context.add_person(()).unwrap();
         }
-        global_mixing_itinerary(&mut context, 1.0).unwrap();
+        global_mixing_itinerary(&mut context, 1.0, ()).unwrap();
 
         init(&mut context).unwrap();
 
@@ -193,11 +179,11 @@ mod test {
 
     #[test]
     fn test_zero_rate_no_infections() {
-        let mut context = setup_context(0, 0.0);
+        let mut context = setup_context(0, 0.0, 1.0);
         for _ in 0..=context.get_params().initial_infections {
             context.add_person(()).unwrap();
         }
-        global_mixing_itinerary(&mut context, 1.0).unwrap();
+        global_mixing_itinerary(&mut context, 1.0, ()).unwrap();
 
         init(&mut context).unwrap();
 
@@ -238,6 +224,7 @@ mod test {
         // of events, they "cancel" each other out to give a uniform distribution (handwavingly).
         let num_sims: u64 = 15_000;
         let rate = 1.5;
+        let alpha = 1.0;
         // We need the total infectiousness multiplier for the person.
         let mut total_infectiousness_multiplier = None;
         // Where we store the infection times.
@@ -246,7 +233,7 @@ mod test {
         for seed in 0..num_sims {
             let infection_times_clone = Rc::clone(&infection_times);
             let num_infected_clone = Rc::clone(&num_infected);
-            let mut context = setup_context(seed, rate);
+            let mut context = setup_context(seed, rate, alpha);
             // We only run the simulation for 1.0 time units.
             context.add_plan_with_phase(1.0, ixa::Context::shutdown, ExecutionPhase::Last);
             // Add a a person who will get infected.
@@ -258,7 +245,8 @@ mod test {
             // Add our infectious fellow.
             let infectious_person = context.add_person(()).unwrap();
 
-            global_mixing_itinerary(&mut context, 1.0).unwrap();
+            //Initiate global mixing to place all people in the same Global setting
+            global_mixing_itinerary(&mut context, 1.0, ()).unwrap();
 
             context.infect_person(infectious_person, None);
             // Get the total infectiousness multiplier for comparison to total number of infections.
@@ -325,7 +313,7 @@ mod test {
 
     #[test]
     fn test_schedule_recovery() {
-        let mut context = setup_context(0, 0.0);
+        let mut context = setup_context(0, 0.0, 1.0);
         load_rate_fns(&mut context).unwrap();
         let person = context.add_person(()).unwrap();
 

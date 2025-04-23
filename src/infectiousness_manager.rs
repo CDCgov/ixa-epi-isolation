@@ -224,13 +224,11 @@ mod test {
         infectiousness_manager::{
             InfectionData, InfectionDataValue, InfectionStatus, InfectionStatusValue,
         },
-        parameters::{GlobalParams, Params, RateFnType, CORE_SETTING_VARIANTS},
+        parameters::{CoreSettingsTypes, GlobalParams, Params, RateFnType},
         rate_fns::load_rate_fns,
-        settings::{
-            define_setting_type, ContextSettingExt, ItineraryEntry, SettingId, SettingProperties,
-        },
+        settings::{global_mixing_itinerary, ContextSettingExt, Global, SettingProperties},
     };
-    use ixa::{Context, ContextGlobalPropertiesExt, ContextPeopleExt, ContextRandomExt, IxaError};
+    use ixa::{Context, ContextGlobalPropertiesExt, ContextPeopleExt, ContextRandomExt};
 
     fn setup_context() -> Context {
         let mut context = Context::new();
@@ -249,24 +247,14 @@ mod test {
                     report_period: 1.0,
                     synth_population_file: PathBuf::from("."),
                     transmission_report_name: None,
-                    settings_properties: [None; CORE_SETTING_VARIANTS],
+                    settings_properties: vec![CoreSettingsTypes::Global { alpha: 1.0 }],
                 },
             )
             .unwrap();
         load_rate_fns(&mut context).unwrap();
+        context.register_setting_type(Global {}, SettingProperties { alpha: 1.0 });
+
         context
-    }
-
-    define_setting_type!(Global);
-    fn global_mixing_itinerary(context: &mut Context, alpha: f64) -> Result<(), IxaError> {
-        context.register_setting_type(Global {}, SettingProperties { alpha });
-
-        for i in context.query_people(()) {
-            let itinerary = vec![ItineraryEntry::new(&SettingId::<Global>::new(0), 1.0)];
-            context.add_itinerary(i, itinerary)?;
-        }
-
-        Ok(())
     }
 
     #[test]
@@ -325,8 +313,6 @@ mod test {
         let mut context = setup_context();
         let p1 = context.add_person(()).unwrap();
 
-        global_mixing_itinerary(&mut context, 1.0).unwrap();
-
         assert_eq!(max_total_infectiousness_multiplier(&context, p1), 0.0);
     }
 
@@ -337,8 +323,7 @@ mod test {
         // Add two additional contacts, which should make the factor 2
         context.add_person(()).unwrap();
         context.add_person(()).unwrap();
-
-        global_mixing_itinerary(&mut context, 1.0).unwrap();
+        global_mixing_itinerary(&mut context, 1.0, ()).unwrap();
 
         context.infect_person(p1, None);
 
@@ -355,8 +340,7 @@ mod test {
         let p1 = context.add_person(()).unwrap();
         context.infect_person(p1, None);
         let _ = context.add_person(()).unwrap();
-
-        global_mixing_itinerary(&mut context, 1.0).unwrap();
+        global_mixing_itinerary(&mut context, 1.0, ()).unwrap();
 
         let invalid_forecast = 1.0 - 0.1;
         evaluate_forecast(&mut context, p1, invalid_forecast);
@@ -367,8 +351,7 @@ mod test {
         let mut context = setup_context();
         let index = context.add_person(()).unwrap();
         let contact = context.add_person(()).unwrap();
-
-        global_mixing_itinerary(&mut context, 1.0).unwrap();
+        global_mixing_itinerary(&mut context, 1.0, ()).unwrap();
 
         context.infect_person(contact, Some(index));
         context.execute();

@@ -9,13 +9,14 @@ pub enum RateFnType {
     EmpiricalFromFile { file: PathBuf },
 }
 
-pub const CORE_SETTING_VARIANTS: usize = 4;
+pub const CORE_SETTING_VARIANTS: usize = 5;
 #[derive(Debug, Clone, Copy, Deserialize, Serialize)]
 pub enum CoreSettingsTypes {
     Home { alpha: f64 },
     School { alpha: f64 },
     Workplace { alpha: f64 },
     CensusTract { alpha: f64 },
+    Global { alpha: f64 },
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -32,7 +33,7 @@ pub struct Params {
     /// The period at which to report tabulated values
     pub report_period: f64,
     /// Setting properties, currently only the transmission modifier alpha values for each setting
-    pub settings_properties: [Option<CoreSettingsTypes>; CORE_SETTING_VARIANTS],
+    pub settings_properties: Vec<CoreSettingsTypes>,
     /// The path to the synthetic population file loaded in `population_loader`
     pub synth_population_file: PathBuf,
     /// The path to the transmission report file
@@ -54,30 +55,33 @@ fn validate_inputs(parameters: &Params) -> Result<(), IxaError> {
     let mut variant_counts = [0; CORE_SETTING_VARIANTS];
     for setting in &parameters.settings_properties {
         let alpha_value;
-        if let Some(variant) = setting {
-            match variant {
-                CoreSettingsTypes::Home { alpha } => {
-                    alpha_value = *alpha;
-                    variant_counts[0] += 1;
-                }
-                CoreSettingsTypes::School { alpha } => {
-                    alpha_value = *alpha;
-                    variant_counts[1] += 1;
-                }
-                CoreSettingsTypes::Workplace { alpha } => {
-                    alpha_value = *alpha;
-                    variant_counts[2] += 1;
-                }
-                CoreSettingsTypes::CensusTract { alpha } => {
-                    alpha_value = *alpha;
-                    variant_counts[3] += 1;
-                }
+        match setting {
+            CoreSettingsTypes::Home { alpha } => {
+                alpha_value = alpha;
+                variant_counts[0] += 1;
             }
-            if alpha_value < 0.0 {
-                return Err(IxaError::IxaError(
-                    "The alpha values for each setting must be non-negative.".to_string(),
-                ));
+            CoreSettingsTypes::School { alpha } => {
+                alpha_value = alpha;
+                variant_counts[1] += 1;
             }
+            CoreSettingsTypes::Workplace { alpha } => {
+                alpha_value = alpha;
+                variant_counts[2] += 1;
+            }
+            CoreSettingsTypes::CensusTract { alpha } => {
+                alpha_value = alpha;
+                variant_counts[3] += 1;
+            }
+            CoreSettingsTypes::Global { alpha } => {
+                alpha_value = alpha;
+                variant_counts[4] += 1;
+            }
+        }
+
+        if *alpha_value < 0.0 {
+            return Err(IxaError::IxaError(
+                "The alpha values for each setting must be non-negative.".to_string(),
+            ));
         }
     }
 
@@ -111,9 +115,7 @@ mod test {
     use super::validate_inputs;
     use std::path::PathBuf;
 
-    use crate::parameters::{
-        ContextParametersExt, GlobalParams, Params, RateFnType, CORE_SETTING_VARIANTS,
-    };
+    use crate::parameters::{ContextParametersExt, GlobalParams, Params, RateFnType};
 
     #[test]
     fn test_default_input_file() {
@@ -139,7 +141,7 @@ mod test {
             report_period: 1.0,
             synth_population_file: PathBuf::from("."),
             transmission_report_name: None,
-            settings_properties: [None; CORE_SETTING_VARIANTS],
+            settings_properties: vec![],
         };
         context
             .set_global_property_value(GlobalParams, parameters)
@@ -164,7 +166,7 @@ mod test {
             report_period: 1.0,
             synth_population_file: PathBuf::from("."),
             transmission_report_name: None,
-            settings_properties: [None; CORE_SETTING_VARIANTS],
+            settings_properties: vec![],
         };
         let e = validate_inputs(&parameters).err();
         match e {
