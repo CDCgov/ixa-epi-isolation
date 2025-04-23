@@ -425,7 +425,7 @@ pub fn init(context: &mut Context) -> Result<(), IxaError> {
                 context.register_setting_type(Global {}, SettingProperties { alpha: *alpha });
                 global_mixing_itinerary(context, 1.0, ())?;
             }
-        };
+        }
     }
     Ok(())
 }
