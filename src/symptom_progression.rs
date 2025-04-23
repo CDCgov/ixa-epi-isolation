@@ -72,14 +72,19 @@ struct UpperTruncatedDiscreteWeibull {
 
 impl UpperTruncatedDiscreteWeibull {
     fn new(shape: f64, scale: f64, upper_bound: f64) -> Result<Self, IxaError> {
-        if shape <= 0.0 {
+        if shape < 0.0 {
             return Err(IxaError::IxaError(
                 "Shape of Weibull distribution must be positive.".to_string(),
             ));
         }
-        if scale <= 0.0 {
+        if scale < 0.0 {
             return Err(IxaError::IxaError(
                 "Scale of Weibull distribution must be positive.".to_string(),
+            ));
+        }
+        if upper_bound < 0.0 {
+            return Err(IxaError::IxaError(
+                "Upper bound of Weibull distribution must be positive.".to_string(),
             ));
         }
         Ok(Self {
@@ -112,7 +117,7 @@ impl SymptomData {
         }
 
         // Get out the symptom category name
-        let category: SymptomValue = from_str(&parameter_names[0])?;
+        let category = from_str(&format!(r#""{}""#, parameter_names[0]))?;
         if !parameters[0].is_nan() {
             return Err(IxaError::IxaError(format!(
                             "Parameter associated with specifying the symptom category name should be NaN, but got {}",

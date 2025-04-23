@@ -123,6 +123,7 @@ where
 #[derive(Deserialize, PartialEq, Debug)]
 enum ProgressionType {
     SymptomData,
+    Unimplemented,
 }
 
 #[derive(Deserialize)]
@@ -130,7 +131,7 @@ struct ProgressionRecord {
     id: u8,
     progression_type: ProgressionType,
     parameter_name: String,
-    distribution_parameter: f64,
+    parameter_value: f64,
 }
 
 fn add_progressions_from_file(context: &mut Context, file: PathBuf) -> Result<(), IxaError> {
@@ -141,7 +142,7 @@ fn add_progressions_from_file(context: &mut Context, file: PathBuf) -> Result<()
     let mut last_id = record.id;
     let mut last_progression_type = record.progression_type;
     let mut parameter_names = vec![record.parameter_name];
-    let mut parameters = vec![record.distribution_parameter];
+    let mut parameters = vec![record.parameter_value];
     for record in reader {
         let record = record?;
         if record.id == last_id {
@@ -154,7 +155,7 @@ fn add_progressions_from_file(context: &mut Context, file: PathBuf) -> Result<()
             }
             // Add to the current parameter vector
             parameter_names.push(record.parameter_name);
-            parameters.push(record.distribution_parameter);
+            parameters.push(record.parameter_value);
         } else {
             // Take the last values of times and values and make them into a rate function
             if !parameters.is_empty() {
@@ -162,13 +163,14 @@ fn add_progressions_from_file(context: &mut Context, file: PathBuf) -> Result<()
                     ProgressionType::SymptomData => {
                         SymptomData::register(context, &parameter_names, &parameters)?;
                     }
+                    ProgressionType::Unimplemented => {}
                 };
                 last_id = record.id;
                 last_progression_type = record.progression_type;
             }
             // Start the new values off
             parameter_names = vec![record.parameter_name];
-            parameters = vec![record.distribution_parameter];
+            parameters = vec![record.parameter_value];
         }
     }
     // Add the last progression in the CSV
@@ -176,23 +178,30 @@ fn add_progressions_from_file(context: &mut Context, file: PathBuf) -> Result<()
         ProgressionType::SymptomData => {
             SymptomData::register(context, &parameter_names, &parameters)
         }
+        ProgressionType::Unimplemented => Ok(()),
     }
 }
 
 #[cfg(test)]
 mod test {
 
-    use std::any::TypeId;
+    use std::{any::TypeId, path::PathBuf};
 
     use ixa::{
         define_person_property_with_default, Context, ContextPeopleExt, ContextRandomExt,
-        ExecutionPhase, PersonId, PersonPropertyChangeEvent,
+        ExecutionPhase, IxaError, PersonId, PersonPropertyChangeEvent,
     };
     use statrs::assert_almost_eq;
 
-    use crate::population_loader::Age;
+    use crate::{
+        parameters::LibraryType,
+        population_loader::Age,
+        symptom_progression::{SymptomValue, Symptoms},
+    };
 
-    use super::{ContextPropertyProgressionExt, Progression, PropertyProgressions};
+    use super::{
+        load_progression_library, ContextPropertyProgressionExt, Progression, PropertyProgressions,
+    };
 
     struct AgeProgression {
         time_to_next_age: f64,
@@ -462,5 +471,99 @@ mod test {
         // number of running shoes and the tracer behavior depends on that person property.
         assert!(tcr.next(&context, person, 1).is_none());
         assert!(tcr.next(&context, person, 10).is_none());
+    }
+
+    #[test]
+    fn test_load_library_nonsensible_library_type() {
+        let mut context = Context::new();
+        let person = context.add_person(()).unwrap();
+        load_progression_library(
+            &mut context,
+            Age,
+            LibraryType::Constant {
+                rate: 1.0,
+                duration: 5.0,
+            },
+        )
+        .unwrap();
+        // Check that we have a null tracer for Age
+        let container = context.get_data_container(PropertyProgressions).unwrap();
+        let progressions = container.progressions.get(&TypeId::of::<Age>()).unwrap();
+        assert_eq!(progressions.len(), 1);
+        let tcr = progressions[0]
+            .downcast_ref::<Box<dyn Progression<Age>>>()
+            .unwrap()
+            .as_ref();
+        // This is the default implementation of Progression, which does nothing.
+        assert_eq!(tcr.next(&context, person, 0), None);
+    }
+
+    #[test]
+    fn test_progression_type_mismatch() {
+        let mut context = Context::new();
+        let file = PathBuf::from("./tests/data/progression_type_mismatch.csv");
+        // Load the library and check for an error
+        let result =
+            load_progression_library(&mut context, Age, LibraryType::EmpiricalFromFile { file });
+        let e = result.err();
+        match e {
+            Some(IxaError::IxaError(msg)) => {
+                assert_eq!(
+                    msg,
+                    "Progression type mismatch: expected SymptomData, got Unimplemented"
+                );
+            }
+            Some(ue) => panic!(
+                "Expected an error that the the progression types should not match. Instead got {:?}",
+                ue.to_string()
+            ),
+            None => panic!("Expected an error. Instead, loading the progression library passed with no errors."),
+        }
+    }
+
+    #[test]
+    fn test_load_progression_library() {
+        let mut context = Context::new();
+        context.init_random(0);
+        let person = context.add_person(()).unwrap();
+        let file = PathBuf::from("./tests/data/two_symptom_data_progressions.csv");
+        // Load the library and check for an error
+        load_progression_library(
+            &mut context,
+            Symptoms,
+            LibraryType::EmpiricalFromFile { file },
+        )
+        .unwrap();
+        // Get out the registered progressions.
+        let container = context.get_data_container(PropertyProgressions).unwrap();
+        let progressions = container
+            .progressions
+            .get(&TypeId::of::<Symptoms>())
+            .unwrap();
+        assert_eq!(progressions.len(), 2);
+        // Inspect the first progression
+        let tcr = progressions[0]
+            .downcast_ref::<Box<dyn Progression<Symptoms>>>()
+            .unwrap()
+            .as_ref();
+        // Check that this progression gives us category 2
+        assert_eq!(
+            tcr.next(&context, person, Some(SymptomValue::Presymptomatic))
+                .unwrap()
+                .0,
+            Some(SymptomValue::Category2)
+        );
+        // Same for the second
+        let tcr = progressions[1]
+            .downcast_ref::<Box<dyn Progression<Symptoms>>>()
+            .unwrap()
+            .as_ref();
+        // Check that this progression gives us category 3
+        assert_eq!(
+            tcr.next(&context, person, Some(SymptomValue::Presymptomatic))
+                .unwrap()
+                .0,
+            Some(SymptomValue::Category3)
+        );
     }
 }
