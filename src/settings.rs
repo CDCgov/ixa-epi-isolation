@@ -1,10 +1,10 @@
-use crate::parameters::{ContextParametersExt, Params};
+use crate::parameters::{ContextParametersExt, CoreSettingsTypes, Params};
 use ixa::people::PersonId;
 use ixa::{
     define_data_plugin, define_rng, people::Query, Context, ContextPeopleExt, ContextRandomExt,
     IxaError,
 };
-use serde::{Deserialize, Serialize};
+
 use std::any::TypeId;
 use std::collections::HashMap;
 use std::collections::HashSet;
@@ -133,14 +133,6 @@ define_setting_type!(Home);
 define_setting_type!(CensusTract);
 define_setting_type!(School);
 define_setting_type!(Workplace);
-
-#[derive(Debug, Clone, Deserialize, Serialize)]
-pub enum CoreSettingsTypes {
-    Home,
-    CensusTract,
-    School,
-    Workplace,
-}
 
 define_data_plugin!(
     SettingDataPlugin,
@@ -386,18 +378,18 @@ pub fn init(context: &mut Context) {
 
     let settings_properties = settings_properties.clone();
 
-    for (setting_name, alpha) in settings_properties {
-        match setting_name {
-            CoreSettingsTypes::Home => {
+    for setting in settings_properties {
+        match setting {
+            CoreSettingsTypes::Home { alpha } => {
                 context.register_setting_type(Home {}, SettingProperties { alpha });
             }
-            CoreSettingsTypes::CensusTract => {
+            CoreSettingsTypes::CensusTract { alpha } => {
                 context.register_setting_type(CensusTract {}, SettingProperties { alpha });
             }
-            CoreSettingsTypes::School => {
+            CoreSettingsTypes::School { alpha } => {
                 context.register_setting_type(School {}, SettingProperties { alpha });
             }
-            CoreSettingsTypes::Workplace => {
+            CoreSettingsTypes::Workplace { alpha } => {
                 context.register_setting_type(Workplace {}, SettingProperties { alpha });
             }
         }

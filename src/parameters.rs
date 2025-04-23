@@ -1,6 +1,5 @@
 use std::{fmt::Debug, path::PathBuf};
 
-use crate::settings::CoreSettingsTypes;
 use ixa::{define_global_property, ContextGlobalPropertiesExt, IxaError};
 use serde::{Deserialize, Serialize};
 
@@ -8,6 +7,14 @@ use serde::{Deserialize, Serialize};
 pub enum RateFnType {
     Constant { rate: f64, duration: f64 },
     EmpiricalFromFile { file: PathBuf },
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub enum CoreSettingsTypes {
+    Home { alpha: f64 },
+    School { alpha: f64 },
+    Workplace { alpha: f64 },
+    CensusTract { alpha: f64 },
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -24,7 +31,7 @@ pub struct Params {
     /// The period at which to report tabulated values
     pub report_period: f64,
     /// Setting properties, currently only the transmission modifier alpha values for each setting
-    pub settings_properties: Vec<(CoreSettingsTypes, f64)>,
+    pub settings_properties: Vec<CoreSettingsTypes>,
     /// The path to the synthetic population file loaded in `population_loader`
     pub synth_population_file: PathBuf,
     /// The path to the transmission report file
