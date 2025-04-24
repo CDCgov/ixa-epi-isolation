@@ -164,7 +164,7 @@ fn add_progressions_from_file(context: &mut Context, file: PathBuf) -> Result<()
                         SymptomData::register(context, parameter_names, parameters)?;
                     }
                     ProgressionType::Unimplemented => {}
-                };
+                }
                 last_id = record.id;
                 last_progression_type = record.progression_type;
             }
