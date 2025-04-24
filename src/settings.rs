@@ -159,7 +159,11 @@ pub trait ContextSettingExt {
         &mut self,
         setting: T,
         setting_props: SettingProperties,
-    );
+    ) -> Result<(), IxaError>;
+    fn validate_setting_registration<T: SettingType + 'static>(
+        &self,
+        setting_type: &T,
+    ) -> Result<(), IxaError>;
     fn add_itinerary(
         &mut self,
         person_id: PersonId,
@@ -314,7 +318,8 @@ impl ContextSettingExt for Context {
         &mut self,
         setting_type: T,
         setting_props: SettingProperties,
-    ) {
+    ) -> Result<(), IxaError> {
+        self.validate_setting_registration(&setting_type)?;
         let container = self.get_data_container_mut(SettingDataPlugin);
 
         // Add the setting
@@ -326,6 +331,21 @@ impl ContextSettingExt for Context {
         container
             .setting_properties
             .insert(TypeId::of::<T>(), setting_props);
+        Ok(())
+    }
+    fn validate_setting_registration<T: SettingType + 'static>(
+        &self,
+        _setting_type: &T,
+    ) -> Result<(), IxaError> {
+        let data_container = self.get_data_container(SettingDataPlugin);
+        if let Some(data_container) = data_container {
+            let registered_setting = data_container.setting_types.get(&TypeId::of::<T>());
+
+            if registered_setting.is_some() {
+                return Err(IxaError::from("Setting type is already registered"));
+            }
+        }
+        Ok(())
     }
     fn add_itinerary(
         &mut self,
@@ -505,8 +525,12 @@ mod test {
     #[test]
     fn test_setting_type_creation() {
         let mut context = Context::new();
-        context.register_setting_type(Home {}, SettingProperties { alpha: 0.1 });
-        context.register_setting_type(CensusTract {}, SettingProperties { alpha: 0.001 });
+        context
+            .register_setting_type(Home {}, SettingProperties { alpha: 0.1 })
+            .unwrap();
+        context
+            .register_setting_type(CensusTract {}, SettingProperties { alpha: 0.001 })
+            .unwrap();
         let home_props = context.get_setting_properties::<Home>();
         let tract_props = context.get_setting_properties::<CensusTract>();
 
@@ -515,9 +539,30 @@ mod test {
     }
 
     #[test]
+    fn test_duplicate_setting_type_registration() {
+        let mut context = Context::new();
+        context
+            .register_setting_type(Home {}, SettingProperties { alpha: 0.1 })
+            .unwrap();
+        let e = context
+            .register_setting_type(Home {}, SettingProperties { alpha: 0.001 })
+            .err();
+        match e {
+            Some(IxaError::IxaError(msg)) => {
+                assert_eq!(msg, "Setting type is already registered");
+            }
+            Some(ue) => panic!(
+                "Expected an error that there are duplicate settings types. Instead got: {:?}",
+                ue.to_string()
+            ),
+            None => panic!("Expected an error. Instead, validation passed with no errors."),
+        }
+    }
+
+    #[test]
     fn test_duplicated_itinerary() {
         let mut context = Context::new();
-        context.register_setting_type(Home {}, SettingProperties { alpha: 1.0 });
+        let _ = context.register_setting_type(Home {}, SettingProperties { alpha: 1.0 });
 
         let person = context.add_person(()).unwrap();
         let itinerary = vec![
@@ -540,7 +585,7 @@ mod test {
     #[test]
     fn test_feasible_itinerary() {
         let mut context = Context::new();
-        context.register_setting_type(Home {}, SettingProperties { alpha: 1.0 });
+        let _ = context.register_setting_type(Home {}, SettingProperties { alpha: 1.0 });
 
         let person = context.add_person(()).unwrap();
         let itinerary = vec![ItineraryEntry::new(&SettingId::<Home>::new(1), -0.5)];
@@ -558,7 +603,7 @@ mod test {
     #[test]
     fn test_add_itinerary() {
         let mut context = Context::new();
-        context.register_setting_type(Home {}, SettingProperties { alpha: 1.0 });
+        let _ = context.register_setting_type(Home {}, SettingProperties { alpha: 1.0 });
 
         let person = context.add_person(()).unwrap();
         let itinerary = vec![
@@ -584,8 +629,8 @@ mod test {
     #[test]
     fn test_setting_registration() {
         let mut context = Context::new();
-        context.register_setting_type(Home {}, SettingProperties { alpha: 0.1 });
-        context.register_setting_type(CensusTract {}, SettingProperties { alpha: 0.01 });
+        let _ = context.register_setting_type(Home {}, SettingProperties { alpha: 0.1 });
+        let _ = context.register_setting_type(CensusTract {}, SettingProperties { alpha: 0.01 });
         for s in 0..5 {
             // Create 5 people
             for _ in 0..5 {
@@ -612,7 +657,7 @@ mod test {
     fn test_setting_multiplier() {
         // TODO: if setting not registered, shouldn't be able to register people to setting
         let mut context = Context::new();
-        context.register_setting_type(Home {}, SettingProperties { alpha: 0.1 });
+        let _ = context.register_setting_type(Home {}, SettingProperties { alpha: 0.1 });
         for s in 0..5 {
             // Create 5 people
             for _ in 0..5 {
@@ -643,8 +688,8 @@ mod test {
     fn test_total_infectiousness_multiplier() {
         // Go through all the settings and compute infectiousness multiplier
         let mut context = Context::new();
-        context.register_setting_type(Home {}, SettingProperties { alpha: 0.1 });
-        context.register_setting_type(CensusTract {}, SettingProperties { alpha: 0.01 });
+        let _ = context.register_setting_type(Home {}, SettingProperties { alpha: 0.1 });
+        let _ = context.register_setting_type(CensusTract {}, SettingProperties { alpha: 0.01 });
 
         for s in 0..5 {
             for _ in 0..5 {
@@ -700,8 +745,8 @@ mod test {
         // TODO: What happens if the person isn't registered in the setting?
         let mut context = Context::new();
         context.init_random(42);
-        context.register_setting_type(Home {}, SettingProperties { alpha: 0.1 });
-        context.register_setting_type(CensusTract {}, SettingProperties { alpha: 0.01 });
+        let _ = context.register_setting_type(Home {}, SettingProperties { alpha: 0.1 });
+        let _ = context.register_setting_type(CensusTract {}, SettingProperties { alpha: 0.01 });
 
         let person_a = context.add_person(()).unwrap();
         let person_b = context.add_person(()).unwrap();
@@ -740,8 +785,9 @@ mod test {
         for seed in 0..100 {
             let mut context = Context::new();
             context.init_random(seed);
-            context.register_setting_type(Home {}, SettingProperties { alpha: 0.1 });
-            context.register_setting_type(CensusTract {}, SettingProperties { alpha: 0.01 });
+            let _ = context.register_setting_type(Home {}, SettingProperties { alpha: 0.1 });
+            let _ =
+                context.register_setting_type(CensusTract {}, SettingProperties { alpha: 0.01 });
 
             for _ in 0..3 {
                 let person = context.add_person(()).unwrap();
