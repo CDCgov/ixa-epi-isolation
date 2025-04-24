@@ -116,7 +116,7 @@ where
         LibraryType::Constant { .. } => {
             context.register_property_progression(property, ());
         }
-    };
+    }
     Ok(())
 }
 
