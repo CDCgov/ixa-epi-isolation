@@ -101,7 +101,7 @@ where
     }
 }
 
-pub fn load_progression_library<T>(
+pub fn load_progressions<T>(
     context: &mut Context,
     property: T,
     library: LibraryType,
@@ -161,7 +161,7 @@ fn add_progressions_from_file(context: &mut Context, file: PathBuf) -> Result<()
             if !parameters.is_empty() {
                 match last_progression_type {
                     ProgressionType::SymptomData => {
-                        SymptomData::register(context, &parameter_names, &parameters)?;
+                        SymptomData::register(context, parameter_names, parameters)?;
                     }
                     ProgressionType::Unimplemented => {}
                 };
@@ -175,9 +175,7 @@ fn add_progressions_from_file(context: &mut Context, file: PathBuf) -> Result<()
     }
     // Add the last progression in the CSV
     match last_progression_type {
-        ProgressionType::SymptomData => {
-            SymptomData::register(context, &parameter_names, &parameters)
-        }
+        ProgressionType::SymptomData => SymptomData::register(context, parameter_names, parameters),
         ProgressionType::Unimplemented => Ok(()),
     }
 }
@@ -200,7 +198,7 @@ mod test {
     };
 
     use super::{
-        load_progression_library, ContextPropertyProgressionExt, Progression, PropertyProgressions,
+        load_progressions, ContextPropertyProgressionExt, Progression, PropertyProgressions,
     };
 
     struct AgeProgression {
@@ -477,7 +475,7 @@ mod test {
     fn test_load_library_nonsensible_library_type() {
         let mut context = Context::new();
         let person = context.add_person(()).unwrap();
-        load_progression_library(
+        load_progressions(
             &mut context,
             Age,
             LibraryType::Constant {
@@ -503,8 +501,7 @@ mod test {
         let mut context = Context::new();
         let file = PathBuf::from("./tests/data/progression_type_mismatch.csv");
         // Load the library and check for an error
-        let result =
-            load_progression_library(&mut context, Age, LibraryType::EmpiricalFromFile { file });
+        let result = load_progressions(&mut context, Age, LibraryType::EmpiricalFromFile { file });
         let e = result.err();
         match e {
             Some(IxaError::IxaError(msg)) => {
@@ -528,7 +525,7 @@ mod test {
         let person = context.add_person(()).unwrap();
         let file = PathBuf::from("./tests/data/two_symptom_data_progressions.csv");
         // Load the library and check for an error
-        load_progression_library(
+        load_progressions(
             &mut context,
             Symptoms,
             LibraryType::EmpiricalFromFile { file },

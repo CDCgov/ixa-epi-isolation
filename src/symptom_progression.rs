@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use ixa::{
     define_person_property_with_default, define_rng, Context, ContextPeopleExt, ContextRandomExt,
     IxaError, PersonId, PersonPropertyChangeEvent,
@@ -5,14 +7,12 @@ use ixa::{
 use rand::Rng;
 use serde::{Deserialize, Serialize};
 use serde_json::from_str;
-use statrs::distribution::{ContinuousCDF, LogNormal, Normal, Weibull};
+use statrs::distribution::Weibull;
 
 use crate::{
     infectiousness_manager::{InfectionStatus, InfectionStatusValue},
     parameters::ContextParametersExt,
-    property_progression_manager::{
-        load_progression_library, ContextPropertyProgressionExt, Progression,
-    },
+    property_progression_manager::{load_progressions, ContextPropertyProgressionExt, Progression},
 };
 
 define_rng!(SymptomRng);
@@ -28,58 +28,41 @@ pub enum SymptomValue {
 
 define_person_property_with_default!(Symptoms, Option<SymptomValue>, None);
 
-/// Stores information about a symptom progression (presymptomatic -> category{1..=4} -> None).
-/// Includes details about the incubation period and time to symptom improvement distributions.
+/// Stores information about a symptom progression (presymptomatic -> category{1..=4} -> None)
+/// for a person.
+/// Includes an incubation period and the time to symptom improvement distribution.
 pub struct SymptomData {
     category: SymptomValue,
-    incubation_period: LowerTruncatedLogNormal,
-    time_to_symptom_improvement: UpperTruncatedDiscreteWeibull,
+    // We need to store a singular value as this progression's incubation period rather than a
+    // distribution of allowable values because we have done the random sampling elsewhere: to make
+    // the empirical rate function, we had to use an incubation period sample to convert from
+    // time since symptom onset (the units of the outputs of our triangle viral load) to time since
+    // infection (the units of the empirical rate function). We store that value (read in via the
+    // input file) here. The natural history parameter manager ensures that this symptom progression
+    // is only used for people who have the rate function that was calculated with this value.
+    incubation_period: f64,
+    time_to_symptom_improvement: RightTruncatedWeibull,
 }
 
 #[derive(Copy, Clone)]
-struct LowerTruncatedLogNormal {
-    mean: f64,
-    std_dev: f64,
-    lower_bound: f64,
-}
-
-impl LowerTruncatedLogNormal {
-    fn new(mean: f64, std_dev: f64, lower_bound: f64) -> Result<Self, IxaError> {
-        if mean <= 0.0 {
-            return Err(IxaError::IxaError(
-                "Mean of log-normal distribution must be positive.".to_string(),
-            ));
-        }
-        if std_dev <= 0.0 {
-            return Err(IxaError::IxaError(
-                "Standard deviation of log-normal distribution must be positive.".to_string(),
-            ));
-        }
-        Ok(Self {
-            mean,
-            std_dev,
-            lower_bound,
-        })
-    }
-}
-
-#[derive(Copy, Clone)]
-struct UpperTruncatedDiscreteWeibull {
+/// A Weibull distribution that is right truncated (probability mass of 0 past a given
+/// value).
+struct RightTruncatedWeibull {
     shape: f64,
     scale: f64,
     upper_bound: f64,
 }
 
-impl UpperTruncatedDiscreteWeibull {
+impl RightTruncatedWeibull {
     fn new(shape: f64, scale: f64, upper_bound: f64) -> Result<Self, IxaError> {
         if shape < 0.0 {
             return Err(IxaError::IxaError(
-                "Shape of Weibull distribution must be positive.".to_string(),
+                "Weibull shape must be positive.".to_string(),
             ));
         }
         if scale < 0.0 {
             return Err(IxaError::IxaError(
-                "Scale of Weibull distribution must be positive.".to_string(),
+                "Weibull scale must be positive.".to_string(),
             ));
         }
         if upper_bound < 0.0 {
@@ -96,25 +79,27 @@ impl UpperTruncatedDiscreteWeibull {
 }
 
 impl SymptomData {
+    #[allow(clippy::needless_pass_by_value)]
     pub fn register(
         context: &mut Context,
-        parameter_names: &[String],
-        parameters: &[f64],
+        parameter_names: Vec<String>,
+        parameters: Vec<f64>,
     ) -> Result<(), IxaError> {
-        assert_eq!(
-            parameter_names.len(),
-            parameters.len(),
-            "Parameter names and parameters must be of the same length."
-        );
         // The first parameter is the symptom category name, the next three are the
         // parameters for the incubation period distribution, and the final three are
         // the parameters for the Weibull distribution.
-        if parameter_names.len() != 7 {
+        if parameter_names.len() != 5 {
             return Err(IxaError::IxaError(format!(
-                "Parameters should be of length 7, but got {}",
+                "Parameters should be of length 5, but got {}",
                 parameter_names.len()
             )));
         }
+
+        let parameter_dict = parameter_names
+            .iter()
+            .zip(parameters.iter())
+            .map(|(s, &f)| (s.as_str(), f))
+            .collect::<HashMap<&str, f64>>();
 
         // Get out the symptom category name
         let category = from_str(&format!(r#""{}""#, parameter_names[0]))?;
@@ -127,11 +112,35 @@ impl SymptomData {
 
         // Get out the incubation period parameters
         let incubation_period =
-            LowerTruncatedLogNormal::new(parameters[1], parameters[2], parameters[3])?;
+            *parameter_dict
+                .get("Incubation period")
+                .ok_or(IxaError::IxaError(
+                    "No incubation period provided.".to_string(),
+                ))?;
+        if incubation_period < 0.0 {
+            return Err(IxaError::IxaError(
+                "Incubation period must be positive.".to_string(),
+            ));
+        }
 
-        // Get out the Weibull parameters
-        let time_to_symptom_improvement =
-            UpperTruncatedDiscreteWeibull::new(parameters[4], parameters[5], parameters[6])?;
+        // Set up the Weibull distribution
+        let shape = *parameter_dict
+            .get("Weibull shape")
+            .ok_or(IxaError::IxaError(
+                "No Weibull shape period provided.".to_string(),
+            ))?;
+        let scale = *parameter_dict
+            .get("Weibull scale")
+            .ok_or(IxaError::IxaError(
+                "No Weibull scale period provided.".to_string(),
+            ))?;
+        let upper_bound = *parameter_dict
+            .get("Weibull upper bound")
+            .ok_or(IxaError::IxaError(
+                "No Weibull upper bound provided.".to_string(),
+            ))?;
+
+        let time_to_symptom_improvement = RightTruncatedWeibull::new(shape, scale, upper_bound)?;
         let progression = SymptomData {
             category,
             incubation_period,
@@ -154,7 +163,7 @@ impl Progression<Symptoms> for SymptomData {
             // People become presymptomatic when they are infected.
             // If they are presymptomatic, we schedule their symptom development.
             if symptoms == SymptomValue::Presymptomatic {
-                return Some(schedule_symptoms(self, context));
+                return Some(schedule_symptoms(self));
             }
             // Otherwise, person is currently experiencing symptoms, so schedule recovery.
             return Some(schedule_recovery(self, context));
@@ -163,56 +172,26 @@ impl Progression<Symptoms> for SymptomData {
     }
 }
 
-fn schedule_symptoms(data: &SymptomData, context: &Context) -> (Option<SymptomValue>, f64) {
-    // Draw from the incubation period
-    let time = context.sample(SymptomRng, |rng| {
-        let i = data.incubation_period;
-        if i.lower_bound < 0.0 {
-            // Just draw from the vanilla log-normal
-            let log_normal = statrs::distribution::LogNormal::new(i.mean, i.std_dev).unwrap();
-            return rng.sample(log_normal);
-        }
-        // Use inverse transform sampling
-        // lognormal cdf is Phi((ln(x) - mu) / sigma)
-        // With lower bound truncation this becomes
-        // Phi((ln(x) - mu) / sigma) - Phi((ln(lower_bound) - mu) / sigma)
-        // We can easily see that this function is 0 at x = lower_bound
-        // We want to solve for x, setting this function equal to U(0, 1)
-        // Phi((ln(x) - mu) / sigma) = U(0, 1) + Phi((ln(lower_bound) - mu) / sigma)
-        // ln(x) = mu + sigma * Phi^-1(U(0, 1) + Phi((ln(lower_bound) - mu) / sigma))
-        // x = exp(mu + sigma * Phi^-1(U(0, 1) + Phi((ln(lower_bound) - mu) / sigma)))
-        let lower_bound_cdf = LogNormal::new(i.mean, i.std_dev)
-            .unwrap()
-            .cdf(i.lower_bound);
-        let random_cdf_value = rng.gen_range(0.0..1.0);
-        let phi_inversed = Normal::standard().inverse_cdf(random_cdf_value * lower_bound_cdf);
-        f64::exp(i.mean + i.std_dev * phi_inversed)
-    });
+fn schedule_symptoms(data: &SymptomData) -> (Option<SymptomValue>, f64) {
     // Assign this person the corresponding symptom category at the given time
-    (Some(data.category), time)
+    (Some(data.category), data.incubation_period)
 }
 
 fn schedule_recovery(data: &SymptomData, context: &Context) -> (Option<SymptomValue>, f64) {
     // Draw from the time to symptom improvement distribution
     let time = context.sample(SymptomRng, |rng| {
+        // We draw continuous values from the Weibull even though the parameters were fit from
+        // discrete symptom improvement times -- this is because the Weibull as implemented in our
+        // Stan model accounts for daily interval censoring, so the parameters retain their meaning
+        // in a continuous distribution without needing to adjust them.
         let w = data.time_to_symptom_improvement;
-        let random_cdf_value = rng.gen_range(0.0..1.0);
-        // Convert a uniform value to a Weibull sample using inverse transform sampling
-        // We do exactly this analysis in our Stan model.
-        // See function `discrete_weibull_truncated_rng` in the Stan model. For completeness, here's
-        // the sampling code (recall beta = shape, si_scale_inv = 1 / scale):
-        // real log_q = -(si_scale_inv ^ beta);
-        // real days = (log1m_exp(log(random_cdf_value) + discrete_weibull_lcdf(max_si | si_scale_inv, beta)) / log_q) ^ (1 / beta);
-        // return ceil(days);
-        let log_q = -((1.0 / w.scale).powf(w.shape));
-        let days = (f64::ln_1p(
-            -random_cdf_value
-                * Weibull::new(1.0 / w.scale, w.shape)
-                    .unwrap()
-                    .cdf(w.upper_bound),
-        ) / log_q)
-            .powf(1.0 / w.shape);
-        days.ceil()
+        // Since so little mass is above the typical values of the upper bound in our Weibulls,
+        // use rejection sampling (could use inverse transform sampling instead)
+        let mut sample = w.upper_bound;
+        while sample >= w.upper_bound {
+            sample = rng.sample(Weibull::new(w.shape, w.scale).unwrap());
+        }
+        sample
     });
     // Schedule the person to recover from their symptoms (`Symptoms` = `None`) at the given time
     (None, time)
@@ -220,7 +199,7 @@ fn schedule_recovery(data: &SymptomData, context: &Context) -> (Option<SymptomVa
 
 pub fn init(context: &mut Context) -> Result<(), IxaError> {
     let params = context.get_params();
-    load_progression_library(
+    load_progressions(
         context,
         Symptoms,
         params.symptom_progression_library.clone(),
@@ -255,16 +234,17 @@ mod test {
         property_progression_manager::Progression,
         rate_fns::load_rate_fns,
         symptom_progression::{
-            event_subscriptions, schedule_recovery, schedule_symptoms, LowerTruncatedLogNormal,
-            Symptoms, UpperTruncatedDiscreteWeibull,
+            event_subscriptions, schedule_recovery, schedule_symptoms, RightTruncatedWeibull,
+            Symptoms,
         },
         Params,
     };
 
     use ixa::{
-        Context, ContextGlobalPropertiesExt, ContextPeopleExt, ContextRandomExt,
+        Context, ContextGlobalPropertiesExt, ContextPeopleExt, ContextRandomExt, IxaError,
         PersonPropertyChangeEvent,
     };
+    use statrs::assert_almost_eq;
 
     fn setup() -> Context {
         let mut context = Context::new();
@@ -296,16 +276,16 @@ mod test {
 
     #[test]
     fn test_schedule_symptoms() {
-        let context = setup();
         let symptom_data = SymptomData {
             category: SymptomValue::Category1,
-            incubation_period: LowerTruncatedLogNormal::new(5.0, 1.0, 1.0).unwrap(),
-            time_to_symptom_improvement: UpperTruncatedDiscreteWeibull::new(2.0, 3.0, 28.0)
-                .unwrap(),
+            incubation_period: 5.0,
+            time_to_symptom_improvement: RightTruncatedWeibull::new(2.0, 3.0, 28.0).unwrap(),
         };
-        let symptoms = schedule_symptoms(&symptom_data, &context);
+        let symptoms = schedule_symptoms(&symptom_data);
         assert_eq!(symptoms.0, Some(SymptomValue::Category1));
         assert!(symptoms.1 > 0.0); // Check that the time to symptoms is positive
+                                   // Check that the time to symptoms is equal to the incubation period
+        assert_almost_eq!(symptoms.1, symptom_data.incubation_period, 0.0);
     }
 
     #[test]
@@ -313,22 +293,22 @@ mod test {
         let context = setup();
         let symptom_data = SymptomData {
             category: SymptomValue::Category1,
-            incubation_period: LowerTruncatedLogNormal::new(5.0, 1.0, 1.0).unwrap(),
-            time_to_symptom_improvement: UpperTruncatedDiscreteWeibull::new(2.0, 3.0, 28.0)
-                .unwrap(),
+            incubation_period: 5.0,
+            time_to_symptom_improvement: RightTruncatedWeibull::new(2.0, 3.0, 28.0).unwrap(),
         };
         let recovery = schedule_recovery(&symptom_data, &context);
         assert_eq!(recovery.0, None);
         assert!(recovery.1 > 0.0); // Check that the time to recovery is positive
+                                   // Check that the time to recovery is less than the upper bound of the Weibull distribution
+        assert!(recovery.1 < symptom_data.time_to_symptom_improvement.upper_bound);
     }
 
     #[test]
     fn test_progression_impl_symptom_data() {
         let symptom_data = SymptomData {
             category: SymptomValue::Category1,
-            incubation_period: LowerTruncatedLogNormal::new(5.0, 1.0, 1.0).unwrap(),
-            time_to_symptom_improvement: UpperTruncatedDiscreteWeibull::new(2.0, 3.0, 28.0)
-                .unwrap(),
+            incubation_period: 5.0,
+            time_to_symptom_improvement: RightTruncatedWeibull::new(2.0, 3.0, 28.0).unwrap(),
         };
         let mut context = setup();
         let person = context.add_person(()).unwrap();
@@ -393,5 +373,180 @@ mod test {
             }
         });
         context.execute();
+    }
+
+    #[test]
+    fn test_weibull_error_shape() {
+        let w = RightTruncatedWeibull::new(-1.0, 1.0, 1.0);
+        let e = w.err();
+        match e {
+            Some(IxaError::IxaError(msg)) => {
+                assert_eq!(msg, "Weibull shape must be positive.".to_string());
+            }
+            Some(ue) => panic!(
+                "Expected an error that Weibull shape must be positive.. Instead got {:?}",
+                ue.to_string()
+            ),
+            None => panic!("Expected an error. Instead, Weibull creation passed with no errors."),
+        }
+    }
+
+    #[test]
+    fn test_weibull_error_scale() {
+        let w = RightTruncatedWeibull::new(1.0, -1.0, 1.0);
+        let e = w.err();
+        match e {
+            Some(IxaError::IxaError(msg)) => {
+                assert_eq!(msg, "Weibull scale must be positive.".to_string());
+            }
+            Some(ue) => panic!(
+                "Expected an error that Weibull scale must be positive.. Instead got {:?}",
+                ue.to_string()
+            ),
+            None => panic!("Expected an error. Instead, Weibull creation passed with no errors."),
+        }
+    }
+
+    #[test]
+    fn test_weibull_error_upper_bound() {
+        let w = RightTruncatedWeibull::new(1.0, 1.0, -1.0);
+        let e = w.err();
+        match e {
+            Some(IxaError::IxaError(msg)) => {
+                assert_eq!(
+                    msg,
+                    "Upper bound of Weibull distribution must be positive.".to_string()
+                );
+            }
+            Some(ue) => panic!(
+                "Expected an error that Weibull upper bound must be positive.. Instead got {:?}",
+                ue.to_string()
+            ),
+            None => panic!("Expected an error. Instead, Weibull creation passed with no errors."),
+        }
+    }
+
+    #[test]
+    fn test_register_vecs_not_right_size() {
+        let mut context = setup();
+        let parameter_names = vec!["Category1".to_string(), "Category2".to_string()];
+        let parameters = vec![1.0, 2.0];
+        let e = SymptomData::register(&mut context, parameter_names, parameters).err();
+        match e {
+            Some(IxaError::IxaError(msg)) => {
+                assert_eq!(
+                    msg,
+                    "Parameters should be of length 5, but got 2".to_string()
+                );
+            }
+            Some(ue) => panic!(
+                "Expected an error that parameters should be of length 5. Instead got {:?}",
+                ue.to_string()
+            ),
+            None => panic!("Expected an error. Instead, registration passed with no errors."),
+        }
+    }
+
+    #[test]
+    fn test_register_parameter_not_nan() {
+        let mut context = setup();
+        let parameter_names = vec![
+            "Category1".to_string(),
+            "a".to_string(),
+            "b".to_string(),
+            "c".to_string(),
+            "d".to_string(),
+        ];
+        let parameters = vec![0.0, 1.0, 2.0, 3.0, 4.0];
+        let e = SymptomData::register(&mut context, parameter_names, parameters).err();
+        match e {
+            Some(IxaError::IxaError(msg)) => {
+                assert_eq!(msg, "Parameter associated with specifying the symptom category name should be NaN, but got 0".to_string());
+            }
+            Some(ue) => panic!(
+                "Expected an error that parameter associated with specifying the symptom category name should be NaN. Instead got {:?}",
+                ue.to_string()
+            ),
+            None => panic!("Expected an error. Instead, registration passed with no errors."),
+        }
+    }
+
+    #[test]
+    fn test_register_incubation_period_not_positive() {
+        let mut context = setup();
+        let parameter_names = vec![
+            "Category1".to_string(),
+            "Incubation period".to_string(),
+            "b".to_string(),
+            "c".to_string(),
+            "d".to_string(),
+        ];
+        let parameters = vec![f64::NAN, -1.0, 2.0, 3.0, 4.0];
+        let e = SymptomData::register(&mut context, parameter_names, parameters).err();
+        match e {
+            Some(IxaError::IxaError(msg)) => {
+                assert_eq!(msg, "Incubation period must be positive.".to_string());
+            }
+            Some(ue) => panic!(
+                "Expected an error that incubation period must be positive. Instead got {:?}",
+                ue.to_string()
+            ),
+            None => panic!("Expected an error. Instead, registration passed with no errors."),
+        }
+    }
+
+    #[test]
+    fn test_register_wrong_param_names() {
+        let mut context = setup();
+        let parameter_names = vec![
+            "Category1".to_string(),
+            "Outcubation rate".to_string(),
+            "Weibull shape".to_string(),
+            "Weibull scale".to_string(),
+            "Weibull upper bound".to_string(),
+        ];
+        let parameters = vec![f64::NAN, 5.0, 2.0, 3.0, 4.0];
+        let e = SymptomData::register(&mut context, parameter_names, parameters).err();
+        match e {
+            Some(IxaError::IxaError(msg)) => {
+                assert_eq!(msg, "No incubation period provided.".to_string());
+            }
+            Some(ue) => panic!(
+                "Expected an error that no incubation period provided. Instead got {:?}",
+                ue.to_string()
+            ),
+            None => panic!("Expected an error. Instead, registration passed with no errors."),
+        }
+    }
+
+    #[test]
+    fn test_register_produces_right_symptom_data() {
+        let mut context = setup();
+        let parameter_names = vec![
+            "Category1".to_string(),
+            "Incubation period".to_string(),
+            "Weibull shape".to_string(),
+            "Weibull scale".to_string(),
+            "Weibull upper bound".to_string(),
+        ];
+        let parameters = vec![f64::NAN, 5.0, 2.0, 3.0, 4.0];
+        SymptomData::register(&mut context, parameter_names, parameters).unwrap();
+        // Check that a person goes through this progression as we would expect
+        let person = context.add_person(()).unwrap();
+        context.add_plan(0.0, move |ctx| {
+            ctx.set_person_property(person, Symptoms, Some(SymptomValue::Presymptomatic));
+        });
+        context.subscribe_to_event(move |ctx, event: PersonPropertyChangeEvent<Symptoms>| {
+            if event.current == Some(SymptomValue::Category1) {
+                assert_eq!(event.previous, Some(SymptomValue::Presymptomatic));
+                // We set the incubation period to five days
+                assert_almost_eq!(ctx.get_current_time(), 5.0, 0.0);
+            } else if event.current.is_none() {
+                assert_eq!(event.previous, Some(SymptomValue::Category1));
+                assert!(ctx.get_current_time() > 5.0);
+                // Check that the time to symptom improvement is less than the upper bound of the Weibull distribution
+                assert!(ctx.get_current_time() < 5.0 + 4.0);
+            }
+        });
     }
 }
