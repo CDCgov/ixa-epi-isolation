@@ -22,8 +22,7 @@ pub trait InfectiousnessRateFn {
     /// that it would take 2 days to infect 6 people
     fn inverse_cum_rate(&self, events: f64) -> Option<f64>;
 
-    /// Returns the remaining time of the infectiousness period at time `t`. Can return a negative
-    /// number if the infectiousness period has already ended.
+    /// Returns the duration of the infectiousness period.
     fn infection_duration(&self) -> f64;
 }
 
