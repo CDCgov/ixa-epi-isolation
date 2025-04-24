@@ -232,7 +232,7 @@ mod test {
         let mut context = Context::new();
         context.init_random(0);
         context
-            .register_parameter_id_assignment(Age, |_, _| 0)
+            .register_parameter_id_assigner(Age, |_, _| 0)
             .unwrap();
         context.register_property_progression(
             Age,
@@ -327,7 +327,7 @@ mod test {
         let mut context = Context::new();
         context.init_random(0);
         context
-            .register_parameter_id_assignment(Age, |_, _| 0)
+            .register_parameter_id_assigner(Age, |_, _| 0)
             .unwrap();
         let age_progression = AgeProgression {
             time_to_next_age: 1.0,
