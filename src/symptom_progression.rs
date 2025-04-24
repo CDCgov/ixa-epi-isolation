@@ -209,7 +209,7 @@ fn schedule_recovery(data: &SymptomData, context: &Context) -> (Option<SymptomVa
 pub fn init(context: &mut Context) -> Result<(), IxaError> {
     // For isolation guidance, each rate function has a corresponding symptom improvement time
     // distribution, so we enforce a 1:1 relationship between the two.
-    context.register_parameter_id_assignment(Symptoms, |context, person_id| {
+    context.register_parameter_id_assigner(Symptoms, |context, person_id| {
         context.get_parameter_id(RateFn, person_id)
     })?;
     

@@ -52,7 +52,7 @@ pub trait ContextNaturalHistoryParameterExt {
     /// - If an assignment function for the parameter has already been registered
     /// - If an id for the parameter has already been queried for a person (i.e., defaulting to
     ///   random assignment)
-    fn register_parameter_id_assignment<T, S, I>(
+    fn register_parameter_id_assigner<T, S, I>(
         &mut self,
         parameter: T,
         assignment_fn: S,
@@ -75,7 +75,7 @@ pub trait ContextNaturalHistoryParameterExt {
 }
 
 impl ContextNaturalHistoryParameterExt for Context {
-    fn register_parameter_id_assignment<T, S, I>(
+    fn register_parameter_id_assigner<T, S, I>(
         &mut self,
         _parameter: T,
         assignment_fn: S,
@@ -192,7 +192,7 @@ mod test {
         let mut context = init_context();
         let person = context.add_person(()).unwrap();
         context
-            .register_parameter_id_assignment(ViralLoad, |_, _| 0)
+            .register_parameter_id_assigner(ViralLoad, |_, _| 0)
             .unwrap();
         let container = context
             .get_data_container(NaturalHistoryParameters)
@@ -210,9 +210,9 @@ mod test {
     fn test_error_register_two_assignments_same_parameter() {
         let mut context = init_context();
         context
-            .register_parameter_id_assignment(ViralLoad, |_, _| 0)
+            .register_parameter_id_assigner(ViralLoad, |_, _| 0)
             .unwrap();
-        let result = context.register_parameter_id_assignment(ViralLoad, |_, _| 1);
+        let result = context.register_parameter_id_assigner(ViralLoad, |_, _| 1);
         let e = result.err();
         match e {
             Some(IxaError::IxaError(msg)) => {
@@ -240,13 +240,13 @@ mod test {
         let person = context.add_person(()).unwrap();
         // We have to register something to make sure the data container exists.
         context
-            .register_parameter_id_assignment(ViralLoad, |_, _| 0)
+            .register_parameter_id_assigner(ViralLoad, |_, _| 0)
             .unwrap();
         // This section also tests that we default to random assignment in library range for
         // parameters not previously seen if some registration has occured previously.
         let result = context.get_parameter_id(AntigenPositivity, person);
         assert_eq!(result, 0);
-        let result = context.register_parameter_id_assignment(AntigenPositivity, |_, _| 1);
+        let result = context.register_parameter_id_assigner(AntigenPositivity, |_, _| 1);
         let e = result.err();
         match e {
             Some(IxaError::IxaError(msg)) => {
@@ -277,7 +277,7 @@ mod test {
         let mut context = init_context();
         let person = context.add_person(()).unwrap();
         context
-            .register_parameter_id_assignment(ViralLoad, |_, _| 0)
+            .register_parameter_id_assigner(ViralLoad, |_, _| 0)
             .unwrap();
         let id = context.get_parameter_id(ViralLoad, person);
         assert_eq!(id, 0);
@@ -317,7 +317,7 @@ mod test {
         let mut context = init_context();
         let person = context.add_person(()).unwrap();
         context
-            .register_parameter_id_assignment(CulturePositivity, |context, person_id| {
+            .register_parameter_id_assigner(CulturePositivity, |context, person_id| {
                 context.get_parameter_id(TestingPatterns, person_id)
             })
             .unwrap();

@@ -74,7 +74,7 @@ pub fn load_rate_fns(context: &mut Context) -> Result<(), IxaError> {
         }
     }
 
-    context.register_parameter_id_assignment(RateFn, |context, _| {
+    context.register_parameter_id_assigner(RateFn, |context, _| {
         let container = context.get_data_container(RateFnPlugin).unwrap();
         let len = container.rates.len();
         context.sample_range(InfectiousnessRng, 0..len)
@@ -161,7 +161,7 @@ mod tests {
         let mut context = Context::new();
         context.init_random(0);
         context
-            .register_parameter_id_assignment(RateFn, |context, _| {
+            .register_parameter_id_assigner(RateFn, |context, _| {
                 let container = context.get_data_container(RateFnPlugin).unwrap();
                 let len = container.rates.len();
                 context.sample_range(InfectiousnessRng, 0..len)
