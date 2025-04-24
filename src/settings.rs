@@ -357,6 +357,14 @@ impl ContextSettingExt for Context {
         let mut current_setting_ids = vec![];
 
         for itinerary_entry in &itinerary {
+            // TODO: If we are changing a person's itinerary, the person_id should be removed from vector
+            // This isn't the same as the concept of being present or not.
+            let registered_setting = container.setting_types.get(&itinerary_entry.setting_type);
+            if registered_setting.is_none() {
+                return Err(IxaError::from(
+                    "Itinerary entry setting type not registered",
+                ));
+            }
             container
                 .members
                 .entry(itinerary_entry.setting_type)
@@ -583,7 +591,7 @@ mod test {
     }
 
     #[test]
-    fn test_feasible_itinerary() {
+    fn test_feasible_itinerary_ratio() {
         let mut context = Context::new();
         let _ = context.register_setting_type(Home {}, SettingProperties { alpha: 1.0 });
 
@@ -596,6 +604,27 @@ mod test {
                 assert_eq!(msg, "Setting ratio must be greater than or equal to 0");
             }
             Some(ue) => panic!("Expected an error setting ratios should be greater than or equal to 0. Instead got: {:?}", ue.to_string()),
+            None => panic!("Expected an error. Instead, validation passed with no errors."),
+        }
+    }
+
+    #[test]
+    fn test_feasible_itinerary_setting() {
+        let mut context = Context::new();
+        let _ = context.register_setting_type(Home {}, SettingProperties { alpha: 1.0 });
+
+        let person = context.add_person(()).unwrap();
+        let itinerary = vec![ItineraryEntry::new(&SettingId::<CensusTract>::new(1), 0.5)];
+
+        let e = context.add_itinerary(person, itinerary).err();
+        match e {
+            Some(IxaError::IxaError(msg)) => {
+                assert_eq!(msg, "Itinerary entry setting type not registered");
+            }
+            Some(ue) => panic!(
+                "Expected an error setting . Instead got: {:?}",
+                ue.to_string()
+            ),
             None => panic!("Expected an error. Instead, validation passed with no errors."),
         }
     }
