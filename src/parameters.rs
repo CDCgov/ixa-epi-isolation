@@ -19,6 +19,11 @@ pub enum CoreSettingsTypes {
     Global { alpha: f64 },
 }
 
+#[derive(Debug, Serialize, Deserialize, Clone, Copy)]
+pub enum ItineraryWriteFnType {
+    SplitEvenly,
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Params {
     /// The number of infections we seed the population with.
@@ -34,6 +39,8 @@ pub struct Params {
     pub report_period: f64,
     /// Setting properties, currently only the transmission modifier alpha values for each setting
     pub settings_properties: Vec<CoreSettingsTypes>,
+    /// Rule set for writing itineraries
+    pub itinerary_write_fn: ItineraryWriteFnType,
     /// The path to the synthetic population file loaded in `population_loader`
     pub synth_population_file: PathBuf,
     /// The path to the transmission report file
@@ -115,7 +122,9 @@ mod test {
     use super::validate_inputs;
     use std::path::PathBuf;
 
-    use crate::parameters::{ContextParametersExt, GlobalParams, Params, RateFnType};
+    use crate::parameters::{
+        ContextParametersExt, GlobalParams, ItineraryWriteFnType, Params, RateFnType,
+    };
 
     #[test]
     fn test_default_input_file() {
@@ -142,6 +151,7 @@ mod test {
             synth_population_file: PathBuf::from("."),
             transmission_report_name: None,
             settings_properties: vec![],
+            itinerary_write_fn: ItineraryWriteFnType::SplitEvenly,
         };
         context
             .set_global_property_value(GlobalParams, parameters)
@@ -167,6 +177,7 @@ mod test {
             synth_population_file: PathBuf::from("."),
             transmission_report_name: None,
             settings_properties: vec![],
+            itinerary_write_fn: ItineraryWriteFnType::SplitEvenly,
         };
         let e = validate_inputs(&parameters).err();
         match e {

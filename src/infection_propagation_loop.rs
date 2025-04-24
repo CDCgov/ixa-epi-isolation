@@ -92,7 +92,10 @@ mod test {
             max_total_infectiousness_multiplier, InfectionContextExt, InfectionData,
             InfectionDataValue,
         },
-        parameters::{ContextParametersExt, CoreSettingsTypes, GlobalParams, Params, RateFnType},
+        parameters::{
+            ContextParametersExt, CoreSettingsTypes, GlobalParams, ItineraryWriteFnType, Params,
+            RateFnType,
+        },
         rate_fns::load_rate_fns,
         settings::{global_mixing_itinerary, ContextSettingExt, Global, SettingProperties},
     };
@@ -113,6 +116,7 @@ mod test {
             synth_population_file: PathBuf::from("."),
             transmission_report_name: None,
             settings_properties: vec![CoreSettingsTypes::Global { alpha }],
+            itinerary_write_fn: ItineraryWriteFnType::SplitEvenly,
         };
         context.init_random(parameters.seed);
         context

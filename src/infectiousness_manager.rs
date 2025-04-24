@@ -224,7 +224,7 @@ mod test {
         infectiousness_manager::{
             InfectionData, InfectionDataValue, InfectionStatus, InfectionStatusValue,
         },
-        parameters::{CoreSettingsTypes, GlobalParams, Params, RateFnType},
+        parameters::{CoreSettingsTypes, GlobalParams, ItineraryWriteFnType, Params, RateFnType},
         rate_fns::load_rate_fns,
         settings::{global_mixing_itinerary, ContextSettingExt, Global, SettingProperties},
     };
@@ -248,6 +248,7 @@ mod test {
                     synth_population_file: PathBuf::from("."),
                     transmission_report_name: None,
                     settings_properties: vec![CoreSettingsTypes::Global { alpha: 1.0 }],
+                    itinerary_write_fn: ItineraryWriteFnType::SplitEvenly,
                 },
             )
             .unwrap();

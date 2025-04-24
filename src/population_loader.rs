@@ -8,7 +8,7 @@ use std::path::PathBuf;
 
 use crate::parameters::{ContextParametersExt, Params};
 use crate::settings::{
-    CensusTract, ContextSettingExt, Home, ItineraryEntry, School, SettingId, Workplace,
+    CensusTract, ContextSettingExt, Home, Itinerary, ItineraryEntry, School, Workplace,
 };
 
 #[derive(Deserialize, Debug)]
@@ -33,27 +33,19 @@ fn create_person_from_record(
     let school_string: String = String::from_utf8(person_record.schoolId.to_owned())?;
     let workplace_string: String = String::from_utf8(person_record.workplaceId.to_owned())?;
 
-    // TODO: itinerary ratios should come from parameters
-    itinerary_person.push(ItineraryEntry::new(
-        &SettingId::<Home>::new(home_id.parse()?),
-        0.25,
-    ));
-    if !school_string.is_empty() {
-        itinerary_person.push(ItineraryEntry::new(
-            &SettingId::<School>::new(school_string.parse()?),
-            0.25,
-        ));
-    }
     if !workplace_string.is_empty() {
-        itinerary_person.push(ItineraryEntry::new(
-            &SettingId::<Workplace>::new(workplace_string.parse()?),
-            0.25,
-        ));
+        itinerary_person
+            .add_setting_to_itinerary::<Workplace>(context, workplace_string.parse()?)?;
     }
-    itinerary_person.push(ItineraryEntry::new(
-        &SettingId::<CensusTract>::new(tract.parse()?),
-        0.25,
-    ));
+    if !school_string.is_empty() {
+        itinerary_person.add_setting_to_itinerary::<School>(context, school_string.parse()?)?;
+    }
+
+    // Add the settings consistent across all individuals (Home, CensusTract) and rescale to 1.0
+    itinerary_person
+        .add_setting_to_itinerary::<Home>(context, home_id.parse()?)?
+        .add_setting_to_itinerary::<CensusTract>(context, tract.parse()?)?
+        .rescale();
 
     let person_id = context.add_person((Age, person_record.age))?;
 
@@ -86,7 +78,9 @@ pub fn init(context: &mut Context) -> Result<(), IxaError> {
 #[cfg(test)]
 mod test {
     use super::*;
-    use ixa::ContextPeopleExt;
+    use crate::parameters::{GlobalParams, ItineraryWriteFnType, RateFnType};
+    use crate::settings::SettingId;
+    use ixa::{ContextGlobalPropertiesExt, ContextPeopleExt};
     use std::io::Write;
     use std::path::PathBuf;
     use tempfile::NamedTempFile;
@@ -98,9 +92,31 @@ mod test {
         path
     }
 
+    fn setup() -> Context {
+        let mut context = Context::new();
+        let parameters = Params {
+            initial_infections: 1,
+            max_time: 100.0,
+            seed: 0,
+            infectiousness_rate_fn: RateFnType::Constant {
+                rate: 1.0,
+                duration: 5.0,
+            },
+            report_period: 1.0,
+            synth_population_file: PathBuf::from("."),
+            transmission_report_name: None,
+            settings_properties: vec![],
+            itinerary_write_fn: ItineraryWriteFnType::SplitEvenly,
+        };
+        context
+            .set_global_property_value(GlobalParams, parameters)
+            .unwrap();
+        context
+    }
+
     #[test]
     fn check_synth_file_tract() {
-        let mut context = Context::new();
+        let mut context = setup();
         let input = String::from(
             "age,homeId,schoolId,workplaceId\n43,360930331020001,,\n42,360930331020002,,",
         );
@@ -134,7 +150,7 @@ mod test {
     #[test]
     #[should_panic(expected = "range end index 11 out of range for slice of length 9")]
     fn check_invalid_census_tract() {
-        let mut context = Context::new();
+        let mut context = setup();
         let input =
             String::from("age,homeId,schoolId,workplaceId\n43,360930331,,\n42,360930331020002,,");
         let synth_file = persist_tmp_csv(&input);
@@ -143,7 +159,7 @@ mod test {
 
     #[test]
     fn check_synth_file_school() {
-        let mut context = Context::new();
+        let mut context = setup();
         let input = String::from(
             "age,homeId,schoolId,workplaceId\n43,360930331020001,1,\n42,360930331020002,2,",
         );
@@ -184,7 +200,7 @@ mod test {
 
     #[test]
     fn check_synth_file_workplace() {
-        let mut context = Context::new();
+        let mut context = setup();
         let input = String::from(
             "age,homeId,schoolId,workplaceId\n43,360930331020001,,1\n42,360930331020002,,2",
         );

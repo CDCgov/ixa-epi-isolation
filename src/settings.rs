@@ -1,4 +1,4 @@
-use crate::parameters::{ContextParametersExt, CoreSettingsTypes, Params};
+use crate::parameters::{ContextParametersExt, CoreSettingsTypes, ItineraryWriteFnType, Params};
 use ixa::people::PersonId;
 use ixa::{
     define_data_plugin, define_rng, people::Query, Context, ContextPeopleExt, ContextRandomExt,
@@ -50,7 +50,6 @@ pub struct ItineraryEntry {
     ratio: f64,
 }
 
-#[allow(dead_code)]
 impl ItineraryEntry {
     pub fn new<T: SettingType>(setting_id: &SettingId<T>, ratio: f64) -> ItineraryEntry {
         ItineraryEntry {
@@ -58,6 +57,39 @@ impl ItineraryEntry {
             setting_id: setting_id.id,
             ratio,
         }
+    }
+}
+
+type ItineraryEntryWriter<T> = dyn Fn(&Context, &SettingId<T>) -> Box<ItineraryEntry>;
+
+pub trait Itinerary {
+    fn rescale(&mut self);
+    fn add_setting_to_itinerary<T: SettingType + 'static>(
+        &mut self,
+        context: &Context,
+        setting_id_value: usize,
+    ) -> Result<&mut Self, IxaError>;
+}
+
+impl Itinerary for Vec<ItineraryEntry> {
+    fn rescale(&mut self) {
+        let mut sum = 0.0;
+        for entry in self.iter() {
+            sum += entry.ratio;
+        }
+        for entry in self.iter_mut() {
+            entry.ratio /= sum;
+        }
+    }
+    fn add_setting_to_itinerary<T: SettingType + 'static>(
+        &mut self,
+        context: &Context,
+        setting_id_value: usize,
+    ) -> Result<&mut Self, IxaError> {
+        let setting_id = &SettingId::<T>::new(setting_id_value);
+        let writer = context.get_itinerary_write_rules::<T>();
+        self.push(*writer(context, setting_id));
+        Ok(self)
     }
 }
 
@@ -187,6 +219,7 @@ trait ContextSettingInternalExt {
         setting_type: TypeId,
         setting_id: usize,
     ) -> Option<&Vec<PersonId>>;
+    fn get_itinerary_write_rules<T: SettingType + 'static>(&self) -> Box<ItineraryEntryWriter<T>>;
 }
 
 impl ContextSettingInternalExt for Context {
@@ -219,6 +252,17 @@ impl ContextSettingInternalExt for Context {
     ) -> Option<&Vec<PersonId>> {
         self.get_data_container(SettingDataPlugin)?
             .get_setting_members(&setting_type, setting_id)
+    }
+    fn get_itinerary_write_rules<T: SettingType + 'static>(&self) -> Box<ItineraryEntryWriter<T>> {
+        let &Params {
+            itinerary_write_fn, ..
+        } = self.get_params();
+
+        match itinerary_write_fn {
+            ItineraryWriteFnType::SplitEvenly => {
+                Box::new(|_context, setting_id| Box::new(ItineraryEntry::new(setting_id, 1.0)))
+            }
+        }
     }
 }
 
