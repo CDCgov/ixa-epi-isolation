@@ -9,30 +9,17 @@ use ixa::{define_data_plugin, define_rng, Context, ContextRandomExt, IxaError, P
 define_rng!(NaturalHistoryParameterRng);
 
 /// Specifies behavior for a library of natural history parameters
-pub trait NaturalHistoryParameter {
-    /// Returns the size of a library of natural history parameters.
+pub trait NaturalHistoryParameterLibrary {
+    /// Returns the size of a library of natural history parameters. Used to return a random index
+    /// in the range of the library size when querying an id for a natural history parameter that
+    /// has no assignment function previously registered.
     fn library_size(&self, context: &Context) -> usize;
 }
 
-/// Specifies behavior for obtaining a natural history id from a type.
-pub trait NaturalHistoryId {
-    /// Returns the index of a natural history parameter in a library of parameters.
-    fn id(&self) -> usize;
-}
-
-// By default, natural history indeces will be usize. This is a convenience implementation for
-// common user code that returns a usize id as the natural history id.
-impl NaturalHistoryId for usize {
-    fn id(&self) -> usize {
-        *self
-    }
-}
-
-type IdAssigner<I> = dyn Fn(&Context, PersonId) -> I;
-
 #[derive(Default)]
+#[allow(clippy::type_complexity)]
 struct NaturalHistoryParameterContainer {
-    parameter_id_assigners: HashMap<TypeId, Box<IdAssigner<Box<dyn NaturalHistoryId>>>>,
+    parameter_id_assigners: HashMap<TypeId, Box<dyn Fn(&Context, PersonId) -> usize>>,
     ids: RefCell<HashMap<TypeId, HashMap<PersonId, usize>>>,
 }
 
@@ -44,46 +31,45 @@ define_data_plugin!(
 
 /// Provides methods for specifying relationships between libraries of natural history parameters.
 pub trait ContextNaturalHistoryParameterExt {
-    /// Register an assignment function for the id of a natural history parameter. The assignment
-    /// function takes `Context` and `PersonId` as arguments and returns a type `I` that implements
-    /// `NaturalHistoryId`. The id refers to the index of an item in a library of natural history
-    /// parameters.
+    /// Register the function used to assign a particular index from a library of natural history
+    /// parameters `T` to a person. The function is evaluated when the id is requested, so it can
+    /// depend on other parameters and takes `&Context` and `PersonId` as arguments. Values from
+    /// the registered function are returned when `context.get_parameter_id` is called.
     /// # Errors
     /// - If an assignment function for the parameter has already been registered
     /// - If an id for the parameter has already been queried for a person (i.e., defaulting to
     ///   random assignment)
-    fn register_parameter_id_assigner<T, S, I>(
+    fn register_parameter_id_assigner<T, S>(
         &mut self,
         parameter: T,
         assignment_fn: S,
     ) -> Result<(), IxaError>
     where
-        T: NaturalHistoryParameter + 'static,
-        S: Fn(&Context, PersonId) -> I + 'static,
-        I: NaturalHistoryId + 'static;
+        T: NaturalHistoryParameterLibrary + 'static,
+        S: Fn(&Context, PersonId) -> usize + 'static;
 
-    /// Get the id for a parameter for a person according to the registered assignment function. If
-    /// no assignment function is registered, a random id will be assigned between 0 (inclusive) and
-    /// the parameter's library size (exclusive).
+    /// Get the id for a natural history parameter for a person. If an assignment function is
+    /// registered, returns the id from evaluating that function, and if no assignment function is
+    /// registered, returns a random id between 0 (inclusive) and the parameter's library size
+    /// (exclusive).
     /// Stores the assigned id so that calling this function again with the same parameter and
     /// person will return the same id.
     /// Does not check whether the id returned from an assignment function is in the range of the
     /// library size.
     fn get_parameter_id<T>(&self, parameter: T, person_id: PersonId) -> usize
     where
-        T: NaturalHistoryParameter + 'static;
+        T: NaturalHistoryParameterLibrary + 'static;
 }
 
 impl ContextNaturalHistoryParameterExt for Context {
-    fn register_parameter_id_assigner<T, S, I>(
+    fn register_parameter_id_assigner<T, S>(
         &mut self,
         _parameter: T,
         assignment_fn: S,
     ) -> Result<(), IxaError>
     where
-        T: NaturalHistoryParameter + 'static,
-        S: Fn(&Context, PersonId) -> I + 'static,
-        I: NaturalHistoryId + 'static,
+        T: NaturalHistoryParameterLibrary + 'static,
+        S: Fn(&Context, PersonId) -> usize + 'static,
     {
         let container = self.get_data_container_mut(NaturalHistoryParameters);
 
@@ -103,7 +89,7 @@ impl ContextNaturalHistoryParameterExt for Context {
         match container.parameter_id_assigners.entry(TypeId::of::<T>()) {
             Entry::Vacant(entry) => {
                 entry.insert(Box::new(move |ctx, person_id| {
-                    Box::new(assignment_fn(ctx, person_id))
+                    assignment_fn(ctx, person_id)
                 }));
                 Ok(())
             }
@@ -117,7 +103,7 @@ impl ContextNaturalHistoryParameterExt for Context {
 
     fn get_parameter_id<T>(&self, parameter: T, person_id: PersonId) -> usize
     where
-        T: NaturalHistoryParameter + 'static,
+        T: NaturalHistoryParameterLibrary + 'static,
     {
         let container = self
         .get_data_container(NaturalHistoryParameters)
@@ -139,7 +125,7 @@ impl ContextNaturalHistoryParameterExt for Context {
             .map(|x| x.as_ref())
         {
             // Get the id from the assignment function
-            let id = assigner(self, person_id).id();
+            let id = assigner(self, person_id);
             // Store the id for this person
             container
                 .ids
@@ -170,12 +156,12 @@ mod test {
     use ixa::{context::Context, ContextPeopleExt, ContextRandomExt, IxaError};
 
     use super::{
-        ContextNaturalHistoryParameterExt, NaturalHistoryParameter, NaturalHistoryParameters,
+        ContextNaturalHistoryParameterExt, NaturalHistoryParameterLibrary, NaturalHistoryParameters,
     };
 
     struct ViralLoad;
 
-    impl NaturalHistoryParameter for ViralLoad {
+    impl NaturalHistoryParameterLibrary for ViralLoad {
         fn library_size(&self, _context: &Context) -> usize {
             1
         }
@@ -203,7 +189,7 @@ mod test {
             .get(&TypeId::of::<ViralLoad>())
             .unwrap()
             .as_ref();
-        assert_eq!(assigner(&context, person).id(), 0);
+        assert_eq!(assigner(&context, person), 0);
     }
 
     #[test]
@@ -228,7 +214,7 @@ mod test {
 
     struct AntigenPositivity;
 
-    impl NaturalHistoryParameter for AntigenPositivity {
+    impl NaturalHistoryParameterLibrary for AntigenPositivity {
         fn library_size(&self, _context: &Context) -> usize {
             1
         }
@@ -298,7 +284,7 @@ mod test {
 
     struct CulturePositivity;
 
-    impl NaturalHistoryParameter for CulturePositivity {
+    impl NaturalHistoryParameterLibrary for CulturePositivity {
         fn library_size(&self, _context: &Context) -> usize {
             10000
         }
@@ -306,7 +292,7 @@ mod test {
 
     struct TestingPatterns;
 
-    impl NaturalHistoryParameter for TestingPatterns {
+    impl NaturalHistoryParameterLibrary for TestingPatterns {
         fn library_size(&self, _context: &Context) -> usize {
             10000
         }
