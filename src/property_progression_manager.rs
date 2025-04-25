@@ -13,7 +13,7 @@ use serde::Deserialize;
 use crate::{parameters::ProgressionLibraryType, symptom_progression::SymptomData};
 
 use crate::natural_history_parameter_manager::{
-    ContextNaturalHistoryParameterExt, NaturalHistoryParameter,
+    ContextNaturalHistoryParameterExt, NaturalHistoryParameterLibrary,
 };
 
 /// Defines a semi-Markovian method for getting the next value based on the last.
@@ -52,7 +52,7 @@ pub trait ContextPropertyProgressionExt {
     );
 }
 
-impl<T> NaturalHistoryParameter for T
+impl<T> NaturalHistoryParameterLibrary for T
 where
     T: PersonProperty + 'static,
 {

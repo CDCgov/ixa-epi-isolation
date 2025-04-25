@@ -5,7 +5,7 @@ use serde::Deserialize;
 
 use crate::{
     natural_history_parameter_manager::{
-        ContextNaturalHistoryParameterExt, NaturalHistoryParameter,
+        ContextNaturalHistoryParameterExt, NaturalHistoryParameterLibrary,
     },
     parameters::{ContextParametersExt, Params, RateFnType},
 };
@@ -20,7 +20,7 @@ struct RateFnContainer {
 
 pub struct RateFn;
 
-impl NaturalHistoryParameter for RateFn {
+impl NaturalHistoryParameterLibrary for RateFn {
     fn library_size(&self, context: &Context) -> usize {
         context
             .get_data_container(RateFnPlugin)
