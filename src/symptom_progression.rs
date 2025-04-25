@@ -199,11 +199,7 @@ fn schedule_recovery(data: &SymptomData, context: &Context) -> (Option<SymptomVa
 
 pub fn init(context: &mut Context) -> Result<(), IxaError> {
     let params = context.get_params();
-    load_progressions(
-        context,
-        Symptoms,
-        params.symptom_progression_library.clone(),
-    )?;
+    load_progressions(context, params.symptom_progression_library.clone())?;
 
     event_subscriptions(context);
     Ok(())
@@ -252,14 +248,11 @@ mod test {
             initial_infections: 3,
             max_time: 100.0,
             seed: 0,
-            infectiousness_rate_fn: LibraryType::Constant {
+            infectiousness_rate_fn: RateFnType::Constant {
                 rate: 1.0,
                 duration: 5.0,
             },
-            symptom_progression_library: LibraryType::Constant {
-                rate: 1.0,
-                duration: 5.0,
-            },
+            symptom_progression_library: None,
             report_period: 1.0,
             synth_population_file: PathBuf::from("."),
             transmission_report_name: None,

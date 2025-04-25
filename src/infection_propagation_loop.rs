@@ -106,7 +106,7 @@ mod test {
         },
         parameters::{
             ContextParametersExt, CoreSettingsTypes, GlobalParams, ItineraryWriteFnType, Params,
-            LibraryType},
+            RateFnType},
         rate_fns::load_rate_fns,
     };
 
@@ -118,14 +118,11 @@ mod test {
             initial_infections: 3,
             max_time: 100.0,
             seed,
-            infectiousness_rate_fn: LibraryType::Constant {
+            infectiousness_rate_fn: RateFnType::Constant {
                 rate,
                 duration: 5.0,
             },
-            symptom_progression_library: LibraryType::Constant {
-                rate: 1.0,
-                duration: 5.0,
-            },
+            symptom_progression_library: None,
             report_period: 1.0,
             synth_population_file: PathBuf::from("."),
             transmission_report_name: None,

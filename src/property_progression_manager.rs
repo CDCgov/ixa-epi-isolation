@@ -10,7 +10,7 @@ use ixa::{
 };
 use serde::Deserialize;
 
-use crate::{parameters::LibraryType, symptom_progression::SymptomData};
+use crate::{parameters::ProgressionLibraryType, symptom_progression::SymptomData};
 
 define_rng!(ProgressionRng);
 
@@ -87,34 +87,15 @@ impl ContextPropertyProgressionExt for Context {
     }
 }
 
-impl<T> Progression<T> for ()
-where
-    T: PersonProperty + 'static,
-{
-    fn next(
-        &self,
-        _context: &Context,
-        _person_id: PersonId,
-        _last: T::Value,
-    ) -> Option<(T::Value, f64)> {
-        None
-    }
-}
-
-pub fn load_progressions<T>(
+pub fn load_progressions(
     context: &mut Context,
-    property: T,
-    library: LibraryType,
-) -> Result<(), IxaError>
-where
-    T: PersonProperty + 'static,
-{
-    match library {
-        LibraryType::EmpiricalFromFile { file } => {
-            add_progressions_from_file(context, file)?;
-        }
-        LibraryType::Constant { .. } => {
-            context.register_property_progression(property, ());
+    library: Option<ProgressionLibraryType>,
+) -> Result<(), IxaError> {
+    if let Some(library) = library {
+        match library {
+            ProgressionLibraryType::EmpiricalFromFile { file } => {
+                add_progressions_from_file(context, file)?;
+            }
         }
     }
     Ok(())
@@ -192,7 +173,7 @@ mod test {
     use statrs::assert_almost_eq;
 
     use crate::{
-        parameters::LibraryType,
+        parameters::ProgressionLibraryType,
         population_loader::Age,
         symptom_progression::{SymptomValue, Symptoms},
     };
@@ -472,28 +453,12 @@ mod test {
     }
 
     #[test]
-    fn test_load_library_nonsensible_library_type() {
+    fn test_load_library_none_provided_library_type() {
         let mut context = Context::new();
-        let person = context.add_person(()).unwrap();
-        load_progressions(
-            &mut context,
-            Age,
-            LibraryType::Constant {
-                rate: 1.0,
-                duration: 5.0,
-            },
-        )
-        .unwrap();
-        // Check that we have a null tracer for Age
-        let container = context.get_data_container(PropertyProgressions).unwrap();
-        let progressions = container.progressions.get(&TypeId::of::<Age>()).unwrap();
-        assert_eq!(progressions.len(), 1);
-        let tcr = progressions[0]
-            .downcast_ref::<Box<dyn Progression<Age>>>()
-            .unwrap()
-            .as_ref();
-        // This is the default implementation of Progression, which does nothing.
-        assert_eq!(tcr.next(&context, person, 0), None);
+        load_progressions(&mut context, None).unwrap();
+        // Check that we have nothing in the progression data container
+        let container = context.get_data_container(PropertyProgressions);
+        assert!(container.is_none());
     }
 
     #[test]
@@ -501,7 +466,10 @@ mod test {
         let mut context = Context::new();
         let file = PathBuf::from("./tests/data/progression_type_mismatch.csv");
         // Load the library and check for an error
-        let result = load_progressions(&mut context, Age, LibraryType::EmpiricalFromFile { file });
+        let result = load_progressions(
+            &mut context,
+            Some(ProgressionLibraryType::EmpiricalFromFile { file }),
+        );
         let e = result.err();
         match e {
             Some(IxaError::IxaError(msg)) => {
@@ -527,8 +495,7 @@ mod test {
         // Load the library and check for an error
         load_progressions(
             &mut context,
-            Symptoms,
-            LibraryType::EmpiricalFromFile { file },
+            Some(ProgressionLibraryType::EmpiricalFromFile { file }),
         )
         .unwrap();
         // Get out the registered progressions.

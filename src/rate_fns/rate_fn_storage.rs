@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use ixa::{define_data_plugin, define_rng, Context, ContextRandomExt, IxaError};
 use serde::{Deserialize, Serialize};
 
-use crate::parameters::{ContextParametersExt, LibraryType};
+use crate::parameters::{ContextParametersExt, RateFnType};
 
 use super::{rate_fn::InfectiousnessRateFn, ConstantRate, EmpiricalRate};
 
@@ -61,10 +61,10 @@ pub fn load_rate_fns(context: &mut Context) -> Result<(), IxaError> {
     let rate_of_infection = context.get_params().infectiousness_rate_fn.clone();
 
     match rate_of_infection {
-        LibraryType::Constant { rate, duration } => {
+        RateFnType::Constant { rate, duration } => {
             context.add_rate_fn(Box::new(ConstantRate::new(rate, duration)?));
         }
-        LibraryType::EmpiricalFromFile { file } => {
+        RateFnType::EmpiricalFromFile { file } => {
             add_rate_fns_from_file(context, file)?;
         }
     }
@@ -161,14 +161,11 @@ mod tests {
             initial_infections: 3,
             max_time: 100.0,
             seed: 0,
-            infectiousness_rate_fn: LibraryType::Constant {
+            infectiousness_rate_fn: RateFnType::Constant {
                 rate: 1.0,
                 duration: 5.0,
             },
-            symptom_progression_library: LibraryType::Constant {
-                rate: 1.0,
-                duration: 5.0,
-            },
+            symptom_progression_library: None,
             report_period: 1.0,
             synth_population_file: PathBuf::from("."),
             transmission_report_name: None,

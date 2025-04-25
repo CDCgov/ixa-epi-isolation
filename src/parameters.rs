@@ -9,8 +9,13 @@ use ixa::{define_global_property, ContextGlobalPropertiesExt, IxaError};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub enum LibraryType {
+pub enum RateFnType {
     Constant { rate: f64, duration: f64 },
+    EmpiricalFromFile { file: PathBuf },
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum ProgressionLibraryType {
     EmpiricalFromFile { file: PathBuf },
 }
 
@@ -66,9 +71,9 @@ pub struct Params {
     /// The random seed for the simulation.
     pub seed: u64,
     /// A library of infection rates to assign to infected people.
-    pub infectiousness_rate_fn: LibraryType,
+    pub infectiousness_rate_fn: RateFnType,
     /// A library of symptom progressions
-    pub symptom_progression_library: LibraryType,
+    pub symptom_progression_library: Option<ProgressionLibraryType>,
     /// The period at which to report tabulated values
     pub report_period: f64,
     /// Setting properties, currently only the transmission modifier alpha values for each setting
@@ -131,7 +136,7 @@ mod test {
 
     use super::validate_inputs;
     use crate::parameters::{
-        ContextParametersExt, GlobalParams, ItineraryWriteFnType, Params, LibraryType,
+        ContextParametersExt, GlobalParams, ItineraryWriteFnType, Params, RateFnType,
     };
     use std::path::PathBuf;
 
@@ -152,14 +157,11 @@ mod test {
             initial_infections: 1,
             max_time: 100.0,
             seed: 0,
-            infectiousness_rate_fn: LibraryType::Constant {
+            infectiousness_rate_fn: RateFnType::Constant {
                 rate: 1.0,
                 duration: 5.0,
             },
-            symptom_progression_library: LibraryType::Constant {
-                rate: 1.0,
-                duration: 5.0,
-            },
+            symptom_progression_library: None,
             report_period: 1.0,
             synth_population_file: PathBuf::from("."),
             transmission_report_name: None,
@@ -182,14 +184,11 @@ mod test {
             initial_infections: 1,
             max_time: -100.0,
             seed: 0,
-            infectiousness_rate_fn: LibraryType::Constant {
+            infectiousness_rate_fn: RateFnType::Constant {
                 rate: 1.0,
                 duration: 5.0,
             },
-            symptom_progression_library: LibraryType::Constant {
-                rate: 1.0,
-                duration: 5.0,
-            },
+            symptom_progression_library: None,
             report_period: 1.0,
             synth_population_file: PathBuf::from("."),
             transmission_report_name: None,
@@ -211,13 +210,13 @@ mod test {
 
     #[test]
     fn test_deserialization_rates() {
-        let deserialized = serde_json::from_str::<LibraryType>(
+        let deserialized = serde_json::from_str::<RateFnType>(
             "{\"Constant\": {\"rate\": 1.0, \"duration\": 5.0}}",
         )
         .unwrap();
         assert_eq!(
             deserialized,
-            LibraryType::Constant {
+            RateFnType::Constant {
                 rate: 1.0,
                 duration: 5.0
             }
