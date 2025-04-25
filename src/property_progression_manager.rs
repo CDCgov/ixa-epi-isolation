@@ -104,6 +104,8 @@ pub fn load_progressions(
 #[derive(Deserialize, PartialEq, Debug)]
 enum ProgressionType {
     SymptomData,
+    // We need this variant for testing that our CSV deserialization catches mismatched progression
+    // types with the same id.
     Unimplemented,
 }
 
