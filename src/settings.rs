@@ -817,11 +817,11 @@ mod test {
         let itinerary_b = vec![ItineraryEntry::new(&SettingId::<Home>::new(0), 1.0)];
         let _ = context.add_itinerary(person_a, itinerary_a);
         let _ = context.add_itinerary(person_b, itinerary_b);
-
         assert_eq!(
             person_b,
             context
                 .get_contact(person_a, SettingId::<Home>::new(0), ())
+                .unwrap()
                 .unwrap()
         );
         assert!(context
@@ -839,10 +839,19 @@ mod test {
         let person_c = context.add_person(()).unwrap();
         let itinerary_c = vec![ItineraryEntry::new(&SettingId::<CensusTract>::new(0), 0.5)];
         let _ = context.add_itinerary(person_c, itinerary_c);
-
-        assert!(context
-            .get_contact::<CensusTract>(person_b, SettingId::<CensusTract>::new(0))
-            .is_none());
+        let e = context
+            .get_contact(person_b, SettingId::<CensusTract>::new(0))
+            .err();
+        match e {
+            Some(IxaError::IxaError(msg)) => {
+                assert_eq!(msg, "Attempting contact in invalid setting");
+            }
+            Some(ue) => panic!(
+                "Expected an error attempting contact in invalid setting. Instead got: {:?}",
+                ue.to_string()
+            ),
+            None => panic!("Expected an error. Instead, validation passed with no errors."),
+        }
     }
 
     #[test]
