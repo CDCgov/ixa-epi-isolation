@@ -154,7 +154,9 @@ define_data_plugin!(
 
 #[allow(dead_code)]
 pub trait ContextSettingExt {
-    fn get_setting_properties<T: SettingType + 'static>(&self) -> SettingProperties;
+    fn get_setting_properties<T: SettingType + 'static>(
+        &self,
+    ) -> Result<SettingProperties, IxaError>;
     fn register_setting_type<T: SettingType + 'static>(
         &mut self,
         setting: T,
@@ -305,14 +307,23 @@ impl ContextSettingInternalExt for Context {
 }
 
 impl ContextSettingExt for Context {
-    fn get_setting_properties<T: SettingType + 'static>(&self) -> SettingProperties {
-        let data_container = self
-            .get_data_container(SettingDataPlugin)
-            .unwrap()
+    fn get_setting_properties<T: SettingType + 'static>(
+        &self,
+    ) -> Result<SettingProperties, IxaError> {
+        let data_container = self.get_data_container(SettingDataPlugin).unwrap();
+
+        let registered_setting = data_container.setting_types.get(&TypeId::of::<T>());
+
+        if registered_setting.is_none() {
+            return Err(IxaError::from(
+                "Attempting to get properties of unregistered setting type",
+            ));
+        }
+        let properties = data_container
             .setting_properties
             .get(&TypeId::of::<T>())
             .unwrap();
-        *data_container
+        Ok(*properties)
     }
     fn register_setting_type<T: SettingType + 'static>(
         &mut self,
@@ -539,11 +550,31 @@ mod test {
         context
             .register_setting_type(CensusTract {}, SettingProperties { alpha: 0.001 })
             .unwrap();
-        let home_props = context.get_setting_properties::<Home>();
-        let tract_props = context.get_setting_properties::<CensusTract>();
+        let home_props = context.get_setting_properties::<Home>().unwrap();
+        let tract_props = context.get_setting_properties::<CensusTract>().unwrap();
 
         assert_almost_eq!(0.1, home_props.alpha, 0.0);
         assert_almost_eq!(0.001, tract_props.alpha, 0.0);
+    }
+
+    #[test]
+    fn test_get_properties_after_registration() {
+        let mut context = Context::new();
+        context
+            .register_setting_type(Home {}, SettingProperties { alpha: 0.1 })
+            .unwrap();
+        let _ = context.get_setting_properties::<Home>().unwrap();
+        let e = context.get_setting_properties::<CensusTract>().err();
+        match e {
+            Some(IxaError::IxaError(msg)) => {
+                assert_eq!(msg, "Attempting to get properties of unregistered setting type");
+            }
+            Some(ue) => panic!(
+                "Expected an error attempting to get properties of unregistered setting type. Instead got: {:?}",
+                ue.to_string()
+            ),
+            None => panic!("Expected an error. Instead, validation passed with no errors."),
+        }
     }
 
     #[test]
