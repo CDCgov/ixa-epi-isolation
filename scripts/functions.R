@@ -43,7 +43,7 @@ calculate_weibull_scale <- function(
   # = (ln(wr / wr_midpoint_prior) - ln(wr_mean / wr_midpoint_prior)) / log_wr_sd
   # = ln((wr / wr_midpoint_prior) / (wr_mean / wr_midpoint_prior)) / log_wr_sd
   # = ln((wr / wr_midpoint_prior) * (wr_midpoint_prior / wr_mean)) / log_wr_sd
-  # = ln(wr / wr_mean) / log_wr_sd)
+  # = ln(wr / wr_mean) / log_wr_sd
   log_wr_sd <- log(wr_sd)
   wr_raw <- log(wr / wr_mean) / log_wr_sd
   # Recall that the discrete Weibull takes two arguments --
