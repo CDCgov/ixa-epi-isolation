@@ -6,7 +6,6 @@ use ixa::{
 };
 use rand::Rng;
 use serde::{Deserialize, Serialize};
-use serde_json::from_str;
 use statrs::distribution::Weibull;
 
 use crate::{
@@ -102,13 +101,21 @@ impl SymptomData {
             .collect::<HashMap<&str, f64>>();
 
         // Get out the symptom category name
-        let category = from_str(&format!(r#""{}""#, parameter_names[0]))?;
-        if !parameters[0].is_nan() {
-            return Err(IxaError::IxaError(format!(
-                            "Parameter associated with specifying the symptom category name should be NaN, but got {}",
-                            parameters[0]
-                        )));
-        }
+        let category = match parameter_dict
+            .get("Symptom category")
+            .ok_or(IxaError::IxaError(
+                "No Symptom category provided.".to_string(),
+            ))? {
+            1.0 => SymptomValue::Category1,
+            2.0 => SymptomValue::Category2,
+            3.0 => SymptomValue::Category3,
+            4.0 => SymptomValue::Category4,
+            _ => {
+                return Err(IxaError::IxaError(
+                    "Symptom category must be between 1 and 4.".to_string(),
+                ))
+            }
+        };
 
         // Get out the incubation period parameters
         let incubation_period =
@@ -441,23 +448,23 @@ mod test {
     }
 
     #[test]
-    fn test_register_parameter_not_nan() {
+    fn test_register_error_symptom_category() {
         let mut context = setup();
         let parameter_names = vec![
-            "Category1".to_string(),
+            "Symptom category".to_string(),
             "a".to_string(),
             "b".to_string(),
             "c".to_string(),
             "d".to_string(),
         ];
-        let parameters = vec![0.0, 1.0, 2.0, 3.0, 4.0];
+        let parameters = vec![5.0, 1.0, 2.0, 3.0, 4.0];
         let e = SymptomData::register(&mut context, parameter_names, parameters).err();
         match e {
             Some(IxaError::IxaError(msg)) => {
-                assert_eq!(msg, "Parameter associated with specifying the symptom category name should be NaN, but got 0".to_string());
+                assert_eq!(msg, "Symptom category must be between 1 and 4.".to_string());
             }
             Some(ue) => panic!(
-                "Expected an error that parameter associated with specifying the symptom category name should be NaN. Instead got {:?}",
+                "Expected an error that symptom category must be between 1 and 4. Instead got {:?}",
                 ue.to_string()
             ),
             None => panic!("Expected an error. Instead, registration passed with no errors."),
@@ -468,13 +475,13 @@ mod test {
     fn test_register_incubation_period_not_positive() {
         let mut context = setup();
         let parameter_names = vec![
-            "Category1".to_string(),
+            "Symptom category".to_string(),
             "Incubation period".to_string(),
             "b".to_string(),
             "c".to_string(),
             "d".to_string(),
         ];
-        let parameters = vec![f64::NAN, -1.0, 2.0, 3.0, 4.0];
+        let parameters = vec![1.0, -1.0, 2.0, 3.0, 4.0];
         let e = SymptomData::register(&mut context, parameter_names, parameters).err();
         match e {
             Some(IxaError::IxaError(msg)) => {
@@ -492,13 +499,13 @@ mod test {
     fn test_register_wrong_param_names() {
         let mut context = setup();
         let parameter_names = vec![
-            "Category1".to_string(),
+            "Symptom category".to_string(),
             "Outcubation rate".to_string(),
             "Weibull shape".to_string(),
             "Weibull scale".to_string(),
             "Weibull upper bound".to_string(),
         ];
-        let parameters = vec![f64::NAN, 5.0, 2.0, 3.0, 4.0];
+        let parameters = vec![1.0, 5.0, 2.0, 3.0, 4.0];
         let e = SymptomData::register(&mut context, parameter_names, parameters).err();
         match e {
             Some(IxaError::IxaError(msg)) => {
@@ -516,13 +523,13 @@ mod test {
     fn test_register_produces_right_symptom_data() {
         let mut context = setup();
         let parameter_names = vec![
-            "Category1".to_string(),
+            "Symptom category".to_string(),
             "Incubation period".to_string(),
             "Weibull shape".to_string(),
             "Weibull scale".to_string(),
             "Weibull upper bound".to_string(),
         ];
-        let parameters = vec![f64::NAN, 5.0, 2.0, 3.0, 4.0];
+        let parameters = vec![1.0, 5.0, 2.0, 3.0, 4.0];
         SymptomData::register(&mut context, parameter_names, parameters).unwrap();
         // Check that a person goes through this progression as we would expect
         let person = context.add_person(()).unwrap();
