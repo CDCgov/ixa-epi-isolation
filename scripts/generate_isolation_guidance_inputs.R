@@ -4,7 +4,14 @@
 library(tidyverse)
 library(sjmisc)
 source("scripts/functions.R")
+set.seed(108)
 
+# Jason's suggestion for basically adding a positive value (that we calibrate)
+# to the time before infectiousness starts (by our assumption of logVL > 0)
+# to get the time of infection. This time plus the time to symptom onset is the
+# disease latent period. We can calibrate these parameters.
+pre_infectiousness_mean <- 0.5
+pre_infectiousness_std_dev <- 1
 dt <- 0.2
 max_time <- 28
 
@@ -19,23 +26,36 @@ sampled_params <- readr::read_csv(,
 
 # Our isolation guidance parameters provide the viral load _with respect to_
 # time since symptom. We need to convert times to be with respect to _infection_
-# onset.
-# Todo (kzs9): Use Sang Woo Park (PNAS, 2022) incubation period and
-# proliferation times to develop a principled way to get incubation
-# periods consistent with proliferation times.
-# For now, we use a bogus incubation period. We know that the incubation
-# period must be longer than proliferation period - time of symptom onset.
-# We add one as a buffer, and we negate to be wrt to symptom onset.
+# onset. For this reason, we need to estimate the time of infection.
+# We do this by assuming that infection happens sometime before whenever we
+# assume infectiousness starts (logVL > 0). We can calibrate these parameters.
+# Note that this time is the disease latent period, and the time from the start
+# of the infection to symptom onset is the incubation period
+# (this is -infection_start_time), so we can interpret these parameters
+# epidemiologically.
+# There core assumption here is really that infectiousness starts at logVL > 0.
+# If that is not true, we should see the pre infectiousness period run up
+# against 0 in the calibration, and we can adjust accordingly.
 sampled_params <- sampled_params |>
-  dplyr::mutate(infectiousness_start_time = -(wp - tp + 1))
+  dplyr::mutate(pre_infectiousness_period = exp(rnorm(
+    nrow(sampled_params),
+    mean = log(pre_infectiousness_mean),
+    sd = pre_infectiousness_std_dev
+  ))) |>
+  # wp is the proliferation period -- time from logVL = 0 to peak logVL
+  # tp is the time of peak logVL wrt time since symptom onset
+  # so wp - tp is the time from logVL = 0 to symptom onset, and -(wp - tp)
+  # is the time at which infectiousness starts. We want to have the
+  # infection start before that, so we subtract some time.
+  dplyr::mutate(infection_start_time = -(wp - tp) - pre_infectiousness_period)
 
 # Our triangle_vl function from our isolation guidance work (copied and put in
 # `functions.R` for now) is defined in terms of the time since symptom onset.
 # This function is defined in terms of the time since infection.
 triangle_vl_wrt_infected_time <- function(
-    tp, dp, wp, wr, infectiousness_start_time, max_time, dt) {
+    tp, dp, wp, wr, infection_start_time, max_time, dt) {
   curve <- pmax(triangle_vl(
-    seq(infectiousness_start_time, infectiousness_start_time + max_time, dt),
+    seq(infection_start_time, infection_start_time + max_time, dt),
     dp, tp, wp, wr
   ), 0)
   return(list(unnormalized_pdf_to_hazard(curve, dt)))
@@ -48,7 +68,7 @@ trajectories <- purrr::pmap_vec(
     dp = sampled_params$dp,
     wp = sampled_params$wp,
     wr = sampled_params$wr,
-    infectiousness_start_time = sampled_params$infectiousness_start_time,
+    infection_start_time = sampled_params$infection_start_time,
     max_time = max_time,
     dt = dt
   ), triangle_vl_wrt_infected_time,
@@ -89,10 +109,31 @@ sampled_params <- sampled_params |>
       )
   )
 
-# This output format is still a WIP based on what formatting I land in Rust
 symptom_parameters <- sampled_params |>
   dplyr::mutate(id = row_number()) |>
-  dplyr::select(id, symp_type_cat, si_shape, si_scale)
+  # Same max si as is used in isolation guidance modeling
+  dplyr::mutate(incubation_period = -infection_start_time, max_si = 28.0) |>
+  dplyr::select(
+    id, symp_type_cat,
+    incubation_period, si_shape, si_scale, max_si
+  )
+
+# Get the dataframe into the right format for ixa epi's progression
+# library reader
+names(symptom_parameters) <- c(
+  "id", "Symptom category", "Incubation period", "Weibull shape",
+  "Weibull scale",
+  "Weibull upper bound"
+)
+
+symptom_parameters <- symptom_parameters |>
+  tidyr::pivot_longer(
+    cols = -c("id"),
+    names_to = "parameter_name",
+    values_to = "parameter_value"
+  ) |>
+  dplyr::mutate(progression_type = "SymptomData") |>
+  dplyr::select(id, progression_type, parameter_name, parameter_value)
 
 write_csv(symptom_parameters,
   file.path(
