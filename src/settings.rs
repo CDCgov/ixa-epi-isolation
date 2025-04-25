@@ -827,6 +827,22 @@ mod test {
         assert!(context
             .get_contact(person_a, SettingId::<CensusTract>::new(0), ())
             .is_none());
+
+        let person_c = context.add_person(()).unwrap();
+        let itinerary_c = vec![ItineraryEntry::new(&SettingId::<CensusTract>::new(0), 0.5)];
+        let _ = context.add_itinerary(person_c, itinerary_c);
+
+        assert!(context
+            .get_contact::<CensusTract>(person_b, SettingId::<CensusTract>::new(0))
+            .is_none());
+
+        let person_c = context.add_person(()).unwrap();
+        let itinerary_c = vec![ItineraryEntry::new(&SettingId::<CensusTract>::new(0), 0.5)];
+        let _ = context.add_itinerary(person_c, itinerary_c);
+
+        assert!(context
+            .get_contact::<CensusTract>(person_b, SettingId::<CensusTract>::new(0))
+            .is_none());
     }
 
     #[test]
