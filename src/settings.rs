@@ -73,6 +73,7 @@ pub trait Itinerary {
 }
 
 impl Itinerary for Vec<ItineraryEntry> {
+    /// Add a specified setting Id into the Itoinerary vector
     fn add_setting_to_itinerary<T: SettingType + 'static>(
         &mut self,
         context: &Context,
@@ -83,6 +84,9 @@ impl Itinerary for Vec<ItineraryEntry> {
         self.push(writer(context, setting_id));
         Ok(self)
     }
+    /// Merge the current itinerary with another itinerary
+    /// Takes in an existing itinerary vector and filters for entries that have no matches in the provided vector
+    /// Other values are ignored as they are already present in the input self vector
     fn merge_itinerary(&mut self, other_itinerary: &Self) {
         for entry in other_itinerary {
             // Push entries from existing itinerary that do not match a setting type setting id pair in the new itinerary
@@ -184,6 +188,11 @@ pub trait ContextSettingExt {
         &mut self,
         person_id: PersonId,
         itinerary: Vec<ItineraryEntry>,
+    ) -> Result<(), IxaError>;
+    fn append_itinerary_entry_as_proportion(
+        &mut self,
+        person_id: PersonId,
+        mixing_time_proportion: f64,
     ) -> Result<(), IxaError>;
     fn merge_with_existing_itinerary(
         &mut self,
@@ -353,6 +362,29 @@ impl ContextSettingExt for Context {
         Ok(())
     }
 
+    fn append_itinerary_entry_as_proportion(
+        &mut self,
+        person_id: PersonId,
+        mixing_time_proportion: f64,
+    ) -> Result<(), IxaError> {
+        let ratio = self
+            .get_itinerary(person_id)
+            .map_or(1.0, |existing_itinerary| {
+                //calculate current total itinerary weight
+                let mut sum = 0.0;
+                for entry in existing_itinerary {
+                    sum += entry.ratio;
+                }
+                mixing_time_proportion * sum / (1.0 - mixing_time_proportion)
+            });
+        let mut itinerary = vec![ItineraryEntry::new(&SettingId::<Global>::new(0), ratio)];
+
+        // Append to current existing itinerary
+        self.merge_with_existing_itinerary(person_id, &mut itinerary);
+        self.add_itinerary(person_id, itinerary)?;
+        Ok(())
+    }
+
     fn merge_with_existing_itinerary(
         &mut self,
         person_id: PersonId,
@@ -464,26 +496,15 @@ pub fn global_mixing_itinerary<Q: Query + 'static>(
     q: Q,
 ) -> Result<(), IxaError> {
     for person_id in context.query_people(q) {
-        let mut itinerary = vec![ItineraryEntry::new(
-            &SettingId::<Global>::new(0),
-            mixing_time_proportion,
-        )];
-
-        // Append to current existing itinerary
-        context.merge_with_existing_itinerary(person_id, &mut itinerary);
-        context.add_itinerary(person_id, itinerary)?;
+        context.append_itinerary_entry_as_proportion(person_id, mixing_time_proportion)?;
     }
 
     context.subscribe_to_event::<PersonCreatedEvent>(move |context, event| {
         let person_id = event.person_id;
         if context.match_person(person_id, q) {
-            let mut itinerary = vec![ItineraryEntry::new(
-                &SettingId::<Global>::new(0),
-                mixing_time_proportion,
-            )];
-
-            context.merge_with_existing_itinerary(person_id, &mut itinerary);
-            context.add_itinerary(person_id, itinerary).unwrap();
+            context
+                .append_itinerary_entry_as_proportion(person_id, mixing_time_proportion)
+                .unwrap();
         }
     });
 
