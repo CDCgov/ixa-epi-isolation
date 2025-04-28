@@ -1,4 +1,4 @@
-use std::{fmt::Debug, path::PathBuf};
+use std::{any::TypeId, collections::HashMap, fmt::Debug, path::PathBuf};
 
 use ixa::{define_global_property, ContextGlobalPropertiesExt, IxaError};
 use serde::{Deserialize, Serialize};
@@ -9,7 +9,6 @@ pub enum RateFnType {
     EmpiricalFromFile { file: PathBuf },
 }
 
-pub const CORE_SETTING_VARIANTS: usize = 5;
 #[derive(Debug, Clone, Copy, Deserialize, Serialize)]
 pub enum CoreSettingsTypes {
     Home { alpha: f64 },
@@ -17,6 +16,18 @@ pub enum CoreSettingsTypes {
     Workplace { alpha: f64 },
     CensusTract { alpha: f64 },
     Global { alpha: f64 },
+}
+
+impl AsRef<f64> for CoreSettingsTypes {
+    fn as_ref(&self) -> &f64 {
+        match self {
+            CoreSettingsTypes::Home { alpha }
+            | CoreSettingsTypes::School { alpha }
+            | CoreSettingsTypes::Workplace { alpha }
+            | CoreSettingsTypes::CensusTract { alpha }
+            | CoreSettingsTypes::Global { alpha } => alpha,
+        }
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, Copy)]
@@ -59,43 +70,19 @@ fn validate_inputs(parameters: &Params) -> Result<(), IxaError> {
         ));
     }
 
-    let mut variant_counts = [0; CORE_SETTING_VARIANTS];
-    for setting in &parameters.settings_properties {
-        let alpha_value;
-        match setting {
-            CoreSettingsTypes::Home { alpha } => {
-                alpha_value = alpha;
-                variant_counts[0] += 1;
-            }
-            CoreSettingsTypes::School { alpha } => {
-                alpha_value = alpha;
-                variant_counts[1] += 1;
-            }
-            CoreSettingsTypes::Workplace { alpha } => {
-                alpha_value = alpha;
-                variant_counts[2] += 1;
-            }
-            CoreSettingsTypes::CensusTract { alpha } => {
-                alpha_value = alpha;
-                variant_counts[3] += 1;
-            }
-            CoreSettingsTypes::Global { alpha } => {
-                alpha_value = alpha;
-                variant_counts[4] += 1;
-            }
-        }
+    let mut settings_map: HashMap<TypeId, f64> = HashMap::new();
 
-        if *alpha_value < 0.0 {
+    for setting in &parameters.settings_properties {
+        let setting_type = TypeId::of::<CoreSettingsTypes>();
+        let alpha = setting.as_ref();
+        if *alpha < 0.0 {
             return Err(IxaError::IxaError(
                 "The alpha values for each setting must be non-negative.".to_string(),
             ));
         }
-    }
-
-    for count in variant_counts {
-        if count > 1 {
+        if settings_map.insert(setting_type, *alpha).is_some() {
             return Err(IxaError::IxaError(
-                "Each setting type can only have one alpha value.".to_string(),
+                "Setting types must be uniquely associated with an alpha value.".to_string(),
             ));
         }
     }
@@ -120,11 +107,10 @@ mod test {
     use ixa::{Context, ContextGlobalPropertiesExt, IxaError};
 
     use super::validate_inputs;
-    use std::path::PathBuf;
-
     use crate::parameters::{
         ContextParametersExt, GlobalParams, ItineraryWriteFnType, Params, RateFnType,
     };
+    use std::path::PathBuf;
 
     #[test]
     fn test_default_input_file() {
