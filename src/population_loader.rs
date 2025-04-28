@@ -44,8 +44,7 @@ fn create_person_from_record(
     // Add the settings consistent across all individuals (Home, CensusTract) and rescale to 1.0
     itinerary_person
         .add_setting_to_itinerary::<Home>(context, home_id.parse()?)?
-        .add_setting_to_itinerary::<CensusTract>(context, tract.parse()?)?
-        .rescale();
+        .add_setting_to_itinerary::<CensusTract>(context, tract.parse()?)?;
 
     let person_id = context.add_person((Age, person_record.age))?;
 
