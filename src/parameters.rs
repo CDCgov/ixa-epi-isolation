@@ -1,4 +1,9 @@
-use std::{any::TypeId, collections::HashMap, fmt::Debug, path::PathBuf};
+use std::{
+    collections::HashMap,
+    fmt::Debug,
+    fmt::{Display, Formatter},
+    path::PathBuf,
+};
 
 use ixa::{define_global_property, ContextGlobalPropertiesExt, IxaError};
 use serde::{Deserialize, Serialize};
@@ -26,6 +31,18 @@ impl AsRef<f64> for CoreSettingsTypes {
             | CoreSettingsTypes::Workplace { alpha }
             | CoreSettingsTypes::CensusTract { alpha }
             | CoreSettingsTypes::Global { alpha } => alpha,
+        }
+    }
+}
+
+impl Display for CoreSettingsTypes {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            CoreSettingsTypes::Home { .. } => write!(f, "Home"),
+            CoreSettingsTypes::School { .. } => write!(f, "School"),
+            CoreSettingsTypes::Workplace { .. } => write!(f, "Workplace"),
+            CoreSettingsTypes::CensusTract { .. } => write!(f, "CensusTract"),
+            CoreSettingsTypes::Global { .. } => write!(f, "Global"),
         }
     }
 }
@@ -70,10 +87,10 @@ fn validate_inputs(parameters: &Params) -> Result<(), IxaError> {
         ));
     }
 
-    let mut settings_map: HashMap<TypeId, f64> = HashMap::new();
+    let mut settings_map: HashMap<String, f64> = HashMap::new();
 
     for setting in &parameters.settings_properties {
-        let setting_type = TypeId::of::<CoreSettingsTypes>();
+        let setting_type = setting.to_string();
         let alpha = setting.as_ref();
         if *alpha < 0.0 {
             return Err(IxaError::IxaError(
