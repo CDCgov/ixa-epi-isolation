@@ -23,8 +23,12 @@ pub enum CoreSettingsTypes {
     Global { alpha: f64 },
 }
 
-impl AsRef<f64> for CoreSettingsTypes {
-    fn as_ref(&self) -> &f64 {
+trait GetSettingPropertyFromType {
+    fn get_alpha(&self) -> &f64;
+}
+
+impl GetSettingPropertyFromType for CoreSettingsTypes {
+    fn get_alpha(&self) -> &f64 {
         match self {
             CoreSettingsTypes::Home { alpha }
             | CoreSettingsTypes::School { alpha }
@@ -90,14 +94,14 @@ fn validate_inputs(parameters: &Params) -> Result<(), IxaError> {
     let mut settings_map: HashMap<String, f64> = HashMap::new();
 
     for setting in &parameters.settings_properties {
-        let setting_type = setting.to_string();
-        let alpha = setting.as_ref();
+        let setting_string = setting.to_string();
+        let alpha = setting.get_alpha();
         if *alpha < 0.0 || *alpha > 1.0 {
             return Err(IxaError::IxaError(
                 "The alpha values for each setting must be between 0 and 1, inclusive.".to_string(),
             ));
         }
-        if settings_map.insert(setting_type, *alpha).is_some() {
+        if settings_map.insert(setting_string, *alpha).is_some() {
             return Err(IxaError::IxaError(
                 "Setting types must be uniquely associated with an alpha value.".to_string(),
             ));
