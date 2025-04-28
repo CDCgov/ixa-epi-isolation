@@ -133,23 +133,6 @@ pub fn evaluate_forecast(
     true
 }
 
-// TODO<ryl8@cdc.gov>:
-/// Choose a the next contact for a given transmitter.
-/// Returns None if the contact is not susceptible.
-pub fn select_next_contact(context: &Context, person_id: PersonId) -> Option<PersonId> {
-    //let next_contact = context.get_contact(person_id, ((Alive, true),))?;
-    if let Some(next_contact) = context.draw_contact_from_transmitter_itinerary(person_id, ()) {
-        if context.get_person_property(next_contact, InfectionStatus)
-            != InfectionStatusValue::Susceptible
-        {
-            return None;
-        }
-        Some(next_contact)
-    } else {
-        None
-    }
-}
-
 pub trait InfectionContextExt {
     fn infect_person(&mut self, target_id: PersonId, source_id: Option<PersonId>);
     fn recover_person(&mut self, person_id: PersonId);

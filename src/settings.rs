@@ -690,11 +690,11 @@ mod test {
         assert_eq!(
             person_b,
             context
-                .get_contact::<Home, _>(person_a, SettingId::<Home>::new(0), ())
+                .get_contact(person_a, SettingId::<Home>::new(0), ())
                 .unwrap()
         );
         assert!(context
-            .get_contact::<CensusTract, _>(person_a, SettingId::<CensusTract>::new(0), ())
+            .get_contact(person_a, SettingId::<CensusTract>::new(0), ())
             .is_none());
     }
 
