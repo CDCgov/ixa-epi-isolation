@@ -231,7 +231,7 @@ mod test {
         // of events, they "cancel" each other out to give a uniform distribution (handwavingly).
         let num_sims: u64 = 15_000;
         let rate = 1.5;
-        let alpha = 1.0;
+        let alpha = 0.42;
         // We need the total infectiousness multiplier for the person.
         let mut total_infectiousness_multiplier = None;
         // Where we store the infection times.
