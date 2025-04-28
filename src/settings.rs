@@ -69,6 +69,7 @@ pub trait Itinerary {
         context: &Context,
         setting_id_value: usize,
     ) -> Result<&mut Self, IxaError>;
+    fn merge_itinerary(&mut self, other: &Self);
 }
 
 impl Itinerary for Vec<ItineraryEntry> {
@@ -81,6 +82,18 @@ impl Itinerary for Vec<ItineraryEntry> {
         let writer = context.get_itinerary_write_rules::<T>();
         self.push(writer(context, setting_id));
         Ok(self)
+    }
+    fn merge_itinerary(&mut self, other_itinerary: &Self) {
+        for entry in other_itinerary {
+            // Push entries from existing itinerary that do not match a setting type setting id pair in the new itinerary
+            if !self
+                .iter()
+                .any(|x| x.setting_type == entry.setting_type && x.setting_id == entry.setting_id)
+            {
+                // If the setting id is not in the new itinerary, push it to the new itinerary
+                self.push(*entry);
+            }
+        }
     }
 }
 
@@ -347,15 +360,7 @@ impl ContextSettingExt for Context {
     ) {
         // Append to current existing itinerary
         if let Some(existing_itinerary) = self.get_itinerary(person_id) {
-            for entry in existing_itinerary {
-                // Push entries from existing itinerary that do not match a setting type setting id pair in the new itinerary
-                if !itinerary.iter().any(|x| {
-                    x.setting_type == entry.setting_type && x.setting_id == entry.setting_id
-                }) {
-                    // If the setting id is not in the new itinerary, push it to the new itinerary
-                    itinerary.push(*entry);
-                }
-            }
+            itinerary.merge_itinerary(existing_itinerary);
         }
     }
 
@@ -479,7 +484,7 @@ pub fn global_mixing_itinerary<Q: Query + 'static>(
 
             context.merge_with_existing_itinerary(person_id, &mut itinerary);
             context.add_itinerary(person_id, itinerary).unwrap();
-        };
+        }
     });
 
     Ok(())
