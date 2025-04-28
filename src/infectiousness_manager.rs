@@ -225,8 +225,7 @@ mod test {
             InfectionData, InfectionDataValue, InfectionStatus, InfectionStatusValue,
         },
         parameters::{CoreSettingsTypes, GlobalParams, ItineraryWriteFnType, Params, RateFnType},
-        rate_fns::load_rate_fns,
-        settings::{global_mixing_itinerary, ContextSettingExt, Global, SettingProperties},
+        rate_fns::load_rate_fns
     };
     use ixa::{Context, ContextGlobalPropertiesExt, ContextPeopleExt, ContextRandomExt};
 
@@ -248,12 +247,11 @@ mod test {
                     synth_population_file: PathBuf::from("."),
                     transmission_report_name: None,
                     settings_properties: vec![CoreSettingsTypes::Global { alpha: 1.0 }],
-                    itinerary_write_fn: ItineraryWriteFnType::SplitEvenly,
+                    itinerary_fn_type: ItineraryWriteFnType::SplitEvenly,
                 },
             )
             .unwrap();
         load_rate_fns(&mut context).unwrap();
-        context.register_setting_type(Global {}, SettingProperties { alpha: 1.0 });
 
         context
     }
@@ -322,7 +320,7 @@ mod test {
         let mut context = setup_context();
         let p1 = context.add_person(()).unwrap();
         let p2 = context.add_person(()).unwrap();
-        global_mixing_itinerary(&mut context, 1.0, ()).unwrap();
+        crate::settings::init(&mut context).unwrap();
 
         assert_eq!(max_total_infectiousness_multiplier(&context, p1), 1.0);
         assert_eq!(max_total_infectiousness_multiplier(&context, p2), 1.0);
@@ -335,7 +333,7 @@ mod test {
         // Add two additional contacts, which should make the factor 2
         context.add_person(()).unwrap();
         context.add_person(()).unwrap();
-        global_mixing_itinerary(&mut context, 1.0, ()).unwrap();
+        crate::settings::init(&mut context).unwrap();
 
         context.infect_person(p1, None);
 
@@ -352,7 +350,7 @@ mod test {
         let p1 = context.add_person(()).unwrap();
         context.infect_person(p1, None);
         let _ = context.add_person(()).unwrap();
-        global_mixing_itinerary(&mut context, 1.0, ()).unwrap();
+        crate::settings::init(&mut context).unwrap();
 
         let invalid_forecast = 1.0 - 0.1;
         evaluate_forecast(&mut context, p1, invalid_forecast);
@@ -363,7 +361,7 @@ mod test {
         let mut context = setup_context();
         let index = context.add_person(()).unwrap();
         let contact = context.add_person(()).unwrap();
-        global_mixing_itinerary(&mut context, 1.0, ()).unwrap();
+        crate::settings::init(&mut context).unwrap();
 
         context.infect_person(contact, Some(index));
         context.execute();

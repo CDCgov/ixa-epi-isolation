@@ -255,10 +255,10 @@ impl ContextSettingInternalExt for Context {
     }
     fn get_itinerary_write_rules<T: SettingType + 'static>(&self) -> Box<ItineraryEntryWriter<T>> {
         let &Params {
-            itinerary_write_fn, ..
+            itinerary_fn_type, ..
         } = self.get_params();
 
-        match itinerary_write_fn {
+        match itinerary_fn_type {
             ItineraryWriteFnType::SplitEvenly => {
                 Box::new(|_context, setting_id| Box::new(ItineraryEntry::new(setting_id, 1.0)))
             }
@@ -372,20 +372,27 @@ impl ContextSettingExt for Context {
         setting_id: SettingId<T>,
         q: Q,
     ) -> Option<PersonId> {
-        if let Some(members) = self.get_setting_members::<T>(setting_id) {
-            let query_population = self.query_people(q);
+        self.get_setting_members::<T>(setting_id).and_then(|members| {
             if members.len() == 1 {
                 return None;
             }
-            let members = inner_join(members, &query_population);
             let mut contact_id = person_id;
-            while contact_id == person_id {
-                contact_id = *members[self.sample_range(SettingsRng, 0..members.len())];
+            if !q.get_query().is_empty() {
+                // If the query is not empty, we join setting members to a queried population
+                // Possible contacts is now a vector of references
+                let query_population = self.query_people(q);
+                let members = inner_join(members, &query_population);
+                while contact_id == person_id {
+                    contact_id = *members[self.sample_range(SettingsRng, 0..members.len())];
+                }
+            } else {
+                // If the query is empty, we sample directly from the borrowed vector
+                while contact_id == person_id {
+                    contact_id = members[self.sample_range(SettingsRng, 0..members.len())];
+                }
             }
             Some(contact_id)
-        } else {
-            None
-        }
+        })
     }
     fn draw_contact_from_transmitter_itinerary<Q: Query>(
         &self,

@@ -10,7 +10,7 @@
       {"School": {"alpha": 0.1}},
       {"CensusTract": {"alpha": 0.1}}
     ],
-    "itinerary_write_fn": "SplitEvenly",
+    "itinerary_fn_type": "SplitEvenly",
     "report_period": 1.0,
     "synth_population_file": "input/people_test.csv"
   }

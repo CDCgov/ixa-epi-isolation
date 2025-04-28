@@ -169,7 +169,7 @@ mod tests {
             synth_population_file: PathBuf::from("."),
             transmission_report_name: None,
             settings_properties: vec![],
-            itinerary_write_fn: ItineraryWriteFnType::SplitEvenly,
+            itinerary_fn_type: ItineraryWriteFnType::SplitEvenly,
         };
         context
             .set_global_property_value(GlobalParams, parameters)

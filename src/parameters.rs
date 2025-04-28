@@ -40,7 +40,7 @@ pub struct Params {
     /// Setting properties, currently only the transmission modifier alpha values for each setting
     pub settings_properties: Vec<CoreSettingsTypes>,
     /// Rule set for writing itineraries
-    pub itinerary_write_fn: ItineraryWriteFnType,
+    pub itinerary_fn_type: ItineraryWriteFnType,
     /// The path to the synthetic population file loaded in `population_loader`
     pub synth_population_file: PathBuf,
     /// The path to the transmission report file
@@ -151,7 +151,7 @@ mod test {
             synth_population_file: PathBuf::from("."),
             transmission_report_name: None,
             settings_properties: vec![],
-            itinerary_write_fn: ItineraryWriteFnType::SplitEvenly,
+            itinerary_fn_type: ItineraryWriteFnType::SplitEvenly,
         };
         context
             .set_global_property_value(GlobalParams, parameters)
@@ -177,7 +177,7 @@ mod test {
             synth_population_file: PathBuf::from("."),
             transmission_report_name: None,
             settings_properties: vec![],
-            itinerary_write_fn: ItineraryWriteFnType::SplitEvenly,
+            itinerary_fn_type: ItineraryWriteFnType::SplitEvenly,
         };
         let e = validate_inputs(&parameters).err();
         match e {

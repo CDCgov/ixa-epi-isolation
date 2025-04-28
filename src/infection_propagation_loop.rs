@@ -97,7 +97,6 @@ mod test {
             RateFnType,
         },
         rate_fns::load_rate_fns,
-        settings::{global_mixing_itinerary, ContextSettingExt, Global, SettingProperties},
     };
 
     use super::{schedule_recovery, seed_infections};
@@ -116,13 +115,13 @@ mod test {
             synth_population_file: PathBuf::from("."),
             transmission_report_name: None,
             settings_properties: vec![CoreSettingsTypes::Global { alpha }],
-            itinerary_write_fn: ItineraryWriteFnType::SplitEvenly,
+            itinerary_fn_type: ItineraryWriteFnType::SplitEvenly,
         };
         context.init_random(parameters.seed);
         context
             .set_global_property_value(GlobalParams, parameters)
             .unwrap();
-        context.register_setting_type(Global {}, SettingProperties { alpha });
+
         context
     }
 
@@ -147,7 +146,7 @@ mod test {
         for _ in 0..10 {
             context.add_person(()).unwrap();
         }
-        global_mixing_itinerary(&mut context, 1.0, ()).unwrap();
+        crate::settings::init(&mut context).unwrap();
 
         init(&mut context).unwrap();
 
@@ -187,7 +186,7 @@ mod test {
         for _ in 0..=context.get_params().initial_infections {
             context.add_person(()).unwrap();
         }
-        global_mixing_itinerary(&mut context, 1.0, ()).unwrap();
+        crate::settings::init(&mut context).unwrap();
 
         init(&mut context).unwrap();
 
@@ -250,7 +249,7 @@ mod test {
             let infectious_person = context.add_person(()).unwrap();
 
             //Initiate global mixing to place all people in the same Global setting
-            global_mixing_itinerary(&mut context, 1.0, ()).unwrap();
+            crate::settings::init(&mut context).unwrap();
 
             context.infect_person(infectious_person, None);
             // Get the total infectiousness multiplier for comparison to total number of infections.
