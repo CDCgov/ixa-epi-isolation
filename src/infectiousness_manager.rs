@@ -225,7 +225,7 @@ mod test {
             InfectionData, InfectionDataValue, InfectionStatus, InfectionStatusValue,
         },
         parameters::{CoreSettingsTypes, GlobalParams, ItineraryWriteFnType, Params, RateFnType},
-        rate_fns::load_rate_fns
+        rate_fns::load_rate_fns,
     };
     use ixa::{Context, ContextGlobalPropertiesExt, ContextPeopleExt, ContextRandomExt};
 
@@ -311,6 +311,7 @@ mod test {
     fn test_calc_total_infectiousness_multiplier() {
         let mut context = setup_context();
         let p1 = context.add_person(()).unwrap();
+        crate::settings::init(&mut context).unwrap();
 
         assert_eq!(max_total_infectiousness_multiplier(&context, p1), 0.0);
     }

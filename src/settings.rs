@@ -135,11 +135,6 @@ impl SettingDataContainer {
     }
 }
 
-fn inner_join<'a, T: Eq + Hash>(vec1: &'a [T], vec2: &'a [T]) -> Vec<&'a T> {
-    let set1: HashSet<&T> = vec1.iter().collect();
-    vec2.iter().filter(|&x| set1.contains(x)).collect()
-}
-
 #[macro_export]
 macro_rules! define_setting_type {
     ($name:ident) => {
@@ -230,20 +225,34 @@ impl ContextSettingInternalExt for Context {
         setting_id: usize,
         q: T,
     ) -> Option<PersonId> {
-        if let Some(members) = self.get_setting_members_internal(setting_type, setting_id) {
-            let query_population = self.query_people(q);
-            if members.len() == 1 {
-                return None;
-            }
-            let members = inner_join(members, &query_population);
-            let mut contact_id = person_id;
-            while contact_id == person_id {
-                contact_id = *members[self.sample_range(SettingsRng, 0..members.len())];
-            }
-            Some(contact_id)
-        } else {
-            None
-        }
+        self.get_setting_members_internal(setting_type, setting_id)
+            .and_then(|members| {
+                if members.len() == 1 {
+                    return None;
+                }
+                let member_iter = members.iter().filter(|&x| *x != person_id);
+
+                let mut contacts = vec![];
+                if q.get_query().is_empty() {
+                    // If the query is empty we push members directly to the vector
+                    for contact in member_iter {
+                        contacts.push(*contact);
+                    }
+                } else {
+                    // If the query is not empty, we match setting members to the query
+                    for contact in member_iter {
+                        if self.match_person(*contact, q) {
+                            contacts.push(*contact);
+                        }
+                    }
+                };
+
+                if contacts.is_empty() {
+                    return None;
+                }
+
+                Some(contacts[self.sample_range(SettingsRng, 0..contacts.len())])
+            })
     }
     fn get_setting_members_internal(
         &self,
@@ -372,27 +381,7 @@ impl ContextSettingExt for Context {
         setting_id: SettingId<T>,
         q: Q,
     ) -> Option<PersonId> {
-        self.get_setting_members::<T>(setting_id).and_then(|members| {
-            if members.len() == 1 {
-                return None;
-            }
-            let mut contact_id = person_id;
-            if !q.get_query().is_empty() {
-                // If the query is not empty, we join setting members to a queried population
-                // Possible contacts is now a vector of references
-                let query_population = self.query_people(q);
-                let members = inner_join(members, &query_population);
-                while contact_id == person_id {
-                    contact_id = *members[self.sample_range(SettingsRng, 0..members.len())];
-                }
-            } else {
-                // If the query is empty, we sample directly from the borrowed vector
-                while contact_id == person_id {
-                    contact_id = members[self.sample_range(SettingsRng, 0..members.len())];
-                }
-            }
-            Some(contact_id)
-        })
+        self.get_contact_internal(person_id, TypeId::of::<T>(), setting_id.id, q)
     }
     fn draw_contact_from_transmitter_itinerary<Q: Query>(
         &self,
