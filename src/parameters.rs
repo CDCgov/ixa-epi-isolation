@@ -92,9 +92,9 @@ fn validate_inputs(parameters: &Params) -> Result<(), IxaError> {
     for setting in &parameters.settings_properties {
         let setting_type = setting.to_string();
         let alpha = setting.as_ref();
-        if *alpha < 0.0 {
+        if *alpha < 0.0 || *alpha > 1.0 {
             return Err(IxaError::IxaError(
-                "The alpha values for each setting must be non-negative.".to_string(),
+                "The alpha values for each setting must be between 0 and 1, inclusive.".to_string(),
             ));
         }
         if settings_map.insert(setting_type, *alpha).is_some() {
