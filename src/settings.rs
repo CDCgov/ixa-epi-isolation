@@ -6,6 +6,7 @@ use ixa::{
 };
 
 use std::any::TypeId;
+use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::hash::Hash;
@@ -27,7 +28,7 @@ pub trait SettingType {
     ) -> f64;
 }
 
-#[derive(Hash, Eq, PartialEq, Ord, PartialOrd)]
+#[derive(Debug, Hash, Eq, PartialEq, Ord, PartialOrd)]
 pub struct SettingId<T: SettingType + 'static> {
     pub id: usize,
     // Marker to say this group id is associated with T (but does not own it)
@@ -161,10 +162,6 @@ pub trait ContextSettingExt {
         &mut self,
         setting: T,
         setting_props: SettingProperties,
-    ) -> Result<(), IxaError>;
-    fn validate_setting_registration<T: SettingType + 'static>(
-        &self,
-        setting_type: &T,
     ) -> Result<(), IxaError>;
     fn add_itinerary(
         &mut self,
@@ -310,7 +307,11 @@ impl ContextSettingExt for Context {
     fn get_setting_properties<T: SettingType + 'static>(
         &self,
     ) -> Result<SettingProperties, IxaError> {
-        let data_container = self.get_data_container(SettingDataPlugin).unwrap();
+        let data_container =
+            self.get_data_container(SettingDataPlugin)
+                .ok_or(IxaError::IxaError(
+                    "Setting plugin data is none".to_string(),
+                ))?;
 
         let registered_setting = data_container.setting_types.get(&TypeId::of::<T>());
 
@@ -330,13 +331,14 @@ impl ContextSettingExt for Context {
         setting_type: T,
         setting_props: SettingProperties,
     ) -> Result<(), IxaError> {
-        self.validate_setting_registration(&setting_type)?;
         let container = self.get_data_container_mut(SettingDataPlugin);
 
-        // Add the setting
-        container
-            .setting_types
-            .insert(TypeId::of::<T>(), Box::new(setting_type));
+        match container.setting_types.entry(TypeId::of::<T>()) {
+            Entry::Vacant(entry) => {
+                entry.insert(Box::new(setting_type));
+            }
+            Entry::Occupied(_) => return Err(IxaError::from("Setting type is already registered")),
+        }
 
         // Add properties
         container
@@ -344,20 +346,7 @@ impl ContextSettingExt for Context {
             .insert(TypeId::of::<T>(), setting_props);
         Ok(())
     }
-    fn validate_setting_registration<T: SettingType + 'static>(
-        &self,
-        _setting_type: &T,
-    ) -> Result<(), IxaError> {
-        let data_container = self.get_data_container(SettingDataPlugin);
-        if let Some(data_container) = data_container {
-            let registered_setting = data_container.setting_types.get(&TypeId::of::<T>());
 
-            if registered_setting.is_some() {
-                return Err(IxaError::from("Setting type is already registered"));
-            }
-        }
-        Ok(())
-    }
     fn add_itinerary(
         &mut self,
         person_id: PersonId,
@@ -560,10 +549,22 @@ mod test {
     #[test]
     fn test_get_properties_after_registration() {
         let mut context = Context::new();
+        let e = context.get_setting_properties::<Home>().err();
+        match e {
+            Some(IxaError::IxaError(msg)) => {
+                assert_eq!(msg, "Setting plugin data is none");
+            }
+            Some(ue) => panic!(
+                "Expected an error setting plugin data is none. Instead got: {:?}",
+                ue.to_string()
+            ),
+            None => panic!("Expected an error. Instead, validation passed with no errors."),
+        }
+
         context
             .register_setting_type(Home {}, SettingProperties { alpha: 0.1 })
             .unwrap();
-        let _ = context.get_setting_properties::<Home>().unwrap();
+        context.get_setting_properties::<Home>().unwrap();
         let e = context.get_setting_properties::<CensusTract>().err();
         match e {
             Some(IxaError::IxaError(msg)) => {
@@ -601,7 +602,9 @@ mod test {
     #[test]
     fn test_duplicated_itinerary() {
         let mut context = Context::new();
-        let _ = context.register_setting_type(Home {}, SettingProperties { alpha: 1.0 });
+        context
+            .register_setting_type(Home {}, SettingProperties { alpha: 1.0 })
+            .unwrap();
 
         let person = context.add_person(()).unwrap();
         let itinerary = vec![
@@ -624,7 +627,9 @@ mod test {
     #[test]
     fn test_feasible_itinerary_ratio() {
         let mut context = Context::new();
-        let _ = context.register_setting_type(Home {}, SettingProperties { alpha: 1.0 });
+        context
+            .register_setting_type(Home {}, SettingProperties { alpha: 1.0 })
+            .unwrap();
 
         let person = context.add_person(()).unwrap();
         let itinerary = vec![ItineraryEntry::new(&SettingId::<Home>::new(1), -0.5)];
@@ -642,7 +647,9 @@ mod test {
     #[test]
     fn test_feasible_itinerary_setting() {
         let mut context = Context::new();
-        let _ = context.register_setting_type(Home {}, SettingProperties { alpha: 1.0 });
+        context
+            .register_setting_type(Home {}, SettingProperties { alpha: 1.0 })
+            .unwrap();
 
         let person = context.add_person(()).unwrap();
         let itinerary = vec![ItineraryEntry::new(&SettingId::<CensusTract>::new(1), 0.5)];
@@ -663,7 +670,9 @@ mod test {
     #[test]
     fn test_add_itinerary() {
         let mut context = Context::new();
-        let _ = context.register_setting_type(Home {}, SettingProperties { alpha: 1.0 });
+        context
+            .register_setting_type(Home {}, SettingProperties { alpha: 1.0 })
+            .unwrap();
 
         let person = context.add_person(()).unwrap();
         let itinerary = vec![
