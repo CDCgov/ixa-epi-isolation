@@ -486,7 +486,7 @@ impl ContextSettingExt for Context {
 /// Function to assign a Global itinerary item to all individuakls in a query
 /// If the query is empty, future people will be added by subscribing to the `PersonCreatedEvent`
 /// Function must be called after people are added if the simulation is not running and able to listen
-/// for events. People added after global itinerary is set but before `conterxt.execute()` will not have the global itinerary
+/// for events. People added after global itinerary is set but before `context.execute()` will not have the global itinerary
 ///
 /// Function currently does not provide a later match to ensure that `PersonPropertyChange` events do not remove the individual
 /// from the global itinerary
