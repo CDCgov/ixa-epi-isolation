@@ -348,7 +348,11 @@ impl ContextSettingExt for Context {
         // Append to current existing itinerary
         if let Some(existing_itinerary) = self.get_itinerary(person_id) {
             for entry in existing_itinerary {
-                if entry.setting_type != TypeId::of::<Global>() {
+                // Push entries from existing itinerary that do not match a setting type setting id pair in the new itinerary
+                if !itinerary.iter().any(|x| {
+                    x.setting_type == entry.setting_type && x.setting_id == entry.setting_id
+                }) {
+                    // If the setting id is not in the new itinerary, push it to the new itinerary
                     itinerary.push(*entry);
                 }
             }
