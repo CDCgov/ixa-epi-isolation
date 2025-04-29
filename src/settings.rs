@@ -313,18 +313,12 @@ impl ContextSettingExt for Context {
                     "Setting plugin data is none".to_string(),
                 ))?;
 
-        let registered_setting = data_container.setting_types.get(&TypeId::of::<T>());
-
-        if registered_setting.is_none() {
-            return Err(IxaError::from(
+        match data_container.setting_properties.get(&TypeId::of::<T>()) {
+            None => Err(IxaError::from(
                 "Attempting to get properties of unregistered setting type",
-            ));
+            )),
+            Some(properties) => Ok(*properties),
         }
-        let properties = data_container
-            .setting_properties
-            .get(&TypeId::of::<T>())
-            .unwrap();
-        Ok(*properties)
     }
     fn register_setting_type<T: SettingType + 'static>(
         &mut self,
@@ -359,20 +353,22 @@ impl ContextSettingExt for Context {
         for itinerary_entry in &itinerary {
             // TODO: If we are changing a person's itinerary, the person_id should be removed from vector
             // This isn't the same as the concept of being present or not.
-            let registered_setting = container.setting_types.get(&itinerary_entry.setting_type);
-            if registered_setting.is_none() {
-                return Err(IxaError::from(
-                    "Itinerary entry setting type not registered",
-                ));
+            match container.setting_types.get(&itinerary_entry.setting_type) {
+                None => {
+                    return Err(IxaError::from(
+                        "Itinerary entry setting type not registered",
+                    ))
+                }
+                Some(_) => {
+                    container
+                        .members
+                        .entry(itinerary_entry.setting_type)
+                        .or_default()
+                        .entry(itinerary_entry.setting_id)
+                        .or_default()
+                        .push(person_id);
+                }
             }
-            container
-                .members
-                .entry(itinerary_entry.setting_type)
-                .or_default()
-                .entry(itinerary_entry.setting_id)
-                .or_default()
-                .push(person_id);
-            current_setting_ids.push((itinerary_entry.setting_type, itinerary_entry.setting_id));
         }
 
         // Clean up settings that the person is no longer a member of
@@ -757,8 +753,12 @@ mod test {
     fn test_total_infectiousness_multiplier() {
         // Go through all the settings and compute infectiousness multiplier
         let mut context = Context::new();
-        let _ = context.register_setting_type(Home {}, SettingProperties { alpha: 0.1 });
-        let _ = context.register_setting_type(CensusTract {}, SettingProperties { alpha: 0.01 });
+        context
+            .register_setting_type(Home {}, SettingProperties { alpha: 0.1 })
+            .unwrap();
+        context
+            .register_setting_type(CensusTract {}, SettingProperties { alpha: 0.01 })
+            .unwrap();
 
         for s in 0..5 {
             for _ in 0..5 {
@@ -814,8 +814,12 @@ mod test {
         // TODO: What happens if the person isn't registered in the setting?
         let mut context = Context::new();
         context.init_random(42);
-        let _ = context.register_setting_type(Home {}, SettingProperties { alpha: 0.1 });
-        let _ = context.register_setting_type(CensusTract {}, SettingProperties { alpha: 0.01 });
+        context
+            .register_setting_type(Home {}, SettingProperties { alpha: 0.1 })
+            .unwrap();
+        context
+            .register_setting_type(CensusTract {}, SettingProperties { alpha: 0.01 })
+            .unwrap();
 
         let person_a = context.add_person(()).unwrap();
         let person_b = context.add_person(()).unwrap();
@@ -827,10 +831,9 @@ mod test {
         let _ = context.add_itinerary(person_a, itinerary_a);
         let _ = context.add_itinerary(person_b, itinerary_b);
         assert_eq!(
-            person_b,
+            Some(person_b),
             context
-                .get_contact(person_a, SettingId::<Home>::new(0), ())
-                .unwrap()
+                .get_contact::<Home>(person_a, SettingId::<Home>::new(0))
                 .unwrap()
         );
         assert!(context
