@@ -720,7 +720,6 @@ mod test {
 
     #[test]
     fn test_setting_multiplier() {
-        // TODO: if setting not registered, shouldn't be able to register people to setting
         let mut context = Context::new();
         let _ = context.register_setting_type(Home {}, SettingProperties { alpha: 0.1 });
         for s in 0..5 {
@@ -811,7 +810,6 @@ mod test {
     fn test_get_contact_from_setting() {
         // Register two people to a setting and make sure that the person chosen is the other one
         // Attempt to draw a contact from a setting with only the person trying to get a contact
-        // TODO: What happens if the person isn't registered in the setting?
         let mut context = Context::new();
         context.init_random(42);
         context
