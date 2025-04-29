@@ -61,28 +61,24 @@ impl ItineraryEntry {
     }
 }
 
-type ItineraryEntryWriter<T> = dyn Fn(&Context, &SettingId<T>) -> ItineraryEntry;
+type ItineraryEntryWriter = dyn Fn(&Context, TypeId, usize) -> ItineraryEntry;
 
 pub trait Itinerary {
-    fn add_setting_to_itinerary<T: SettingType + 'static>(
-        &mut self,
-        context: &Context,
-        setting_id_value: usize,
-    ) -> Result<&mut Self, IxaError>;
+    fn new(context: &Context, setting_id_vec: Vec<(TypeId, usize)>) -> Result<Self, IxaError>
+    where
+        Self: Sized;
     fn merge_itinerary(&mut self, other: &Self);
 }
 
 impl Itinerary for Vec<ItineraryEntry> {
     /// Add a specified setting Id into the Itoinerary vector
-    fn add_setting_to_itinerary<T: SettingType + 'static>(
-        &mut self,
-        context: &Context,
-        setting_id_value: usize,
-    ) -> Result<&mut Self, IxaError> {
-        let setting_id = &SettingId::<T>::new(setting_id_value);
-        let writer = context.get_itinerary_write_rules::<T>();
-        self.push(writer(context, setting_id));
-        Ok(self)
+    fn new(context: &Context, setting_id_vec: Vec<(TypeId, usize)>) -> Result<Self, IxaError> {
+        let writer = context.get_itinerary_write_rules();
+        let mut itinerary = vec![];
+        for (setting_type, id) in setting_id_vec {
+            itinerary.push(writer(context, setting_type, id));
+        }
+        Ok(itinerary)
     }
     /// Merge the current itinerary with another itinerary
     /// Takes in an existing itinerary vector and filters for entries that have no matches in the provided vector
@@ -232,7 +228,7 @@ trait ContextSettingInternalExt {
         setting_type: TypeId,
         setting_id: usize,
     ) -> Option<&Vec<PersonId>>;
-    fn get_itinerary_write_rules<T: SettingType + 'static>(&self) -> Box<ItineraryEntryWriter<T>>;
+    fn get_itinerary_write_rules(&self) -> Box<ItineraryEntryWriter>;
 }
 
 impl ContextSettingInternalExt for Context {
@@ -280,14 +276,18 @@ impl ContextSettingInternalExt for Context {
         self.get_data_container(SettingDataPlugin)?
             .get_setting_members(&setting_type, setting_id)
     }
-    fn get_itinerary_write_rules<T: SettingType + 'static>(&self) -> Box<ItineraryEntryWriter<T>> {
+    fn get_itinerary_write_rules(&self) -> Box<ItineraryEntryWriter> {
         let &Params {
             itinerary_fn_type, ..
         } = self.get_params();
 
         match itinerary_fn_type {
             ItineraryWriteFnType::SplitEvenly => {
-                Box::new(|_context, setting_id| ItineraryEntry::new(setting_id, 1.0))
+                Box::new(|_context, setting_type, setting_id| ItineraryEntry {
+                    setting_type,
+                    setting_id,
+                    ratio: 1.0,
+                })
             }
         }
     }
@@ -367,6 +367,8 @@ impl ContextSettingExt for Context {
         person_id: PersonId,
         mixing_time_proportion: f64,
     ) -> Result<(), IxaError> {
+        // set ratio to recreate the proportion specified in input
+        // Should panic if mixing_proportion is 1.0 but a person already has `itinerary.is_some()`
         let ratio = self
             .get_itinerary(person_id)
             .map_or(1.0, |existing_itinerary| {

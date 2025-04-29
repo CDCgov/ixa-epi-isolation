@@ -4,12 +4,10 @@ use ixa::{
 };
 
 use serde::Deserialize;
-use std::path::PathBuf;
+use std::{any::TypeId, path::PathBuf};
 
 use crate::parameters::{ContextParametersExt, Params};
-use crate::settings::{
-    CensusTract, ContextSettingExt, Home, Itinerary, ItineraryEntry, School, Workplace,
-};
+use crate::settings::{CensusTract, ContextSettingExt, Home, Itinerary, School, Workplace};
 
 #[derive(Deserialize, Debug)]
 #[allow(non_snake_case)]
@@ -27,27 +25,31 @@ fn create_person_from_record(
     context: &mut Context,
     person_record: &PeopleRecord,
 ) -> Result<(), IxaError> {
-    let mut itinerary_person = Vec::<ItineraryEntry>::new();
+    // Add person to context
+    let person_id = context.add_person((Age, person_record.age))?;
+
+    // Create itinerary entries for all setting memberships in input file
     let tract: String = String::from_utf8(person_record.homeId[..11].to_owned())?;
     let home_id: String = String::from_utf8(person_record.homeId.to_owned())?;
     let school_string: String = String::from_utf8(person_record.schoolId.to_owned())?;
     let workplace_string: String = String::from_utf8(person_record.workplaceId.to_owned())?;
 
+    // Initialize with home and census tract
+    let mut itinerary_entries = vec![
+        (TypeId::of::<CensusTract>(), tract.parse()?),
+        (TypeId::of::<Home>(), home_id.parse()?),
+    ];
+
+    // Check for work and school memberships
     if !workplace_string.is_empty() {
-        itinerary_person
-            .add_setting_to_itinerary::<Workplace>(context, workplace_string.parse()?)?;
+        itinerary_entries.push((TypeId::of::<Workplace>(), workplace_string.parse()?));
     }
     if !school_string.is_empty() {
-        itinerary_person.add_setting_to_itinerary::<School>(context, school_string.parse()?)?;
+        itinerary_entries.push((TypeId::of::<School>(), school_string.parse()?));
     }
 
-    // Add the settings consistent across all individuals (Home, CensusTract) and rescale to 1.0
-    itinerary_person
-        .add_setting_to_itinerary::<Home>(context, home_id.parse()?)?
-        .add_setting_to_itinerary::<CensusTract>(context, tract.parse()?)?;
-
-    let person_id = context.add_person((Age, person_record.age))?;
-
+    // Create the itinerary using write rules stored in Context
+    let itinerary_person = Itinerary::new(context, itinerary_entries)?;
     context.add_itinerary(person_id, itinerary_person)?;
 
     Ok(())
