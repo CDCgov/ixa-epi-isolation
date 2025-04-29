@@ -6,6 +6,7 @@ use serde::Serialize;
 use statrs::distribution::Exp;
 
 use crate::{
+    population_loader::Alive,
     rate_fns::{InfectiousnessRateExt, InfectiousnessRateFn, RateFnId, ScaledRateFn},
     settings::ContextSettingExt,
 };
@@ -66,6 +67,15 @@ pub fn max_total_infectiousness_multiplier(context: &Context, person_id: PersonI
 }
 
 define_rng!(ForecastRng);
+
+// Infection attempt function for a context and given `PersonId`
+pub fn infection_attempt(context: &Context, person_id: PersonId) -> Option<PersonId> {
+    let next_contact = context.draw_contact_from_transmitter_itinerary(person_id, (Alive, true))?;
+    match context.get_person_property(person_id, InfectionStatus) {
+        InfectionStatusValue::Susceptible => Some(next_contact),
+        _ => None,
+    }
+}
 
 pub struct Forecast {
     pub next_time: f64,
