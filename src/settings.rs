@@ -241,16 +241,38 @@ impl ContextSettingExt for Context {
     ) -> Result<(), IxaError> {
         self.validate_itinerary(&itinerary)?;
         let container = self.get_data_container_mut(SettingDataPlugin);
+
+        // remove person if they exist in a setting with a different SettingId
+        if let Some(existing_itinerary) = container.itineraries.get(&person_id) {
+            // Remove the person from the existing itinerary
+            for itinerary_entry in existing_itinerary {
+                container
+                    .members
+                    .entry(itinerary_entry.setting_type)
+                    .or_default()
+                    .entry(itinerary_entry.setting_id)
+                    .or_default()
+                    .retain(|&x| x != person_id);
+            }
+        }
+
         for itinerary_entry in &itinerary {
-            // TODO: If we are changing a person's itinerary, the person_id should be removed from vector
-            // This isn't the same as the concept of being present or not.
-            container
-                .members
-                .entry(itinerary_entry.setting_type)
-                .or_default()
-                .entry(itinerary_entry.setting_id)
-                .or_default()
-                .push(person_id);
+            match container.setting_types.get(&itinerary_entry.setting_type) {
+                None => {
+                    return Err(IxaError::from(
+                        "Itinerary entry setting type not registered",
+                    ))
+                }
+                Some(_) => {
+                    container
+                        .members
+                        .entry(itinerary_entry.setting_type)
+                        .or_default()
+                        .entry(itinerary_entry.setting_id)
+                        .or_default()
+                        .push(person_id);
+                }
+            }
         }
         container.itineraries.insert(person_id, itinerary);
         Ok(())
@@ -431,6 +453,21 @@ mod test {
             .get_setting_members::<Home>(SettingId::<Home>::new(2))
             .unwrap();
         assert_eq!(members2.len(), 2);
+
+        let itinerary3 = vec![ItineraryEntry::new(&SettingId::<Home>::new(3), 0.5)];
+        let _ = context.add_itinerary(person, itinerary3);
+        let members2_removed = context
+            .get_setting_members::<Home>(SettingId::<Home>::new(2))
+            .unwrap();
+        assert_eq!(members2_removed.len(), 1);
+        let members3 = context
+            .get_setting_members::<Home>(SettingId::<Home>::new(3))
+            .unwrap();
+        assert_eq!(members3.len(), 1);
+        let members1_removed = context
+            .get_setting_members::<Home>(SettingId::<Home>::new(1))
+            .unwrap();
+        assert_eq!(members1_removed.len(), 0);
     }
 
     #[test]
