@@ -106,7 +106,8 @@ mod test {
         },
         parameters::{
             ContextParametersExt, CoreSettingsTypes, GlobalParams, ItineraryWriteFnType, Params,
-            RateFnType},
+            RateFnType,
+        },
         rate_fns::load_rate_fns,
     };
 

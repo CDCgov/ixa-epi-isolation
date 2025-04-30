@@ -217,7 +217,7 @@ mod test {
         infectiousness_manager::{
             InfectionData, InfectionDataValue, InfectionStatus, InfectionStatusValue,
         },
-        parameters::{CoreSettingsTypes, GlobalParams, ItineraryWriteFnType, RateFnType, Params},
+        parameters::{CoreSettingsTypes, GlobalParams, ItineraryWriteFnType, Params, RateFnType},
         rate_fns::load_rate_fns,
     };
     use ixa::{Context, ContextGlobalPropertiesExt, ContextPeopleExt, ContextRandomExt};

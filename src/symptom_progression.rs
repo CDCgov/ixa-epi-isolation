@@ -1,10 +1,10 @@
 use std::collections::HashMap;
 
+use ixa::rand::Rng;
 use ixa::{
     define_person_property_with_default, define_rng, Context, ContextPeopleExt, ContextRandomExt,
     IxaError, PersonId, PersonPropertyChangeEvent,
 };
-use rand::Rng;
 use serde::{Deserialize, Serialize};
 use statrs::distribution::Weibull;
 
@@ -233,7 +233,7 @@ mod test {
     use super::{init, SymptomData, SymptomValue};
     use crate::{
         infectiousness_manager::InfectionContextExt,
-        parameters::{GlobalParams, ItineraryWriteFnType, LibraryType},
+        parameters::{GlobalParams, ItineraryWriteFnType, RateFnType},
         property_progression_manager::Progression,
         rate_fns::load_rate_fns,
         symptom_progression::{
