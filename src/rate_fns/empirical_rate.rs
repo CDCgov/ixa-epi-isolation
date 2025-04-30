@@ -275,6 +275,8 @@ fn get_lower_index(xs: &[f64], xp: f64) -> (usize, usize) {
 
 #[cfg(test)]
 mod test {
+    use core::f64;
+
     use ixa::IxaError;
     use statrs::assert_almost_eq;
 
@@ -530,5 +532,22 @@ mod test {
         )
         .unwrap();
         assert_almost_eq!(empirical.infection_duration(), 5.0, 0.0);
+    }
+
+    #[test]
+    fn test_rates_below_zero_rate() {
+        let empirical = EmpiricalRate::new(vec![1.0, 2.0], vec![1.0, 1.0]).unwrap();
+        // Rate below first value in time series should be 0
+        assert_almost_eq!(empirical.rate(0.5), 0.0, 0.0);
+        // Cum rate below first value in time series should be 0
+        assert_almost_eq!(empirical.cum_rate(0.5), 0.0, 0.0);
+        // Cum rate should always start at 0
+        assert_eq!(empirical.get_cum_rates(), vec![0.0, 1.0]);
+        // Rate above last value in time series should be 0
+        assert_almost_eq!(empirical.rate(2.1), 0.0, 0.0);
+        // Cum rate should not increase beyond cum rate of last value in time series
+        assert_almost_eq!(empirical.cum_rate(2.1), 1.0, 0.0);
+        // Inverse cum rate should always return a time that is greater than the minimum time
+        assert!(empirical.inverse_cum_rate(f64::EPSILON).unwrap() > 1.0);
     }
 }
