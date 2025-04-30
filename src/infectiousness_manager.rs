@@ -71,7 +71,7 @@ define_rng!(ForecastRng);
 // Infection attempt function for a context and given `PersonId`
 pub fn infection_attempt(context: &Context, person_id: PersonId) -> Option<PersonId> {
     let next_contact = context.draw_contact_from_transmitter_itinerary(person_id, (Alive, true))?;
-    match context.get_person_property(person_id, InfectionStatus) {
+    match context.get_person_property(next_contact, InfectionStatus) {
         InfectionStatusValue::Susceptible => Some(next_contact),
         _ => None,
     }
