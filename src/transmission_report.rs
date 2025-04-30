@@ -5,7 +5,7 @@ use crate::{
 use ixa::{
     create_report_trait, info,
     report::{ContextReportExt, Report},
-    Context, ContextPeopleExt, IxaError, PersonId, PersonPropertyChangeEvent,
+    Context, IxaError, PersonId, PersonPropertyChangeEvent,
 };
 use serde::{Deserialize, Serialize};
 
@@ -21,17 +21,9 @@ create_report_trait!(TransmissionReport);
 
 fn record_transmission_event(
     context: &mut Context,
-    event: PersonPropertyChangeEvent<InfectionData>,
+    target_id: PersonId,
+    infected_by: Option<PersonId>,
 ) {
-    let target_id = event.person_id;
-    let InfectionDataValue::Infectious { infected_by, .. } =
-        context.get_person_property(target_id, InfectionData)
-    else {
-        panic!("Person {target_id} is not infectious")
-    };
-
-    // let setting = get_person_setting_id(infector).unwrap();
-
     if infected_by.is_some() {
         context.send_report(TransmissionReport {
             time: context.get_current_time(),
@@ -45,7 +37,9 @@ fn record_transmission_event(
 fn create_transmission_report(context: &mut Context, file_name: &str) -> Result<(), IxaError> {
     context.add_report::<TransmissionReport>(file_name)?;
     context.subscribe_to_event::<PersonPropertyChangeEvent<InfectionData>>(|context, event| {
-        record_transmission_event(context, event);
+        if let InfectionDataValue::Infectious { infected_by, .. } = event.current {
+            record_transmission_event(context, event.person_id, infected_by);
+        }
     });
     Ok(())
 }
