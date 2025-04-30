@@ -4,9 +4,10 @@ use ixa::{
 };
 
 use serde::Deserialize;
-use std::path::PathBuf;
+use std::{any::TypeId, path::PathBuf};
 
-use crate::parameters::ContextParametersExt;
+use crate::parameters::{ContextParametersExt, Params};
+use crate::settings::{CensusTract, ContextSettingExt, Home, Itinerary, School, Workplace};
 
 #[derive(Deserialize, Debug)]
 #[allow(non_snake_case)]
@@ -20,39 +21,36 @@ pub struct PeopleRecord<'a> {
 define_person_property!(Age, u8);
 define_person_property_with_default!(Alive, bool, true);
 
-define_person_property!(Household, usize);
-define_person_property!(CensusTract, usize);
-
-define_person_property_with_default!(SchoolId, Option<usize>, None);
-define_person_property_with_default!(WorkplaceId, Option<usize>, None);
-
-fn option_from_string(s: &str) -> Option<usize> {
-    if s.is_empty() {
-        None
-    } else {
-        Some(s.parse().unwrap())
-    }
-}
-
 fn create_person_from_record(
     context: &mut Context,
     person_record: &PeopleRecord,
 ) -> Result<(), IxaError> {
+    // Add person to context
+    let person_id = context.add_person((Age, person_record.age))?;
+
+    // Create itinerary entries for all setting memberships in input file
     let tract: String = String::from_utf8(person_record.homeId[..11].to_owned())?;
     let home_id: String = String::from_utf8(person_record.homeId.to_owned())?;
     let school_string: String = String::from_utf8(person_record.schoolId.to_owned())?;
     let workplace_string: String = String::from_utf8(person_record.workplaceId.to_owned())?;
 
-    let school_id = option_from_string(&school_string);
-    let workplace_id = option_from_string(&workplace_string);
+    // Initialize with home and census tract
+    let mut itinerary_entries = vec![
+        (TypeId::of::<CensusTract>(), tract.parse()?),
+        (TypeId::of::<Home>(), home_id.parse()?),
+    ];
 
-    let _person_id = context.add_person((
-        (Age, person_record.age),
-        (Household, home_id.parse()?),
-        (CensusTract, tract.parse()?),
-        (SchoolId, school_id),
-        (WorkplaceId, workplace_id),
-    ))?;
+    // Check for work and school memberships
+    if !workplace_string.is_empty() {
+        itinerary_entries.push((TypeId::of::<Workplace>(), workplace_string.parse()?));
+    }
+    if !school_string.is_empty() {
+        itinerary_entries.push((TypeId::of::<School>(), school_string.parse()?));
+    }
+
+    // Create the itinerary using write rules stored in Context
+    let itinerary_person = Itinerary::new(context, itinerary_entries)?;
+    context.add_itinerary(person_id, itinerary_person)?;
 
     Ok(())
 }
@@ -70,14 +68,20 @@ fn load_synth_population(context: &mut Context, synth_input_file: PathBuf) -> Re
 }
 
 pub fn init(context: &mut Context) -> Result<(), IxaError> {
-    let parameters = context.get_params();
-    load_synth_population(context, parameters.synth_population_file.clone())
+    let Params {
+        synth_population_file,
+        ..
+    } = context.get_params();
+    load_synth_population(context, synth_population_file.clone())?;
+    Ok(())
 }
 
 #[cfg(test)]
 mod test {
     use super::*;
-    use ixa::ContextPeopleExt;
+    use crate::parameters::{GlobalParams, ItineraryWriteFnType, RateFnType};
+    use crate::settings::SettingId;
+    use ixa::{ContextGlobalPropertiesExt, ContextPeopleExt};
     use std::io::Write;
     use std::path::PathBuf;
     use tempfile::NamedTempFile;
@@ -89,36 +93,65 @@ mod test {
         path
     }
 
+    fn setup() -> Context {
+        let mut context = Context::new();
+        let parameters = Params {
+            initial_infections: 1,
+            max_time: 100.0,
+            seed: 0,
+            infectiousness_rate_fn: RateFnType::Constant {
+                rate: 1.0,
+                duration: 5.0,
+            },
+            report_period: 1.0,
+            synth_population_file: PathBuf::from("."),
+            transmission_report_name: None,
+            settings_properties: vec![],
+            itinerary_fn_type: ItineraryWriteFnType::SplitEvenly,
+        };
+        context
+            .set_global_property_value(GlobalParams, parameters)
+            .unwrap();
+        context
+    }
+
     #[test]
     fn check_synth_file_tract() {
-        let mut context = Context::new();
+        let mut context = setup();
         let input = String::from(
             "age,homeId,schoolId,workplaceId\n43,360930331020001,,\n42,360930331020002,,",
         );
         let synth_file = persist_tmp_csv(&input);
         load_synth_population(&mut context, synth_file).unwrap();
         let age = [43, 42];
-        let tract = [36_093_033_102, 36_093_033_102];
         let home_id = [360_930_331_020_001, 360_930_331_020_002];
+        let census_tract_id = 36_093_033_102;
 
         assert_eq!(context.get_current_population(), 2);
 
         for i in 0..1 {
+            assert_eq!(1, context.query_people_count((Age, age[i])));
             assert_eq!(
                 1,
-                context.query_people_count((
-                    (Age, age[i]),
-                    (CensusTract, tract[i]),
-                    (Household, home_id[i]),
-                ))
+                context
+                    .get_setting_members::<Home>(SettingId::<Home>::new(home_id[i]))
+                    .unwrap()
+                    .len()
             );
         }
+        assert_eq!(
+            2,
+            context
+                .get_setting_members::<CensusTract>(SettingId::<CensusTract>::new(census_tract_id))
+                .unwrap()
+                .len()
+        );
     }
 
     #[test]
     #[should_panic(expected = "range end index 11 out of range for slice of length 9")]
     fn check_invalid_census_tract() {
-        let mut context = Context::new();
+        let mut context = setup();
         let input =
             String::from("age,homeId,schoolId,workplaceId\n43,360930331,,\n42,360930331020002,,");
         let synth_file = persist_tmp_csv(&input);
@@ -127,7 +160,7 @@ mod test {
 
     #[test]
     fn check_synth_file_school() {
-        let mut context = Context::new();
+        let mut context = setup();
         let input = String::from(
             "age,homeId,schoolId,workplaceId\n43,360930331020001,1,\n42,360930331020002,2,",
         );
@@ -136,25 +169,39 @@ mod test {
         let age = [43, 42];
         let school_id = [1, 2];
         let home_id = [360_930_331_020_001, 360_930_331_020_002];
+        let census_tract_id = 36_093_033_102;
 
         assert_eq!(context.get_current_population(), 2);
 
         for i in 0..1 {
+            assert_eq!(1, context.query_people_count((Age, age[i])));
             assert_eq!(
                 1,
-                context.query_people_count((
-                    (Age, age[i]),
-                    (SchoolId, Some(school_id[i])),
-                    (Household, home_id[i]),
-                    (WorkplaceId, None)
-                ))
+                context
+                    .get_setting_members::<School>(SettingId::<School>::new(school_id[i]))
+                    .unwrap()
+                    .len()
+            );
+            assert_eq!(
+                1,
+                context
+                    .get_setting_members::<Home>(SettingId::<Home>::new(home_id[i]))
+                    .unwrap()
+                    .len()
             );
         }
+        assert_eq!(
+            2,
+            context
+                .get_setting_members::<CensusTract>(SettingId::<CensusTract>::new(census_tract_id))
+                .unwrap()
+                .len()
+        );
     }
 
     #[test]
     fn check_synth_file_workplace() {
-        let mut context = Context::new();
+        let mut context = setup();
         let input = String::from(
             "age,homeId,schoolId,workplaceId\n43,360930331020001,,1\n42,360930331020002,,2",
         );
@@ -163,19 +210,33 @@ mod test {
         let age = [43, 42];
         let workplace_id = [1, 2];
         let home_id = [360_930_331_020_001, 360_930_331_020_002];
+        let census_tract_id = 36_093_033_102;
 
         assert_eq!(context.get_current_population(), 2);
 
         for i in 0..1 {
+            assert_eq!(1, context.query_people_count(((Age, age[i]),)));
             assert_eq!(
                 1,
-                context.query_people_count((
-                    (Age, age[i]),
-                    (Household, home_id[i]),
-                    (SchoolId, None),
-                    (WorkplaceId, Some(workplace_id[i]))
-                ))
+                context
+                    .get_setting_members::<Workplace>(SettingId::<Workplace>::new(workplace_id[i]))
+                    .unwrap()
+                    .len()
+            );
+            assert_eq!(
+                1,
+                context
+                    .get_setting_members::<Home>(SettingId::<Home>::new(home_id[i]))
+                    .unwrap()
+                    .len()
             );
         }
+        assert_eq!(
+            2,
+            context
+                .get_setting_members::<CensusTract>(SettingId::<CensusTract>::new(census_tract_id))
+                .unwrap()
+                .len()
+        );
     }
 }

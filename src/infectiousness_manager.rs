@@ -6,9 +6,9 @@ use serde::Serialize;
 use statrs::distribution::Exp;
 
 use crate::{
-    contact::ContextContactExt,
     population_loader::Alive,
     rate_fns::{InfectiousnessRateExt, InfectiousnessRateFn, RateFnId, ScaledRateFn},
+    settings::ContextSettingExt,
 };
 
 #[derive(Serialize, PartialEq, Debug, Clone, Copy)]
@@ -49,27 +49,33 @@ define_derived_property!(
     }
 );
 
-const TOTAL_INFECTIOUSNESS_MULTIPLIER: f64 = 2.0;
-
 /// Calculate the scaling factor that accounts for the total infectiousness
 /// for a person, given factors related to their environment, such as the number of people
 /// they come in contact with or how close they are.
 /// This is used to scale the intrinsic infectiousness function of that person.
-pub fn calc_total_infectiousness_multiplier(_context: &Context, _person_id: PersonId) -> f64 {
-    // TODO<ryl8@cdc.gov> This is a placeholder until we have an implementation
-    // of settings and itineraries
-    TOTAL_INFECTIOUSNESS_MULTIPLIER
+pub fn calc_total_infectiousness_multiplier(context: &Context, person_id: PersonId) -> f64 {
+    // TODO: calculate current vs total infectiousness. This depends on interventions.
+    context.calculate_total_infectiousness_multiplier_for_person(person_id)
 }
 
 /// Calculate the maximum possible scaling factor for total infectiousness
 /// for a person, given information we know at the time of a forecast.
-pub fn max_total_infectiousness_multiplier(_context: &Context, _person_id: PersonId) -> f64 {
-    // TODO<ryl8@cdc.gov> This is a placeholder until we have an implementation
-    // of settings and itineraries
-    TOTAL_INFECTIOUSNESS_MULTIPLIER
+pub fn max_total_infectiousness_multiplier(context: &Context, person_id: PersonId) -> f64 {
+    // TODO: Max and current total infectiousness are the same for now until the notion of
+    // being present in a setting is implemented
+    context.calculate_total_infectiousness_multiplier_for_person(person_id)
 }
 
 define_rng!(ForecastRng);
+
+// Infection attempt function for a context and given `PersonId`
+pub fn infection_attempt(context: &Context, person_id: PersonId) -> Option<PersonId> {
+    let next_contact = context.draw_contact_from_transmitter_itinerary(person_id, (Alive, true))?;
+    match context.get_person_property(next_contact, InfectionStatus) {
+        InfectionStatusValue::Susceptible => Some(next_contact),
+        _ => None,
+    }
+}
 
 pub struct Forecast {
     pub next_time: f64,
@@ -135,20 +141,6 @@ pub fn evaluate_forecast(
     }
 
     true
-}
-
-// TODO<ryl8@cdc.gov>:
-/// Choose a the next contact for a given transmitter.
-/// Returns None if the contact is not susceptible.
-pub fn select_next_contact(context: &Context, person_id: PersonId) -> Option<PersonId> {
-    let next_contact = context.get_contact(person_id, ((Alive, true),))?;
-
-    if context.get_person_property(next_contact, InfectionStatus)
-        != InfectionStatusValue::Susceptible
-    {
-        return None;
-    }
-    Some(next_contact)
 }
 
 pub trait InfectionContextExt {
@@ -224,9 +216,8 @@ mod test {
     use crate::{
         infectiousness_manager::{
             InfectionData, InfectionDataValue, InfectionStatus, InfectionStatusValue,
-            TOTAL_INFECTIOUSNESS_MULTIPLIER,
         },
-        parameters::{GlobalParams, Params, RateFnType},
+        parameters::{CoreSettingsTypes, GlobalParams, ItineraryWriteFnType, Params, RateFnType},
         rate_fns::load_rate_fns,
     };
     use ixa::{Context, ContextGlobalPropertiesExt, ContextPeopleExt, ContextRandomExt};
@@ -248,10 +239,13 @@ mod test {
                     report_period: 1.0,
                     synth_population_file: PathBuf::from("."),
                     transmission_report_name: None,
+                    settings_properties: vec![CoreSettingsTypes::Global { alpha: 1.0 }],
+                    itinerary_fn_type: ItineraryWriteFnType::SplitEvenly,
                 },
             )
             .unwrap();
         load_rate_fns(&mut context).unwrap();
+
         context
     }
 
@@ -310,10 +304,20 @@ mod test {
     fn test_calc_total_infectiousness_multiplier() {
         let mut context = setup_context();
         let p1 = context.add_person(()).unwrap();
-        assert_eq!(
-            max_total_infectiousness_multiplier(&context, p1),
-            TOTAL_INFECTIOUSNESS_MULTIPLIER
-        );
+        crate::settings::init(&mut context).unwrap();
+
+        assert_eq!(max_total_infectiousness_multiplier(&context, p1), 0.0);
+    }
+
+    #[test]
+    fn test_calc_total_infectiousness_multiplier_with_contact() {
+        let mut context = setup_context();
+        let p1 = context.add_person(()).unwrap();
+        let p2 = context.add_person(()).unwrap();
+        crate::settings::init(&mut context).unwrap();
+
+        assert_eq!(max_total_infectiousness_multiplier(&context, p1), 1.0);
+        assert_eq!(max_total_infectiousness_multiplier(&context, p2), 1.0);
     }
 
     #[test]
@@ -323,6 +327,7 @@ mod test {
         // Add two additional contacts, which should make the factor 2
         context.add_person(()).unwrap();
         context.add_person(()).unwrap();
+        crate::settings::init(&mut context).unwrap();
 
         context.infect_person(p1, None);
 
@@ -333,13 +338,15 @@ mod test {
     }
 
     #[test]
-    #[should_panic = "Person 0: Forecasted infectiousness must always be greater than or equal to current infectiousness. Current: 2, Forecasted: 1.9"]
+    #[should_panic = "Person 0: Forecasted infectiousness must always be greater than or equal to current infectiousness. Current: 1, Forecasted: 0.9"]
     fn test_assert_evaluate_fails_when_forecast_smaller() {
         let mut context = setup_context();
         let p1 = context.add_person(()).unwrap();
         context.infect_person(p1, None);
+        let _ = context.add_person(()).unwrap();
+        crate::settings::init(&mut context).unwrap();
 
-        let invalid_forecast = TOTAL_INFECTIOUSNESS_MULTIPLIER - 0.1;
+        let invalid_forecast = 1.0 - 0.1;
         evaluate_forecast(&mut context, p1, invalid_forecast);
     }
 
@@ -348,6 +355,7 @@ mod test {
         let mut context = setup_context();
         let index = context.add_person(()).unwrap();
         let contact = context.add_person(()).unwrap();
+        crate::settings::init(&mut context).unwrap();
 
         context.infect_person(contact, Some(index));
         context.execute();

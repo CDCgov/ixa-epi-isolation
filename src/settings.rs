@@ -1,5 +1,10 @@
+use crate::parameters::{ContextParametersExt, CoreSettingsTypes, ItineraryWriteFnType, Params};
 use ixa::people::PersonId;
-use ixa::{define_data_plugin, define_rng, Context, ContextRandomExt, IxaError};
+use ixa::{
+    define_data_plugin, define_rng, people::Query, Context, ContextPeopleExt, ContextRandomExt,
+    IxaError, PersonCreatedEvent,
+};
+
 use std::any::TypeId;
 use std::collections::HashMap;
 use std::collections::HashSet;
@@ -11,7 +16,7 @@ define_rng!(SettingsRng);
 // This is not the most flexible structure but would work for now
 #[derive(Debug, Clone, Copy)]
 pub struct SettingProperties {
-    alpha: f64,
+    pub alpha: f64,
 }
 
 pub trait SettingType {
@@ -39,19 +44,55 @@ impl<T: SettingType + 'static> SettingId<T> {
     }
 }
 
+#[derive(Copy, Clone)]
 pub struct ItineraryEntry {
     setting_type: TypeId,
     setting_id: usize,
     ratio: f64,
 }
 
-#[allow(dead_code)]
 impl ItineraryEntry {
-    fn new<T: SettingType>(setting_id: &SettingId<T>, ratio: f64) -> ItineraryEntry {
+    pub fn new<T: SettingType>(setting_id: &SettingId<T>, ratio: f64) -> ItineraryEntry {
         ItineraryEntry {
             setting_type: TypeId::of::<T>(),
             setting_id: setting_id.id,
             ratio,
+        }
+    }
+}
+
+type ItineraryEntryWriter = dyn Fn(&Context, TypeId, usize) -> ItineraryEntry;
+
+pub trait Itinerary {
+    fn new(context: &Context, setting_id_vec: Vec<(TypeId, usize)>) -> Result<Self, IxaError>
+    where
+        Self: Sized;
+    fn merge_itinerary(&mut self, other: &Self);
+}
+
+impl Itinerary for Vec<ItineraryEntry> {
+    /// Add a specified setting Id into the Itoinerary vector
+    fn new(context: &Context, setting_id_vec: Vec<(TypeId, usize)>) -> Result<Self, IxaError> {
+        let writer = context.get_itinerary_write_rules();
+        let mut itinerary = vec![];
+        for (setting_type, id) in setting_id_vec {
+            itinerary.push(writer(context, setting_type, id));
+        }
+        Ok(itinerary)
+    }
+    /// Merge the current itinerary with another itinerary
+    /// Takes in an existing itinerary vector and filters for entries that have no matches in the provided vector
+    /// Other values are ignored as they are already present in the input self vector
+    fn merge_itinerary(&mut self, other_itinerary: &Self) {
+        for entry in other_itinerary {
+            // Push entries from existing itinerary that do not match a setting type setting id pair in the new itinerary
+            if !self
+                .iter()
+                .any(|x| x.setting_type == entry.setting_type && x.setting_id == entry.setting_id)
+            {
+                // If the setting id is not in the new itinerary, push it to the new itinerary
+                self.push(*entry);
+            }
         }
     }
 }
@@ -98,36 +139,32 @@ impl SettingDataContainer {
     }
 }
 
-// Define a home setting
-#[derive(Default, Debug, Hash, Eq, PartialEq)]
-pub struct Home {}
+#[macro_export]
+macro_rules! define_setting_type {
+    ($name:ident) => {
+        #[derive(Default, Debug, Hash, Eq, PartialEq)]
+        pub struct $name {}
 
-impl SettingType for Home {
-    // Read members and setting_properties as arguments
-    fn calculate_multiplier(
-        &self,
-        members: &[PersonId],
-        setting_properties: SettingProperties,
-    ) -> f64 {
-        let n_members = members.len();
-        #[allow(clippy::cast_precision_loss)]
-        ((n_members - 1) as f64).powf(setting_properties.alpha)
-    }
+        impl $crate::settings::SettingType for $name {
+            fn calculate_multiplier(
+                &self,
+                members: &[ixa::PersonId],
+                setting_properties: $crate::settings::SettingProperties,
+            ) -> f64 {
+                let n_members = members.len();
+                #[allow(clippy::cast_precision_loss)]
+                ((n_members - 1) as f64).powf(setting_properties.alpha)
+            }
+        }
+    };
 }
+pub use define_setting_type;
 
-#[derive(Default, Debug, Hash, Eq, PartialEq)]
-pub struct CensusTract {}
-impl SettingType for CensusTract {
-    fn calculate_multiplier(
-        &self,
-        members: &[PersonId],
-        setting_properties: SettingProperties,
-    ) -> f64 {
-        let n_members = members.len();
-        #[allow(clippy::cast_precision_loss)]
-        ((n_members - 1) as f64).powf(setting_properties.alpha)
-    }
-}
+define_setting_type!(Home);
+define_setting_type!(CensusTract);
+define_setting_type!(School);
+define_setting_type!(Workplace);
+define_setting_type!(Global);
 
 define_data_plugin!(
     SettingDataPlugin,
@@ -148,6 +185,16 @@ pub trait ContextSettingExt {
         person_id: PersonId,
         itinerary: Vec<ItineraryEntry>,
     ) -> Result<(), IxaError>;
+    fn append_itinerary_entry_as_proportion(
+        &mut self,
+        person_id: PersonId,
+        mixing_time_proportion: f64,
+    ) -> Result<(), IxaError>;
+    fn merge_with_existing_itinerary(
+        &mut self,
+        person_id: PersonId,
+        itinerary: &mut Vec<ItineraryEntry>,
+    );
     fn validate_itinerary(&self, itinerary: &[ItineraryEntry]) -> Result<(), IxaError>;
     fn get_setting_members<T: SettingType + 'static>(
         &self,
@@ -155,47 +202,71 @@ pub trait ContextSettingExt {
     ) -> Option<&Vec<PersonId>>;
     fn calculate_total_infectiousness_multiplier_for_person(&self, person_id: PersonId) -> f64;
     fn get_itinerary(&self, person_id: PersonId) -> Option<&Vec<ItineraryEntry>>;
-    fn get_contact<T: SettingType + 'static>(
+    fn get_contact<T: SettingType + 'static, Q: Query + 'static>(
         &self,
         person_id: PersonId,
         setting_id: SettingId<T>,
+        q: Q,
     ) -> Option<PersonId>;
-    fn draw_contact_from_itinerary(&self, person_id: PersonId) -> Option<PersonId>;
+    fn draw_contact_from_transmitter_itinerary<Q: Query>(
+        &self,
+        person_id: PersonId,
+        q: Q,
+    ) -> Option<PersonId>;
 }
 
 trait ContextSettingInternalExt {
-    fn get_contact_internal(
+    fn get_contact_internal<T: Query>(
         &self,
         person_id: PersonId,
         setting_type: TypeId,
         setting_id: usize,
+        q: T,
     ) -> Option<PersonId>;
     fn get_setting_members_internal(
         &self,
         setting_type: TypeId,
         setting_id: usize,
     ) -> Option<&Vec<PersonId>>;
+    fn get_itinerary_write_rules(&self) -> Box<ItineraryEntryWriter>;
 }
 
 impl ContextSettingInternalExt for Context {
-    fn get_contact_internal(
+    fn get_contact_internal<T: Query>(
         &self,
         person_id: PersonId,
         setting_type: TypeId,
         setting_id: usize,
+        q: T,
     ) -> Option<PersonId> {
-        if let Some(members) = self.get_setting_members_internal(setting_type, setting_id) {
-            if members.len() == 1 {
-                return None;
-            }
-            let mut contact_id = person_id;
-            while contact_id == person_id {
-                contact_id = members[self.sample_range(SettingsRng, 0..members.len())];
-            }
-            Some(contact_id)
-        } else {
-            None
-        }
+        self.get_setting_members_internal(setting_type, setting_id)
+            .and_then(|members| {
+                if members.len() == 1 {
+                    return None;
+                }
+                let member_iter = members.iter().filter(|&x| *x != person_id);
+
+                let mut contacts = vec![];
+                if q.get_query().is_empty() {
+                    // If the query is empty we push members directly to the vector
+                    for contact in member_iter {
+                        contacts.push(*contact);
+                    }
+                } else {
+                    // If the query is not empty, we match setting members to the query
+                    for contact in member_iter {
+                        if self.match_person(*contact, q) {
+                            contacts.push(*contact);
+                        }
+                    }
+                }
+
+                if contacts.is_empty() {
+                    return None;
+                }
+
+                Some(contacts[self.sample_range(SettingsRng, 0..contacts.len())])
+            })
     }
     fn get_setting_members_internal(
         &self,
@@ -204,6 +275,21 @@ impl ContextSettingInternalExt for Context {
     ) -> Option<&Vec<PersonId>> {
         self.get_data_container(SettingDataPlugin)?
             .get_setting_members(&setting_type, setting_id)
+    }
+    fn get_itinerary_write_rules(&self) -> Box<ItineraryEntryWriter> {
+        let &Params {
+            itinerary_fn_type, ..
+        } = self.get_params();
+
+        match itinerary_fn_type {
+            ItineraryWriteFnType::SplitEvenly => {
+                Box::new(|_context, setting_type, setting_id| ItineraryEntry {
+                    setting_type,
+                    setting_id,
+                    ratio: 1.0,
+                })
+            }
+        }
     }
 }
 
@@ -241,9 +327,9 @@ impl ContextSettingExt for Context {
     ) -> Result<(), IxaError> {
         self.validate_itinerary(&itinerary)?;
         let container = self.get_data_container_mut(SettingDataPlugin);
+        let mut current_setting_ids = vec![];
+
         for itinerary_entry in &itinerary {
-            // TODO: If we are changing a person's itinerary, the person_id should be removed from vector
-            // This isn't the same as the concept of being present or not.
             container
                 .members
                 .entry(itinerary_entry.setting_type)
@@ -251,9 +337,65 @@ impl ContextSettingExt for Context {
                 .entry(itinerary_entry.setting_id)
                 .or_default()
                 .push(person_id);
+            current_setting_ids.push((itinerary_entry.setting_type, itinerary_entry.setting_id));
         }
-        container.itineraries.insert(person_id, itinerary);
+
+        // Clean up settings that the person is no longer a member of
+        if let Some(previous_itinerary) = container.itineraries.insert(person_id, itinerary) {
+            // Remove the person from the previous itinerary entries not modified already
+            for itinerary_entry in previous_itinerary {
+                //Check if the entry of setting ID and type is not in the current itinerary
+                if !current_setting_ids
+                    .contains(&(itinerary_entry.setting_type, itinerary_entry.setting_id))
+                {
+                    // Remove the person from the previous itinerary
+                    container
+                        .members
+                        .entry(itinerary_entry.setting_type)
+                        .or_default()
+                        .entry(itinerary_entry.setting_id)
+                        .or_default()
+                        .retain(|&x| x != person_id);
+                }
+            }
+        }
         Ok(())
+    }
+
+    fn append_itinerary_entry_as_proportion(
+        &mut self,
+        person_id: PersonId,
+        mixing_time_proportion: f64,
+    ) -> Result<(), IxaError> {
+        // set ratio to recreate the proportion specified in input
+        // Should panic if mixing_proportion is 1.0 but a person already has `itinerary.is_some()`
+        let ratio = self
+            .get_itinerary(person_id)
+            .map_or(1.0, |existing_itinerary| {
+                //calculate current total itinerary weight
+                let mut sum = 0.0;
+                for entry in existing_itinerary {
+                    sum += entry.ratio;
+                }
+                mixing_time_proportion * sum / (1.0 - mixing_time_proportion)
+            });
+        let mut itinerary = vec![ItineraryEntry::new(&SettingId::<Global>::new(0), ratio)];
+
+        // Append to current existing itinerary
+        self.merge_with_existing_itinerary(person_id, &mut itinerary);
+        self.add_itinerary(person_id, itinerary)?;
+        Ok(())
+    }
+
+    fn merge_with_existing_itinerary(
+        &mut self,
+        person_id: PersonId,
+        itinerary: &mut Vec<ItineraryEntry>,
+    ) {
+        // Append to current existing itinerary
+        if let Some(existing_itinerary) = self.get_itinerary(person_id) {
+            itinerary.merge_itinerary(existing_itinerary);
+        }
     }
 
     fn validate_itinerary(&self, itinerary: &[ItineraryEntry]) -> Result<(), IxaError> {
@@ -307,25 +449,19 @@ impl ContextSettingExt for Context {
             .get(&person_id)
     }
 
-    fn get_contact<T: SettingType + 'static>(
+    fn get_contact<T: SettingType + 'static, Q: Query + 'static>(
         &self,
         person_id: PersonId,
         setting_id: SettingId<T>,
+        q: Q,
     ) -> Option<PersonId> {
-        if let Some(members) = self.get_setting_members::<T>(setting_id) {
-            if members.len() == 1 {
-                return None;
-            }
-            let mut contact_id = person_id;
-            while contact_id == person_id {
-                contact_id = members[self.sample_range(SettingsRng, 0..members.len())];
-            }
-            Some(contact_id)
-        } else {
-            None
-        }
+        self.get_contact_internal(person_id, TypeId::of::<T>(), setting_id.id, q)
     }
-    fn draw_contact_from_itinerary(&self, person_id: PersonId) -> Option<PersonId> {
+    fn draw_contact_from_transmitter_itinerary<Q: Query>(
+        &self,
+        person_id: PersonId,
+        q: Q,
+    ) -> Option<PersonId> {
         let container = self.get_data_container(SettingDataPlugin).unwrap();
         let mut itinerary_multiplier = Vec::new();
         container.with_itinerary(person_id, |setting_type, setting_props, members, ratio| {
@@ -341,6 +477,7 @@ impl ContextSettingExt for Context {
                 person_id,
                 itinerary_entry.setting_type,
                 itinerary_entry.setting_id,
+                q,
             )
         } else {
             None
@@ -348,11 +485,69 @@ impl ContextSettingExt for Context {
     }
 }
 
+/// Function to assign a Global itinerary item to all individuakls in a query
+/// If the query is empty, future people will be added by subscribing to the `PersonCreatedEvent`
+/// Function must be called after people are added if the simulation is not running and able to listen
+/// for events. People added after global itinerary is set but before `context.execute()` will not have the global itinerary
+///
+/// Function currently does not provide a later match to ensure that `PersonPropertyChange` events do not remove the individual
+/// from the global itinerary
+pub fn global_mixing_itinerary<Q: Query + 'static>(
+    context: &mut Context,
+    mixing_time_proportion: f64,
+    q: Q,
+) -> Result<(), IxaError> {
+    for person_id in context.query_people(q) {
+        context.append_itinerary_entry_as_proportion(person_id, mixing_time_proportion)?;
+    }
+
+    context.subscribe_to_event::<PersonCreatedEvent>(move |context, event| {
+        let person_id = event.person_id;
+        if context.match_person(person_id, q) {
+            context
+                .append_itinerary_entry_as_proportion(person_id, mixing_time_proportion)
+                .unwrap();
+        }
+    });
+
+    Ok(())
+}
+
+pub fn init(context: &mut Context) -> Result<(), IxaError> {
+    let Params {
+        settings_properties,
+        ..
+    } = context.get_params();
+
+    for setting in &settings_properties.clone() {
+        match setting {
+            CoreSettingsTypes::Home { alpha } => {
+                context.register_setting_type(Home {}, SettingProperties { alpha: *alpha });
+            }
+            CoreSettingsTypes::CensusTract { alpha } => {
+                context.register_setting_type(CensusTract {}, SettingProperties { alpha: *alpha });
+            }
+            CoreSettingsTypes::School { alpha } => {
+                context.register_setting_type(School {}, SettingProperties { alpha: *alpha });
+            }
+            CoreSettingsTypes::Workplace { alpha } => {
+                context.register_setting_type(Workplace {}, SettingProperties { alpha: *alpha });
+            }
+            CoreSettingsTypes::Global { alpha } => {
+                context.register_setting_type(Global {}, SettingProperties { alpha: *alpha });
+                // Mixing time proportion in Global is currently set to 1.0, this should be specified by a writer fn
+                global_mixing_itinerary(context, 1.0, ())?;
+            }
+        }
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
     use crate::settings::ContextSettingExt;
-    use ixa::ContextPeopleExt;
+    use ixa::{define_person_property, ContextPeopleExt};
     use statrs::assert_almost_eq;
     #[test]
     fn test_setting_type_creation() {
@@ -568,16 +763,16 @@ mod test {
         assert_eq!(
             person_b,
             context
-                .get_contact::<Home>(person_a, SettingId::<Home>::new(0))
+                .get_contact(person_a, SettingId::<Home>::new(0), ())
                 .unwrap()
         );
         assert!(context
-            .get_contact::<CensusTract>(person_a, SettingId::<CensusTract>::new(0))
+            .get_contact(person_a, SettingId::<CensusTract>::new(0), ())
             .is_none());
     }
 
     #[test]
-    fn test_draw_contact_from_itinerary() {
+    fn test_draw_contact_from_transmitter_itinerary() {
         /*
         Run 100 times
         - Create 3 people at home, and 3 people at censustract
@@ -626,13 +821,81 @@ mod test {
                 .clone();
 
             let _ = context.add_itinerary(person, itinerary_home);
-            let contact_id_home = context.draw_contact_from_itinerary(person);
+            let contact_id_home = context.draw_contact_from_transmitter_itinerary(person, ());
             assert!(home_members.contains(&contact_id_home.unwrap()));
 
             let _ = context.add_itinerary(person, itinerary_censustract);
-            let contact_id_tract = context.draw_contact_from_itinerary(person);
+            let contact_id_tract = context.draw_contact_from_transmitter_itinerary(person, ());
             assert!(tract_members.contains(&contact_id_tract.unwrap()));
         }
+    }
+
+    define_person_property!(Age, usize);
+
+    #[test]
+    fn test_draw_contact_from_transmitter_itinerary_with_query() {
+        /*
+        Run 100 times
+        - Create 3 people at home, and 3 people at censustract
+        - Create 7th person with itinerary at home and census tract
+        - Assign Age property to people and query for only Age = 42
+        - Call "draw contact from itinerary":
+          + Compute total infectiousness
+          + Draw a setting weighted by total infectiousness
+          + Sample contact from chosen setting
+         - Test 1 Itinerary with 0 proportion at census tract, contacts drawn should be from home (0-2)
+         - Test 2 Itinerary with 0 proportion at home, contacts should be drawn from census tract (3-6)
+         */
+        let mut context = Context::new();
+        context.init_random(1234);
+        context.register_setting_type(Home {}, SettingProperties { alpha: 0.1 });
+        context.register_setting_type(CensusTract {}, SettingProperties { alpha: 0.01 });
+
+        for i in 0..3 {
+            let person = context.add_person((Age, 42 + i)).unwrap();
+            let itinerary = vec![ItineraryEntry::new(&SettingId::<Home>::new(0), 1.0)];
+            let _ = context.add_itinerary(person, itinerary);
+        }
+
+        for i in 3..6 {
+            let person = context.add_person((Age, 39 + i)).unwrap();
+            let itinerary = vec![ItineraryEntry::new(&SettingId::<CensusTract>::new(0), 1.0)];
+            let _ = context.add_itinerary(person, itinerary);
+        }
+
+        let person = context.add_person((Age, 42)).unwrap();
+        let itinerary_home = vec![
+            ItineraryEntry::new(&SettingId::<Home>::new(0), 1.0),
+            ItineraryEntry::new(&SettingId::<CensusTract>::new(0), 0.0),
+        ];
+        let itinerary_censustract = vec![
+            ItineraryEntry::new(&SettingId::<Home>::new(0), 0.0),
+            ItineraryEntry::new(&SettingId::<CensusTract>::new(0), 1.0),
+        ];
+        let home_members = context
+            .get_setting_members::<Home>(SettingId::<Home>::new(0))
+            .unwrap()
+            .clone();
+        let tract_members = context
+            .get_setting_members::<CensusTract>(SettingId::<CensusTract>::new(0))
+            .unwrap()
+            .clone();
+
+        let _ = context.add_itinerary(person, itinerary_home);
+        let contact_id_home = context.draw_contact_from_transmitter_itinerary(person, (Age, 42));
+        assert!(home_members.contains(&contact_id_home.unwrap()));
+        assert_eq!(
+            context.get_person_property(contact_id_home.unwrap(), Age),
+            42
+        );
+
+        let _ = context.add_itinerary(person, itinerary_censustract);
+        let contact_id_tract = context.draw_contact_from_transmitter_itinerary(person, (Age, 42));
+        assert!(tract_members.contains(&contact_id_tract.unwrap()));
+        assert_eq!(
+            context.get_person_property(contact_id_tract.unwrap(), Age),
+            42
+        );
     }
     /*TODO:
     Test failure of getting properties if not initialized

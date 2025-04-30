@@ -1,5 +1,9 @@
-use std::fmt::Debug;
-use std::path::PathBuf;
+use std::{
+    collections::HashMap,
+    fmt::Debug,
+    fmt::{Display, Formatter},
+    path::PathBuf,
+};
 
 use ixa::{define_global_property, ContextGlobalPropertiesExt, IxaError};
 use serde::{Deserialize, Serialize};
@@ -8,6 +12,48 @@ use serde::{Deserialize, Serialize};
 pub enum RateFnType {
     Constant { rate: f64, duration: f64 },
     EmpiricalFromFile { file: PathBuf },
+}
+
+#[derive(Debug, Clone, Copy, Deserialize, Serialize)]
+pub enum CoreSettingsTypes {
+    Home { alpha: f64 },
+    School { alpha: f64 },
+    Workplace { alpha: f64 },
+    CensusTract { alpha: f64 },
+    Global { alpha: f64 },
+}
+
+trait GetSettingPropertyFromType {
+    fn get_alpha(&self) -> &f64;
+}
+
+impl GetSettingPropertyFromType for CoreSettingsTypes {
+    fn get_alpha(&self) -> &f64 {
+        match self {
+            CoreSettingsTypes::Home { alpha }
+            | CoreSettingsTypes::School { alpha }
+            | CoreSettingsTypes::Workplace { alpha }
+            | CoreSettingsTypes::CensusTract { alpha }
+            | CoreSettingsTypes::Global { alpha } => alpha,
+        }
+    }
+}
+
+impl Display for CoreSettingsTypes {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            CoreSettingsTypes::Home { .. } => write!(f, "Home"),
+            CoreSettingsTypes::School { .. } => write!(f, "School"),
+            CoreSettingsTypes::Workplace { .. } => write!(f, "Workplace"),
+            CoreSettingsTypes::CensusTract { .. } => write!(f, "CensusTract"),
+            CoreSettingsTypes::Global { .. } => write!(f, "Global"),
+        }
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, Copy)]
+pub enum ItineraryWriteFnType {
+    SplitEvenly,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -23,6 +69,10 @@ pub struct Params {
     pub infectiousness_rate_fn: RateFnType,
     /// The period at which to report tabulated values
     pub report_period: f64,
+    /// Setting properties, currently only the transmission modifier alpha values for each setting
+    pub settings_properties: Vec<CoreSettingsTypes>,
+    /// Rule set for writing itineraries
+    pub itinerary_fn_type: ItineraryWriteFnType,
     /// The path to the synthetic population file loaded in `population_loader`
     pub synth_population_file: PathBuf,
     /// The path to the transmission report file
@@ -39,6 +89,23 @@ fn validate_inputs(parameters: &Params) -> Result<(), IxaError> {
         return Err(IxaError::IxaError(
             "The report writing period must be non-negative.".to_string(),
         ));
+    }
+
+    let mut settings_map: HashMap<String, f64> = HashMap::new();
+
+    for setting in &parameters.settings_properties {
+        let setting_string = setting.to_string();
+        let alpha = setting.get_alpha();
+        if *alpha < 0.0 || *alpha > 1.0 {
+            return Err(IxaError::IxaError(
+                "The alpha values for each setting must be between 0 and 1, inclusive.".to_string(),
+            ));
+        }
+        if settings_map.insert(setting_string, *alpha).is_some() {
+            return Err(IxaError::IxaError(
+                "Setting types must be uniquely associated with an alpha value.".to_string(),
+            ));
+        }
     }
     Ok(())
 }
@@ -61,9 +128,10 @@ mod test {
     use ixa::{Context, ContextGlobalPropertiesExt, IxaError};
 
     use super::validate_inputs;
+    use crate::parameters::{
+        ContextParametersExt, GlobalParams, ItineraryWriteFnType, Params, RateFnType,
+    };
     use std::path::PathBuf;
-
-    use crate::parameters::{ContextParametersExt, GlobalParams, Params, RateFnType};
 
     #[test]
     fn test_default_input_file() {
@@ -89,6 +157,8 @@ mod test {
             report_period: 1.0,
             synth_population_file: PathBuf::from("."),
             transmission_report_name: None,
+            settings_properties: vec![],
+            itinerary_fn_type: ItineraryWriteFnType::SplitEvenly,
         };
         context
             .set_global_property_value(GlobalParams, parameters)
@@ -113,6 +183,8 @@ mod test {
             report_period: 1.0,
             synth_population_file: PathBuf::from("."),
             transmission_report_name: None,
+            settings_properties: vec![],
+            itinerary_fn_type: ItineraryWriteFnType::SplitEvenly,
         };
         let e = validate_inputs(&parameters).err();
         match e {

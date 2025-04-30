@@ -14,7 +14,7 @@ use infectiousness_manager::InfectionStatus;
 use ixa::runner::run_with_args;
 use ixa::{ContextPeopleExt, ContextRandomExt, ContextReportExt};
 use parameters::{ContextParametersExt, Params};
-use population_loader::{Age, CensusTract};
+use population_loader::Age;
 
 // You must run this with a parameters file:
 // cargo run -- --config input/input.json
@@ -44,14 +44,15 @@ fn main() {
         context.add_periodic_report(
             "person_property_count",
             report_period,
-            (Age, CensusTract, InfectionStatus),
+            (Age, InfectionStatus),
         )?;
 
         // Load the synthetic population from the `synthetic_population_file`
         // specified in input.json.
         population_loader::init(context)?;
         context.index_property(Age);
-        context.index_property(CensusTract);
+
+        settings::init(context)?;
 
         infection_propagation_loop::init(context)?;
         transmission_report::init(context)?;

@@ -1,5 +1,5 @@
 use crate::infectiousness_manager::{
-    evaluate_forecast, get_forecast, select_next_contact, Forecast, InfectionContextExt,
+    evaluate_forecast, get_forecast, infection_attempt, Forecast, InfectionContextExt,
     InfectionStatus, InfectionStatusValue,
 };
 use crate::parameters::{ContextParametersExt, Params};
@@ -19,7 +19,7 @@ fn schedule_next_forecasted_infection(context: &mut Context, person: PersonId) {
         context.add_plan(next_time, move |context| {
             // TODO<ryl8@cc.gov>: We will choose a setting here
             if evaluate_forecast(context, person, forecasted_total_infectiousness) {
-                if let Some(next_contact) = select_next_contact(context, person) {
+                if let Some(next_contact) = infection_attempt(context, person) {
                     trace!("Person {person}: Forecast accepted, infecting {next_contact}");
                     context.infect_person(next_contact, Some(person));
                 }
@@ -92,13 +92,16 @@ mod test {
             max_total_infectiousness_multiplier, InfectionContextExt, InfectionData,
             InfectionDataValue,
         },
-        parameters::{ContextParametersExt, GlobalParams, Params, RateFnType},
+        parameters::{
+            ContextParametersExt, CoreSettingsTypes, GlobalParams, ItineraryWriteFnType, Params,
+            RateFnType,
+        },
         rate_fns::load_rate_fns,
     };
 
     use super::{schedule_recovery, seed_infections};
 
-    fn setup_context(seed: u64, rate: f64) -> Context {
+    fn setup_context(seed: u64, rate: f64, alpha: f64) -> Context {
         let mut context = Context::new();
         let parameters = Params {
             initial_infections: 3,
@@ -111,20 +114,24 @@ mod test {
             report_period: 1.0,
             synth_population_file: PathBuf::from("."),
             transmission_report_name: None,
+            settings_properties: vec![CoreSettingsTypes::Global { alpha }],
+            itinerary_fn_type: ItineraryWriteFnType::SplitEvenly,
         };
         context.init_random(parameters.seed);
         context
             .set_global_property_value(GlobalParams, parameters)
             .unwrap();
+
         context
     }
 
     #[test]
     fn test_seed_infections() {
-        let mut context = setup_context(0, 1.0);
+        let mut context = setup_context(0, 1.0, 1.0);
         for _ in 0..10 {
             context.add_person(()).unwrap();
         }
+
         load_rate_fns(&mut context).unwrap();
         seed_infections(&mut context, 5);
         let infectious_count = context
@@ -135,10 +142,11 @@ mod test {
 
     #[test]
     fn test_init_loop() {
-        let mut context = setup_context(42, 1.0);
+        let mut context = setup_context(42, 1.0, 1.0);
         for _ in 0..10 {
             context.add_person(()).unwrap();
         }
+        crate::settings::init(&mut context).unwrap();
 
         init(&mut context).unwrap();
 
@@ -174,10 +182,11 @@ mod test {
 
     #[test]
     fn test_zero_rate_no_infections() {
-        let mut context = setup_context(0, 0.0);
+        let mut context = setup_context(0, 0.0, 1.0);
         for _ in 0..=context.get_params().initial_infections {
             context.add_person(()).unwrap();
         }
+        crate::settings::init(&mut context).unwrap();
 
         init(&mut context).unwrap();
 
@@ -216,8 +225,9 @@ mod test {
         // attempt happens quickly, that increases the chance we see another in 1.0 time units, and
         // because there is basically this compensating relationship between the time and the number
         // of events, they "cancel" each other out to give a uniform distribution (handwavingly).
-        let num_sims: u64 = 10000;
+        let num_sims: u64 = 15_000;
         let rate = 1.5;
+        let alpha = 0.42;
         // We need the total infectiousness multiplier for the person.
         let mut total_infectiousness_multiplier = None;
         // Where we store the infection times.
@@ -226,7 +236,7 @@ mod test {
         for seed in 0..num_sims {
             let infection_times_clone = Rc::clone(&infection_times);
             let num_infected_clone = Rc::clone(&num_infected);
-            let mut context = setup_context(seed, rate);
+            let mut context = setup_context(seed, rate, alpha);
             // We only run the simulation for 1.0 time units.
             context.add_plan_with_phase(1.0, ixa::Context::shutdown, ExecutionPhase::Last);
             // Add a a person who will get infected.
@@ -237,6 +247,10 @@ mod test {
             load_rate_fns(&mut context).unwrap();
             // Add our infectious fellow.
             let infectious_person = context.add_person(()).unwrap();
+
+            //Initiate global mixing to place all people in the same Global setting
+            crate::settings::init(&mut context).unwrap();
+
             context.infect_person(infectious_person, None);
             // Get the total infectiousness multiplier for comparison to total number of infections.
             if total_infectiousness_multiplier.is_none() {
@@ -302,9 +316,10 @@ mod test {
 
     #[test]
     fn test_schedule_recovery() {
-        let mut context = setup_context(0, 0.0);
+        let mut context = setup_context(0, 0.0, 1.0);
         load_rate_fns(&mut context).unwrap();
         let person = context.add_person(()).unwrap();
+
         seed_infections(&mut context, 1);
         // For later, we need to get the recovery time from the rate function.
         let recovery_time = context.get_person_rate_fn(person).infection_duration();
