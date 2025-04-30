@@ -6,6 +6,7 @@ use serde::Serialize;
 use statrs::distribution::Exp;
 
 use crate::{
+    interventions::ContextTransmissionModifierExt,
     population_loader::Alive,
     rate_fns::{InfectiousnessRateExt, InfectiousnessRateFn, ScaledRateFn},
     settings::ContextSettingExt,
@@ -24,7 +25,7 @@ pub enum InfectionDataValue {
     },
 }
 
-#[derive(Serialize, PartialEq, Debug, Clone, Copy)]
+#[derive(Serialize, PartialEq, Debug, Clone, Copy, Eq, Hash)]
 pub enum InfectionStatusValue {
     Susceptible,
     Infectious,
@@ -73,7 +74,15 @@ pub fn infection_attempt(context: &Context, person_id: PersonId) -> Option<Perso
         .draw_contact_from_transmitter_itinerary(person_id, (Alive, true))
         .unwrap()?;
     match context.get_person_property(next_contact, InfectionStatus) {
-        InfectionStatusValue::Susceptible => Some(next_contact),
+        InfectionStatusValue::Susceptible => {
+            let relative_transmission_success =
+                context.get_relative_transmission_infection_attempt(person_id, next_contact);
+            if context.sample_bool(ForecastRng, relative_transmission_success) {
+                Some(next_contact)
+            } else {
+                None
+            }
+        }
         _ => None,
     }
 }
