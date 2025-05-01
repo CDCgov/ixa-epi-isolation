@@ -73,7 +73,7 @@ pub fn load_rate_fns(context: &mut Context) -> Result<(), IxaError> {
 
 #[derive(Deserialize)]
 pub struct EmpiricalRateFnRecord {
-    id: u8,
+    id: u32,
     time: f64,
     value: f64,
 }
