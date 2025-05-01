@@ -180,12 +180,12 @@ pub trait ContextSettingExt {
         person_id: PersonId,
         setting_id: SettingId<T>,
         q: Q,
-    ) -> Option<PersonId>;
+    ) -> Result<Option<PersonId>, IxaError>;
     fn draw_contact_from_transmitter_itinerary<Q: Query>(
         &self,
         person_id: PersonId,
         q: Q,
-    ) -> Option<PersonId>;
+    ) -> Result<Option<PersonId>, IxaError>;
 }
 
 trait ContextSettingInternalExt {
@@ -195,7 +195,7 @@ trait ContextSettingInternalExt {
         setting_type: TypeId,
         setting_id: usize,
         q: T,
-    ) -> Option<PersonId>;
+    ) -> Result<Option<PersonId>, IxaError>;
     fn get_setting_members_internal(
         &self,
         setting_type: TypeId,
@@ -211,35 +211,42 @@ impl ContextSettingInternalExt for Context {
         setting_type: TypeId,
         setting_id: usize,
         q: T,
-    ) -> Option<PersonId> {
-        self.get_setting_members_internal(setting_type, setting_id)
-            .and_then(|members| {
-                if members.len() == 1 {
-                    return None;
-                }
-                let member_iter = members.iter().filter(|&x| *x != person_id);
+    ) -> Result<Option<PersonId>, IxaError> {
+        let members = self
+            .get_setting_members_internal(setting_type, setting_id)
+            .unwrap();
+        if !members.contains(&person_id) {
+            return Err(IxaError::from(
+                "Attempting contact outside of group membership",
+            ));
+        }
+        if members.len() == 1 {
+            return Ok(None);
+        }
+        let member_iter = members.iter().filter(|&x| *x != person_id);
 
-                let mut contacts = vec![];
-                if q.get_query().is_empty() {
-                    // If the query is empty we push members directly to the vector
-                    for contact in member_iter {
-                        contacts.push(*contact);
-                    }
-                } else {
-                    // If the query is not empty, we match setting members to the query
-                    for contact in member_iter {
-                        if self.match_person(*contact, q) {
-                            contacts.push(*contact);
-                        }
-                    }
+        let mut contacts = vec![];
+        if q.get_query().is_empty() {
+            // If the query is empty we push members directly to the vector
+            for contact in member_iter {
+                contacts.push(*contact);
+            }
+        } else {
+            // If the query is not empty, we match setting members to the query
+            for contact in member_iter {
+                if self.match_person(*contact, q) {
+                    contacts.push(*contact);
                 }
+            }
+        }
 
-                if contacts.is_empty() {
-                    return None;
-                }
+        if contacts.is_empty() {
+            return Ok(None);
+        }
 
-                Some(contacts[self.sample_range(SettingsRng, 0..contacts.len())])
-            })
+        Ok(Some(
+            contacts[self.sample_range(SettingsRng, 0..contacts.len())],
+        ))
     }
     fn get_setting_members_internal(
         &self,
@@ -353,22 +360,22 @@ impl ContextSettingExt for Context {
         for itinerary_entry in &itinerary {
             // TODO: If we are changing a person's itinerary, the person_id should be removed from vector
             // This isn't the same as the concept of being present or not.
-            match container.setting_types.get(&itinerary_entry.setting_type) {
-                None => {
-                    return Err(IxaError::from(
-                        "Itinerary entry setting type not registered",
-                    ))
-                }
-                Some(_) => {
-                    container
-                        .members
-                        .entry(itinerary_entry.setting_type)
-                        .or_default()
-                        .entry(itinerary_entry.setting_id)
-                        .or_default()
-                        .push(person_id);
-                }
+            if !container
+                .setting_types
+                .contains_key(&itinerary_entry.setting_type)
+            {
+                return Err(IxaError::from(
+                    "Itinerary entry setting type not registered",
+                ));
             }
+            container
+                .members
+                .entry(itinerary_entry.setting_type)
+                .or_default()
+                .entry(itinerary_entry.setting_id)
+                .or_default()
+                .push(person_id);
+            current_setting_ids.push((itinerary_entry.setting_type, itinerary_entry.setting_id));
         }
 
         // Clean up settings that the person is no longer a member of
@@ -449,14 +456,14 @@ impl ContextSettingExt for Context {
         person_id: PersonId,
         setting_id: SettingId<T>,
         q: Q,
-    ) -> Option<PersonId> {
+    ) -> Result<Option<PersonId>, IxaError> {
         self.get_contact_internal(person_id, TypeId::of::<T>(), setting_id.id, q)
     }
     fn draw_contact_from_transmitter_itinerary<Q: Query>(
         &self,
         person_id: PersonId,
         q: Q,
-    ) -> Option<PersonId> {
+    ) -> Result<Option<PersonId>, IxaError> {
         let container = self.get_data_container(SettingDataPlugin).unwrap();
         let mut itinerary_multiplier = Vec::new();
         container.with_itinerary(person_id, |setting_type, setting_props, members, ratio| {
@@ -475,7 +482,7 @@ impl ContextSettingExt for Context {
                 q,
             )
         } else {
-            None
+            Ok(None)
         }
     }
 }
@@ -489,16 +496,24 @@ pub fn init(context: &mut Context) {
     for setting in &settings_properties.clone() {
         match setting {
             CoreSettingsTypes::Home { alpha } => {
-                context.register_setting_type(Home {}, SettingProperties { alpha: *alpha });
+                context
+                    .register_setting_type(Home {}, SettingProperties { alpha: *alpha })
+                    .unwrap();
             }
             CoreSettingsTypes::CensusTract { alpha } => {
-                context.register_setting_type(CensusTract {}, SettingProperties { alpha: *alpha });
+                context
+                    .register_setting_type(CensusTract {}, SettingProperties { alpha: *alpha })
+                    .unwrap();
             }
             CoreSettingsTypes::School { alpha } => {
-                context.register_setting_type(School {}, SettingProperties { alpha: *alpha });
+                context
+                    .register_setting_type(School {}, SettingProperties { alpha: *alpha })
+                    .unwrap();
             }
             CoreSettingsTypes::Workplace { alpha } => {
-                context.register_setting_type(Workplace {}, SettingProperties { alpha: *alpha });
+                context
+                    .register_setting_type(Workplace {}, SettingProperties { alpha: *alpha })
+                    .unwrap();
             }
         }
     }
@@ -689,6 +704,26 @@ mod test {
             .get_setting_members::<Home>(SettingId::<Home>::new(2))
             .unwrap();
         assert_eq!(members2.len(), 2);
+
+        let members2 = context
+            .get_setting_members::<Home>(SettingId::<Home>::new(2))
+            .unwrap();
+        assert_eq!(members2.len(), 2);
+
+        let itinerary3 = vec![ItineraryEntry::new(&SettingId::<Home>::new(3), 0.5)];
+        let _ = context.add_itinerary(person, itinerary3);
+        let members2_removed = context
+            .get_setting_members::<Home>(SettingId::<Home>::new(2))
+            .unwrap();
+        assert_eq!(members2_removed.len(), 1);
+        let members3 = context
+            .get_setting_members::<Home>(SettingId::<Home>::new(3))
+            .unwrap();
+        assert_eq!(members3.len(), 1);
+        let members1_removed = context
+            .get_setting_members::<Home>(SettingId::<Home>::new(1))
+            .unwrap();
+        assert_eq!(members1_removed.len(), 0);
     }
 
     #[test]
@@ -831,33 +866,26 @@ mod test {
         assert_eq!(
             Some(person_b),
             context
-                .get_contact::<Home>(person_a, SettingId::<Home>::new(0))
+                .get_contact::<Home, _>(person_a, SettingId::<Home>::new(0), ())
                 .unwrap()
         );
         assert!(context
-            .get_contact(person_a, SettingId::<CensusTract>::new(0), ())
-            .is_none());
-
-        let person_c = context.add_person(()).unwrap();
-        let itinerary_c = vec![ItineraryEntry::new(&SettingId::<CensusTract>::new(0), 0.5)];
-        let _ = context.add_itinerary(person_c, itinerary_c);
-
-        assert!(context
-            .get_contact::<CensusTract>(person_b, SettingId::<CensusTract>::new(0))
+            .get_contact::<CensusTract, _>(person_a, SettingId::<CensusTract>::new(0), ())
+            .unwrap()
             .is_none());
 
         let person_c = context.add_person(()).unwrap();
         let itinerary_c = vec![ItineraryEntry::new(&SettingId::<CensusTract>::new(0), 0.5)];
         let _ = context.add_itinerary(person_c, itinerary_c);
         let e = context
-            .get_contact(person_b, SettingId::<CensusTract>::new(0))
+            .get_contact(person_b, SettingId::<CensusTract>::new(0), ())
             .err();
         match e {
             Some(IxaError::IxaError(msg)) => {
-                assert_eq!(msg, "Attempting contact in invalid setting");
+                assert_eq!(msg, "Attempting contact outside of group membership");
             }
             Some(ue) => panic!(
-                "Expected an error attempting contact in invalid setting. Instead got: {:?}",
+                "Expected an error attempting contact outside group membership. Instead got: {:?}",
                 ue.to_string()
             ),
             None => panic!("Expected an error. Instead, validation passed with no errors."),
@@ -880,9 +908,12 @@ mod test {
         for seed in 0..100 {
             let mut context = Context::new();
             context.init_random(seed);
-            let _ = context.register_setting_type(Home {}, SettingProperties { alpha: 0.1 });
-            let _ =
-                context.register_setting_type(CensusTract {}, SettingProperties { alpha: 0.01 });
+            context
+                .register_setting_type(Home {}, SettingProperties { alpha: 0.1 })
+                .unwrap();
+            context
+                .register_setting_type(CensusTract {}, SettingProperties { alpha: 0.01 })
+                .unwrap();
 
             for _ in 0..3 {
                 let person = context.add_person(()).unwrap();
@@ -916,11 +947,11 @@ mod test {
 
             let _ = context.add_itinerary(person, itinerary_home);
             let contact_id_home = context.draw_contact_from_transmitter_itinerary(person, ());
-            assert!(home_members.contains(&contact_id_home.unwrap()));
+            assert!(home_members.contains(&contact_id_home.unwrap().unwrap()));
 
             let _ = context.add_itinerary(person, itinerary_censustract);
             let contact_id_tract = context.draw_contact_from_transmitter_itinerary(person, ());
-            assert!(tract_members.contains(&contact_id_tract.unwrap()));
+            assert!(tract_members.contains(&contact_id_tract.unwrap().unwrap()));
         }
     }
 
@@ -942,8 +973,12 @@ mod test {
          */
         let mut context = Context::new();
         context.init_random(1234);
-        context.register_setting_type(Home {}, SettingProperties { alpha: 0.1 });
-        context.register_setting_type(CensusTract {}, SettingProperties { alpha: 0.01 });
+        context
+            .register_setting_type(Home {}, SettingProperties { alpha: 0.1 })
+            .unwrap();
+        context
+            .register_setting_type(CensusTract {}, SettingProperties { alpha: 0.01 })
+            .unwrap();
 
         for i in 0..3 {
             let person = context.add_person((Age, 42 + i)).unwrap();
@@ -976,7 +1011,9 @@ mod test {
             .clone();
 
         let _ = context.add_itinerary(person, itinerary_home);
-        let contact_id_home = context.draw_contact_from_transmitter_itinerary(person, (Age, 42));
+        let contact_id_home = context
+            .draw_contact_from_transmitter_itinerary(person, (Age, 42))
+            .unwrap();
         assert!(home_members.contains(&contact_id_home.unwrap()));
         assert_eq!(
             context.get_person_property(contact_id_home.unwrap(), Age),
@@ -984,7 +1021,9 @@ mod test {
         );
 
         let _ = context.add_itinerary(person, itinerary_censustract);
-        let contact_id_tract = context.draw_contact_from_transmitter_itinerary(person, (Age, 42));
+        let contact_id_tract = context
+            .draw_contact_from_transmitter_itinerary(person, (Age, 42))
+            .unwrap();
         assert!(tract_members.contains(&contact_id_tract.unwrap()));
         assert_eq!(
             context.get_person_property(contact_id_tract.unwrap(), Age),
