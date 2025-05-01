@@ -64,30 +64,19 @@ impl EmpiricalRate {
         // integral from the first value in the time series to itself).
         // We add that zero here:
         cum_rates.insert(0, 0.0);
-        // Next we account for there being infectiousness potentially before the first value in the
-        // timeseries -- i.e., if the rate timeseries does not start at 0.
-        // We need to calculate that infectiousness and add it to our cumulative rates.
-        let (_, _, estimated_rate_zero) = empirical_rate_no_cum.lower_index_and_rate(0.0);
-        let pre_times_zero_infectiousness = trapezoid_integral(
-            &[0.0, empirical_rate_no_cum.times[0]],
-            &[
-                estimated_rate_zero,
-                empirical_rate_no_cum.instantaneous_rate[0],
-            ],
-        )?;
-        cum_rates
-            .iter_mut()
-            .for_each(|x| *x += pre_times_zero_infectiousness);
+
         Ok(Self {
             cum_rates,
             ..empirical_rate_no_cum
         })
     }
+
     #[allow(dead_code)]
     /// Used exclusively in tests for checking that we have created the cumulative rates correctly.
     fn get_cum_rates(&self) -> Vec<f64> {
         self.cum_rates.clone()
     }
+
     /// Private function that returns all the values used in the rate function interpolation
     /// process. In particular, returns a tuple where the first two elements are the result of
     /// `get_lower_index(times, t)` (i.e., the first element is the index in `times` of the greatest
@@ -119,9 +108,18 @@ impl EmpiricalRate {
 
 impl InfectiousnessRateFn for EmpiricalRate {
     fn rate(&self, t: f64) -> f64 {
+        if t < self.times[0] {
+            return 0.0;
+        }
+        if t > self.times[self.times.len() - 1] {
+            return 0.0;
+        }
         self.lower_index_and_rate(t).2
     }
     fn cum_rate(&self, t: f64) -> f64 {
+        if t < self.times[0] {
+            return 0.0;
+        }
         // We use a two-step process: first, we use the pre-calculated cumulative rates vector to
         // get the cumulative rate up until the greatest value in `times` less than or equal to `t`.
         // Then, we estimate the extra cumulative rate from the last time in our samples of the rate
@@ -132,6 +130,10 @@ impl InfectiousnessRateFn for EmpiricalRate {
         // Later, we will need the estimated rate at `t` for the second step, so we get both here.
         let (integration_index, _, estimated_rate) = self.lower_index_and_rate(t);
         let mut cum_rate = self.cum_rates[integration_index];
+        if t > self.times[self.times.len() - 1] {
+            // rates for times greater than the last time are 0, so cum_rate stays the same
+            return cum_rate;
+        }
 
         // Now we need to estimate the extra area from the last time in our samples of the rate
         // function to t.
@@ -273,6 +275,8 @@ fn get_lower_index(xs: &[f64], xp: f64) -> (usize, usize) {
 
 #[cfg(test)]
 mod test {
+    use core::f64;
+
     use ixa::IxaError;
     use statrs::assert_almost_eq;
 
@@ -441,7 +445,9 @@ mod test {
     #[test]
     fn test_cum_rate_vector_nonzero_start() {
         let empirical = EmpiricalRate::new(vec![1.0, 2.0, 3.0], vec![1.0, 1.0, 1.0]).unwrap();
-        assert_eq!(empirical.get_cum_rates(), vec![1.0, 2.0, 3.0]);
+        // The cumulative rates should start at 0.0 because we assume that infectiousness is 0.0
+        // before the first time in the time series.
+        assert_eq!(empirical.get_cum_rates(), vec![0.0, 1.0, 2.0]);
     }
 
     #[test]
@@ -479,8 +485,7 @@ mod test {
         // cumulative rates vector + extra integration work for the case when that extra integration
         // needs to return a negative value?
         let empirical = EmpiricalRate::new(vec![1.0, 2.0, 3.0], vec![1.0, 1.0, 1.0]).unwrap();
-        assert_eq!(empirical.get_cum_rates(), vec![1.0, 2.0, 3.0]);
-        assert_eq!(empirical.inverse_cum_rate(0.5), Some(0.5));
+        assert_eq!(empirical.inverse_cum_rate(0.5), Some(1.5));
     }
 
     #[test]
@@ -488,8 +493,9 @@ mod test {
         let empirical = EmpiricalRate::new(vec![1.0, 2.0, 3.0], vec![1.0, 3.0, 5.0]).unwrap();
         // At t = 0, the rate would be -1.0, but we should return 0.0.
         assert_almost_eq!(empirical.cum_rate(0.0), 0.0, 0.0);
-        // When we integrate from 0.0 to 1.0, we get 0.5 then.
-        assert_eq!(empirical.get_cum_rates(), vec![0.5, 2.5, 6.5]);
+        // We assume that infectiousness is 0.0 before the first time in the time series, so the
+        // cumulative rate should be 0.0 (the first value in the vector).
+        assert_eq!(empirical.get_cum_rates(), vec![0.0, 2.0, 6.0]);
     }
 
     #[test]
@@ -526,5 +532,22 @@ mod test {
         )
         .unwrap();
         assert_almost_eq!(empirical.infection_duration(), 5.0, 0.0);
+    }
+
+    #[test]
+    fn test_rates_below_zero_rate() {
+        let empirical = EmpiricalRate::new(vec![1.0, 2.0], vec![1.0, 1.0]).unwrap();
+        // Rate below first value in time series should be 0
+        assert_almost_eq!(empirical.rate(0.5), 0.0, 0.0);
+        // Cum rate below first value in time series should be 0
+        assert_almost_eq!(empirical.cum_rate(0.5), 0.0, 0.0);
+        // Cum rate should always start at 0
+        assert_eq!(empirical.get_cum_rates(), vec![0.0, 1.0]);
+        // Rate above last value in time series should be 0
+        assert_almost_eq!(empirical.rate(2.1), 0.0, 0.0);
+        // Cum rate should not increase beyond cum rate of last value in time series
+        assert_almost_eq!(empirical.cum_rate(2.1), 1.0, 0.0);
+        // Inverse cum rate should always return a time that is greater than the minimum time
+        assert!(empirical.inverse_cum_rate(f64::EPSILON).unwrap() > 1.0);
     }
 }
