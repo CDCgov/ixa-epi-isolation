@@ -6,7 +6,6 @@ use serde::Serialize;
 use statrs::distribution::Exp;
 
 use crate::{
-    contact::ContextContactExt,
     parameters::{ContextParametersExt, RateFnType},
     population_loader::Alive,
     rate_fns::{InfectiousnessRateExt, InfectiousnessRateFn, RateFnId, ScaledRateFn},

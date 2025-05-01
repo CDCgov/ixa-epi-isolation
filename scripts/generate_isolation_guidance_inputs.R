@@ -6,10 +6,11 @@ library(sjmisc)
 source("scripts/functions.R")
 set.seed(108)
 
-# Jason's suggestion for basically adding a positive value (that we calibrate)
-# to the time before infectiousness starts (by our assumption of logVL > 0)
-# to get the time of infection. This time plus the time to symptom onset is the
-# disease latent period. We can calibrate these parameters.
+# Jason's suggestion: add some time before infectiousness starts
+# to get the time of infection. We can calibrate this time and use
+# it to check our assumption that infectiousness starts at logVL > 0.
+# The time we add is the disease latent period, and the latent period
+# plus the time to symptom onset is the incubation period.
 pre_infectiousness_mean <- 0.5
 pre_infectiousness_std_dev <- 1
 dt <- 0.2
@@ -87,7 +88,10 @@ trajectories <- trajectories |>
   pivot_longer(cols = -c("id"), names_to = "time", values_to = "value") |>
   # Due to numerical instability, it is possible to have the rate go to infinity
   # at the end of a timeseries -- we need to remove these.
-  dplyr::filter(is.finite(value))
+  dplyr::filter(is.finite(value)) |>
+  # We can save space by removing zeros since the Rust code assumes that the
+  # rate is 0 for values outside the time series.
+  dplyr::filter(value != 0)
 
 write_csv(trajectories,
   file.path(
