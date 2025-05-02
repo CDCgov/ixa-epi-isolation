@@ -111,7 +111,7 @@ enum ProgressionType {
 
 #[derive(Deserialize)]
 struct ProgressionRecord {
-    id: u8,
+    id: u32,
     progression_type: ProgressionType,
     parameter_name: String,
     parameter_value: f64,
