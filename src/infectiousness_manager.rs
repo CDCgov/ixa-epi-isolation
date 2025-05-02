@@ -220,7 +220,7 @@ mod test {
         },
         parameters::{GlobalParams, ItineraryWriteFnType, Params, RateFnType},
         rate_fns::load_rate_fns,
-        settings::{ContextSettingExt, Itinerary, SettingProperties},
+        settings::{create_itinerary, ContextSettingExt, SettingProperties},
     };
     use ixa::{
         Context, ContextGlobalPropertiesExt, ContextPeopleExt, ContextRandomExt, IxaError, PersonId,
@@ -232,7 +232,7 @@ mod test {
         context: &mut Context,
         person_id: PersonId,
     ) -> Result<(), IxaError> {
-        let itinerary = Itinerary::new(context, vec![(TypeId::of::<HomogeneousMixing>(), 0)])?;
+        let itinerary = create_itinerary(context, vec![(TypeId::of::<HomogeneousMixing>(), 0)]);
         context.add_itinerary(person_id, itinerary)
     }
 
@@ -319,7 +319,6 @@ mod test {
     fn test_calc_total_infectiousness_multiplier() {
         let mut context = setup_context();
         let p1 = context.add_person(()).unwrap();
-        crate::settings::init(&mut context);
 
         assert_eq!(max_total_infectiousness_multiplier(&context, p1), 0.0);
     }
@@ -331,7 +330,6 @@ mod test {
         set_homogenous_mixing_itinerary(&mut context, p1).unwrap();
         let p2 = context.add_person(()).unwrap();
         set_homogenous_mixing_itinerary(&mut context, p2).unwrap();
-        crate::settings::init(&mut context);
 
         assert_eq!(max_total_infectiousness_multiplier(&context, p1), 1.0);
         assert_eq!(max_total_infectiousness_multiplier(&context, p2), 1.0);
@@ -347,7 +345,6 @@ mod test {
         set_homogenous_mixing_itinerary(&mut context, p2).unwrap();
         let p3 = context.add_person(()).unwrap();
         set_homogenous_mixing_itinerary(&mut context, p3).unwrap();
-        crate::settings::init(&mut context);
 
         context.infect_person(p1, None);
 
@@ -366,7 +363,6 @@ mod test {
         context.infect_person(p1, None);
         let p2 = context.add_person(()).unwrap();
         set_homogenous_mixing_itinerary(&mut context, p2).unwrap();
-        crate::settings::init(&mut context);
 
         let invalid_forecast = 1.0 - 0.1;
         evaluate_forecast(&mut context, p1, invalid_forecast);
@@ -377,7 +373,6 @@ mod test {
         let mut context = setup_context();
         let index = context.add_person(()).unwrap();
         let contact = context.add_person(()).unwrap();
-        crate::settings::init(&mut context);
 
         context.infect_person(contact, Some(index));
         context.execute();

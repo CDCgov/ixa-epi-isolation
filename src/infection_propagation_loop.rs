@@ -109,7 +109,7 @@ mod test {
             ContextParametersExt, GlobalParams, ItineraryWriteFnType, Params, RateFnType,
         },
         rate_fns::load_rate_fns,
-        settings::{ContextSettingExt, Itinerary, SettingProperties},
+        settings::{create_itinerary, ContextSettingExt, SettingProperties},
     };
 
     use super::{schedule_recovery, seed_infections};
@@ -120,7 +120,7 @@ mod test {
         context: &mut Context,
         person_id: PersonId,
     ) -> Result<(), IxaError> {
-        let itinerary = Itinerary::new(context, vec![(TypeId::of::<HomogeneousMixing>(), 0)])?;
+        let itinerary = create_itinerary(context, vec![(TypeId::of::<HomogeneousMixing>(), 0)]);
         context.add_itinerary(person_id, itinerary)
     }
 
@@ -194,7 +194,6 @@ mod test {
         for _ in 0..10 {
             context.add_person(()).unwrap();
         }
-        crate::settings::init(&mut context);
 
         init(&mut context).unwrap();
 
@@ -234,7 +233,6 @@ mod test {
         for _ in 0..=context.get_params().initial_infections {
             context.add_person(()).unwrap();
         }
-        crate::settings::init(&mut context);
 
         init(&mut context).unwrap();
 
@@ -297,9 +295,6 @@ mod test {
             // Add our infectious fellow.
             let infectious_person = context.add_person(()).unwrap();
             set_homogenous_mixing_itinerary(&mut context, infectious_person).unwrap();
-
-            //Initiate global mixing to place all people in the same Global setting
-            crate::settings::init(&mut context);
 
             context.infect_person(infectious_person, None);
             // Get the total infectiousness multiplier for comparison to total number of infections.

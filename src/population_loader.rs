@@ -7,7 +7,7 @@ use serde::Deserialize;
 use std::{any::TypeId, path::PathBuf};
 
 use crate::parameters::{ContextParametersExt, Params};
-use crate::settings::{CensusTract, ContextSettingExt, Home, Itinerary, School, Workplace};
+use crate::settings::{create_itinerary, CensusTract, ContextSettingExt, Home, School, Workplace};
 
 #[derive(Deserialize, Debug)]
 #[allow(non_snake_case)]
@@ -49,7 +49,7 @@ fn create_person_from_record(
     }
 
     // Create the itinerary using write rules stored in Context
-    let itinerary_person = Itinerary::new(context, itinerary_entries)?;
+    let itinerary_person = create_itinerary(context, itinerary_entries);
     context.add_itinerary(person_id, itinerary_person)?;
 
     Ok(())
