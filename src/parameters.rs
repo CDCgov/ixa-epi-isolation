@@ -28,11 +28,7 @@ pub enum CoreSettingsTypes {
     Global { alpha: f64 },
 }
 
-trait GetSettingPropertyFromType {
-    fn get_alpha(&self) -> &f64;
-}
-
-impl GetSettingPropertyFromType for CoreSettingsTypes {
+impl CoreSettingsTypes {
     fn get_alpha(&self) -> &f64 {
         match self {
             CoreSettingsTypes::Home { alpha }

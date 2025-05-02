@@ -5,10 +5,7 @@
     "infectiousness_rate_fn": {"Constant": {"rate": 1.0, "duration": 5.0}},
     "initial_infections": 1,
     "settings_properties": [
-      {"Home": {"alpha": 0.1}},
-      {"Workplace": {"alpha": 0.1}},
-      {"School": {"alpha": 0.1}},
-      {"CensusTract": {"alpha": 0.1}}
+      {"Global": {"alpha": 0.4}}
     ],
     "itinerary_fn_type": "SplitEvenly",
     "report_period": 1.0,

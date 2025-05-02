@@ -71,12 +71,22 @@ pub trait Itinerary {
 }
 
 impl Itinerary for Vec<ItineraryEntry> {
-    /// Add a specified setting Id into the Itoinerary vector
+    /// Add a specified setting Id into the Itinerary vector
     fn new(context: &Context, setting_id_vec: Vec<(TypeId, usize)>) -> Result<Self, IxaError> {
         let writer = context.get_itinerary_write_rules();
         let mut itinerary = vec![];
         for (setting_type, id) in setting_id_vec {
-            itinerary.push(writer(context, setting_type, id));
+            // Our population loader model is hard coded to put people into the settings of home,
+            // school, work, and census tract. However, sometimes, we don't want all those settings
+            // but rather just the ones that are specified in the input file.
+            if context
+                .get_data_container(SettingDataPlugin)
+                .unwrap()
+                .setting_types
+                .contains_key(&setting_type)
+            {
+                itinerary.push(writer(context, setting_type, id));
+            };
         }
         Ok(itinerary)
     }
@@ -372,10 +382,13 @@ impl ContextSettingExt for Context {
         let ratio = self
             .get_itinerary(person_id)
             .map_or(1.0, |existing_itinerary| {
-                //calculate current total itinerary weight
+                // Calculate current total itinerary weight
                 let mut sum = 0.0;
                 for entry in existing_itinerary {
                     sum += entry.ratio;
+                }
+                if sum == 0.0 {
+                    return 1.0;
                 }
                 mixing_time_proportion * sum / (1.0 - mixing_time_proportion)
             });

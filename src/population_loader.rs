@@ -7,7 +7,9 @@ use serde::Deserialize;
 use std::{any::TypeId, path::PathBuf};
 
 use crate::parameters::{ContextParametersExt, Params};
-use crate::settings::{CensusTract, ContextSettingExt, Home, Itinerary, School, Workplace};
+use crate::settings::{
+    CensusTract, ContextSettingExt, Home, Itinerary, ItineraryEntry, School, Workplace,
+};
 
 #[derive(Deserialize, Debug)]
 #[allow(non_snake_case)]
@@ -49,7 +51,11 @@ fn create_person_from_record(
     }
 
     // Create the itinerary using write rules stored in Context
-    let itinerary_person = Itinerary::new(context, itinerary_entries)?;
+    let mut itinerary_person: Vec<ItineraryEntry> = Itinerary::new(context, itinerary_entries)?;
+    if let Some(itinerary) = context.get_itinerary(person_id) {
+        // If the person already has an itinerary, merge the new one with the existing one
+        itinerary_person.merge_itinerary(itinerary);
+    }
     context.add_itinerary(person_id, itinerary_person)?;
 
     Ok(())
@@ -79,8 +85,8 @@ pub fn init(context: &mut Context) -> Result<(), IxaError> {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::parameters::{GlobalParams, ItineraryWriteFnType, RateFnType};
-    use crate::settings::SettingId;
+    use crate::parameters::{CoreSettingsTypes, GlobalParams, ItineraryWriteFnType, RateFnType};
+    use crate::settings::{init as settings_init, SettingId};
     use ixa::{ContextGlobalPropertiesExt, ContextPeopleExt};
     use std::io::Write;
     use std::path::PathBuf;
@@ -107,12 +113,18 @@ mod test {
             report_period: 1.0,
             synth_population_file: PathBuf::from("."),
             transmission_report_name: None,
-            settings_properties: vec![],
+            settings_properties: vec![
+                CoreSettingsTypes::Home { alpha: 1.0 },
+                CoreSettingsTypes::School { alpha: 1.0 },
+                CoreSettingsTypes::Workplace { alpha: 1.0 },
+                CoreSettingsTypes::CensusTract { alpha: 1.0 },
+            ],
             itinerary_fn_type: ItineraryWriteFnType::SplitEvenly,
         };
         context
             .set_global_property_value(GlobalParams, parameters)
             .unwrap();
+        settings_init(&mut context).unwrap();
         context
     }
 
