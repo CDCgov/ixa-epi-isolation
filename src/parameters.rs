@@ -25,7 +25,6 @@ pub enum CoreSettingsTypes {
     School { alpha: f64 },
     Workplace { alpha: f64 },
     CensusTract { alpha: f64 },
-    Global { alpha: f64 },
 }
 
 impl CoreSettingsTypes {
@@ -34,8 +33,7 @@ impl CoreSettingsTypes {
             CoreSettingsTypes::Home { alpha }
             | CoreSettingsTypes::School { alpha }
             | CoreSettingsTypes::Workplace { alpha }
-            | CoreSettingsTypes::CensusTract { alpha }
-            | CoreSettingsTypes::Global { alpha } => alpha,
+            | CoreSettingsTypes::CensusTract { alpha } => alpha,
         }
     }
 }
@@ -47,7 +45,6 @@ impl Display for CoreSettingsTypes {
             CoreSettingsTypes::School { .. } => write!(f, "School"),
             CoreSettingsTypes::Workplace { .. } => write!(f, "Workplace"),
             CoreSettingsTypes::CensusTract { .. } => write!(f, "CensusTract"),
-            CoreSettingsTypes::Global { .. } => write!(f, "Global"),
         }
     }
 }

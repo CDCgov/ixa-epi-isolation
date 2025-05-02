@@ -2,7 +2,7 @@ use crate::parameters::{ContextParametersExt, CoreSettingsTypes, ItineraryWriteF
 use ixa::people::PersonId;
 use ixa::{
     define_data_plugin, define_rng, people::Query, Context, ContextPeopleExt, ContextRandomExt,
-    IxaError, PersonCreatedEvent,
+    IxaError,
 };
 
 use std::any::TypeId;
@@ -67,7 +67,6 @@ pub trait Itinerary {
     fn new(context: &Context, setting_id_vec: Vec<(TypeId, usize)>) -> Result<Self, IxaError>
     where
         Self: Sized;
-    fn merge_itinerary(&mut self, other: &Self);
 }
 
 impl Itinerary for Vec<ItineraryEntry> {
@@ -89,21 +88,6 @@ impl Itinerary for Vec<ItineraryEntry> {
             };
         }
         Ok(itinerary)
-    }
-    /// Merge the current itinerary with another itinerary
-    /// Takes in an existing itinerary vector and filters for entries that have no matches in the provided vector
-    /// Other values are ignored as they are already present in the input self vector
-    fn merge_itinerary(&mut self, other_itinerary: &Self) {
-        for entry in other_itinerary {
-            // Push entries from existing itinerary that do not match a setting type setting id pair in the new itinerary
-            if !self
-                .iter()
-                .any(|x| x.setting_type == entry.setting_type && x.setting_id == entry.setting_id)
-            {
-                // If the setting id is not in the new itinerary, push it to the new itinerary
-                self.push(*entry);
-            }
-        }
     }
 }
 
@@ -195,16 +179,6 @@ pub trait ContextSettingExt {
         person_id: PersonId,
         itinerary: Vec<ItineraryEntry>,
     ) -> Result<(), IxaError>;
-    fn append_itinerary_entry_as_proportion(
-        &mut self,
-        person_id: PersonId,
-        mixing_time_proportion: f64,
-    ) -> Result<(), IxaError>;
-    fn merge_with_existing_itinerary(
-        &mut self,
-        person_id: PersonId,
-        itinerary: &mut Vec<ItineraryEntry>,
-    );
     fn validate_itinerary(&self, itinerary: &[ItineraryEntry]) -> Result<(), IxaError>;
     fn get_setting_members<T: SettingType + 'static>(
         &self,
@@ -372,45 +346,6 @@ impl ContextSettingExt for Context {
         Ok(())
     }
 
-    fn append_itinerary_entry_as_proportion(
-        &mut self,
-        person_id: PersonId,
-        mixing_time_proportion: f64,
-    ) -> Result<(), IxaError> {
-        // set ratio to recreate the proportion specified in input
-        // Should panic if mixing_proportion is 1.0 but a person already has `itinerary.is_some()`
-        let ratio = self
-            .get_itinerary(person_id)
-            .map_or(1.0, |existing_itinerary| {
-                // Calculate current total itinerary weight
-                let mut sum = 0.0;
-                for entry in existing_itinerary {
-                    sum += entry.ratio;
-                }
-                if sum == 0.0 {
-                    return 1.0;
-                }
-                mixing_time_proportion * sum / (1.0 - mixing_time_proportion)
-            });
-        let mut itinerary = vec![ItineraryEntry::new(&SettingId::<Global>::new(0), ratio)];
-
-        // Append to current existing itinerary
-        self.merge_with_existing_itinerary(person_id, &mut itinerary);
-        self.add_itinerary(person_id, itinerary)?;
-        Ok(())
-    }
-
-    fn merge_with_existing_itinerary(
-        &mut self,
-        person_id: PersonId,
-        itinerary: &mut Vec<ItineraryEntry>,
-    ) {
-        // Append to current existing itinerary
-        if let Some(existing_itinerary) = self.get_itinerary(person_id) {
-            itinerary.merge_itinerary(existing_itinerary);
-        }
-    }
-
     fn validate_itinerary(&self, itinerary: &[ItineraryEntry]) -> Result<(), IxaError> {
         let mut setting_counts: HashMap<TypeId, HashSet<usize>> = HashMap::new();
         for itinerary_entry in itinerary {
@@ -498,35 +433,7 @@ impl ContextSettingExt for Context {
     }
 }
 
-/// Function to assign a Global itinerary item to all individuakls in a query
-/// If the query is empty, future people will be added by subscribing to the `PersonCreatedEvent`
-/// Function must be called after people are added if the simulation is not running and able to listen
-/// for events. People added after global itinerary is set but before `context.execute()` will not have the global itinerary
-///
-/// Function currently does not provide a later match to ensure that `PersonPropertyChange` events do not remove the individual
-/// from the global itinerary
-pub fn global_mixing_itinerary<Q: Query + 'static>(
-    context: &mut Context,
-    mixing_time_proportion: f64,
-    q: Q,
-) -> Result<(), IxaError> {
-    for person_id in context.query_people(q) {
-        context.append_itinerary_entry_as_proportion(person_id, mixing_time_proportion)?;
-    }
-
-    context.subscribe_to_event::<PersonCreatedEvent>(move |context, event| {
-        let person_id = event.person_id;
-        if context.match_person(person_id, q) {
-            context
-                .append_itinerary_entry_as_proportion(person_id, mixing_time_proportion)
-                .unwrap();
-        }
-    });
-
-    Ok(())
-}
-
-pub fn init(context: &mut Context) -> Result<(), IxaError> {
+pub fn init(context: &mut Context) {
     let Params {
         settings_properties,
         ..
@@ -546,14 +453,8 @@ pub fn init(context: &mut Context) -> Result<(), IxaError> {
             CoreSettingsTypes::Workplace { alpha } => {
                 context.register_setting_type(Workplace {}, SettingProperties { alpha: *alpha });
             }
-            CoreSettingsTypes::Global { alpha } => {
-                context.register_setting_type(Global {}, SettingProperties { alpha: *alpha });
-                // Mixing time proportion in Global is currently set to 1.0, this should be specified by a writer fn
-                global_mixing_itinerary(context, 1.0, ())?;
-            }
         }
     }
-    Ok(())
 }
 
 #[cfg(test)]

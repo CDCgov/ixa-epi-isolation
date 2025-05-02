@@ -85,11 +85,11 @@ pub fn init(context: &mut Context) -> Result<(), IxaError> {
 #[cfg(test)]
 #[allow(clippy::float_cmp)]
 mod test {
-    use std::{cell::RefCell, path::PathBuf, rc::Rc};
+    use std::{any::TypeId, cell::RefCell, path::PathBuf, rc::Rc};
 
     use ixa::{
         Context, ContextGlobalPropertiesExt, ContextPeopleExt, ContextRandomExt, ExecutionPhase,
-        IxaError, PersonPropertyChangeEvent,
+        IxaError, PersonId, PersonPropertyChangeEvent,
     };
     use statrs::{
         assert_almost_eq,
@@ -97,6 +97,7 @@ mod test {
     };
 
     use crate::{
+        define_setting_type,
         infection_propagation_loop::{
             init, schedule_next_forecasted_infection, InfectionStatus, InfectionStatusValue,
         },
@@ -105,13 +106,23 @@ mod test {
             InfectionDataValue,
         },
         parameters::{
-            ContextParametersExt, CoreSettingsTypes, GlobalParams, ItineraryWriteFnType, Params,
-            RateFnType,
+            ContextParametersExt, GlobalParams, ItineraryWriteFnType, Params, RateFnType,
         },
         rate_fns::load_rate_fns,
+        settings::{ContextSettingExt, Itinerary, SettingProperties},
     };
 
     use super::{schedule_recovery, seed_infections};
+
+    define_setting_type!(HomogeneousMixing);
+
+    fn set_homogenous_mixing_itinerary(
+        context: &mut Context,
+        person_id: PersonId,
+    ) -> Result<(), IxaError> {
+        let itinerary = Itinerary::new(context, vec![(TypeId::of::<HomogeneousMixing>(), 0)])?;
+        context.add_itinerary(person_id, itinerary)
+    }
 
     fn setup_context(seed: u64, rate: f64, alpha: f64) -> Context {
         let mut context = Context::new();
@@ -127,7 +138,7 @@ mod test {
             report_period: 1.0,
             synth_population_file: PathBuf::from("."),
             transmission_report_name: None,
-            settings_properties: vec![CoreSettingsTypes::Global { alpha }],
+            settings_properties: vec![],
             itinerary_fn_type: ItineraryWriteFnType::SplitEvenly,
         };
         context.init_random(parameters.seed);
@@ -135,6 +146,7 @@ mod test {
             .set_global_property_value(GlobalParams, parameters)
             .unwrap();
 
+        context.register_setting_type(HomogeneousMixing {}, SettingProperties { alpha });
         context
     }
 
@@ -182,7 +194,7 @@ mod test {
         for _ in 0..10 {
             context.add_person(()).unwrap();
         }
-        crate::settings::init(&mut context).unwrap();
+        crate::settings::init(&mut context);
 
         init(&mut context).unwrap();
 
@@ -222,7 +234,7 @@ mod test {
         for _ in 0..=context.get_params().initial_infections {
             context.add_person(()).unwrap();
         }
-        crate::settings::init(&mut context).unwrap();
+        crate::settings::init(&mut context);
 
         init(&mut context).unwrap();
 
@@ -276,16 +288,18 @@ mod test {
             // We only run the simulation for 1.0 time units.
             context.add_plan_with_phase(1.0, ixa::Context::shutdown, ExecutionPhase::Last);
             // Add a a person who will get infected.
-            context.add_person(()).unwrap();
+            let p1 = context.add_person(()).unwrap();
+            set_homogenous_mixing_itinerary(&mut context, p1).unwrap();
             // We don't want infectious people beyond our index case to be able to transmit, so we
             // have to do setup on our own since just calling `init` will trigger a watcher for
             // people becoming infectious that lets them transmit.
             load_rate_fns(&mut context).unwrap();
             // Add our infectious fellow.
             let infectious_person = context.add_person(()).unwrap();
+            set_homogenous_mixing_itinerary(&mut context, infectious_person).unwrap();
 
             //Initiate global mixing to place all people in the same Global setting
-            crate::settings::init(&mut context).unwrap();
+            crate::settings::init(&mut context);
 
             context.infect_person(infectious_person, None);
             // Get the total infectiousness multiplier for comparison to total number of infections.

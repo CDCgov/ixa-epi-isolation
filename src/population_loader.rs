@@ -7,9 +7,7 @@ use serde::Deserialize;
 use std::{any::TypeId, path::PathBuf};
 
 use crate::parameters::{ContextParametersExt, Params};
-use crate::settings::{
-    CensusTract, ContextSettingExt, Home, Itinerary, ItineraryEntry, School, Workplace,
-};
+use crate::settings::{CensusTract, ContextSettingExt, Home, Itinerary, School, Workplace};
 
 #[derive(Deserialize, Debug)]
 #[allow(non_snake_case)]
@@ -51,11 +49,7 @@ fn create_person_from_record(
     }
 
     // Create the itinerary using write rules stored in Context
-    let mut itinerary_person: Vec<ItineraryEntry> = Itinerary::new(context, itinerary_entries)?;
-    if let Some(itinerary) = context.get_itinerary(person_id) {
-        // If the person already has an itinerary, merge the new one with the existing one
-        itinerary_person.merge_itinerary(itinerary);
-    }
+    let itinerary_person = Itinerary::new(context, itinerary_entries)?;
     context.add_itinerary(person_id, itinerary_person)?;
 
     Ok(())
@@ -114,17 +108,17 @@ mod test {
             synth_population_file: PathBuf::from("."),
             transmission_report_name: None,
             settings_properties: vec![
-                CoreSettingsTypes::Home { alpha: 1.0 },
-                CoreSettingsTypes::School { alpha: 1.0 },
-                CoreSettingsTypes::Workplace { alpha: 1.0 },
-                CoreSettingsTypes::CensusTract { alpha: 1.0 },
+                CoreSettingsTypes::Home { alpha: 0.0 },
+                CoreSettingsTypes::CensusTract { alpha: 0.0 },
+                CoreSettingsTypes::School { alpha: 0.0 },
+                CoreSettingsTypes::Workplace { alpha: 0.0 },
             ],
             itinerary_fn_type: ItineraryWriteFnType::SplitEvenly,
         };
         context
             .set_global_property_value(GlobalParams, parameters)
             .unwrap();
-        settings_init(&mut context).unwrap();
+        settings_init(&mut context);
         context
     }
 

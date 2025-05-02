@@ -47,12 +47,12 @@ fn main() {
             (Age, InfectionStatus),
         )?;
 
-        settings::init(context)?;
-
         // Load the synthetic population from the `synthetic_population_file`
         // specified in input.json.
         population_loader::init(context)?;
         context.index_property(Age);
+
+        settings::init(context);
 
         infection_propagation_loop::init(context)?;
         transmission_report::init(context)?;

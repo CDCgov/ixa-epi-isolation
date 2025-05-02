@@ -208,19 +208,33 @@ impl InfectionContextExt for Context {
 #[cfg(test)]
 #[allow(clippy::float_cmp)]
 mod test {
-    use std::path::PathBuf;
+    use std::{any::TypeId, path::PathBuf};
 
     use super::{
         evaluate_forecast, get_forecast, max_total_infectiousness_multiplier, InfectionContextExt,
     };
     use crate::{
+        define_setting_type,
         infectiousness_manager::{
             InfectionData, InfectionDataValue, InfectionStatus, InfectionStatusValue,
         },
-        parameters::{CoreSettingsTypes, GlobalParams, ItineraryWriteFnType, Params, RateFnType},
+        parameters::{GlobalParams, ItineraryWriteFnType, Params, RateFnType},
         rate_fns::load_rate_fns,
+        settings::{ContextSettingExt, Itinerary, SettingProperties},
     };
-    use ixa::{Context, ContextGlobalPropertiesExt, ContextPeopleExt, ContextRandomExt};
+    use ixa::{
+        Context, ContextGlobalPropertiesExt, ContextPeopleExt, ContextRandomExt, IxaError, PersonId,
+    };
+
+    define_setting_type!(HomogeneousMixing);
+
+    fn set_homogenous_mixing_itinerary(
+        context: &mut Context,
+        person_id: PersonId,
+    ) -> Result<(), IxaError> {
+        let itinerary = Itinerary::new(context, vec![(TypeId::of::<HomogeneousMixing>(), 0)])?;
+        context.add_itinerary(person_id, itinerary)
+    }
 
     fn setup_context() -> Context {
         let mut context = Context::new();
@@ -240,13 +254,13 @@ mod test {
                     report_period: 1.0,
                     synth_population_file: PathBuf::from("."),
                     transmission_report_name: None,
-                    settings_properties: vec![CoreSettingsTypes::Global { alpha: 1.0 }],
+                    settings_properties: vec![],
                     itinerary_fn_type: ItineraryWriteFnType::SplitEvenly,
                 },
             )
             .unwrap();
         load_rate_fns(&mut context).unwrap();
-
+        context.register_setting_type(HomogeneousMixing {}, SettingProperties { alpha: 1.0 });
         context
     }
 
@@ -305,7 +319,7 @@ mod test {
     fn test_calc_total_infectiousness_multiplier() {
         let mut context = setup_context();
         let p1 = context.add_person(()).unwrap();
-        crate::settings::init(&mut context).unwrap();
+        crate::settings::init(&mut context);
 
         assert_eq!(max_total_infectiousness_multiplier(&context, p1), 0.0);
     }
@@ -314,8 +328,10 @@ mod test {
     fn test_calc_total_infectiousness_multiplier_with_contact() {
         let mut context = setup_context();
         let p1 = context.add_person(()).unwrap();
+        set_homogenous_mixing_itinerary(&mut context, p1).unwrap();
         let p2 = context.add_person(()).unwrap();
-        crate::settings::init(&mut context).unwrap();
+        set_homogenous_mixing_itinerary(&mut context, p2).unwrap();
+        crate::settings::init(&mut context);
 
         assert_eq!(max_total_infectiousness_multiplier(&context, p1), 1.0);
         assert_eq!(max_total_infectiousness_multiplier(&context, p2), 1.0);
@@ -325,10 +341,13 @@ mod test {
     fn test_forecast() {
         let mut context = setup_context();
         let p1 = context.add_person(()).unwrap();
+        set_homogenous_mixing_itinerary(&mut context, p1).unwrap();
         // Add two additional contacts, which should make the factor 2
-        context.add_person(()).unwrap();
-        context.add_person(()).unwrap();
-        crate::settings::init(&mut context).unwrap();
+        let p2 = context.add_person(()).unwrap();
+        set_homogenous_mixing_itinerary(&mut context, p2).unwrap();
+        let p3 = context.add_person(()).unwrap();
+        set_homogenous_mixing_itinerary(&mut context, p3).unwrap();
+        crate::settings::init(&mut context);
 
         context.infect_person(p1, None);
 
@@ -343,9 +362,11 @@ mod test {
     fn test_assert_evaluate_fails_when_forecast_smaller() {
         let mut context = setup_context();
         let p1 = context.add_person(()).unwrap();
+        set_homogenous_mixing_itinerary(&mut context, p1).unwrap();
         context.infect_person(p1, None);
-        let _ = context.add_person(()).unwrap();
-        crate::settings::init(&mut context).unwrap();
+        let p2 = context.add_person(()).unwrap();
+        set_homogenous_mixing_itinerary(&mut context, p2).unwrap();
+        crate::settings::init(&mut context);
 
         let invalid_forecast = 1.0 - 0.1;
         evaluate_forecast(&mut context, p1, invalid_forecast);
@@ -356,7 +377,7 @@ mod test {
         let mut context = setup_context();
         let index = context.add_person(()).unwrap();
         let contact = context.add_person(()).unwrap();
-        crate::settings::init(&mut context).unwrap();
+        crate::settings::init(&mut context);
 
         context.infect_person(contact, Some(index));
         context.execute();
