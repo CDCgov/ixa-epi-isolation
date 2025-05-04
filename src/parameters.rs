@@ -14,6 +14,11 @@ pub enum RateFnType {
     EmpiricalFromFile { file: PathBuf },
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum ProgressionLibraryType {
+    EmpiricalFromFile { file: PathBuf },
+}
+
 #[derive(Debug, Clone, Copy, Deserialize, Serialize)]
 pub enum CoreSettingsTypes {
     Home { alpha: f64 },
@@ -67,6 +72,8 @@ pub struct Params {
     pub seed: u64,
     /// A library of infection rates to assign to infected people.
     pub infectiousness_rate_fn: RateFnType,
+    /// A library of symptom progressions
+    pub symptom_progression_library: Option<ProgressionLibraryType>,
     /// The period at which to report tabulated values
     pub report_period: f64,
     /// Setting properties, currently only the transmission modifier alpha values for each setting
@@ -154,6 +161,7 @@ mod test {
                 rate: 1.0,
                 duration: 5.0,
             },
+            symptom_progression_library: None,
             report_period: 1.0,
             synth_population_file: PathBuf::from("."),
             transmission_report_name: None,
@@ -180,6 +188,7 @@ mod test {
                 rate: 1.0,
                 duration: 5.0,
             },
+            symptom_progression_library: None,
             report_period: 1.0,
             synth_population_file: PathBuf::from("."),
             transmission_report_name: None,

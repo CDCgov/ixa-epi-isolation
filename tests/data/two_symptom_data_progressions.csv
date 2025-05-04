@@ -1,0 +1,11 @@
+id,progression_type,parameter_name,parameter_value
+1,SymptomData,Symptom category,2
+1,SymptomData,Incubation period,1.5
+1,SymptomData,Weibull shape,1.5
+1,SymptomData,Weibull scale,1.5
+1,SymptomData,Weibull upper bound,1.5
+2,SymptomData,Symptom category,3
+2,SymptomData,Incubation period,2.5
+2,SymptomData,Weibull shape,2.5
+2,SymptomData,Weibull scale,2.5
+2,SymptomData,Weibull upper bound,2.5
