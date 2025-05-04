@@ -260,6 +260,43 @@ impl ContextSettingInternalExt for Context {
                     ratio: 1.0,
                 })
             }
+            ItineraryWriteFnType::Split {
+                home,
+                school,
+                workplace,
+                census_tract,
+            } => {
+                Box::new(move |_context, setting_type, setting_id| {
+                    match setting_type {
+                        t if t == TypeId::of::<Home>() => ItineraryEntry {
+                            setting_type,
+                            setting_id,
+                            ratio: home,
+                        },
+                        t if t == TypeId::of::<School>() => ItineraryEntry {
+                            setting_type,
+                            setting_id,
+                            ratio: school,
+                        },
+                        t if t == TypeId::of::<Workplace>() => ItineraryEntry {
+                            setting_type,
+                            setting_id,
+                            ratio: workplace,
+                        },
+                        t if t == TypeId::of::<CensusTract>() => ItineraryEntry {
+                            setting_type,
+                            setting_id,
+                            ratio: census_tract,
+                        },
+                        // For any other type id, we default to a ratio of 1 -- for multiple
+                        _ => ItineraryEntry {
+                            setting_type,
+                            setting_id,
+                            ratio: 1.0,
+                        },
+                    }
+                })
+            }
         }
     }
 }

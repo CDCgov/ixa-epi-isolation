@@ -100,7 +100,7 @@ mod test {
                 "initial_infections": 1,
                 "report_period": 1.0,
                 "settings_properties": [],
-                "itinerary_fn_type": "SplitEvenly",
+                "itinerary_fn_type": {"Split": {"home": 0.25, "school": 0.25, "workplace": 0.25, "census_tract": 0.25}},
                 "synth_population_file": "input/people_test.csv"
                 }
             }
@@ -121,7 +121,7 @@ mod test {
                 "initial_infections": 1,
                 "report_period": 1.0,
                 "settings_properties": [],
-                "itinerary_fn_type": "SplitEvenly",
+                "itinerary_fn_type": {"Split": {"home": 0.25, "school": 0.25, "workplace": 0.25, "census_tract": 0.25}},
                 "synth_population_file": "input/people_test.csv",
                 "transmission_report_name": "output.csv"
                 }
@@ -144,7 +144,7 @@ mod test {
                 "initial_infections": 1,
                 "report_period": 1.0,
                 "settings_properties": [],
-                "itinerary_fn_type": "SplitEvenly",
+                "itinerary_fn_type": {"Split": {"home": 0.25, "school": 0.25, "workplace": 0.25, "census_tract": 0.25}},
                 "synth_population_file": "input/people_test.csv",
                 "transmission_report_name": "output.csv"
                 }

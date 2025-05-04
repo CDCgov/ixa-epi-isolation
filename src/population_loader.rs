@@ -113,7 +113,12 @@ mod test {
                 CoreSettingsTypes::School { alpha: 0.0 },
                 CoreSettingsTypes::Workplace { alpha: 0.0 },
             ],
-            itinerary_fn_type: ItineraryWriteFnType::SplitEvenly,
+            itinerary_fn_type: ItineraryWriteFnType::Split {
+                home: 0.25,
+                school: 0.25,
+                workplace: 0.25,
+                census_tract: 0.25,
+            },
         };
         context
             .set_global_property_value(GlobalParams, parameters)

@@ -51,7 +51,16 @@ impl Display for CoreSettingsTypes {
 
 #[derive(Debug, Serialize, Deserialize, Clone, Copy)]
 pub enum ItineraryWriteFnType {
+    /// Splits the ratio of infectiousness across all specified settings evenly
+    /// Useful for when we need to create a new setting in tests and have people in that setting only
     SplitEvenly,
+    /// Split the ratio of infectiousness across the core settings according to the provided proportions
+    Split {
+        home: f64,
+        school: f64,
+        workplace: f64,
+        census_tract: f64,
+    },
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -107,6 +116,23 @@ fn validate_inputs(parameters: &Params) -> Result<(), IxaError> {
             ));
         }
     }
+    // Check that none of the setting proportions are below zero
+    let setting_proportions = parameters.itinerary_fn_type;
+    match setting_proportions {
+        ItineraryWriteFnType::Split {
+            home,
+            school,
+            workplace,
+            census_tract,
+        } => {
+            if home < 0.0 || school < 0.0 || workplace < 0.0 || census_tract < 0.0 {
+                return Err(IxaError::IxaError(
+                    "The proportions for each setting must be non-negative.".to_string(),
+                ));
+            }
+        }
+        ItineraryWriteFnType::SplitEvenly => {}
+    }
     Ok(())
 }
 
@@ -159,7 +185,12 @@ mod test {
             synth_population_file: PathBuf::from("."),
             transmission_report_name: None,
             settings_properties: vec![],
-            itinerary_fn_type: ItineraryWriteFnType::SplitEvenly,
+            itinerary_fn_type: ItineraryWriteFnType::Split {
+                home: 0.25,
+                school: 0.25,
+                workplace: 0.25,
+                census_tract: 0.25,
+            },
         };
         context
             .set_global_property_value(GlobalParams, parameters)
@@ -186,7 +217,12 @@ mod test {
             synth_population_file: PathBuf::from("."),
             transmission_report_name: None,
             settings_properties: vec![],
-            itinerary_fn_type: ItineraryWriteFnType::SplitEvenly,
+            itinerary_fn_type: ItineraryWriteFnType::Split {
+                home: 0.25,
+                school: 0.25,
+                workplace: 0.25,
+                census_tract: 0.25,
+            },
         };
         let e = validate_inputs(&parameters).err();
         match e {
