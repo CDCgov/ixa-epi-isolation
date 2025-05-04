@@ -145,7 +145,6 @@ define_setting_type!(Home);
 define_setting_type!(CensusTract);
 define_setting_type!(School);
 define_setting_type!(Workplace);
-define_setting_type!(Global);
 
 define_data_plugin!(
     SettingDataPlugin,
@@ -934,6 +933,38 @@ mod test {
             ),
             None => panic!("Expected an error. Instead, validation passed with no errors."),
         }
+    }
+
+    #[test]
+    fn test_setting_split_evenly() {
+        let mut context = Context::new();
+        let parameters = Params {
+            initial_infections: 1,
+            max_time: 100.0,
+            seed: 0,
+            infectiousness_rate_fn: RateFnType::Constant {
+                rate: 1.0,
+                duration: 5.0,
+            },
+            report_period: 1.0,
+            synth_population_file: PathBuf::from("."),
+            transmission_report_name: None,
+            settings_properties: vec![],
+            itinerary_fn_type: ItineraryWriteFnType::SplitEvenly,
+        };
+        context
+            .set_global_property_value(GlobalParams, parameters)
+            .unwrap();
+
+        let itinerary_writer = context.get_itinerary_write_rules();
+        assert_eq!(
+            itinerary_writer(&context, TypeId::of::<Home>(), 1).unwrap(),
+            ItineraryEntry {
+                setting_type: TypeId::of::<Home>(),
+                setting_id: 1,
+                ratio: 1.0,
+            }
+        );
     }
     /*TODO:
     Test failure of getting properties if not initialized
