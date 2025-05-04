@@ -73,7 +73,7 @@ pub fn create_itinerary(
             .contains_key(&setting_type)
         {
             itinerary.push(writer(context, setting_type, id)?);
-        };
+        }
     }
     Ok(itinerary)
 }
