@@ -232,7 +232,7 @@ mod test {
         context: &mut Context,
         person_id: PersonId,
     ) -> Result<(), IxaError> {
-        let itinerary = create_itinerary(context, vec![(TypeId::of::<HomogeneousMixing>(), 0)]);
+        let itinerary = create_itinerary(context, vec![(TypeId::of::<HomogeneousMixing>(), 0)])?;
         context.add_itinerary(person_id, itinerary)
     }
 

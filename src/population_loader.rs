@@ -49,7 +49,7 @@ fn create_person_from_record(
     }
 
     // Create the itinerary using write rules stored in Context
-    let itinerary_person = create_itinerary(context, itinerary_entries);
+    let itinerary_person = create_itinerary(context, itinerary_entries)?;
     context.add_itinerary(person_id, itinerary_person)?;
 
     Ok(())

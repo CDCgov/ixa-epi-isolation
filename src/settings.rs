@@ -44,14 +44,14 @@ impl<T: SettingType + 'static> SettingId<T> {
     }
 }
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, PartialEq, Debug)]
 pub struct ItineraryEntry {
     setting_type: TypeId,
     setting_id: usize,
     ratio: f64,
 }
 
-type ItineraryEntryWriter = dyn Fn(&Context, TypeId, usize) -> ItineraryEntry;
+type ItineraryEntryWriter = dyn Fn(&Context, TypeId, usize) -> Result<ItineraryEntry, IxaError>;
 
 /// Creates an itinerary for use by `context.add_itinerary(PersonId, Vec<ItineraryEntry>)` based on
 /// the provided settings and the set itinerary creation rules specified in the `itinerary_fn_type`
@@ -59,7 +59,7 @@ type ItineraryEntryWriter = dyn Fn(&Context, TypeId, usize) -> ItineraryEntry;
 pub fn create_itinerary(
     context: &Context,
     setting_id_vec: Vec<(TypeId, usize)>,
-) -> Vec<ItineraryEntry> {
+) -> Result<Vec<ItineraryEntry>, IxaError> {
     let writer = context.get_itinerary_write_rules();
     let mut itinerary = vec![];
     for (setting_type, id) in setting_id_vec {
@@ -72,10 +72,10 @@ pub fn create_itinerary(
             .setting_types
             .contains_key(&setting_type)
         {
-            itinerary.push(writer(context, setting_type, id));
+            itinerary.push(writer(context, setting_type, id)?);
         };
     }
-    itinerary
+    Ok(itinerary)
 }
 
 pub struct SettingDataContainer {
@@ -253,13 +253,13 @@ impl ContextSettingInternalExt for Context {
         } = self.get_params();
 
         match itinerary_fn_type {
-            ItineraryWriteFnType::SplitEvenly => {
-                Box::new(|_context, setting_type, setting_id| ItineraryEntry {
+            ItineraryWriteFnType::SplitEvenly => Box::new(|_context, setting_type, setting_id| {
+                Ok(ItineraryEntry {
                     setting_type,
                     setting_id,
                     ratio: 1.0,
                 })
-            }
+            }),
             ItineraryWriteFnType::Split {
                 home,
                 school,
@@ -268,32 +268,32 @@ impl ContextSettingInternalExt for Context {
             } => {
                 Box::new(move |_context, setting_type, setting_id| {
                     match setting_type {
-                        t if t == TypeId::of::<Home>() => ItineraryEntry {
+                        t if t == TypeId::of::<Home>() => Ok(ItineraryEntry {
                             setting_type,
                             setting_id,
                             ratio: home,
-                        },
-                        t if t == TypeId::of::<School>() => ItineraryEntry {
+                        }),
+                        t if t == TypeId::of::<School>() => Ok(ItineraryEntry {
                             setting_type,
                             setting_id,
                             ratio: school,
-                        },
-                        t if t == TypeId::of::<Workplace>() => ItineraryEntry {
+                        }),
+                        t if t == TypeId::of::<Workplace>() => Ok(ItineraryEntry {
                             setting_type,
                             setting_id,
                             ratio: workplace,
-                        },
-                        t if t == TypeId::of::<CensusTract>() => ItineraryEntry {
+                        }),
+                        t if t == TypeId::of::<CensusTract>() => Ok(ItineraryEntry {
                             setting_type,
                             setting_id,
                             ratio: census_tract,
-                        },
-                        // For any other type id, we default to a ratio of 1 -- for multiple
-                        _ => ItineraryEntry {
-                            setting_type,
-                            setting_id,
-                            ratio: 1.0,
-                        },
+                        }),
+                        // For any other type id, we don't know how to make a ratio because it wasn't
+                        // specified, so we raise an error.
+                        _ => Err(IxaError::IxaError(
+                            "The `Split` itinerary write method only supports ratios in core setting types.
+                            A non core setting type was provided.".to_string(),
+                        )),
                     }
                 })
             }
@@ -483,9 +483,14 @@ pub fn init(context: &mut Context) {
 
 #[cfg(test)]
 mod test {
+    use std::path::PathBuf;
+
     use super::*;
-    use crate::settings::ContextSettingExt;
-    use ixa::{define_person_property, ContextPeopleExt};
+    use crate::{
+        parameters::{GlobalParams, RateFnType},
+        settings::ContextSettingExt,
+    };
+    use ixa::{define_person_property, ContextGlobalPropertiesExt, ContextPeopleExt};
     use statrs::assert_almost_eq;
 
     impl ItineraryEntry {
@@ -845,6 +850,90 @@ mod test {
             context.get_person_property(contact_id_tract.unwrap(), Age),
             42
         );
+    }
+
+    define_setting_type!(HomogeneousMixing);
+
+    #[test]
+    fn test_setting_split() {
+        let mut context = Context::new();
+        let parameters = Params {
+            initial_infections: 1,
+            max_time: 100.0,
+            seed: 0,
+            infectiousness_rate_fn: RateFnType::Constant {
+                rate: 1.0,
+                duration: 5.0,
+            },
+            report_period: 1.0,
+            synth_population_file: PathBuf::from("."),
+            transmission_report_name: None,
+            settings_properties: vec![
+                CoreSettingsTypes::Home { alpha: 0.0 },
+                CoreSettingsTypes::CensusTract { alpha: 0.0 },
+                CoreSettingsTypes::School { alpha: 0.0 },
+                CoreSettingsTypes::Workplace { alpha: 0.0 },
+            ],
+            itinerary_fn_type: ItineraryWriteFnType::Split {
+                home: 0.2,
+                school: 0.25,
+                workplace: 0.5,
+                census_tract: 0.52,
+            },
+        };
+        context
+            .set_global_property_value(GlobalParams, parameters)
+            .unwrap();
+
+        let itinerary_writer = context.get_itinerary_write_rules();
+        assert_eq!(
+            itinerary_writer(&context, TypeId::of::<Home>(), 1).unwrap(),
+            ItineraryEntry {
+                setting_type: TypeId::of::<Home>(),
+                setting_id: 1,
+                ratio: 0.2,
+            }
+        );
+
+        assert_eq!(
+            itinerary_writer(&context, TypeId::of::<School>(), 2).unwrap(),
+            ItineraryEntry {
+                setting_type: TypeId::of::<School>(),
+                setting_id: 2,
+                ratio: 0.25,
+            }
+        );
+
+        assert_eq!(
+            itinerary_writer(&context, TypeId::of::<Workplace>(), 2).unwrap(),
+            ItineraryEntry {
+                setting_type: TypeId::of::<Workplace>(),
+                setting_id: 2,
+                ratio: 0.5,
+            }
+        );
+
+        assert_eq!(
+            itinerary_writer(&context, TypeId::of::<CensusTract>(), 1).unwrap(),
+            ItineraryEntry {
+                setting_type: TypeId::of::<CensusTract>(),
+                setting_id: 1,
+                ratio: 0.52,
+            }
+        );
+
+        let e = itinerary_writer(&context, TypeId::of::<HomogeneousMixing>(), 1).err();
+        match e {
+            Some(IxaError::IxaError(msg)) => {
+                assert_eq!(msg, "The `Split` itinerary write method only supports ratios in core setting types.
+                            A non core setting type was provided.");
+            }
+            Some(ue) => panic!(
+                "Expected an error that itinerary write rules do not support this setting type. Instead got: {:?}",
+                ue.to_string()
+            ),
+            None => panic!("Expected an error. Instead, validation passed with no errors."),
+        }
     }
     /*TODO:
     Test failure of getting properties if not initialized
