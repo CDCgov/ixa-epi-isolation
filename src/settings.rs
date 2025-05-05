@@ -52,7 +52,8 @@ pub struct ItineraryEntry {
     ratio: f64,
 }
 
-type ItineraryEntryWriter = dyn Fn(&Context, TypeId, usize) -> Result<ItineraryEntry, IxaError>;
+type ItineraryEntryWriter =
+    dyn Fn(&Context, TypeId, usize) -> Result<Option<ItineraryEntry>, IxaError>;
 
 /// Creates an itinerary for use by `context.add_itinerary(PersonId, Vec<ItineraryEntry>)` based on
 /// the provided settings and the set itinerary creation rules specified in the `itinerary_fn_type`
@@ -73,7 +74,9 @@ pub fn create_itinerary(
             .setting_types
             .contains_key(&setting_type)
         {
-            itinerary.push(writer(context, setting_type, id)?);
+            if let Some(entry) = writer(context, setting_type, id)? {
+                itinerary.push(entry);
+            }
         }
     }
     Ok(itinerary)
@@ -266,11 +269,11 @@ impl ContextSettingInternalExt for Context {
 
         match itinerary_fn_type {
             ItineraryWriteFnType::SplitEvenly => Box::new(|_context, setting_type, setting_id| {
-                Ok(ItineraryEntry {
+                Ok(Some(ItineraryEntry {
                     setting_type,
                     setting_id,
                     ratio: 1.0,
-                })
+                }))
             }),
             ItineraryWriteFnType::Split {
                 home,
@@ -302,26 +305,28 @@ fn make_validate_itinerary_entry<T: SettingType + 'static>(
     _setting_type: T,
     setting_id: usize,
     ratio: f64,
-) -> Result<ItineraryEntry, IxaError> {
+) -> Result<Option<ItineraryEntry>, IxaError> {
     // Check that T has been registered as a setting if it's ratio is nonzero
     // If it's ratio is 0, it doesn't matter whether or not we have registered the setting because
-    // we never put it in an itinerary.
-    if ratio > 0.0
-        && !context
-            .get_data_container(SettingDataPlugin)
-            .expect("Settings must be initialized prior to making itineraries.")
-            .setting_types
-            .contains_key(&TypeId::of::<T>())
+    // we never put that setting in the itinerary.
+    if ratio == 0.0 {
+        return Ok(None);
+    }
+    if !context
+        .get_data_container(SettingDataPlugin)
+        .expect("Settings must be initialized prior to making itineraries.")
+        .setting_types
+        .contains_key(&TypeId::of::<T>())
     {
         return Err(IxaError::IxaError(
             "The ratio for a core setting type is greater than zero but that setting is excluded from those specified with setting properties.".to_string(),
         ));
     }
-    Ok(ItineraryEntry {
+    Ok(Some(ItineraryEntry {
         setting_type: TypeId::of::<T>(),
         setting_id,
         ratio,
-    })
+    }))
 }
 
 impl ContextSettingExt for Context {
@@ -1082,7 +1087,7 @@ mod test {
     #[test]
     fn test_setting_split() {
         let mut context = Context::new();
-        let home = 0.3;
+        let home = 0.0;
         let school = 0.2;
         let workplace = 0.5;
         let census_tract = 0.42;
@@ -1119,38 +1124,34 @@ mod test {
         let itinerary_writer = context.get_itinerary_write_rules();
         assert_eq!(
             itinerary_writer(&context, TypeId::of::<Home>(), 1).unwrap(),
-            ItineraryEntry {
-                setting_type: TypeId::of::<Home>(),
-                setting_id: 1,
-                ratio: home,
-            }
+            None
         );
 
         assert_eq!(
             itinerary_writer(&context, TypeId::of::<School>(), 2).unwrap(),
-            ItineraryEntry {
+            Some(ItineraryEntry {
                 setting_type: TypeId::of::<School>(),
                 setting_id: 2,
                 ratio: school,
-            }
+            })
         );
 
         assert_eq!(
             itinerary_writer(&context, TypeId::of::<Workplace>(), 2).unwrap(),
-            ItineraryEntry {
+            Some(ItineraryEntry {
                 setting_type: TypeId::of::<Workplace>(),
                 setting_id: 2,
                 ratio: workplace,
-            }
+            })
         );
 
         assert_eq!(
             itinerary_writer(&context, TypeId::of::<CensusTract>(), 1).unwrap(),
-            ItineraryEntry {
+            Some(ItineraryEntry {
                 setting_type: TypeId::of::<CensusTract>(),
                 setting_id: 1,
                 ratio: census_tract,
-            }
+            })
         );
 
         let e = itinerary_writer(&context, TypeId::of::<HomogeneousMixing>(), 1).err();
@@ -1192,11 +1193,11 @@ mod test {
         let itinerary_writer = context.get_itinerary_write_rules();
         assert_eq!(
             itinerary_writer(&context, TypeId::of::<Home>(), 1).unwrap(),
-            ItineraryEntry {
+            Some(ItineraryEntry {
                 setting_type: TypeId::of::<Home>(),
                 setting_id: 1,
                 ratio: 1.0,
-            }
+            })
         );
     }
 
@@ -1226,11 +1227,11 @@ mod test {
         let setting = make_validate_itinerary_entry(&context, Home, 1, 0.5);
         assert_eq!(
             setting.unwrap(),
-            ItineraryEntry {
+            Some(ItineraryEntry {
                 setting_type: TypeId::of::<Home>(),
                 setting_id: 1,
                 ratio: 0.5,
-            }
+            })
         );
 
         let e = make_validate_itinerary_entry(&context, Workplace, 1, 0.5).err();
