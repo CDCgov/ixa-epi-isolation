@@ -212,41 +212,43 @@ impl ContextSettingInternalExt for Context {
         setting_id: usize,
         q: T,
     ) -> Result<Option<PersonId>, IxaError> {
-        let members = self
-            .get_setting_members_internal(setting_type, setting_id)
-            .unwrap();
-        if !members.contains(&person_id) {
-            return Err(IxaError::from(
-                "Attempting contact outside of group membership",
-            ));
-        }
-        if members.len() == 1 {
-            return Ok(None);
-        }
-        let member_iter = members.iter().filter(|&x| *x != person_id);
-
-        let mut contacts = vec![];
-        if q.get_query().is_empty() {
-            // If the query is empty we push members directly to the vector
-            for contact in member_iter {
-                contacts.push(*contact);
+        let members = self.get_setting_members_internal(setting_type, setting_id);
+        if let Some(members) = members {
+            if !members.contains(&person_id) {
+                return Err(IxaError::from(
+                    "Attempting contact outside of group membership",
+                ));
             }
-        } else {
-            // If the query is not empty, we match setting members to the query
-            for contact in member_iter {
-                if self.match_person(*contact, q) {
+            if members.len() == 1 {
+                return Ok(None);
+            }
+            let member_iter = members.iter().filter(|&x| *x != person_id);
+
+            let mut contacts = vec![];
+            if q.get_query().is_empty() {
+                // If the query is empty we push members directly to the vector
+                for contact in member_iter {
                     contacts.push(*contact);
                 }
+            } else {
+                // If the query is not empty, we match setting members to the query
+                for contact in member_iter {
+                    if self.match_person(*contact, q) {
+                        contacts.push(*contact);
+                    }
+                }
             }
-        }
 
-        if contacts.is_empty() {
-            return Ok(None);
-        }
+            if contacts.is_empty() {
+                return Ok(None);
+            }
 
-        Ok(Some(
-            contacts[self.sample_range(SettingsRng, 0..contacts.len())],
-        ))
+            Ok(Some(
+                contacts[self.sample_range(SettingsRng, 0..contacts.len())],
+            ))
+        } else {
+            Err(IxaError::from("Group membership is None"))
+        }
     }
     fn get_setting_members_internal(
         &self,
@@ -729,8 +731,12 @@ mod test {
     #[test]
     fn test_setting_registration() {
         let mut context = Context::new();
-        let _ = context.register_setting_type(Home {}, SettingProperties { alpha: 0.1 });
-        let _ = context.register_setting_type(CensusTract {}, SettingProperties { alpha: 0.01 });
+        context
+            .register_setting_type(Home {}, SettingProperties { alpha: 0.1 })
+            .unwrap();
+        context
+            .register_setting_type(CensusTract {}, SettingProperties { alpha: 0.01 })
+            .unwrap();
         for s in 0..5 {
             // Create 5 people
             for _ in 0..5 {
@@ -756,7 +762,9 @@ mod test {
     #[test]
     fn test_setting_multiplier() {
         let mut context = Context::new();
-        let _ = context.register_setting_type(Home {}, SettingProperties { alpha: 0.1 });
+        context
+            .register_setting_type(Home {}, SettingProperties { alpha: 0.1 })
+            .unwrap();
         for s in 0..5 {
             // Create 5 people
             for _ in 0..5 {
@@ -889,6 +897,18 @@ mod test {
                 ue.to_string()
             ),
             None => panic!("Expected an error. Instead, validation passed with no errors."),
+        }
+
+        let e = context.get_contact(person_b, SettingId::<CensusTract>::new(10), ());
+        match e {
+            Err(IxaError::IxaError(msg)) => {
+                assert_eq!(msg, "Group membership is None");
+            }
+            Err(ue) => panic!(
+                "Expected an error attempting contact outside group membership. Instead got: {:?}",
+                ue.to_string()
+            ),
+            Ok(_) => panic!("Expected an error. Instead, validation passed with no errors."),
         }
     }
 
