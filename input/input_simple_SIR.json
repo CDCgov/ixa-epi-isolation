@@ -1,0 +1,23 @@
+{
+  "epi_isolation.GlobalParams": {
+    "max_time": 50,
+    "seed": 50,
+    "infectiousness_rate_fn": {
+      "EmpiricalFromFile": {
+        "file": "input/rate_fns_SIR.csv"
+      }
+    },
+    "initial_infections": 1,
+    "settings_properties": [
+      {"Home": {"alpha": 0}},
+      {"CensusTract": {"alpha": 0}}
+    ],
+    "itinerary_fn_type": {"Split": {
+      "home": 0.5,
+      "school": 0.0,
+      "workplace": 0.0,
+      "census_tract": 0.5}},
+    "report_period": 1,
+    "synth_population_file": "input/simple_people.csv"
+  }
+}
