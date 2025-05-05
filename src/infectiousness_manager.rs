@@ -132,7 +132,8 @@ pub fn evaluate_forecast(
     };
 
     assert!(
-        (current_infectiousness <= forecasted_total_infectiousness),
+        // 1e-10 is a small enough tolerance for floating point comparison.
+        (current_infectiousness <= forecasted_total_infectiousness + 1e-10),
         "Person {person_id}: Forecasted infectiousness must always be greater than or equal to current infectiousness. Current: {current_infectiousness}, Forecasted: {forecasted_total_infectiousness}"
     );
 
@@ -143,7 +144,7 @@ pub fn evaluate_forecast(
             ForecastRng,
             current_infectiousness / forecasted_total_infectiousness,
         ) {
-            trace!("Person{person_id}: Forecast rejected");
+            trace!("Person {person_id}: Forecast rejected");
 
             return false;
         }
@@ -388,6 +389,18 @@ mod test {
 
         let invalid_forecast = 1.0 - 0.1;
         evaluate_forecast(&mut context, p1, invalid_forecast);
+    }
+
+    #[test]
+    fn test_evaluate_fails_when_forecast_slightly_bigger() {
+        let mut context = setup_context();
+        let p1 = context.add_person(()).unwrap();
+        context.infect_person(p1, None);
+        let _ = context.add_person(()).unwrap();
+        crate::settings::init(&mut context).unwrap();
+
+        let still_valid_forecast = 1.0 - 9e-11;
+        evaluate_forecast(&mut context, p1, still_valid_forecast);
     }
 
     #[test]
