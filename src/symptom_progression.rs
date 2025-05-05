@@ -212,7 +212,7 @@ pub fn init(context: &mut Context) -> Result<(), IxaError> {
     context.register_parameter_id_assigner(Symptoms, |context, person_id| {
         context.get_parameter_id(RateFn, person_id)
     })?;
-    
+
     let params = context.get_params();
     load_progressions(context, params.symptom_progression_library.clone())?;
 

@@ -5,8 +5,8 @@ use std::{
 };
 
 use ixa::{
-    define_data_plugin, Context, ContextPeopleExt, IxaError, PersonId,
-    PersonProperty, PersonPropertyChangeEvent,
+    define_data_plugin, Context, ContextPeopleExt, IxaError, PersonId, PersonProperty,
+    PersonPropertyChangeEvent,
 };
 use serde::Deserialize;
 
@@ -188,10 +188,12 @@ mod test {
     };
     use statrs::assert_almost_eq;
 
-    use crate::{natural_history_parameter_manager::ContextNaturalHistoryParameterExt,
+    use crate::{
+        natural_history_parameter_manager::ContextNaturalHistoryParameterExt,
         parameters::ProgressionLibraryType,
         population_loader::Age,
-        symptom_progression::{SymptomValue, Symptoms}};
+        symptom_progression::{SymptomValue, Symptoms},
+    };
 
     use super::{
         load_progressions, ContextPropertyProgressionExt, Progression, PropertyProgressions,
