@@ -2,7 +2,7 @@ use crate::parameters::{ContextParametersExt, CoreSettingsTypes, ItineraryWriteF
 use ixa::people::PersonId;
 use ixa::{
     define_data_plugin, define_rng, people::Query, Context, ContextPeopleExt, ContextRandomExt,
-    IxaError, PersonCreatedEvent,
+    IxaError,
 };
 
 use std::any::TypeId;
@@ -44,57 +44,38 @@ impl<T: SettingType + 'static> SettingId<T> {
     }
 }
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, PartialEq, Debug)]
 pub struct ItineraryEntry {
     setting_type: TypeId,
     setting_id: usize,
     ratio: f64,
 }
 
-impl ItineraryEntry {
-    pub fn new<T: SettingType>(setting_id: &SettingId<T>, ratio: f64) -> ItineraryEntry {
-        ItineraryEntry {
-            setting_type: TypeId::of::<T>(),
-            setting_id: setting_id.id,
-            ratio,
+type ItineraryEntryWriter = dyn Fn(&Context, TypeId, usize) -> Result<ItineraryEntry, IxaError>;
+
+/// Creates an itinerary for use by `context.add_itinerary(PersonId, Vec<ItineraryEntry>)` based on
+/// the provided settings and the set itinerary creation rules specified in the `itinerary_fn_type`
+/// parameter.
+pub fn create_itinerary(
+    context: &Context,
+    setting_id_vec: Vec<(TypeId, usize)>,
+) -> Result<Vec<ItineraryEntry>, IxaError> {
+    let writer = context.get_itinerary_write_rules();
+    let mut itinerary = vec![];
+    for (setting_type, id) in setting_id_vec {
+        // Our population loader model is hard coded to put people into the settings of home,
+        // school, work, and census tract. However, sometimes, we don't want all those settings
+        // but rather just the ones that are specified in the input file.
+        if context
+            .get_data_container(SettingDataPlugin)
+            .expect("Settings must be initialized prior to making itineraries")
+            .setting_types
+            .contains_key(&setting_type)
+        {
+            itinerary.push(writer(context, setting_type, id)?);
         }
     }
-}
-
-type ItineraryEntryWriter = dyn Fn(&Context, TypeId, usize) -> ItineraryEntry;
-
-pub trait Itinerary {
-    fn new(context: &Context, setting_id_vec: Vec<(TypeId, usize)>) -> Result<Self, IxaError>
-    where
-        Self: Sized;
-    fn merge_itinerary(&mut self, other: &Self);
-}
-
-impl Itinerary for Vec<ItineraryEntry> {
-    /// Add a specified setting Id into the Itoinerary vector
-    fn new(context: &Context, setting_id_vec: Vec<(TypeId, usize)>) -> Result<Self, IxaError> {
-        let writer = context.get_itinerary_write_rules();
-        let mut itinerary = vec![];
-        for (setting_type, id) in setting_id_vec {
-            itinerary.push(writer(context, setting_type, id));
-        }
-        Ok(itinerary)
-    }
-    /// Merge the current itinerary with another itinerary
-    /// Takes in an existing itinerary vector and filters for entries that have no matches in the provided vector
-    /// Other values are ignored as they are already present in the input self vector
-    fn merge_itinerary(&mut self, other_itinerary: &Self) {
-        for entry in other_itinerary {
-            // Push entries from existing itinerary that do not match a setting type setting id pair in the new itinerary
-            if !self
-                .iter()
-                .any(|x| x.setting_type == entry.setting_type && x.setting_id == entry.setting_id)
-            {
-                // If the setting id is not in the new itinerary, push it to the new itinerary
-                self.push(*entry);
-            }
-        }
-    }
+    Ok(itinerary)
 }
 
 pub struct SettingDataContainer {
@@ -164,7 +145,6 @@ define_setting_type!(Home);
 define_setting_type!(CensusTract);
 define_setting_type!(School);
 define_setting_type!(Workplace);
-define_setting_type!(Global);
 
 define_data_plugin!(
     SettingDataPlugin,
@@ -185,16 +165,6 @@ pub trait ContextSettingExt {
         person_id: PersonId,
         itinerary: Vec<ItineraryEntry>,
     ) -> Result<(), IxaError>;
-    fn append_itinerary_entry_as_proportion(
-        &mut self,
-        person_id: PersonId,
-        mixing_time_proportion: f64,
-    ) -> Result<(), IxaError>;
-    fn merge_with_existing_itinerary(
-        &mut self,
-        person_id: PersonId,
-        itinerary: &mut Vec<ItineraryEntry>,
-    );
     fn validate_itinerary(&self, itinerary: &[ItineraryEntry]) -> Result<(), IxaError>;
     fn get_setting_members<T: SettingType + 'static>(
         &self,
@@ -282,11 +252,48 @@ impl ContextSettingInternalExt for Context {
         } = self.get_params();
 
         match itinerary_fn_type {
-            ItineraryWriteFnType::SplitEvenly => {
-                Box::new(|_context, setting_type, setting_id| ItineraryEntry {
+            ItineraryWriteFnType::SplitEvenly => Box::new(|_context, setting_type, setting_id| {
+                Ok(ItineraryEntry {
                     setting_type,
                     setting_id,
                     ratio: 1.0,
+                })
+            }),
+            ItineraryWriteFnType::Split {
+                home,
+                school,
+                workplace,
+                census_tract,
+            } => {
+                Box::new(move |_context, setting_type, setting_id| {
+                    match setting_type {
+                        t if t == TypeId::of::<Home>() => Ok(ItineraryEntry {
+                            setting_type,
+                            setting_id,
+                            ratio: home,
+                        }),
+                        t if t == TypeId::of::<School>() => Ok(ItineraryEntry {
+                            setting_type,
+                            setting_id,
+                            ratio: school,
+                        }),
+                        t if t == TypeId::of::<Workplace>() => Ok(ItineraryEntry {
+                            setting_type,
+                            setting_id,
+                            ratio: workplace,
+                        }),
+                        t if t == TypeId::of::<CensusTract>() => Ok(ItineraryEntry {
+                            setting_type,
+                            setting_id,
+                            ratio: census_tract,
+                        }),
+                        // For any other type id, we don't know how to make a ratio because it wasn't
+                        // specified, so we raise an error.
+                        _ => Err(IxaError::IxaError(
+                            "The `Split` itinerary write method only supports ratios in core setting types.
+                            A non core setting type was provided.".to_string(),
+                        )),
+                    }
                 })
             }
         }
@@ -360,42 +367,6 @@ impl ContextSettingExt for Context {
             }
         }
         Ok(())
-    }
-
-    fn append_itinerary_entry_as_proportion(
-        &mut self,
-        person_id: PersonId,
-        mixing_time_proportion: f64,
-    ) -> Result<(), IxaError> {
-        // set ratio to recreate the proportion specified in input
-        // Should panic if mixing_proportion is 1.0 but a person already has `itinerary.is_some()`
-        let ratio = self
-            .get_itinerary(person_id)
-            .map_or(1.0, |existing_itinerary| {
-                //calculate current total itinerary weight
-                let mut sum = 0.0;
-                for entry in existing_itinerary {
-                    sum += entry.ratio;
-                }
-                mixing_time_proportion * sum / (1.0 - mixing_time_proportion)
-            });
-        let mut itinerary = vec![ItineraryEntry::new(&SettingId::<Global>::new(0), ratio)];
-
-        // Append to current existing itinerary
-        self.merge_with_existing_itinerary(person_id, &mut itinerary);
-        self.add_itinerary(person_id, itinerary)?;
-        Ok(())
-    }
-
-    fn merge_with_existing_itinerary(
-        &mut self,
-        person_id: PersonId,
-        itinerary: &mut Vec<ItineraryEntry>,
-    ) {
-        // Append to current existing itinerary
-        if let Some(existing_itinerary) = self.get_itinerary(person_id) {
-            itinerary.merge_itinerary(existing_itinerary);
-        }
     }
 
     fn validate_itinerary(&self, itinerary: &[ItineraryEntry]) -> Result<(), IxaError> {
@@ -485,35 +456,7 @@ impl ContextSettingExt for Context {
     }
 }
 
-/// Function to assign a Global itinerary item to all individuakls in a query
-/// If the query is empty, future people will be added by subscribing to the `PersonCreatedEvent`
-/// Function must be called after people are added if the simulation is not running and able to listen
-/// for events. People added after global itinerary is set but before `context.execute()` will not have the global itinerary
-///
-/// Function currently does not provide a later match to ensure that `PersonPropertyChange` events do not remove the individual
-/// from the global itinerary
-pub fn global_mixing_itinerary<Q: Query + 'static>(
-    context: &mut Context,
-    mixing_time_proportion: f64,
-    q: Q,
-) -> Result<(), IxaError> {
-    for person_id in context.query_people(q) {
-        context.append_itinerary_entry_as_proportion(person_id, mixing_time_proportion)?;
-    }
-
-    context.subscribe_to_event::<PersonCreatedEvent>(move |context, event| {
-        let person_id = event.person_id;
-        if context.match_person(person_id, q) {
-            context
-                .append_itinerary_entry_as_proportion(person_id, mixing_time_proportion)
-                .unwrap();
-        }
-    });
-
-    Ok(())
-}
-
-pub fn init(context: &mut Context) -> Result<(), IxaError> {
+pub fn init(context: &mut Context) {
     let Params {
         settings_properties,
         ..
@@ -533,22 +476,32 @@ pub fn init(context: &mut Context) -> Result<(), IxaError> {
             CoreSettingsTypes::Workplace { alpha } => {
                 context.register_setting_type(Workplace {}, SettingProperties { alpha: *alpha });
             }
-            CoreSettingsTypes::Global { alpha } => {
-                context.register_setting_type(Global {}, SettingProperties { alpha: *alpha });
-                // Mixing time proportion in Global is currently set to 1.0, this should be specified by a writer fn
-                global_mixing_itinerary(context, 1.0, ())?;
-            }
         }
     }
-    Ok(())
 }
 
 #[cfg(test)]
 mod test {
+    use std::path::PathBuf;
+
     use super::*;
-    use crate::settings::ContextSettingExt;
-    use ixa::{define_person_property, ContextPeopleExt};
+    use crate::{
+        parameters::{GlobalParams, RateFnType},
+        settings::ContextSettingExt,
+    };
+    use ixa::{define_person_property, ContextGlobalPropertiesExt, ContextPeopleExt};
     use statrs::assert_almost_eq;
+
+    impl ItineraryEntry {
+        pub fn new<T: SettingType>(setting_id: &SettingId<T>, ratio: f64) -> ItineraryEntry {
+            ItineraryEntry {
+                setting_type: TypeId::of::<T>(),
+                setting_id: setting_id.id,
+                ratio,
+            }
+        }
+    }
+
     #[test]
     fn test_setting_type_creation() {
         let mut context = Context::new();
@@ -895,6 +848,124 @@ mod test {
         assert_eq!(
             context.get_person_property(contact_id_tract.unwrap(), Age),
             42
+        );
+    }
+
+    define_setting_type!(HomogeneousMixing);
+
+    #[test]
+    fn test_setting_split() {
+        let mut context = Context::new();
+        let parameters = Params {
+            initial_infections: 1,
+            max_time: 100.0,
+            seed: 0,
+            infectiousness_rate_fn: RateFnType::Constant {
+                rate: 1.0,
+                duration: 5.0,
+            },
+            symptom_progression_library: None,
+            report_period: 1.0,
+            synth_population_file: PathBuf::from("."),
+            transmission_report_name: None,
+            settings_properties: vec![
+                CoreSettingsTypes::Home { alpha: 0.0 },
+                CoreSettingsTypes::CensusTract { alpha: 0.0 },
+                CoreSettingsTypes::School { alpha: 0.0 },
+                CoreSettingsTypes::Workplace { alpha: 0.0 },
+            ],
+            itinerary_fn_type: ItineraryWriteFnType::Split {
+                home: 0.2,
+                school: 0.25,
+                workplace: 0.5,
+                census_tract: 0.52,
+            },
+        };
+        context
+            .set_global_property_value(GlobalParams, parameters)
+            .unwrap();
+
+        let itinerary_writer = context.get_itinerary_write_rules();
+        assert_eq!(
+            itinerary_writer(&context, TypeId::of::<Home>(), 1).unwrap(),
+            ItineraryEntry {
+                setting_type: TypeId::of::<Home>(),
+                setting_id: 1,
+                ratio: 0.2,
+            }
+        );
+
+        assert_eq!(
+            itinerary_writer(&context, TypeId::of::<School>(), 2).unwrap(),
+            ItineraryEntry {
+                setting_type: TypeId::of::<School>(),
+                setting_id: 2,
+                ratio: 0.25,
+            }
+        );
+
+        assert_eq!(
+            itinerary_writer(&context, TypeId::of::<Workplace>(), 2).unwrap(),
+            ItineraryEntry {
+                setting_type: TypeId::of::<Workplace>(),
+                setting_id: 2,
+                ratio: 0.5,
+            }
+        );
+
+        assert_eq!(
+            itinerary_writer(&context, TypeId::of::<CensusTract>(), 1).unwrap(),
+            ItineraryEntry {
+                setting_type: TypeId::of::<CensusTract>(),
+                setting_id: 1,
+                ratio: 0.52,
+            }
+        );
+
+        let e = itinerary_writer(&context, TypeId::of::<HomogeneousMixing>(), 1).err();
+        match e {
+            Some(IxaError::IxaError(msg)) => {
+                assert_eq!(msg, "The `Split` itinerary write method only supports ratios in core setting types.
+                            A non core setting type was provided.");
+            }
+            Some(ue) => panic!(
+                "Expected an error that itinerary write rules do not support this setting type. Instead got: {:?}",
+                ue.to_string()
+            ),
+            None => panic!("Expected an error. Instead, validation passed with no errors."),
+        }
+    }
+
+    #[test]
+    fn test_setting_split_evenly() {
+        let mut context = Context::new();
+        let parameters = Params {
+            initial_infections: 1,
+            max_time: 100.0,
+            seed: 0,
+            infectiousness_rate_fn: RateFnType::Constant {
+                rate: 1.0,
+                duration: 5.0,
+            },
+            symptom_progression_library: None,
+            report_period: 1.0,
+            synth_population_file: PathBuf::from("."),
+            transmission_report_name: None,
+            settings_properties: vec![],
+            itinerary_fn_type: ItineraryWriteFnType::SplitEvenly,
+        };
+        context
+            .set_global_property_value(GlobalParams, parameters)
+            .unwrap();
+
+        let itinerary_writer = context.get_itinerary_write_rules();
+        assert_eq!(
+            itinerary_writer(&context, TypeId::of::<Home>(), 1).unwrap(),
+            ItineraryEntry {
+                setting_type: TypeId::of::<Home>(),
+                setting_id: 1,
+                ratio: 1.0,
+            }
         );
     }
     /*TODO:

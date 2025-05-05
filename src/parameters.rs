@@ -25,21 +25,15 @@ pub enum CoreSettingsTypes {
     School { alpha: f64 },
     Workplace { alpha: f64 },
     CensusTract { alpha: f64 },
-    Global { alpha: f64 },
 }
 
-trait GetSettingPropertyFromType {
-    fn get_alpha(&self) -> &f64;
-}
-
-impl GetSettingPropertyFromType for CoreSettingsTypes {
+impl CoreSettingsTypes {
     fn get_alpha(&self) -> &f64 {
         match self {
             CoreSettingsTypes::Home { alpha }
             | CoreSettingsTypes::School { alpha }
             | CoreSettingsTypes::Workplace { alpha }
-            | CoreSettingsTypes::CensusTract { alpha }
-            | CoreSettingsTypes::Global { alpha } => alpha,
+            | CoreSettingsTypes::CensusTract { alpha } => alpha,
         }
     }
 }
@@ -51,14 +45,22 @@ impl Display for CoreSettingsTypes {
             CoreSettingsTypes::School { .. } => write!(f, "School"),
             CoreSettingsTypes::Workplace { .. } => write!(f, "Workplace"),
             CoreSettingsTypes::CensusTract { .. } => write!(f, "CensusTract"),
-            CoreSettingsTypes::Global { .. } => write!(f, "Global"),
         }
     }
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, Copy)]
 pub enum ItineraryWriteFnType {
+    /// Splits the ratio of infectiousness across all specified settings evenly
+    /// Useful for when we need to create a new setting in tests and have people in that setting only
     SplitEvenly,
+    /// Split the ratio of infectiousness across the core settings according to the provided proportions
+    Split {
+        home: f64,
+        school: f64,
+        workplace: f64,
+        census_tract: f64,
+    },
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -114,6 +116,28 @@ fn validate_inputs(parameters: &Params) -> Result<(), IxaError> {
             ));
         }
     }
+    // Check that none of the setting proportions are below zero
+    let setting_proportions = parameters.itinerary_fn_type;
+    match setting_proportions {
+        ItineraryWriteFnType::Split {
+            home,
+            school,
+            workplace,
+            census_tract,
+        } => {
+            if home < 0.0 || school < 0.0 || workplace < 0.0 || census_tract < 0.0 {
+                return Err(IxaError::IxaError(
+                    "The itinerary ratio for each setting must be non-negative.".to_string(),
+                ));
+            }
+            if home == 0.0 && school == 0.0 && workplace == 0.0 && census_tract == 0.0 {
+                return Err(IxaError::IxaError(
+                    "At least one itinerary ratio must be greater than zero.".to_string(),
+                ));
+            }
+        }
+        ItineraryWriteFnType::SplitEvenly => {}
+    }
     Ok(())
 }
 
@@ -166,7 +190,12 @@ mod test {
             synth_population_file: PathBuf::from("."),
             transmission_report_name: None,
             settings_properties: vec![],
-            itinerary_fn_type: ItineraryWriteFnType::SplitEvenly,
+            itinerary_fn_type: ItineraryWriteFnType::Split {
+                home: 0.25,
+                school: 0.25,
+                workplace: 0.25,
+                census_tract: 0.25,
+            },
         };
         context
             .set_global_property_value(GlobalParams, parameters)
@@ -193,7 +222,12 @@ mod test {
             synth_population_file: PathBuf::from("."),
             transmission_report_name: None,
             settings_properties: vec![],
-            itinerary_fn_type: ItineraryWriteFnType::SplitEvenly,
+            itinerary_fn_type: ItineraryWriteFnType::Split {
+                home: 0.25,
+                school: 0.25,
+                workplace: 0.25,
+                census_tract: 0.25,
+            },
         };
         let e = validate_inputs(&parameters).err();
         match e {
@@ -202,6 +236,79 @@ mod test {
             }
             Some(ue) => panic!(
                 "Expected an error that the max simulation running time validation should fail. Instead got {:?}",
+                ue.to_string()
+            ),
+            None => panic!("Expected an error. Instead, validation passed with no errors."),
+        }
+    }
+
+    #[test]
+    fn test_validate_split_zeros() {
+        let parameters = Params {
+            initial_infections: 1,
+            max_time: 100.0,
+            seed: 0,
+            infectiousness_rate_fn: RateFnType::Constant {
+                rate: 1.0,
+                duration: 5.0,
+            },
+            symptom_progression_library: None,
+            report_period: 1.0,
+            synth_population_file: PathBuf::from("."),
+            transmission_report_name: None,
+            settings_properties: vec![],
+            itinerary_fn_type: ItineraryWriteFnType::Split {
+                home: 0.0,
+                school: 0.0,
+                workplace: 0.0,
+                census_tract: 0.0,
+            },
+        };
+        let e = validate_inputs(&parameters).err();
+        match e {
+            Some(IxaError::IxaError(msg)) => {
+                assert_eq!(msg, "At least one itinerary ratio must be greater than zero.".to_string());
+            }
+            Some(ue) => panic!(
+                "Expected an error that at least one itinerary ratio must be greater than zero. Instead got {:?}",
+                ue.to_string()
+            ),
+            None => panic!("Expected an error. Instead, validation passed with no errors."),
+        }
+    }
+
+    #[test]
+    fn test_validate_split_negative() {
+        let parameters = Params {
+            initial_infections: 1,
+            max_time: 100.0,
+            seed: 0,
+            infectiousness_rate_fn: RateFnType::Constant {
+                rate: 1.0,
+                duration: 5.0,
+            },
+            symptom_progression_library: None,
+            report_period: 1.0,
+            synth_population_file: PathBuf::from("."),
+            transmission_report_name: None,
+            settings_properties: vec![],
+            itinerary_fn_type: ItineraryWriteFnType::Split {
+                home: -0.1,
+                school: 0.0,
+                workplace: 0.0,
+                census_tract: 0.0,
+            },
+        };
+        let e = validate_inputs(&parameters).err();
+        match e {
+            Some(IxaError::IxaError(msg)) => {
+                assert_eq!(
+                    msg,
+                    "The itinerary ratio for each setting must be non-negative.".to_string()
+                );
+            }
+            Some(ue) => panic!(
+                "Expected an error that itinerary ratios cannot be negative. Instead got {:?}",
                 ue.to_string()
             ),
             None => panic!("Expected an error. Instead, validation passed with no errors."),

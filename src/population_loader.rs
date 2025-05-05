@@ -7,7 +7,7 @@ use serde::Deserialize;
 use std::{any::TypeId, path::PathBuf};
 
 use crate::parameters::{ContextParametersExt, Params};
-use crate::settings::{CensusTract, ContextSettingExt, Home, Itinerary, School, Workplace};
+use crate::settings::{create_itinerary, CensusTract, ContextSettingExt, Home, School, Workplace};
 
 #[derive(Deserialize, Debug)]
 #[allow(non_snake_case)]
@@ -49,7 +49,7 @@ fn create_person_from_record(
     }
 
     // Create the itinerary using write rules stored in Context
-    let itinerary_person = Itinerary::new(context, itinerary_entries)?;
+    let itinerary_person = create_itinerary(context, itinerary_entries)?;
     context.add_itinerary(person_id, itinerary_person)?;
 
     Ok(())
@@ -79,8 +79,8 @@ pub fn init(context: &mut Context) -> Result<(), IxaError> {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::parameters::{GlobalParams, ItineraryWriteFnType, RateFnType};
-    use crate::settings::SettingId;
+    use crate::parameters::{CoreSettingsTypes, GlobalParams, ItineraryWriteFnType, RateFnType};
+    use crate::settings::{init as settings_init, SettingId};
     use ixa::{ContextGlobalPropertiesExt, ContextPeopleExt};
     use std::io::Write;
     use std::path::PathBuf;
@@ -107,12 +107,23 @@ mod test {
             report_period: 1.0,
             synth_population_file: PathBuf::from("."),
             transmission_report_name: None,
-            settings_properties: vec![],
-            itinerary_fn_type: ItineraryWriteFnType::SplitEvenly,
+            settings_properties: vec![
+                CoreSettingsTypes::Home { alpha: 0.0 },
+                CoreSettingsTypes::CensusTract { alpha: 0.0 },
+                CoreSettingsTypes::School { alpha: 0.0 },
+                CoreSettingsTypes::Workplace { alpha: 0.0 },
+            ],
+            itinerary_fn_type: ItineraryWriteFnType::Split {
+                home: 0.25,
+                school: 0.25,
+                workplace: 0.25,
+                census_tract: 0.25,
+            },
         };
         context
             .set_global_property_value(GlobalParams, parameters)
             .unwrap();
+        settings_init(&mut context);
         context
     }
 
