@@ -21,7 +21,7 @@ posterior_sampled_path <- file.path(
   "isolation_guidance_stan_parameters.csv"
 )
 
-sampled_params <- readr::read_csv(,
+sampled_params <- readr::read_csv(
   file = posterior_sampled_path
 )
 
