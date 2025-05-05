@@ -8,6 +8,7 @@
                             "Workplace": {"alpha": 0.0, "itinerary_specification": {"Constant": {"ratio": 0.25}}},
                             "School": {"alpha": 0.0, "itinerary_specification": {"Constant": {"ratio": 0.25}}},
                             "CensusTract": {"alpha": 0.0, "itinerary_specification": {"Constant": {"ratio": 0.25}}}},
+    "symptom_progression_library" : {"EmpiricalFromFile": {"file": "input/library_symptom_parameters.csv"}},
     "report_period": 1.0,
     "synth_population_file": "input/people_test.csv",
     "transmission_report_name": "transmission_report.csv"

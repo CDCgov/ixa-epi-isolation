@@ -29,7 +29,7 @@ sampled_params <- readr::read_csv(,
 # time since symptom. We need to convert times to be with respect to _infection_
 # onset. For this reason, we need to estimate the time of infection.
 # We do this by assuming that infection happens sometime before whenever we
-# assume infectiousness starts (logVL > 0). We can calibrate these parameters.
+# assume infectiousness starts (logVL > 0), a calibratable amount of time.
 # Note that this time is the disease latent period, and the time from the start
 # of the infection to symptom onset is the incubation period
 # (this is -infection_start_time), so we can interpret these parameters
@@ -37,18 +37,33 @@ sampled_params <- readr::read_csv(,
 # There core assumption here is really that infectiousness starts at logVL > 0.
 # If that is not true, we should see the pre infectiousness period run up
 # against 0 in the calibration, and we can adjust accordingly.
+lognorm_with_constraints <- function(minimum, mu, sd) {
+  # Generate a log-normal random variable with a minimum value
+  repeat {
+    x <- exp(rnorm(1, mean = log(mu), sd = sd))
+    if (x > minimum) {
+      return(x)
+    }
+  }
+}
+
 sampled_params <- sampled_params |>
-  dplyr::mutate(pre_infectiousness_period = exp(rnorm(
-    nrow(sampled_params),
-    mean = log(pre_infectiousness_mean),
-    sd = pre_infectiousness_std_dev
-  ))) |>
+  dplyr::mutate(minimum_incubation_period = tp - wp) |>
+  dplyr::mutate(
+    pre_infectiousness_period =
+      purrr::map_dbl(
+        minimum_incubation_period,
+        lognorm_with_constraints,
+        pre_infectiousness_mean,
+        pre_infectiousness_std_dev
+      )
+  ) |>
   # wp is the proliferation period -- time from logVL = 0 to peak logVL
   # tp is the time of peak logVL wrt time since symptom onset
   # so wp - tp is the time from logVL = 0 to symptom onset, and -(wp - tp)
   # is the time at which infectiousness starts. We want to have the
   # infection start before that, so we subtract some time.
-  dplyr::mutate(infection_start_time = -(wp - tp) - pre_infectiousness_period)
+  dplyr::mutate(infection_start_time = tp - wp - pre_infectiousness_period)
 
 # Our triangle_vl function from our isolation guidance work (copied and put in
 # `functions.R` for now) is defined in terms of the time since symptom onset.
@@ -59,7 +74,7 @@ triangle_vl_wrt_infected_time <- function(
     seq(infection_start_time, infection_start_time + max_time, dt),
     dp, tp, wp, wr
   ), 0)
-  return(list(unnormalized_pdf_to_hazard(curve, dt)))
+  list(unnormalized_pdf_to_hazard(curve, dt))
 }
 
 # For every parameter set, make a vector of the viral load over time trajectory.

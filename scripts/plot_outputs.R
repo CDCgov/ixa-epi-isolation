@@ -26,3 +26,12 @@ person_property_report |>
   geom_line(aes(color = InfectionStatus)) +
   xlab("Day") +
   ylab("Number of people")
+
+# Symptom curves
+person_property_report |>
+  group_by(t, Symptoms) |>
+  summarise(count = sum(count), .groups = "drop") |>
+  ggplot(aes(x = t, y = count)) +
+  geom_line(aes(color = Symptoms)) +
+  xlab("Day") +
+  ylab("Number of people")

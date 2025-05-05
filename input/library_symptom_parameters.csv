@@ -1,0 +1,51 @@
+id,progression_type,parameter_name,parameter_value
+1,SymptomData,Symptom category,3
+1,SymptomData,Incubation period,0.8752260974513417
+1,SymptomData,Weibull shape,2.3028596741731664
+1,SymptomData,Weibull scale,1.7810565334641089
+1,SymptomData,Weibull upper bound,28
+2,SymptomData,Symptom category,2
+2,SymptomData,Incubation period,3.0828028228940907
+2,SymptomData,Weibull shape,2.238139598412739
+2,SymptomData,Weibull scale,3.3938860750104456
+2,SymptomData,Weibull upper bound,28
+3,SymptomData,Symptom category,1
+3,SymptomData,Incubation period,0.7577826885742016
+3,SymptomData,Weibull shape,2.189415992800881
+3,SymptomData,Weibull scale,1.2329108475984496e-21
+3,SymptomData,Weibull upper bound,28
+4,SymptomData,Symptom category,1
+4,SymptomData,Incubation period,15.337710436341311
+4,SymptomData,Weibull shape,0.5264434166789742
+4,SymptomData,Weibull scale,7.420944179649009
+4,SymptomData,Weibull upper bound,28
+5,SymptomData,Symptom category,2
+5,SymptomData,Incubation period,0.006860032831870422
+5,SymptomData,Weibull shape,0.9983501184461244
+5,SymptomData,Weibull scale,108.46685958857132
+5,SymptomData,Weibull upper bound,28
+6,SymptomData,Symptom category,2
+6,SymptomData,Incubation period,1.7542267770815272
+6,SymptomData,Weibull shape,1.1620010371534175
+6,SymptomData,Weibull scale,0.574806143537459
+6,SymptomData,Weibull upper bound,28
+7,SymptomData,Symptom category,1
+7,SymptomData,Incubation period,2.828524161305043
+7,SymptomData,Weibull shape,1.8393366362948504
+7,SymptomData,Weibull scale,3.4602302144120416
+7,SymptomData,Weibull upper bound,28
+8,SymptomData,Symptom category,3
+8,SymptomData,Incubation period,0.6309581707828833
+8,SymptomData,Weibull shape,2.378730542718536
+8,SymptomData,Weibull scale,1.7756007581813682
+8,SymptomData,Weibull upper bound,28
+9,SymptomData,Symptom category,2
+9,SymptomData,Incubation period,4.662253440264579
+9,SymptomData,Weibull shape,3.938441892843904
+9,SymptomData,Weibull scale,7.033541854129597
+9,SymptomData,Weibull upper bound,28
+10,SymptomData,Symptom category,2
+10,SymptomData,Incubation period,5.3641895552118894
+10,SymptomData,Weibull shape,3.183660730666515
+10,SymptomData,Weibull scale,3.49590408094402
+10,SymptomData,Weibull upper bound,28
