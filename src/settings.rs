@@ -279,12 +279,11 @@ impl ContextSettingInternalExt for Context {
                 census_tract,
             } => {
                 Box::new(move |context, setting_type, setting_id| {
-                    let sum = home + school + workplace + census_tract;
                     match setting_type {
-                        t if t == TypeId::of::<Home>() => make_validate_itinerary_entry(context, Home, setting_id, home / sum),
-                        t if t == TypeId::of::<School>() => make_validate_itinerary_entry(context, School, setting_id, school / sum),
-                        t if t == TypeId::of::<Workplace>() => make_validate_itinerary_entry(context, Workplace, setting_id, workplace / sum),
-                        t if t == TypeId::of::<CensusTract>() => make_validate_itinerary_entry(context, CensusTract, setting_id, census_tract / sum),
+                        t if t == TypeId::of::<Home>() => make_validate_itinerary_entry(context, Home, setting_id, home),
+                        t if t == TypeId::of::<School>() => make_validate_itinerary_entry(context, School, setting_id, school),
+                        t if t == TypeId::of::<Workplace>() => make_validate_itinerary_entry(context, Workplace, setting_id, workplace),
+                        t if t == TypeId::of::<CensusTract>() => make_validate_itinerary_entry(context, CensusTract, setting_id, census_tract),
                         // For any other type id, we don't know how to make a ratio because it wasn't
                         // specified, so we raise an error.
                         _ => Err(IxaError::IxaError(
@@ -450,10 +449,17 @@ impl ContextSettingExt for Context {
 
     fn calculate_total_infectiousness_multiplier_for_person(&self, person_id: PersonId) -> f64 {
         let container = self.get_data_container(SettingDataPlugin).unwrap();
+        let mut ratio_sum = 0.0;
+        container.with_itinerary(
+            person_id,
+            |_setting_type, _setting_props, _members, ratio| {
+                ratio_sum += ratio;
+            },
+        );
         let mut collector = 0.0;
         container.with_itinerary(person_id, |setting_type, setting_props, members, ratio| {
             let multiplier = setting_type.calculate_multiplier(members, *setting_props);
-            collector += ratio * multiplier;
+            collector += ratio * multiplier / ratio_sum;
         });
         collector
     }
@@ -480,10 +486,17 @@ impl ContextSettingExt for Context {
         q: Q,
     ) -> Result<Option<PersonId>, IxaError> {
         let container = self.get_data_container(SettingDataPlugin).unwrap();
+        let mut ratio_sum = 0.0;
+        container.with_itinerary(
+            person_id,
+            |_setting_type, _setting_props, _members, ratio| {
+                ratio_sum += ratio;
+            },
+        );
         let mut itinerary_multiplier = Vec::new();
         container.with_itinerary(person_id, |setting_type, setting_props, members, ratio| {
             let multiplier = setting_type.calculate_multiplier(members, *setting_props);
-            itinerary_multiplier.push(ratio * multiplier);
+            itinerary_multiplier.push(ratio * multiplier / ratio_sum);
         });
 
         let setting_index = self.sample_weighted(SettingsRng, &itinerary_multiplier);
@@ -1073,7 +1086,6 @@ mod test {
         let school = 0.2;
         let workplace = 0.5;
         let census_tract = 0.42;
-        let sum = home + school + workplace + census_tract;
         let parameters = Params {
             initial_infections: 1,
             max_time: 100.0,
@@ -1110,7 +1122,7 @@ mod test {
             ItineraryEntry {
                 setting_type: TypeId::of::<Home>(),
                 setting_id: 1,
-                ratio: home / sum,
+                ratio: home,
             }
         );
 
@@ -1119,7 +1131,7 @@ mod test {
             ItineraryEntry {
                 setting_type: TypeId::of::<School>(),
                 setting_id: 2,
-                ratio: school / sum,
+                ratio: school,
             }
         );
 
@@ -1128,7 +1140,7 @@ mod test {
             ItineraryEntry {
                 setting_type: TypeId::of::<Workplace>(),
                 setting_id: 2,
-                ratio: workplace / sum,
+                ratio: workplace,
             }
         );
 
@@ -1137,7 +1149,7 @@ mod test {
             ItineraryEntry {
                 setting_type: TypeId::of::<CensusTract>(),
                 setting_id: 1,
-                ratio: census_tract / sum,
+                ratio: census_tract,
             }
         );
 
