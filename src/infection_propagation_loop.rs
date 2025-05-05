@@ -146,7 +146,9 @@ mod test {
             .set_global_property_value(GlobalParams, parameters)
             .unwrap();
 
-        context.register_setting_type(HomogeneousMixing {}, SettingProperties { alpha });
+        context
+            .register_setting_type(HomogeneousMixing {}, SettingProperties { alpha })
+            .unwrap();
         context
     }
 

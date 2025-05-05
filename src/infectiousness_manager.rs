@@ -262,7 +262,9 @@ mod test {
             )
             .unwrap();
         load_rate_fns(&mut context).unwrap();
-        context.register_setting_type(HomogeneousMixing {}, SettingProperties { alpha: 1.0 });
+        context
+            .register_setting_type(HomogeneousMixing {}, SettingProperties { alpha: 1.0 })
+            .unwrap();
         context
     }
 
