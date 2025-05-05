@@ -113,12 +113,15 @@ mod test {
                 CoreSettingsTypes::School { alpha: 0.0 },
                 CoreSettingsTypes::Workplace { alpha: 0.0 },
             ],
-            itinerary_fn_type: ItineraryWriteFnType::Split {
+            // We need to specify an itinerary split here even though we don't draw people from
+            // itineraries because `load_synth_population` calls `create_itinerary` for each person,
+            // and that function requires an itinerary write function to be set.
+            itinerary_fn_type: Some(ItineraryWriteFnType::Split {
                 home: 0.25,
                 school: 0.25,
                 workplace: 0.25,
                 census_tract: 0.25,
-            },
+            }),
         };
         context
             .set_global_property_value(GlobalParams, parameters)

@@ -51,9 +51,6 @@ impl Display for CoreSettingsTypes {
 
 #[derive(Debug, Serialize, Deserialize, Clone, Copy)]
 pub enum ItineraryWriteFnType {
-    /// Splits the ratio of infectiousness across all specified settings evenly
-    /// Useful for when we need to create a new setting in tests and have people in that setting only
-    SplitEvenly,
     /// Split the ratio of infectiousness across the core settings according to the provided proportions
     Split {
         home: f64,
@@ -81,7 +78,7 @@ pub struct Params {
     /// Setting properties, currently only the transmission modifier alpha values for each setting
     pub settings_properties: Vec<CoreSettingsTypes>,
     /// Rule set for writing itineraries
-    pub itinerary_fn_type: ItineraryWriteFnType,
+    pub itinerary_fn_type: Option<ItineraryWriteFnType>,
     /// The path to the synthetic population file loaded in `population_loader`
     pub synth_population_file: PathBuf,
     /// The path to the transmission report file
@@ -119,12 +116,12 @@ fn validate_inputs(parameters: &Params) -> Result<(), IxaError> {
     // Check that none of the setting proportions are below zero
     let setting_proportions = parameters.itinerary_fn_type;
     match setting_proportions {
-        ItineraryWriteFnType::Split {
+        Some(ItineraryWriteFnType::Split {
             home,
             school,
             workplace,
             census_tract,
-        } => {
+        }) => {
             if home < 0.0 || school < 0.0 || workplace < 0.0 || census_tract < 0.0 {
                 return Err(IxaError::IxaError(
                     "The itinerary ratio for each setting must be non-negative.".to_string(),
@@ -136,7 +133,7 @@ fn validate_inputs(parameters: &Params) -> Result<(), IxaError> {
                 ));
             }
         }
-        ItineraryWriteFnType::SplitEvenly => {}
+        None => {}
     }
     Ok(())
 }
@@ -190,12 +187,7 @@ mod test {
             synth_population_file: PathBuf::from("."),
             transmission_report_name: None,
             settings_properties: vec![],
-            itinerary_fn_type: ItineraryWriteFnType::Split {
-                home: 0.25,
-                school: 0.25,
-                workplace: 0.25,
-                census_tract: 0.25,
-            },
+            itinerary_fn_type: None,
         };
         context
             .set_global_property_value(GlobalParams, parameters)
@@ -222,12 +214,7 @@ mod test {
             synth_population_file: PathBuf::from("."),
             transmission_report_name: None,
             settings_properties: vec![],
-            itinerary_fn_type: ItineraryWriteFnType::Split {
-                home: 0.25,
-                school: 0.25,
-                workplace: 0.25,
-                census_tract: 0.25,
-            },
+            itinerary_fn_type: None,
         };
         let e = validate_inputs(&parameters).err();
         match e {
@@ -257,12 +244,12 @@ mod test {
             synth_population_file: PathBuf::from("."),
             transmission_report_name: None,
             settings_properties: vec![],
-            itinerary_fn_type: ItineraryWriteFnType::Split {
+            itinerary_fn_type: Some(ItineraryWriteFnType::Split {
                 home: 0.0,
                 school: 0.0,
                 workplace: 0.0,
                 census_tract: 0.0,
-            },
+            }),
         };
         let e = validate_inputs(&parameters).err();
         match e {
@@ -292,12 +279,12 @@ mod test {
             synth_population_file: PathBuf::from("."),
             transmission_report_name: None,
             settings_properties: vec![],
-            itinerary_fn_type: ItineraryWriteFnType::Split {
+            itinerary_fn_type: Some(ItineraryWriteFnType::Split {
                 home: -0.1,
                 school: 0.0,
                 workplace: 0.0,
                 census_tract: 0.0,
-            },
+            }),
         };
         let e = validate_inputs(&parameters).err();
         match e {

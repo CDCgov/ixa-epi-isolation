@@ -52,6 +52,16 @@ pub struct ItineraryEntry {
     ratio: f64,
 }
 
+impl ItineraryEntry {
+    pub fn new<T: SettingType>(setting_id: &SettingId<T>, ratio: f64) -> ItineraryEntry {
+        ItineraryEntry {
+            setting_type: TypeId::of::<T>(),
+            setting_id: setting_id.id,
+            ratio,
+        }
+    }
+}
+
 type ItineraryEntryWriter =
     dyn Fn(&Context, TypeId, usize) -> Result<Option<ItineraryEntry>, IxaError>;
 
@@ -268,19 +278,12 @@ impl ContextSettingInternalExt for Context {
         } = self.get_params();
 
         match itinerary_fn_type {
-            ItineraryWriteFnType::SplitEvenly => Box::new(|_context, setting_type, setting_id| {
-                Ok(Some(ItineraryEntry {
-                    setting_type,
-                    setting_id,
-                    ratio: 1.0,
-                }))
-            }),
-            ItineraryWriteFnType::Split {
+            Some(ItineraryWriteFnType::Split {
                 home,
                 school,
                 workplace,
                 census_tract,
-            } => {
+            }) => {
                 Box::new(move |context, setting_type, setting_id| {
                     match setting_type {
                         t if t == TypeId::of::<Home>() => make_validate_itinerary_entry(context, Home, setting_id, home),
@@ -296,6 +299,8 @@ impl ContextSettingInternalExt for Context {
                     }
                 })
             }
+            //
+            _ => unreachable!(),
         }
     }
 }
@@ -322,11 +327,10 @@ fn make_validate_itinerary_entry<T: SettingType + 'static>(
             "The ratio for a core setting type is greater than zero but that setting is excluded from those specified with setting properties.".to_string(),
         ));
     }
-    Ok(Some(ItineraryEntry {
-        setting_type: TypeId::of::<T>(),
-        setting_id,
+    Ok(Some(ItineraryEntry::new(
+        &SettingId::<T>::new(setting_id),
         ratio,
-    }))
+    )))
 }
 
 impl ContextSettingExt for Context {
@@ -563,16 +567,6 @@ mod test {
     };
     use ixa::{define_person_property, ContextGlobalPropertiesExt, ContextPeopleExt};
     use statrs::assert_almost_eq;
-
-    impl ItineraryEntry {
-        pub fn new<T: SettingType>(setting_id: &SettingId<T>, ratio: f64) -> ItineraryEntry {
-            ItineraryEntry {
-                setting_type: TypeId::of::<T>(),
-                setting_id: setting_id.id,
-                ratio,
-            }
-        }
-    }
 
     #[test]
     fn test_setting_type_creation() {
@@ -1109,12 +1103,12 @@ mod test {
                 CoreSettingsTypes::School { alpha: 0.0 },
                 CoreSettingsTypes::Workplace { alpha: 0.0 },
             ],
-            itinerary_fn_type: ItineraryWriteFnType::Split {
+            itinerary_fn_type: Some(ItineraryWriteFnType::Split {
                 home,
                 school,
                 workplace,
                 census_tract,
-            },
+            }),
         };
         context
             .set_global_property_value(GlobalParams, parameters)
@@ -1129,29 +1123,23 @@ mod test {
 
         assert_eq!(
             itinerary_writer(&context, TypeId::of::<School>(), 2).unwrap(),
-            Some(ItineraryEntry {
-                setting_type: TypeId::of::<School>(),
-                setting_id: 2,
-                ratio: school,
-            })
+            Some(ItineraryEntry::new(&SettingId::<School>::new(2), school))
         );
 
         assert_eq!(
             itinerary_writer(&context, TypeId::of::<Workplace>(), 2).unwrap(),
-            Some(ItineraryEntry {
-                setting_type: TypeId::of::<Workplace>(),
-                setting_id: 2,
-                ratio: workplace,
-            })
+            Some(ItineraryEntry::new(
+                &SettingId::<Workplace>::new(2),
+                workplace
+            ))
         );
 
         assert_eq!(
             itinerary_writer(&context, TypeId::of::<CensusTract>(), 1).unwrap(),
-            Some(ItineraryEntry {
-                setting_type: TypeId::of::<CensusTract>(),
-                setting_id: 1,
-                ratio: census_tract,
-            })
+            Some(ItineraryEntry::new(
+                &SettingId::<CensusTract>::new(1),
+                census_tract
+            ))
         );
 
         let e = itinerary_writer(&context, TypeId::of::<HomogeneousMixing>(), 1).err();
@@ -1166,39 +1154,6 @@ mod test {
             ),
             None => panic!("Expected an error. Instead, validation passed with no errors."),
         }
-    }
-
-    #[test]
-    fn test_setting_split_evenly() {
-        let mut context = Context::new();
-        let parameters = Params {
-            initial_infections: 1,
-            max_time: 100.0,
-            seed: 0,
-            infectiousness_rate_fn: RateFnType::Constant {
-                rate: 1.0,
-                duration: 5.0,
-            },
-            symptom_progression_library: None,
-            report_period: 1.0,
-            synth_population_file: PathBuf::from("."),
-            transmission_report_name: None,
-            settings_properties: vec![],
-            itinerary_fn_type: ItineraryWriteFnType::SplitEvenly,
-        };
-        context
-            .set_global_property_value(GlobalParams, parameters)
-            .unwrap();
-
-        let itinerary_writer = context.get_itinerary_write_rules();
-        assert_eq!(
-            itinerary_writer(&context, TypeId::of::<Home>(), 1).unwrap(),
-            Some(ItineraryEntry {
-                setting_type: TypeId::of::<Home>(),
-                setting_id: 1,
-                ratio: 1.0,
-            })
-        );
     }
 
     #[test]
@@ -1217,7 +1172,7 @@ mod test {
             synth_population_file: PathBuf::from("."),
             transmission_report_name: None,
             settings_properties: vec![CoreSettingsTypes::Home { alpha: 0.0 }],
-            itinerary_fn_type: ItineraryWriteFnType::SplitEvenly,
+            itinerary_fn_type: None,
         };
         context
             .set_global_property_value(GlobalParams, parameters)
@@ -1227,11 +1182,7 @@ mod test {
         let setting = make_validate_itinerary_entry(&context, Home, 1, 0.5);
         assert_eq!(
             setting.unwrap(),
-            Some(ItineraryEntry {
-                setting_type: TypeId::of::<Home>(),
-                setting_id: 1,
-                ratio: 0.5,
-            })
+            Some(ItineraryEntry::new(&SettingId::<Home>::new(1), 0.5))
         );
 
         let e = make_validate_itinerary_entry(&context, Workplace, 1, 0.5).err();

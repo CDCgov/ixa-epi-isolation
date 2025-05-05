@@ -210,7 +210,7 @@ impl InfectionContextExt for Context {
 #[cfg(test)]
 #[allow(clippy::float_cmp)]
 mod test {
-    use std::{any::TypeId, path::PathBuf};
+    use std::path::PathBuf;
 
     use super::{
         evaluate_forecast, get_forecast, max_total_infectiousness_multiplier, InfectionContextExt,
@@ -220,9 +220,9 @@ mod test {
         infectiousness_manager::{
             InfectionData, InfectionDataValue, InfectionStatus, InfectionStatusValue,
         },
-        parameters::{GlobalParams, ItineraryWriteFnType, Params, RateFnType},
+        parameters::{GlobalParams, Params, RateFnType},
         rate_fns::load_rate_fns,
-        settings::{create_itinerary, ContextSettingExt, SettingProperties},
+        settings::{ContextSettingExt, ItineraryEntry, SettingId, SettingProperties},
     };
     use ixa::{
         Context, ContextGlobalPropertiesExt, ContextPeopleExt, ContextRandomExt, IxaError, PersonId,
@@ -230,11 +230,14 @@ mod test {
 
     define_setting_type!(HomogeneousMixing);
 
-    fn set_homogenous_mixing_itinerary(
+    fn set_homogeneous_mixing_itinerary(
         context: &mut Context,
         person_id: PersonId,
     ) -> Result<(), IxaError> {
-        let itinerary = create_itinerary(context, vec![(TypeId::of::<HomogeneousMixing>(), 0)])?;
+        let itinerary = vec![ItineraryEntry::new(
+            &SettingId::<HomogeneousMixing>::new(0),
+            1.0,
+        )];
         context.add_itinerary(person_id, itinerary)
     }
 
@@ -257,7 +260,8 @@ mod test {
                     synth_population_file: PathBuf::from("."),
                     transmission_report_name: None,
                     settings_properties: vec![],
-                    itinerary_fn_type: ItineraryWriteFnType::SplitEvenly,
+                    // We set the itineraries manually in `set_homogeneous_mixing_itinerary`.
+                    itinerary_fn_type: None,
                 },
             )
             .unwrap();
@@ -331,9 +335,9 @@ mod test {
     fn test_calc_total_infectiousness_multiplier_with_contact() {
         let mut context = setup_context();
         let p1 = context.add_person(()).unwrap();
-        set_homogenous_mixing_itinerary(&mut context, p1).unwrap();
+        set_homogeneous_mixing_itinerary(&mut context, p1).unwrap();
         let p2 = context.add_person(()).unwrap();
-        set_homogenous_mixing_itinerary(&mut context, p2).unwrap();
+        set_homogeneous_mixing_itinerary(&mut context, p2).unwrap();
 
         assert_eq!(max_total_infectiousness_multiplier(&context, p1), 1.0);
         assert_eq!(max_total_infectiousness_multiplier(&context, p2), 1.0);
@@ -343,12 +347,12 @@ mod test {
     fn test_forecast() {
         let mut context = setup_context();
         let p1 = context.add_person(()).unwrap();
-        set_homogenous_mixing_itinerary(&mut context, p1).unwrap();
+        set_homogeneous_mixing_itinerary(&mut context, p1).unwrap();
         // Add two additional contacts, which should make the factor 2
         let p2 = context.add_person(()).unwrap();
-        set_homogenous_mixing_itinerary(&mut context, p2).unwrap();
+        set_homogeneous_mixing_itinerary(&mut context, p2).unwrap();
         let p3 = context.add_person(()).unwrap();
-        set_homogenous_mixing_itinerary(&mut context, p3).unwrap();
+        set_homogeneous_mixing_itinerary(&mut context, p3).unwrap();
 
         context.infect_person(p1, None);
 
@@ -363,10 +367,10 @@ mod test {
     fn test_assert_evaluate_fails_when_forecast_smaller() {
         let mut context = setup_context();
         let p1 = context.add_person(()).unwrap();
-        set_homogenous_mixing_itinerary(&mut context, p1).unwrap();
+        set_homogeneous_mixing_itinerary(&mut context, p1).unwrap();
         context.infect_person(p1, None);
         let p2 = context.add_person(()).unwrap();
-        set_homogenous_mixing_itinerary(&mut context, p2).unwrap();
+        set_homogeneous_mixing_itinerary(&mut context, p2).unwrap();
 
         let invalid_forecast = 1.0 - 0.1;
         evaluate_forecast(&mut context, p1, invalid_forecast);
