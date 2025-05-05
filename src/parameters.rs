@@ -127,7 +127,12 @@ fn validate_inputs(parameters: &Params) -> Result<(), IxaError> {
         } => {
             if home < 0.0 || school < 0.0 || workplace < 0.0 || census_tract < 0.0 {
                 return Err(IxaError::IxaError(
-                    "The proportions for each setting must be non-negative.".to_string(),
+                    "The itinerary ratio for each setting must be non-negative.".to_string(),
+                ));
+            }
+            if home == 0.0 && school == 0.0 && workplace == 0.0 && census_tract == 0.0 {
+                return Err(IxaError::IxaError(
+                    "At least one itinerary ratio must be greater than zero.".to_string(),
                 ));
             }
         }
@@ -231,6 +236,77 @@ mod test {
             }
             Some(ue) => panic!(
                 "Expected an error that the max simulation running time validation should fail. Instead got {:?}",
+                ue.to_string()
+            ),
+            None => panic!("Expected an error. Instead, validation passed with no errors."),
+        }
+    }
+
+    #[test]
+    fn test_validate_split_zeros() {
+        let parameters = Params {
+            initial_infections: 1,
+            max_time: 100.0,
+            seed: 0,
+            infectiousness_rate_fn: RateFnType::Constant {
+                rate: 1.0,
+                duration: 5.0,
+            },
+            report_period: 1.0,
+            synth_population_file: PathBuf::from("."),
+            transmission_report_name: None,
+            settings_properties: vec![],
+            itinerary_fn_type: ItineraryWriteFnType::Split {
+                home: 0.0,
+                school: 0.0,
+                workplace: 0.0,
+                census_tract: 0.0,
+            },
+        };
+        let e = validate_inputs(&parameters).err();
+        match e {
+            Some(IxaError::IxaError(msg)) => {
+                assert_eq!(msg, "At least one itinerary ratio must be greater than zero.".to_string());
+            }
+            Some(ue) => panic!(
+                "Expected an error that at least one itinerary ratio must be greater than zero. Instead got {:?}",
+                ue.to_string()
+            ),
+            None => panic!("Expected an error. Instead, validation passed with no errors."),
+        }
+    }
+
+    #[test]
+    fn test_validate_split_negative() {
+        let parameters = Params {
+            initial_infections: 1,
+            max_time: 100.0,
+            seed: 0,
+            infectiousness_rate_fn: RateFnType::Constant {
+                rate: 1.0,
+                duration: 5.0,
+            },
+            report_period: 1.0,
+            synth_population_file: PathBuf::from("."),
+            transmission_report_name: None,
+            settings_properties: vec![],
+            itinerary_fn_type: ItineraryWriteFnType::Split {
+                home: -0.1,
+                school: 0.0,
+                workplace: 0.0,
+                census_tract: 0.0,
+            },
+        };
+        let e = validate_inputs(&parameters).err();
+        match e {
+            Some(IxaError::IxaError(msg)) => {
+                assert_eq!(
+                    msg,
+                    "The itinerary ratio for each setting must be non-negative.".to_string()
+                );
+            }
+            Some(ue) => panic!(
+                "Expected an error that itinerary ratios cannot be negative. Instead got {:?}",
                 ue.to_string()
             ),
             None => panic!("Expected an error. Instead, validation passed with no errors."),

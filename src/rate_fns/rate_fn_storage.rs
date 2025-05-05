@@ -170,12 +170,7 @@ mod tests {
             synth_population_file: PathBuf::from("."),
             transmission_report_name: None,
             settings_properties: vec![],
-            itinerary_fn_type: ItineraryWriteFnType::Split {
-                home: 0.0,
-                school: 0.0,
-                workplace: 0.0,
-                census_tract: 0.0,
-            },
+            itinerary_fn_type: ItineraryWriteFnType::SplitEvenly,
         };
         context
             .set_global_property_value(GlobalParams, parameters)
