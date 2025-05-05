@@ -125,7 +125,7 @@ impl SettingDataContainer {
 macro_rules! define_setting_type {
     ($name:ident) => {
         #[derive(Default, Debug, Hash, Eq, PartialEq)]
-        pub struct $name {}
+        pub struct $name;
 
         impl $crate::settings::SettingType for $name {
             fn calculate_multiplier(
@@ -278,28 +278,13 @@ impl ContextSettingInternalExt for Context {
                 workplace,
                 census_tract,
             } => {
-                Box::new(move |_context, setting_type, setting_id| {
+                Box::new(move |context, setting_type, setting_id| {
+                    let sum = home + school + workplace + census_tract;
                     match setting_type {
-                        t if t == TypeId::of::<Home>() => Ok(ItineraryEntry {
-                            setting_type,
-                            setting_id,
-                            ratio: home,
-                        }),
-                        t if t == TypeId::of::<School>() => Ok(ItineraryEntry {
-                            setting_type,
-                            setting_id,
-                            ratio: school,
-                        }),
-                        t if t == TypeId::of::<Workplace>() => Ok(ItineraryEntry {
-                            setting_type,
-                            setting_id,
-                            ratio: workplace,
-                        }),
-                        t if t == TypeId::of::<CensusTract>() => Ok(ItineraryEntry {
-                            setting_type,
-                            setting_id,
-                            ratio: census_tract,
-                        }),
+                        t if t == TypeId::of::<Home>() => make_validate_itinerary_entry(context, Home, setting_id, home / sum),
+                        t if t == TypeId::of::<School>() => make_validate_itinerary_entry(context, School, setting_id, school / sum),
+                        t if t == TypeId::of::<Workplace>() => make_validate_itinerary_entry(context, Workplace, setting_id, workplace / sum),
+                        t if t == TypeId::of::<CensusTract>() => make_validate_itinerary_entry(context, CensusTract, setting_id, census_tract / sum),
                         // For any other type id, we don't know how to make a ratio because it wasn't
                         // specified, so we raise an error.
                         _ => Err(IxaError::IxaError(
@@ -311,6 +296,33 @@ impl ContextSettingInternalExt for Context {
             }
         }
     }
+}
+
+fn make_validate_itinerary_entry<T: SettingType + 'static>(
+    context: &Context,
+    _setting_type: T,
+    setting_id: usize,
+    ratio: f64,
+) -> Result<ItineraryEntry, IxaError> {
+    // Check that T has been registered as a setting if it's ratio is nonzero
+    // If it's ratio is 0, it doesn't matter whether or not we have registered the setting because
+    // we never put it in an itinerary.
+    if ratio > 0.0
+        && !context
+            .get_data_container(SettingDataPlugin)
+            .expect("Settings must be initialized prior to making itineraries.")
+            .setting_types
+            .contains_key(&TypeId::of::<T>())
+    {
+        return Err(IxaError::IxaError(
+            "The ratio for a core setting type is greater than zero but that setting is excluded from those specified with setting properties.".to_string(),
+        ));
+    }
+    Ok(ItineraryEntry {
+        setting_type: TypeId::of::<T>(),
+        setting_id,
+        ratio,
+    })
 }
 
 impl ContextSettingExt for Context {
@@ -500,22 +512,22 @@ pub fn init(context: &mut Context) {
         match setting {
             CoreSettingsTypes::Home { alpha } => {
                 context
-                    .register_setting_type(Home {}, SettingProperties { alpha: *alpha })
+                    .register_setting_type(Home, SettingProperties { alpha: *alpha })
                     .unwrap();
             }
             CoreSettingsTypes::CensusTract { alpha } => {
                 context
-                    .register_setting_type(CensusTract {}, SettingProperties { alpha: *alpha })
+                    .register_setting_type(CensusTract, SettingProperties { alpha: *alpha })
                     .unwrap();
             }
             CoreSettingsTypes::School { alpha } => {
                 context
-                    .register_setting_type(School {}, SettingProperties { alpha: *alpha })
+                    .register_setting_type(School, SettingProperties { alpha: *alpha })
                     .unwrap();
             }
             CoreSettingsTypes::Workplace { alpha } => {
                 context
-                    .register_setting_type(Workplace {}, SettingProperties { alpha: *alpha })
+                    .register_setting_type(Workplace, SettingProperties { alpha: *alpha })
                     .unwrap();
             }
         }
@@ -548,10 +560,10 @@ mod test {
     fn test_setting_type_creation() {
         let mut context = Context::new();
         context
-            .register_setting_type(Home {}, SettingProperties { alpha: 0.1 })
+            .register_setting_type(Home, SettingProperties { alpha: 0.1 })
             .unwrap();
         context
-            .register_setting_type(CensusTract {}, SettingProperties { alpha: 0.001 })
+            .register_setting_type(CensusTract, SettingProperties { alpha: 0.001 })
             .unwrap();
         let home_props = context.get_setting_properties::<Home>().unwrap();
         let tract_props = context.get_setting_properties::<CensusTract>().unwrap();
@@ -617,7 +629,7 @@ mod test {
     fn test_duplicated_itinerary() {
         let mut context = Context::new();
         context
-            .register_setting_type(Home {}, SettingProperties { alpha: 1.0 })
+            .register_setting_type(Home, SettingProperties { alpha: 1.0 })
             .unwrap();
 
         let person = context.add_person(()).unwrap();
@@ -642,7 +654,7 @@ mod test {
     fn test_feasible_itinerary_ratio() {
         let mut context = Context::new();
         context
-            .register_setting_type(Home {}, SettingProperties { alpha: 1.0 })
+            .register_setting_type(Home, SettingProperties { alpha: 1.0 })
             .unwrap();
 
         let person = context.add_person(()).unwrap();
@@ -685,7 +697,7 @@ mod test {
     fn test_add_itinerary() {
         let mut context = Context::new();
         context
-            .register_setting_type(Home {}, SettingProperties { alpha: 1.0 })
+            .register_setting_type(Home, SettingProperties { alpha: 1.0 })
             .unwrap();
 
         let person = context.add_person(()).unwrap();
@@ -733,10 +745,10 @@ mod test {
     fn test_setting_registration() {
         let mut context = Context::new();
         context
-            .register_setting_type(Home {}, SettingProperties { alpha: 0.1 })
+            .register_setting_type(Home, SettingProperties { alpha: 0.1 })
             .unwrap();
         context
-            .register_setting_type(CensusTract {}, SettingProperties { alpha: 0.01 })
+            .register_setting_type(CensusTract, SettingProperties { alpha: 0.01 })
             .unwrap();
         for s in 0..5 {
             // Create 5 people
@@ -764,7 +776,7 @@ mod test {
     fn test_setting_multiplier() {
         let mut context = Context::new();
         context
-            .register_setting_type(Home {}, SettingProperties { alpha: 0.1 })
+            .register_setting_type(Home, SettingProperties { alpha: 0.1 })
             .unwrap();
         for s in 0..5 {
             // Create 5 people
@@ -783,7 +795,7 @@ mod test {
             .get_setting_members::<Home>(SettingId::<Home>::new(home_id))
             .unwrap();
 
-        let setting_type = Home {};
+        let setting_type = Home;
 
         let inf_multiplier =
             setting_type.calculate_multiplier(members, SettingProperties { alpha: 0.1 });
@@ -797,10 +809,10 @@ mod test {
         // Go through all the settings and compute infectiousness multiplier
         let mut context = Context::new();
         context
-            .register_setting_type(Home {}, SettingProperties { alpha: 0.1 })
+            .register_setting_type(Home, SettingProperties { alpha: 0.1 })
             .unwrap();
         context
-            .register_setting_type(CensusTract {}, SettingProperties { alpha: 0.01 })
+            .register_setting_type(CensusTract, SettingProperties { alpha: 0.01 })
             .unwrap();
 
         for s in 0..5 {
@@ -857,10 +869,10 @@ mod test {
         let mut context = Context::new();
         context.init_random(42);
         context
-            .register_setting_type(Home {}, SettingProperties { alpha: 0.1 })
+            .register_setting_type(Home, SettingProperties { alpha: 0.1 })
             .unwrap();
         context
-            .register_setting_type(CensusTract {}, SettingProperties { alpha: 0.01 })
+            .register_setting_type(CensusTract, SettingProperties { alpha: 0.01 })
             .unwrap();
 
         let person_a = context.add_person(()).unwrap();
@@ -930,10 +942,10 @@ mod test {
             let mut context = Context::new();
             context.init_random(seed);
             context
-                .register_setting_type(Home {}, SettingProperties { alpha: 0.1 })
+                .register_setting_type(Home, SettingProperties { alpha: 0.1 })
                 .unwrap();
             context
-                .register_setting_type(CensusTract {}, SettingProperties { alpha: 0.01 })
+                .register_setting_type(CensusTract, SettingProperties { alpha: 0.01 })
                 .unwrap();
 
             for _ in 0..3 {
@@ -995,10 +1007,10 @@ mod test {
         let mut context = Context::new();
         context.init_random(1234);
         context
-            .register_setting_type(Home {}, SettingProperties { alpha: 0.1 })
+            .register_setting_type(Home, SettingProperties { alpha: 0.1 })
             .unwrap();
         context
-            .register_setting_type(CensusTract {}, SettingProperties { alpha: 0.01 })
+            .register_setting_type(CensusTract, SettingProperties { alpha: 0.01 })
             .unwrap();
 
         for i in 0..3 {
@@ -1057,6 +1069,11 @@ mod test {
     #[test]
     fn test_setting_split() {
         let mut context = Context::new();
+        let home = 0.3;
+        let school = 0.2;
+        let workplace = 0.5;
+        let census_tract = 0.42;
+        let sum = home + school + workplace + census_tract;
         let parameters = Params {
             initial_infections: 1,
             max_time: 100.0,
@@ -1076,15 +1093,16 @@ mod test {
                 CoreSettingsTypes::Workplace { alpha: 0.0 },
             ],
             itinerary_fn_type: ItineraryWriteFnType::Split {
-                home: 0.2,
-                school: 0.25,
-                workplace: 0.5,
-                census_tract: 0.52,
+                home,
+                school,
+                workplace,
+                census_tract,
             },
         };
         context
             .set_global_property_value(GlobalParams, parameters)
             .unwrap();
+        init(&mut context);
 
         let itinerary_writer = context.get_itinerary_write_rules();
         assert_eq!(
@@ -1092,7 +1110,7 @@ mod test {
             ItineraryEntry {
                 setting_type: TypeId::of::<Home>(),
                 setting_id: 1,
-                ratio: 0.2,
+                ratio: home / sum,
             }
         );
 
@@ -1101,7 +1119,7 @@ mod test {
             ItineraryEntry {
                 setting_type: TypeId::of::<School>(),
                 setting_id: 2,
-                ratio: 0.25,
+                ratio: school / sum,
             }
         );
 
@@ -1110,7 +1128,7 @@ mod test {
             ItineraryEntry {
                 setting_type: TypeId::of::<Workplace>(),
                 setting_id: 2,
-                ratio: 0.5,
+                ratio: workplace / sum,
             }
         );
 
@@ -1119,7 +1137,7 @@ mod test {
             ItineraryEntry {
                 setting_type: TypeId::of::<CensusTract>(),
                 setting_id: 1,
-                ratio: 0.52,
+                ratio: census_tract / sum,
             }
         );
 
@@ -1168,6 +1186,52 @@ mod test {
                 ratio: 1.0,
             }
         );
+    }
+
+    #[test]
+    fn test_make_validate_itinerary() {
+        let mut context = Context::new();
+        let parameters = Params {
+            initial_infections: 1,
+            max_time: 100.0,
+            seed: 0,
+            infectiousness_rate_fn: RateFnType::Constant {
+                rate: 1.0,
+                duration: 5.0,
+            },
+            symptom_progression_library: None,
+            report_period: 1.0,
+            synth_population_file: PathBuf::from("."),
+            transmission_report_name: None,
+            settings_properties: vec![CoreSettingsTypes::Home { alpha: 0.0 }],
+            itinerary_fn_type: ItineraryWriteFnType::SplitEvenly,
+        };
+        context
+            .set_global_property_value(GlobalParams, parameters)
+            .unwrap();
+        init(&mut context);
+
+        let setting = make_validate_itinerary_entry(&context, Home, 1, 0.5);
+        assert_eq!(
+            setting.unwrap(),
+            ItineraryEntry {
+                setting_type: TypeId::of::<Home>(),
+                setting_id: 1,
+                ratio: 0.5,
+            }
+        );
+
+        let e = make_validate_itinerary_entry(&context, Workplace, 1, 0.5).err();
+        match e {
+            Some(IxaError::IxaError(msg)) => {
+                assert_eq!(msg, "The ratio for a core setting type is greater than zero but that setting is excluded from those specified with setting properties.");
+            }
+            Some(ue) => panic!(
+                "Expected an error that itinerary write rules do not support this setting type. Instead got: {:?}",
+                ue.to_string()
+            ),
+            None => panic!("Expected an error. Instead, validation passed with no errors."),
+        }
     }
     /*TODO:
     Test failure of getting properties if not initialized
