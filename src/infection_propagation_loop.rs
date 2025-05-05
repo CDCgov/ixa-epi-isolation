@@ -119,7 +119,7 @@ mod test {
         person_id: PersonId,
     ) -> Result<(), IxaError> {
         let itinerary = vec![ItineraryEntry::new(
-            &SettingId::<HomogeneousMixing>::new(0),
+            &SettingId::new(HomogeneousMixing, 0),
             1.0,
         )];
         context.add_itinerary(person_id, itinerary)
