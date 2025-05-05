@@ -299,7 +299,10 @@ impl ContextSettingInternalExt for Context {
                     }
                 })
             }
-            _ => unreachable!(),
+            None => Box::new(|_, _, _| {
+                Err(IxaError::IxaError("The itinerary write function is `None` but the method `context.get_itinerary_write_rules()` was called.
+                Instead, itineraries must be manually added with `context.add_itinerary(ItineraryEntry::new(...))`.".to_string()))
+            }),
         }
     }
 }
@@ -1191,6 +1194,44 @@ mod test {
             }
             Some(ue) => panic!(
                 "Expected an error that itinerary write rules do not support this setting type. Instead got: {:?}",
+                ue.to_string()
+            ),
+            None => panic!("Expected an error. Instead, validation passed with no errors."),
+        }
+    }
+
+    #[test]
+    fn test_itinerary_write_rules_none() {
+        let mut context = Context::new();
+        let parameters = Params {
+            initial_infections: 1,
+            max_time: 100.0,
+            seed: 0,
+            infectiousness_rate_fn: RateFnType::Constant {
+                rate: 1.0,
+                duration: 5.0,
+            },
+            symptom_progression_library: None,
+            report_period: 1.0,
+            synth_population_file: PathBuf::from("."),
+            transmission_report_name: None,
+            settings_properties: vec![CoreSettingsTypes::Home { alpha: 0.0 }],
+            itinerary_fn_type: None,
+        };
+        context
+            .set_global_property_value(GlobalParams, parameters)
+            .unwrap();
+        init(&mut context);
+
+        let itinerary_writer = context.get_itinerary_write_rules();
+        let e = itinerary_writer(&context, TypeId::of::<Home>(), 1).err();
+        match e {
+            Some(IxaError::IxaError(msg)) => {
+                assert_eq!(msg, "The itinerary write function is `None` but the method `context.get_itinerary_write_rules()` was called.
+                Instead, itineraries must be manually added with `context.add_itinerary(ItineraryEntry::new(...))`.");
+            }
+            Some(ue) => panic!(
+                "Expected an error that itinerary write rules are none. Instead got: {:?}",
                 ue.to_string()
             ),
             None => panic!("Expected an error. Instead, validation passed with no errors."),
