@@ -80,7 +80,9 @@ pub fn create_itinerary(
         // but rather just the ones that are specified in the input file.
         if context
             .get_data_container(SettingDataPlugin)
-            .expect("Settings must be initialized prior to making itineraries")
+            .ok_or(IxaError::IxaError(
+                "Settings must be initialized prior to making itineraries".to_string(),
+            ))?
             .setting_types
             .contains_key(&setting_type)
         {
@@ -321,7 +323,9 @@ fn make_validate_itinerary_entry<T: SettingType + 'static>(
     }
     if !context
         .get_data_container(SettingDataPlugin)
-        .expect("Settings must be initialized prior to making itineraries.")
+        .ok_or(IxaError::IxaError(
+            "Settings must be initialized prior to making itineraries.".to_string(),
+        ))?
         .setting_types
         .contains_key(&TypeId::of::<T>())
     {
