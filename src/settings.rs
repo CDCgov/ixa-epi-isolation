@@ -315,8 +315,8 @@ fn make_validate_itinerary_entry<T: SettingType + 'static>(
     setting_id: usize,
     ratio: f64,
 ) -> Result<Option<ItineraryEntry>, IxaError> {
-    // Check that T has been registered as a setting if it's ratio is nonzero
-    // If it's ratio is 0, it doesn't matter whether or not we have registered the setting because
+    // Check that T has been registered as a setting if its ratio is nonzero
+    // If its ratio is 0, it doesn't matter whether or not we have registered the setting because
     // we never put that setting in the itinerary.
     if ratio == 0.0 {
         return Ok(None);
@@ -536,26 +536,26 @@ pub fn init(context: &mut Context) {
         ..
     } = context.get_params();
 
-    for setting in &settings_properties.clone() {
+    for setting in settings_properties.clone() {
         match setting {
             CoreSettingsTypes::Home { alpha } => {
                 context
-                    .register_setting_type(Home, SettingProperties { alpha: *alpha })
+                    .register_setting_type(Home, SettingProperties { alpha })
                     .unwrap();
             }
             CoreSettingsTypes::CensusTract { alpha } => {
                 context
-                    .register_setting_type(CensusTract, SettingProperties { alpha: *alpha })
+                    .register_setting_type(CensusTract, SettingProperties { alpha })
                     .unwrap();
             }
             CoreSettingsTypes::School { alpha } => {
                 context
-                    .register_setting_type(School, SettingProperties { alpha: *alpha })
+                    .register_setting_type(School, SettingProperties { alpha })
                     .unwrap();
             }
             CoreSettingsTypes::Workplace { alpha } => {
                 context
-                    .register_setting_type(Workplace, SettingProperties { alpha: *alpha })
+                    .register_setting_type(Workplace, SettingProperties { alpha })
                     .unwrap();
             }
         }
