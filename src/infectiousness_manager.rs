@@ -397,7 +397,7 @@ mod test {
         let p1 = context.add_person(()).unwrap();
         context.infect_person(p1, None);
         let _ = context.add_person(()).unwrap();
-        crate::settings::init(&mut context).unwrap();
+        crate::settings::init(&mut context);
 
         let still_valid_forecast = 1.0 - 9e-11;
         evaluate_forecast(&mut context, p1, still_valid_forecast);
