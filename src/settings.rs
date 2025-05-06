@@ -1349,6 +1349,41 @@ mod test {
         assert_eq!(i[0].setting_type, TypeId::of::<Home>());
         assert_eq!(i[1].setting_type, TypeId::of::<School>());
     }
+
+    #[test]
+    fn test_itinerary_normalized_one() {
+        let mut context = Context::new();
+        let person = context.add_person(()).unwrap();
+        context.register_setting_type(
+            Home,
+            SettingProperties {
+                alpha: 0.1,
+                itinerary_specification: Some(ItinerarySpecificationType::Constant { ratio: 5.0 }),
+            },
+        );
+        context.register_setting_type(
+            CensusTract,
+            SettingProperties {
+                alpha: 0.01,
+                itinerary_specification: Some(ItinerarySpecificationType::Constant { ratio: 2.5 }),
+            },
+        );
+        context.register_setting_type(
+            School,
+            SettingProperties {
+                alpha: 0.2,
+                itinerary_specification: Some(ItinerarySpecificationType::Constant { ratio: 2.5 }),
+            },
+        );
+
+        // Test creating an itinerary with all settings
+        let itinerary = create_core_settings_itinerary(&context, 1, Some(1), None, 1).unwrap();
+        context.add_itinerary(person, itinerary).unwrap();
+        let itinerary = context.get_itinerary(person).unwrap();
+
+        let total_ratio: Vec<f64> = itinerary.iter().map(|entry| entry.ratio).collect();
+        assert_eq!(total_ratio, vec![0.5, 0.25, 0.25]);
+    }
     /*TODO:
     Test failure of getting properties if not initialized
     Test failure if a setting is registered more than once?
