@@ -28,6 +28,7 @@ pub trait SettingType {
         &self,
         members: &[PersonId],
         setting_properties: SettingProperties,
+        intrinsic_infectiousness_modifier: f64,
     ) -> f64;
 }
 
@@ -165,14 +166,16 @@ macro_rules! define_setting_type {
         pub struct $name;
 
         impl $crate::settings::SettingType for $name {
+            #[allow(clippy::cast_precision_loss)]
             fn calculate_multiplier(
                 &self,
                 members: &[ixa::PersonId],
                 setting_properties: $crate::settings::SettingProperties,
+                intrinsic_infectiousness_modifier: f64,
             ) -> f64 {
                 let n_members = members.len();
-                #[allow(clippy::cast_precision_loss)]
-                ((n_members - 1) as f64).powf(setting_properties.alpha)
+                intrinsic_infectiousness_modifier
+                    * ((n_members - 1) as f64).powf(setting_properties.alpha)
             }
         }
     };
@@ -211,7 +214,11 @@ pub trait ContextSettingExt {
         &self,
         setting_id: SettingId<T>,
     ) -> Option<&Vec<PersonId>>;
-    fn calculate_total_infectiousness_multiplier_for_person(&self, person_id: PersonId) -> f64;
+    fn calculate_total_infectiousness_multiplier_for_person(
+        &self,
+        person_id: PersonId,
+        intrinsic_infectiousness_modifier: f64,
+    ) -> f64;
     fn get_itinerary(&self, person_id: PersonId) -> Option<&Vec<ItineraryEntry>>;
     fn get_contact<T: SettingType + 'static, Q: Query + 'static>(
         &self,
@@ -430,11 +437,19 @@ impl ContextSettingExt for Context {
             .get_setting_members(&TypeId::of::<T>(), setting_id.id)
     }
 
-    fn calculate_total_infectiousness_multiplier_for_person(&self, person_id: PersonId) -> f64 {
+    fn calculate_total_infectiousness_multiplier_for_person(
+        &self,
+        person_id: PersonId,
+        intrinsic_infectiousness_modifier: f64,
+    ) -> f64 {
         let container = self.get_data_container(SettingDataPlugin).unwrap();
         let mut collector = 0.0;
         container.with_itinerary(person_id, |setting_type, setting_props, members, ratio| {
-            let multiplier = setting_type.calculate_multiplier(members, *setting_props);
+            let multiplier = setting_type.calculate_multiplier(
+                members,
+                *setting_props,
+                intrinsic_infectiousness_modifier,
+            );
             collector += ratio * multiplier;
         });
         collector
@@ -464,7 +479,7 @@ impl ContextSettingExt for Context {
         let container = self.get_data_container(SettingDataPlugin).unwrap();
         let mut itinerary_multiplier = Vec::new();
         container.with_itinerary(person_id, |setting_type, setting_props, members, ratio| {
-            let multiplier = setting_type.calculate_multiplier(members, *setting_props);
+            let multiplier = setting_type.calculate_multiplier(members, *setting_props, 1.0);
             itinerary_multiplier.push(ratio * multiplier);
         });
 
@@ -860,7 +875,7 @@ mod test {
                 alpha: 0.1,
                 itinerary_specification: None,
             },
-        );
+        1.0);
 
         // This is assuming we know what the function for Home is (N - 1) ^ alpha
         assert_almost_eq!(inf_multiplier, f64::from(6 - 1).powf(0.1), 0.0);
@@ -905,7 +920,8 @@ mod test {
         let _ = context.add_itinerary(person, itinerary);
 
         // If only registered at home, total infectiousness multiplier should be (6 - 1) ^ (alpha)
-        let inf_multiplier = context.calculate_total_infectiousness_multiplier_for_person(person);
+        let inf_multiplier =
+            context.calculate_total_infectiousness_multiplier_for_person(person, 1.0);
         assert_almost_eq!(inf_multiplier, f64::from(6 - 1).powf(0.1), 0.0);
 
         // If person's itinerary is changed for two settings,
@@ -927,7 +943,7 @@ mod test {
         assert_eq!(members_tract.len(), 6);
 
         let inf_multiplier_two_settings =
-            context.calculate_total_infectiousness_multiplier_for_person(person);
+            context.calculate_total_infectiousness_multiplier_for_person(person, 1.0);
 
         assert_almost_eq!(
             inf_multiplier_two_settings,

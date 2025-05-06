@@ -1,7 +1,10 @@
 use ixa::{define_data_plugin, Context, ContextPeopleExt, PersonId, PersonProperty};
 use std::{any::TypeId, collections::HashMap};
 
-use crate::infectiousness_manager::{InfectionStatus, InfectionStatusValue};
+use crate::{
+    infectiousness_manager::{InfectionStatus, InfectionStatusValue},
+    population_loader::Alive,
+};
 
 type TransmissionModifierFn = dyn Fn(&Context, PersonId) -> f64;
 type TransmissionAggregatorFn = dyn Fn(&Vec<(TypeId, f64)>) -> f64;
@@ -49,9 +52,7 @@ pub trait ContextTransmissionModifierExt {
     /// Register a transmission modifier for a specific infection status and person property.
     /// Modifier key must have specified lifetime to outlive the Box'd `TrasnmissionModifierFn`.
     /// Modifier key is taken as a slice to avoid new object creation through Vec
-    fn register_transmission_modifier<
-        T: PersonProperty + 'static + std::cmp::Eq + std::hash::Hash,
-    >(
+    fn register_transmission_modifier<T: PersonProperty + 'static>(
         &mut self,
         infection_status: InfectionStatusValue,
         person_property: T,
@@ -62,6 +63,7 @@ pub trait ContextTransmissionModifierExt {
     /// The aggregator is a function that takes a vector of tuples containing the type ID of the person property
     /// and its corresponding modifier value.
     /// The default aggregator multiplies all the modifier values together independently.
+    #[allow(dead_code)]
     fn register_transmission_aggregator(
         &mut self,
         infection_status: InfectionStatusValue,
@@ -71,14 +73,6 @@ pub trait ContextTransmissionModifierExt {
     /// Get the relative intrinsic transmission (infectiousness or susceptiblity) for a person based on their
     /// infection status and current properties based on registered modifiers.
     fn get_relative_intrinsic_transmission_person(&self, person_id: PersonId) -> f64;
-
-    /// Get the relative transmission for a contact attempt between two people.
-    /// This is the independent product of the relative intrinsic transmission for both people.
-    fn get_relative_transmission_infection_attempt(
-        &self,
-        transmitter_id: PersonId,
-        contact_id: PersonId,
-    ) -> f64;
 }
 
 impl ContextTransmissionModifierExt for Context {
@@ -140,13 +134,18 @@ impl ContextTransmissionModifierExt for Context {
 
         transmission_modifier_plugin.run_aggregator(infection_status, &registered_modifiers)
     }
+}
 
-    fn get_relative_transmission_infection_attempt(
-        &self,
-        transmitter_id: PersonId,
-        contact_id: PersonId,
-    ) -> f64 {
-        self.get_relative_intrinsic_transmission_person(transmitter_id)
-            * self.get_relative_intrinsic_transmission_person(contact_id)
-    }
+// Initialize the transmission modifier plugin with guaranteed values
+pub fn init(context: &mut Context) {
+    context.register_transmission_modifier(
+        InfectionStatusValue::Susceptible,
+        Alive,
+        &[(true, 1.0), (false, 0.0)],
+    );
+    context.register_transmission_modifier(
+        InfectionStatusValue::Infectious,
+        Alive,
+        &[(true, 1.0), (false, 0.0)],
+    );
 }
