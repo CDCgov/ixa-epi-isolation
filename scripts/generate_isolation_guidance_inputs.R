@@ -74,7 +74,13 @@ triangle_vl_wrt_infected_time <- function(
     seq(infection_start_time, infection_start_time + max_time, dt),
     dp, tp, wp, wr
   ), 0)
-  list(unnormalized_pdf_to_hazard(curve, dt))
+  # The triangle vl curves tell us the rate of transmission over time, so we
+  # treat them alone as the hazard rate.
+  # TODO (kzs9): allow for adding a viral_load_to_infectiousness function here
+  # which transforms the viral load to an infectiousness function using our
+  # isolation guidance assumptions for the different functional forms of
+  # infectiousness.
+  list(curve)
 }
 
 # For every parameter set, make a vector of the viral load over time trajectory.
@@ -95,7 +101,7 @@ trajectories <- purrr::pmap_vec(
 # Turn the list of vectors into a matrix.
 trajectories <- as_tibble(trajectories, .name_repair = "minimal") |>
   sjmisc::rotate_df()
-times <- seq(dt / 2, max_time, dt) # Add the times for each value
+times <- seq(0, max_time, dt) # Add the times for each value
 names(trajectories) <- times # As column names
 
 trajectories <- trajectories |>

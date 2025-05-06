@@ -22,14 +22,6 @@ triangle_vl <- function(t, dp, tp, wp, wr) {
   return(log_vl)
 }
 
-
-unnormalized_pdf_to_hazard <- function(pdf, dt) {
-  cumulative <- cumsum(pdf)
-  survival <- cumulative[length(cumulative)] - cumulative
-  hazard <- -(diff(log(survival)) / dt)
-  return(hazard)
-}
-
 calculate_weibull_scale <- function(
     si_beta_0_exponentiated, si_beta_wr, wr, wr_mean, wr_sd) {
   # We need wr_raw for the discrete Weibull scale parameter.
