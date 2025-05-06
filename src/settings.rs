@@ -387,9 +387,17 @@ impl ContextSettingExt for Context {
     fn add_itinerary(
         &mut self,
         person_id: PersonId,
-        itinerary: Vec<ItineraryEntry>,
+        mut itinerary: Vec<ItineraryEntry>,
     ) -> Result<(), IxaError> {
+        // Normalize itinerary ratios
         self.validate_itinerary(&itinerary)?;
+
+        let total_ratio: f64 = itinerary.iter().map(|entry| entry.ratio).sum();
+        // If we passed validation, we know setting entries aren't all zero, so we can divide by
+        // total_ratio without worrying about it divide by zero.
+        for entry in &mut itinerary {
+            entry.ratio /= total_ratio;
+        }
         let container = self.get_data_container_mut(SettingDataPlugin);
         let mut current_setting_ids = vec![];
 
@@ -471,17 +479,10 @@ impl ContextSettingExt for Context {
 
     fn calculate_total_infectiousness_multiplier_for_person(&self, person_id: PersonId) -> f64 {
         let container = self.get_data_container(SettingDataPlugin).unwrap();
-        let mut ratio_sum = 0.0;
-        container.with_itinerary(
-            person_id,
-            |_setting_type, _setting_props, _members, ratio| {
-                ratio_sum += ratio;
-            },
-        );
         let mut collector = 0.0;
         container.with_itinerary(person_id, |setting_type, setting_props, members, ratio| {
             let multiplier = setting_type.calculate_multiplier(members, *setting_props);
-            collector += ratio * multiplier / ratio_sum;
+            collector += ratio * multiplier;
         });
         collector
     }
@@ -508,17 +509,10 @@ impl ContextSettingExt for Context {
         q: Q,
     ) -> Result<Option<PersonId>, IxaError> {
         let container = self.get_data_container(SettingDataPlugin).unwrap();
-        let mut ratio_sum = 0.0;
-        container.with_itinerary(
-            person_id,
-            |_setting_type, _setting_props, _members, ratio| {
-                ratio_sum += ratio;
-            },
-        );
         let mut itinerary_multiplier = Vec::new();
         container.with_itinerary(person_id, |setting_type, setting_props, members, ratio| {
             let multiplier = setting_type.calculate_multiplier(members, *setting_props);
-            itinerary_multiplier.push(ratio * multiplier / ratio_sum);
+            itinerary_multiplier.push(ratio * multiplier);
         });
 
         let setting_index = self.sample_weighted(SettingsRng, &itinerary_multiplier);
