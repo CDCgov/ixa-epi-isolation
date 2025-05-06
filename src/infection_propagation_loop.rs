@@ -3,7 +3,9 @@ use crate::infectiousness_manager::{
     InfectionStatus, InfectionStatusValue,
 };
 use crate::parameters::{ContextParametersExt, Params};
+use crate::population_loader::Alive;
 use crate::rate_fns::rate_fn_storage::load_rate_fns;
+use crate::settings::ContextSettingExt;
 use ixa::{
     define_rng, trace, Context, ContextPeopleExt, IxaError, PersonId, PersonPropertyChangeEvent,
 };
@@ -17,11 +19,14 @@ fn schedule_next_forecasted_infection(context: &mut Context, person: PersonId) {
     }) = get_forecast(context, person)
     {
         context.add_plan(next_time, move |context| {
-            // TODO<ryl8@cc.gov>: We will choose a setting here
             if evaluate_forecast(context, person, forecasted_total_infectiousness) {
-                if let Some(next_contact) = infection_attempt(context, person) {
-                    trace!("Person {person}: Forecast accepted, infecting {next_contact}");
-                    context.infect_person(next_contact, Some(person));
+                if let Some(next_contact) =
+                    context.draw_contact_from_transmitter_itinerary(person, (Alive, true)).unwrap()
+                {
+                    if infection_attempt(context, next_contact) {
+                        trace!("Person {person}: Forecast accepted, infecting {next_contact}");
+                        context.infect_person(next_contact, Some(person));
+                    }
                 }
             }
             // Continue scheduling forecasts until the person recovers.
@@ -160,6 +165,7 @@ mod test {
                 },
             )
             .unwrap();
+        crate::interventions::transmission_modifier_manager::init(&mut context);
         context
     }
 
