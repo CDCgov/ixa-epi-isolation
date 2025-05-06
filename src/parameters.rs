@@ -44,7 +44,7 @@ pub struct Params {
     pub symptom_progression_library: Option<ProgressionLibraryType>,
     /// The period at which to report tabulated values
     pub report_period: f64,
-    /// Setting properties, currently only the transmission modifier alpha values for each setting
+    /// Setting properties by setting type
     pub settings_properties: HashMap<CoreSettingsTypes, SettingProperties>,
     /// The path to the synthetic population file loaded in `population_loader`
     pub synth_population_file: PathBuf,
