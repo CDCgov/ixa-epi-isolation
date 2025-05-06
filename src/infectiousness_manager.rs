@@ -70,7 +70,9 @@ define_rng!(ForecastRng);
 
 // Infection attempt function for a context and given `PersonId`
 pub fn infection_attempt(context: &Context, person_id: PersonId) -> Option<PersonId> {
-    let next_contact = context.draw_contact_from_transmitter_itinerary(person_id, (Alive, true))?;
+    let next_contact = context
+        .draw_contact_from_transmitter_itinerary(person_id, (Alive, true))
+        .unwrap()?;
     match context.get_person_property(next_contact, InfectionStatus) {
         InfectionStatusValue::Susceptible => Some(next_contact),
         _ => None,
@@ -260,7 +262,9 @@ mod test {
             )
             .unwrap();
         load_rate_fns(&mut context).unwrap();
-        context.register_setting_type(HomogeneousMixing {}, SettingProperties { alpha: 1.0 });
+        context
+            .register_setting_type(HomogeneousMixing {}, SettingProperties { alpha: 1.0 })
+            .unwrap();
         context
     }
 

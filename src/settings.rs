@@ -6,6 +6,7 @@ use ixa::{
 };
 
 use std::any::TypeId;
+use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::hash::Hash;
@@ -27,7 +28,7 @@ pub trait SettingType {
     ) -> f64;
 }
 
-#[derive(Hash, Eq, PartialEq, Ord, PartialOrd)]
+#[derive(Debug, Hash, Eq, PartialEq, Ord, PartialOrd)]
 pub struct SettingId<T: SettingType + 'static> {
     pub id: usize,
     // Marker to say this group id is associated with T (but does not own it)
@@ -154,12 +155,14 @@ define_data_plugin!(
 
 #[allow(dead_code)]
 pub trait ContextSettingExt {
-    fn get_setting_properties<T: SettingType + 'static>(&self) -> SettingProperties;
+    fn get_setting_properties<T: SettingType + 'static>(
+        &self,
+    ) -> Result<SettingProperties, IxaError>;
     fn register_setting_type<T: SettingType + 'static>(
         &mut self,
         setting: T,
         setting_props: SettingProperties,
-    );
+    ) -> Result<(), IxaError>;
     fn add_itinerary(
         &mut self,
         person_id: PersonId,
@@ -177,12 +180,12 @@ pub trait ContextSettingExt {
         person_id: PersonId,
         setting_id: SettingId<T>,
         q: Q,
-    ) -> Option<PersonId>;
+    ) -> Result<Option<PersonId>, IxaError>;
     fn draw_contact_from_transmitter_itinerary<Q: Query>(
         &self,
         person_id: PersonId,
         q: Q,
-    ) -> Option<PersonId>;
+    ) -> Result<Option<PersonId>, IxaError>;
 }
 
 trait ContextSettingInternalExt {
@@ -192,7 +195,7 @@ trait ContextSettingInternalExt {
         setting_type: TypeId,
         setting_id: usize,
         q: T,
-    ) -> Option<PersonId>;
+    ) -> Result<Option<PersonId>, IxaError>;
     fn get_setting_members_internal(
         &self,
         setting_type: TypeId,
@@ -208,35 +211,45 @@ impl ContextSettingInternalExt for Context {
         setting_type: TypeId,
         setting_id: usize,
         q: T,
-    ) -> Option<PersonId> {
-        self.get_setting_members_internal(setting_type, setting_id)
-            .and_then(|members| {
-                if members.len() == 1 {
-                    return None;
-                }
-                let member_iter = members.iter().filter(|&x| *x != person_id);
+    ) -> Result<Option<PersonId>, IxaError> {
+        let members = self.get_setting_members_internal(setting_type, setting_id);
+        if let Some(members) = members {
+            if !members.contains(&person_id) {
+                return Err(IxaError::from(
+                    "Attempting contact outside of group membership",
+                ));
+            }
+            // The setting has one person in it -- this person
+            if members.len() == 1 {
+                return Ok(None);
+            }
+            let member_iter = members.iter().filter(|&x| *x != person_id);
 
-                let mut contacts = vec![];
-                if q.get_query().is_empty() {
-                    // If the query is empty we push members directly to the vector
-                    for contact in member_iter {
+            let mut contacts = vec![];
+            if q.get_query().is_empty() {
+                // If the query is empty we push members directly to the vector
+                for contact in member_iter {
+                    contacts.push(*contact);
+                }
+            } else {
+                // If the query is not empty, we match setting members to the query
+                for contact in member_iter {
+                    if self.match_person(*contact, q) {
                         contacts.push(*contact);
                     }
-                } else {
-                    // If the query is not empty, we match setting members to the query
-                    for contact in member_iter {
-                        if self.match_person(*contact, q) {
-                            contacts.push(*contact);
-                        }
-                    }
                 }
+            }
 
-                if contacts.is_empty() {
-                    return None;
-                }
+            if contacts.is_empty() {
+                return Ok(None);
+            }
 
-                Some(contacts[self.sample_range(SettingsRng, 0..contacts.len())])
-            })
+            Ok(Some(
+                contacts[self.sample_range(SettingsRng, 0..contacts.len())],
+            ))
+        } else {
+            Err(IxaError::from("Group membership is None"))
+        }
     }
     fn get_setting_members_internal(
         &self,
@@ -301,32 +314,43 @@ impl ContextSettingInternalExt for Context {
 }
 
 impl ContextSettingExt for Context {
-    fn get_setting_properties<T: SettingType + 'static>(&self) -> SettingProperties {
-        let data_container = self
-            .get_data_container(SettingDataPlugin)
-            .unwrap()
-            .setting_properties
-            .get(&TypeId::of::<T>())
-            .unwrap();
-        *data_container
+    fn get_setting_properties<T: SettingType + 'static>(
+        &self,
+    ) -> Result<SettingProperties, IxaError> {
+        let data_container =
+            self.get_data_container(SettingDataPlugin)
+                .ok_or(IxaError::IxaError(
+                    "Setting plugin data is none".to_string(),
+                ))?;
+
+        match data_container.setting_properties.get(&TypeId::of::<T>()) {
+            None => Err(IxaError::from(
+                "Attempting to get properties of unregistered setting type",
+            )),
+            Some(properties) => Ok(*properties),
+        }
     }
     fn register_setting_type<T: SettingType + 'static>(
         &mut self,
         setting_type: T,
         setting_props: SettingProperties,
-    ) {
+    ) -> Result<(), IxaError> {
         let container = self.get_data_container_mut(SettingDataPlugin);
 
-        // Add the setting
-        container
-            .setting_types
-            .insert(TypeId::of::<T>(), Box::new(setting_type));
+        match container.setting_types.entry(TypeId::of::<T>()) {
+            Entry::Vacant(entry) => {
+                entry.insert(Box::new(setting_type));
+            }
+            Entry::Occupied(_) => return Err(IxaError::from("Setting type is already registered")),
+        }
 
         // Add properties
         container
             .setting_properties
             .insert(TypeId::of::<T>(), setting_props);
+        Ok(())
     }
+
     fn add_itinerary(
         &mut self,
         person_id: PersonId,
@@ -337,6 +361,16 @@ impl ContextSettingExt for Context {
         let mut current_setting_ids = vec![];
 
         for itinerary_entry in &itinerary {
+            // TODO: If we are changing a person's itinerary, the person_id should be removed from vector
+            // This isn't the same as the concept of being present or not.
+            if !container
+                .setting_types
+                .contains_key(&itinerary_entry.setting_type)
+            {
+                return Err(IxaError::from(
+                    "Itinerary entry setting type not registered",
+                ));
+            }
             container
                 .members
                 .entry(itinerary_entry.setting_type)
@@ -425,14 +459,14 @@ impl ContextSettingExt for Context {
         person_id: PersonId,
         setting_id: SettingId<T>,
         q: Q,
-    ) -> Option<PersonId> {
+    ) -> Result<Option<PersonId>, IxaError> {
         self.get_contact_internal(person_id, TypeId::of::<T>(), setting_id.id, q)
     }
     fn draw_contact_from_transmitter_itinerary<Q: Query>(
         &self,
         person_id: PersonId,
         q: Q,
-    ) -> Option<PersonId> {
+    ) -> Result<Option<PersonId>, IxaError> {
         let container = self.get_data_container(SettingDataPlugin).unwrap();
         let mut itinerary_multiplier = Vec::new();
         container.with_itinerary(person_id, |setting_type, setting_props, members, ratio| {
@@ -451,7 +485,7 @@ impl ContextSettingExt for Context {
                 q,
             )
         } else {
-            None
+            Ok(None)
         }
     }
 }
@@ -465,16 +499,24 @@ pub fn init(context: &mut Context) {
     for setting in &settings_properties.clone() {
         match setting {
             CoreSettingsTypes::Home { alpha } => {
-                context.register_setting_type(Home {}, SettingProperties { alpha: *alpha });
+                context
+                    .register_setting_type(Home {}, SettingProperties { alpha: *alpha })
+                    .unwrap();
             }
             CoreSettingsTypes::CensusTract { alpha } => {
-                context.register_setting_type(CensusTract {}, SettingProperties { alpha: *alpha });
+                context
+                    .register_setting_type(CensusTract {}, SettingProperties { alpha: *alpha })
+                    .unwrap();
             }
             CoreSettingsTypes::School { alpha } => {
-                context.register_setting_type(School {}, SettingProperties { alpha: *alpha });
+                context
+                    .register_setting_type(School {}, SettingProperties { alpha: *alpha })
+                    .unwrap();
             }
             CoreSettingsTypes::Workplace { alpha } => {
-                context.register_setting_type(Workplace {}, SettingProperties { alpha: *alpha });
+                context
+                    .register_setting_type(Workplace {}, SettingProperties { alpha: *alpha })
+                    .unwrap();
             }
         }
     }
@@ -505,19 +547,78 @@ mod test {
     #[test]
     fn test_setting_type_creation() {
         let mut context = Context::new();
-        context.register_setting_type(Home {}, SettingProperties { alpha: 0.1 });
-        context.register_setting_type(CensusTract {}, SettingProperties { alpha: 0.001 });
-        let home_props = context.get_setting_properties::<Home>();
-        let tract_props = context.get_setting_properties::<CensusTract>();
+        context
+            .register_setting_type(Home {}, SettingProperties { alpha: 0.1 })
+            .unwrap();
+        context
+            .register_setting_type(CensusTract {}, SettingProperties { alpha: 0.001 })
+            .unwrap();
+        let home_props = context.get_setting_properties::<Home>().unwrap();
+        let tract_props = context.get_setting_properties::<CensusTract>().unwrap();
 
         assert_almost_eq!(0.1, home_props.alpha, 0.0);
         assert_almost_eq!(0.001, tract_props.alpha, 0.0);
     }
 
     #[test]
+    fn test_get_properties_after_registration() {
+        let mut context = Context::new();
+        let e = context.get_setting_properties::<Home>().err();
+        match e {
+            Some(IxaError::IxaError(msg)) => {
+                assert_eq!(msg, "Setting plugin data is none");
+            }
+            Some(ue) => panic!(
+                "Expected an error setting plugin data is none. Instead got: {:?}",
+                ue.to_string()
+            ),
+            None => panic!("Expected an error. Instead, validation passed with no errors."),
+        }
+
+        context
+            .register_setting_type(Home {}, SettingProperties { alpha: 0.1 })
+            .unwrap();
+        context.get_setting_properties::<Home>().unwrap();
+        let e = context.get_setting_properties::<CensusTract>().err();
+        match e {
+            Some(IxaError::IxaError(msg)) => {
+                assert_eq!(msg, "Attempting to get properties of unregistered setting type");
+            }
+            Some(ue) => panic!(
+                "Expected an error attempting to get properties of unregistered setting type. Instead got: {:?}",
+                ue.to_string()
+            ),
+            None => panic!("Expected an error. Instead, validation passed with no errors."),
+        }
+    }
+
+    #[test]
+    fn test_duplicate_setting_type_registration() {
+        let mut context = Context::new();
+        context
+            .register_setting_type(Home {}, SettingProperties { alpha: 0.1 })
+            .unwrap();
+        let e = context
+            .register_setting_type(Home {}, SettingProperties { alpha: 0.001 })
+            .err();
+        match e {
+            Some(IxaError::IxaError(msg)) => {
+                assert_eq!(msg, "Setting type is already registered");
+            }
+            Some(ue) => panic!(
+                "Expected an error that there are duplicate settings types. Instead got: {:?}",
+                ue.to_string()
+            ),
+            None => panic!("Expected an error. Instead, validation passed with no errors."),
+        }
+    }
+
+    #[test]
     fn test_duplicated_itinerary() {
         let mut context = Context::new();
-        context.register_setting_type(Home {}, SettingProperties { alpha: 1.0 });
+        context
+            .register_setting_type(Home {}, SettingProperties { alpha: 1.0 })
+            .unwrap();
 
         let person = context.add_person(()).unwrap();
         let itinerary = vec![
@@ -538,9 +639,11 @@ mod test {
     }
 
     #[test]
-    fn test_feasible_itinerary() {
+    fn test_feasible_itinerary_ratio() {
         let mut context = Context::new();
-        context.register_setting_type(Home {}, SettingProperties { alpha: 1.0 });
+        context
+            .register_setting_type(Home {}, SettingProperties { alpha: 1.0 })
+            .unwrap();
 
         let person = context.add_person(()).unwrap();
         let itinerary = vec![ItineraryEntry::new(&SettingId::<Home>::new(1), -0.5)];
@@ -556,9 +659,34 @@ mod test {
     }
 
     #[test]
+    fn test_feasible_itinerary_setting() {
+        let mut context = Context::new();
+        context
+            .register_setting_type(Home {}, SettingProperties { alpha: 1.0 })
+            .unwrap();
+
+        let person = context.add_person(()).unwrap();
+        let itinerary = vec![ItineraryEntry::new(&SettingId::<CensusTract>::new(1), 0.5)];
+
+        let e = context.add_itinerary(person, itinerary).err();
+        match e {
+            Some(IxaError::IxaError(msg)) => {
+                assert_eq!(msg, "Itinerary entry setting type not registered");
+            }
+            Some(ue) => panic!(
+                "Expected an error setting . Instead got: {:?}",
+                ue.to_string()
+            ),
+            None => panic!("Expected an error. Instead, validation passed with no errors."),
+        }
+    }
+
+    #[test]
     fn test_add_itinerary() {
         let mut context = Context::new();
-        context.register_setting_type(Home {}, SettingProperties { alpha: 1.0 });
+        context
+            .register_setting_type(Home {}, SettingProperties { alpha: 1.0 })
+            .unwrap();
 
         let person = context.add_person(()).unwrap();
         let itinerary = vec![
@@ -579,13 +707,37 @@ mod test {
             .get_setting_members::<Home>(SettingId::<Home>::new(2))
             .unwrap();
         assert_eq!(members2.len(), 2);
+
+        let members2 = context
+            .get_setting_members::<Home>(SettingId::<Home>::new(2))
+            .unwrap();
+        assert_eq!(members2.len(), 2);
+
+        let itinerary3 = vec![ItineraryEntry::new(&SettingId::<Home>::new(3), 0.5)];
+        let _ = context.add_itinerary(person, itinerary3);
+        let members2_removed = context
+            .get_setting_members::<Home>(SettingId::<Home>::new(2))
+            .unwrap();
+        assert_eq!(members2_removed.len(), 1);
+        let members3 = context
+            .get_setting_members::<Home>(SettingId::<Home>::new(3))
+            .unwrap();
+        assert_eq!(members3.len(), 1);
+        let members1_removed = context
+            .get_setting_members::<Home>(SettingId::<Home>::new(1))
+            .unwrap();
+        assert_eq!(members1_removed.len(), 0);
     }
 
     #[test]
     fn test_setting_registration() {
         let mut context = Context::new();
-        context.register_setting_type(Home {}, SettingProperties { alpha: 0.1 });
-        context.register_setting_type(CensusTract {}, SettingProperties { alpha: 0.01 });
+        context
+            .register_setting_type(Home {}, SettingProperties { alpha: 0.1 })
+            .unwrap();
+        context
+            .register_setting_type(CensusTract {}, SettingProperties { alpha: 0.01 })
+            .unwrap();
         for s in 0..5 {
             // Create 5 people
             for _ in 0..5 {
@@ -610,9 +762,10 @@ mod test {
 
     #[test]
     fn test_setting_multiplier() {
-        // TODO: if setting not registered, shouldn't be able to register people to setting
         let mut context = Context::new();
-        context.register_setting_type(Home {}, SettingProperties { alpha: 0.1 });
+        context
+            .register_setting_type(Home {}, SettingProperties { alpha: 0.1 })
+            .unwrap();
         for s in 0..5 {
             // Create 5 people
             for _ in 0..5 {
@@ -643,8 +796,12 @@ mod test {
     fn test_total_infectiousness_multiplier() {
         // Go through all the settings and compute infectiousness multiplier
         let mut context = Context::new();
-        context.register_setting_type(Home {}, SettingProperties { alpha: 0.1 });
-        context.register_setting_type(CensusTract {}, SettingProperties { alpha: 0.01 });
+        context
+            .register_setting_type(Home {}, SettingProperties { alpha: 0.1 })
+            .unwrap();
+        context
+            .register_setting_type(CensusTract {}, SettingProperties { alpha: 0.01 })
+            .unwrap();
 
         for s in 0..5 {
             for _ in 0..5 {
@@ -697,11 +854,14 @@ mod test {
     fn test_get_contact_from_setting() {
         // Register two people to a setting and make sure that the person chosen is the other one
         // Attempt to draw a contact from a setting with only the person trying to get a contact
-        // TODO: What happens if the person isn't registered in the setting?
         let mut context = Context::new();
         context.init_random(42);
-        context.register_setting_type(Home {}, SettingProperties { alpha: 0.1 });
-        context.register_setting_type(CensusTract {}, SettingProperties { alpha: 0.01 });
+        context
+            .register_setting_type(Home {}, SettingProperties { alpha: 0.1 })
+            .unwrap();
+        context
+            .register_setting_type(CensusTract {}, SettingProperties { alpha: 0.01 })
+            .unwrap();
 
         let person_a = context.add_person(()).unwrap();
         let person_b = context.add_person(()).unwrap();
@@ -712,16 +872,45 @@ mod test {
         let itinerary_b = vec![ItineraryEntry::new(&SettingId::<Home>::new(0), 1.0)];
         let _ = context.add_itinerary(person_a, itinerary_a);
         let _ = context.add_itinerary(person_b, itinerary_b);
-
         assert_eq!(
-            person_b,
+            Some(person_b),
             context
-                .get_contact(person_a, SettingId::<Home>::new(0), ())
+                .get_contact::<Home, _>(person_a, SettingId::<Home>::new(0), ())
                 .unwrap()
         );
         assert!(context
-            .get_contact(person_a, SettingId::<CensusTract>::new(0), ())
+            .get_contact::<CensusTract, _>(person_a, SettingId::<CensusTract>::new(0), ())
+            .unwrap()
             .is_none());
+
+        let person_c = context.add_person(()).unwrap();
+        let itinerary_c = vec![ItineraryEntry::new(&SettingId::<CensusTract>::new(0), 0.5)];
+        let _ = context.add_itinerary(person_c, itinerary_c);
+        let e = context
+            .get_contact(person_b, SettingId::<CensusTract>::new(0), ())
+            .err();
+        match e {
+            Some(IxaError::IxaError(msg)) => {
+                assert_eq!(msg, "Attempting contact outside of group membership");
+            }
+            Some(ue) => panic!(
+                "Expected an error attempting contact outside group membership. Instead got: {:?}",
+                ue.to_string()
+            ),
+            None => panic!("Expected an error. Instead, validation passed with no errors."),
+        }
+
+        let e = context.get_contact(person_b, SettingId::<CensusTract>::new(10), ());
+        match e {
+            Err(IxaError::IxaError(msg)) => {
+                assert_eq!(msg, "Group membership is None");
+            }
+            Err(ue) => panic!(
+                "Expected an error attempting contact outside group membership. Instead got: {:?}",
+                ue.to_string()
+            ),
+            Ok(_) => panic!("Expected an error. Instead, validation passed with no errors."),
+        }
     }
 
     #[test]
@@ -740,8 +929,12 @@ mod test {
         for seed in 0..100 {
             let mut context = Context::new();
             context.init_random(seed);
-            context.register_setting_type(Home {}, SettingProperties { alpha: 0.1 });
-            context.register_setting_type(CensusTract {}, SettingProperties { alpha: 0.01 });
+            context
+                .register_setting_type(Home {}, SettingProperties { alpha: 0.1 })
+                .unwrap();
+            context
+                .register_setting_type(CensusTract {}, SettingProperties { alpha: 0.01 })
+                .unwrap();
 
             for _ in 0..3 {
                 let person = context.add_person(()).unwrap();
@@ -775,11 +968,11 @@ mod test {
 
             let _ = context.add_itinerary(person, itinerary_home);
             let contact_id_home = context.draw_contact_from_transmitter_itinerary(person, ());
-            assert!(home_members.contains(&contact_id_home.unwrap()));
+            assert!(home_members.contains(&contact_id_home.unwrap().unwrap()));
 
             let _ = context.add_itinerary(person, itinerary_censustract);
             let contact_id_tract = context.draw_contact_from_transmitter_itinerary(person, ());
-            assert!(tract_members.contains(&contact_id_tract.unwrap()));
+            assert!(tract_members.contains(&contact_id_tract.unwrap().unwrap()));
         }
     }
 
@@ -801,8 +994,12 @@ mod test {
          */
         let mut context = Context::new();
         context.init_random(1234);
-        context.register_setting_type(Home {}, SettingProperties { alpha: 0.1 });
-        context.register_setting_type(CensusTract {}, SettingProperties { alpha: 0.01 });
+        context
+            .register_setting_type(Home {}, SettingProperties { alpha: 0.1 })
+            .unwrap();
+        context
+            .register_setting_type(CensusTract {}, SettingProperties { alpha: 0.01 })
+            .unwrap();
 
         for i in 0..3 {
             let person = context.add_person((Age, 42 + i)).unwrap();
@@ -835,7 +1032,9 @@ mod test {
             .clone();
 
         let _ = context.add_itinerary(person, itinerary_home);
-        let contact_id_home = context.draw_contact_from_transmitter_itinerary(person, (Age, 42));
+        let contact_id_home = context
+            .draw_contact_from_transmitter_itinerary(person, (Age, 42))
+            .unwrap();
         assert!(home_members.contains(&contact_id_home.unwrap()));
         assert_eq!(
             context.get_person_property(contact_id_home.unwrap(), Age),
@@ -843,7 +1042,9 @@ mod test {
         );
 
         let _ = context.add_itinerary(person, itinerary_censustract);
-        let contact_id_tract = context.draw_contact_from_transmitter_itinerary(person, (Age, 42));
+        let contact_id_tract = context
+            .draw_contact_from_transmitter_itinerary(person, (Age, 42))
+            .unwrap();
         assert!(tract_members.contains(&contact_id_tract.unwrap()));
         assert_eq!(
             context.get_person_property(contact_id_tract.unwrap(), Age),
