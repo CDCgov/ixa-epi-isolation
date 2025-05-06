@@ -219,6 +219,7 @@ impl ContextSettingInternalExt for Context {
                     "Attempting contact outside of group membership",
                 ));
             }
+            // The setting has one person in it -- this person
             if members.len() == 1 {
                 return Ok(None);
             }
