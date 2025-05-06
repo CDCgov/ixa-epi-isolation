@@ -4,10 +4,10 @@ use ixa::{
 };
 
 use serde::Deserialize;
-use std::{any::TypeId, path::PathBuf};
+use std::path::PathBuf;
 
 use crate::parameters::{ContextParametersExt, Params};
-use crate::settings::{create_itinerary, CensusTract, ContextSettingExt, Home, School, Workplace};
+use crate::settings::{create_core_settings_itinerary, ContextSettingExt};
 
 #[derive(Deserialize, Debug)]
 #[allow(non_snake_case)]
@@ -34,22 +34,24 @@ fn create_person_from_record(
     let school_string: String = String::from_utf8(person_record.schoolId.to_owned())?;
     let workplace_string: String = String::from_utf8(person_record.workplaceId.to_owned())?;
 
-    // Initialize with home and census tract
-    let mut itinerary_entries = vec![
-        (TypeId::of::<CensusTract>(), tract.parse()?),
-        (TypeId::of::<Home>(), home_id.parse()?),
-    ];
+    // Extract home and census tract id
+    let home_id = home_id.parse()?;
+    let tract = tract.parse()?;
+    // Set school and workplace id as none for now
+    let mut school_id = None;
+    let mut workplace_id = None;
 
-    // Check for work and school memberships
-    if !workplace_string.is_empty() {
-        itinerary_entries.push((TypeId::of::<Workplace>(), workplace_string.parse()?));
-    }
+    // Check for school and work memberships
     if !school_string.is_empty() {
-        itinerary_entries.push((TypeId::of::<School>(), school_string.parse()?));
+        school_id = Some(school_string.parse()?);
+    }
+    if !workplace_string.is_empty() {
+        workplace_id = Some(workplace_string.parse()?);
     }
 
     // Create the itinerary using write rules stored in Context
-    let itinerary_person = create_itinerary(context, itinerary_entries)?;
+    let itinerary_person =
+        create_core_settings_itinerary(context, home_id, school_id, workplace_id, tract)?;
     context.add_itinerary(person_id, itinerary_person)?;
 
     Ok(())
@@ -79,9 +81,14 @@ pub fn init(context: &mut Context) -> Result<(), IxaError> {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::parameters::{CoreSettingsTypes, GlobalParams, ItineraryWriteFnType, RateFnType};
-    use crate::settings::{init as settings_init, SettingId};
+    use crate::parameters::{
+        CoreSettingsTypes, GlobalParams, ItinerarySpecificationType, RateFnType,
+    };
+    use crate::settings::{
+        init as settings_init, CensusTract, Home, School, SettingId, SettingProperties, Workplace,
+    };
     use ixa::{ContextGlobalPropertiesExt, ContextPeopleExt};
+    use std::collections::HashMap;
     use std::io::Write;
     use std::path::PathBuf;
     use tempfile::NamedTempFile;
@@ -107,21 +114,47 @@ mod test {
             report_period: 1.0,
             synth_population_file: PathBuf::from("."),
             transmission_report_name: None,
-            settings_properties: vec![
-                CoreSettingsTypes::Home { alpha: 0.0 },
-                CoreSettingsTypes::CensusTract { alpha: 0.0 },
-                CoreSettingsTypes::School { alpha: 0.0 },
-                CoreSettingsTypes::Workplace { alpha: 0.0 },
-            ],
             // We need to specify an itinerary split here even though we don't draw people from
             // itineraries because `load_synth_population` calls `create_itinerary` for each person,
             // and that function requires an itinerary write function to be set.
-            itinerary_fn_type: Some(ItineraryWriteFnType::Split {
-                home: 0.25,
-                school: 0.25,
-                workplace: 0.25,
-                census_tract: 0.25,
-            }),
+            settings_properties: HashMap::from([
+                (
+                    CoreSettingsTypes::Home,
+                    SettingProperties {
+                        alpha: 0.0,
+                        itinerary_specification: Some(ItinerarySpecificationType::Constant {
+                            ratio: 0.25,
+                        }),
+                    },
+                ),
+                (
+                    CoreSettingsTypes::School,
+                    SettingProperties {
+                        alpha: 0.0,
+                        itinerary_specification: Some(ItinerarySpecificationType::Constant {
+                            ratio: 0.25,
+                        }),
+                    },
+                ),
+                (
+                    CoreSettingsTypes::Workplace,
+                    SettingProperties {
+                        alpha: 0.0,
+                        itinerary_specification: Some(ItinerarySpecificationType::Constant {
+                            ratio: 0.25,
+                        }),
+                    },
+                ),
+                (
+                    CoreSettingsTypes::CensusTract,
+                    SettingProperties {
+                        alpha: 0.0,
+                        itinerary_specification: Some(ItinerarySpecificationType::Constant {
+                            ratio: 0.25,
+                        }),
+                    },
+                ),
+            ]),
         };
         context
             .set_global_property_value(GlobalParams, parameters)

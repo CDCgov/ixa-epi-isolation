@@ -85,7 +85,7 @@ pub fn init(context: &mut Context) -> Result<(), IxaError> {
 #[cfg(test)]
 #[allow(clippy::float_cmp)]
 mod test {
-    use std::{cell::RefCell, path::PathBuf, rc::Rc};
+    use std::{cell::RefCell, collections::HashMap, path::PathBuf, rc::Rc};
 
     use ixa::{
         Context, ContextGlobalPropertiesExt, ContextPeopleExt, ContextRandomExt, ExecutionPhase,
@@ -105,7 +105,9 @@ mod test {
             max_total_infectiousness_multiplier, InfectionContextExt, InfectionData,
             InfectionDataValue,
         },
-        parameters::{ContextParametersExt, GlobalParams, Params, RateFnType},
+        parameters::{
+            ContextParametersExt, GlobalParams, ItinerarySpecificationType, Params, RateFnType,
+        },
         rate_fns::load_rate_fns,
         settings::{ContextSettingExt, ItineraryEntry, SettingId, SettingProperties},
     };
@@ -139,18 +141,21 @@ mod test {
             report_period: 1.0,
             synth_population_file: PathBuf::from("."),
             transmission_report_name: None,
-            settings_properties: vec![],
             // We specify the itineraries manually in `set_homogeneous_mixing_itinerary`.
-            itinerary_fn_type: None,
+            settings_properties: HashMap::new(),
         };
         context.init_random(parameters.seed);
         context
             .set_global_property_value(GlobalParams, parameters)
             .unwrap();
 
-        context
-            .register_setting_type(HomogeneousMixing {}, SettingProperties { alpha })
-            .unwrap();
+        context.register_setting_type(
+            HomogeneousMixing,
+            SettingProperties {
+                alpha,
+                itinerary_specification: Some(ItinerarySpecificationType::Constant { ratio: 1.0 }),
+            },
+        ).unwrap();
         context
     }
 

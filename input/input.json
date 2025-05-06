@@ -4,13 +4,10 @@
     "seed": 123,
     "infectiousness_rate_fn": {"Constant": {"rate": 1.0, "duration": 5.0}},
     "initial_infections": 1,
-    "settings_properties": [
-      {"Home": {"alpha": 0.1}},
-      {"Workplace": {"alpha": 0.1}},
-      {"School": {"alpha": 0.1}},
-      {"CensusTract": {"alpha": 0.1}}
-    ],
-    "itinerary_fn_type": {"Split": {"home": 0.25, "school": 0.25, "workplace": 0.25, "census_tract": 0.25}},
+    "settings_properties": {"Home": {"alpha": 1.0, "itinerary_specification": {"Constant": {"ratio": 0.25}}},
+                            "Workplace": {"alpha": 1.0, "itinerary_specification": {"Constant": {"ratio": 0.25}}},
+                            "School": {"alpha": 1.0, "itinerary_specification": {"Constant": {"ratio": 0.25}}},
+                            "CensusTract": {"alpha": 1.0, "itinerary_specification": {"Constant": {"ratio": 0.25}}}},
     "report_period": 1.0,
     "synth_population_file": "input/people_test.csv",
     "transmission_report_name": "transmission_report.csv"

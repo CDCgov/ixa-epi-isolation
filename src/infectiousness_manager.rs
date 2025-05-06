@@ -210,7 +210,7 @@ impl InfectionContextExt for Context {
 #[cfg(test)]
 #[allow(clippy::float_cmp)]
 mod test {
-    use std::path::PathBuf;
+    use std::{collections::HashMap, path::PathBuf};
 
     use super::{
         evaluate_forecast, get_forecast, max_total_infectiousness_multiplier, InfectionContextExt,
@@ -220,7 +220,7 @@ mod test {
         infectiousness_manager::{
             InfectionData, InfectionDataValue, InfectionStatus, InfectionStatusValue,
         },
-        parameters::{GlobalParams, Params, RateFnType},
+        parameters::{GlobalParams, ItinerarySpecificationType, Params, RateFnType},
         rate_fns::load_rate_fns,
         settings::{ContextSettingExt, ItineraryEntry, SettingId, SettingProperties},
     };
@@ -259,16 +259,19 @@ mod test {
                     report_period: 1.0,
                     synth_population_file: PathBuf::from("."),
                     transmission_report_name: None,
-                    settings_properties: vec![],
                     // We set the itineraries manually in `set_homogeneous_mixing_itinerary`.
-                    itinerary_fn_type: None,
+                    settings_properties: HashMap::new(),
                 },
             )
             .unwrap();
         load_rate_fns(&mut context).unwrap();
-        context
-            .register_setting_type(HomogeneousMixing {}, SettingProperties { alpha: 1.0 })
-            .unwrap();
+        context.register_setting_type(
+            HomogeneousMixing,
+            SettingProperties {
+                alpha: 1.0,
+                itinerary_specification: Some(ItinerarySpecificationType::Constant { ratio: 1.0 }),
+            },
+        ).unwrap();
         context
     }
 
