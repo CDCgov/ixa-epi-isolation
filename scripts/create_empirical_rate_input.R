@@ -56,3 +56,12 @@ SEIR_infectious_df <-
     SEIR_infectious_df[order(SEIR_infectious_df$id), ]
 
 write.csv(x = SEIR_infectious_df, file = "input/rate_fns_SEIR.csv", row.names = FALSE)
+
+# set up triangle
+
+triangle_infectious_df <- data.frame(
+    "id" = 1,
+    "time" = c(3, 4, 6),
+    "value" = c(0, 2, 0))
+
+write.csv(x = triangle_infectious_df, file = "input/rate_fn_triangle.csv", row.names = FALSE)
