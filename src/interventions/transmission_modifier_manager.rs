@@ -87,7 +87,6 @@ impl ContextTransmissionModifierExt for Context {
                 TypeId::of::<T>(),
                 Box::new(move |context: &Context, person_id| -> f64 {
                     let property_val = context.get_person_property(person_id, person_property);
-
                     for item in modifier_key {
                         if property_val == item.0 {
                             return item.1;
@@ -119,7 +118,6 @@ impl ContextTransmissionModifierExt for Context {
     fn get_relative_intrinsic_transmission_person(&self, person_id: PersonId) -> f64 {
         let infection_status = self.get_person_property(person_id, InfectionStatus);
 
-        let mut registered_modifiers = Vec::new();
         let transmission_modifier_plugin =
             self.get_data_container(TransmissionModifierPlugin).unwrap();
 
@@ -128,8 +126,10 @@ impl ContextTransmissionModifierExt for Context {
             .get(&infection_status)
             .unwrap();
 
+        let mut registered_modifiers = Vec::new();
         for (t, f) in transmission_modifer_map {
             registered_modifiers.push((*t, f(self, person_id)));
+            println!("value: {}", f(self, person_id));
         }
 
         transmission_modifier_plugin.run_aggregator(infection_status, &registered_modifiers)
@@ -148,4 +148,129 @@ pub fn init(context: &mut Context) {
         Alive,
         &[(true, 1.0), (false, 0.0)],
     );
+}
+
+#[cfg(test)]
+mod test {
+    use ixa::{define_person_property_with_default, Context, ContextPeopleExt, ContextGlobalPropertiesExt, ContextRandomExt};
+    use serde::{Deserialize, Serialize};
+    use std::path::PathBuf;
+
+    use crate::infectiousness_manager::{InfectionData, InfectionDataValue, InfectionStatusValue};
+    use crate::interventions::transmission_modifier_manager::ContextTransmissionModifierExt;
+    use crate::parameters::{Params, GlobalParams, RateFnType, ItineraryWriteFnType};
+    use crate::settings::{ContextSettingExt, SettingProperties, define_setting_type};
+    use crate::rate_fns::{load_rate_fns, InfectiousnessRateExt};
+    
+    define_setting_type!(HomogeneousMixing);
+
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+    pub enum Intervention {
+        Partial,
+        Full,
+    }
+
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+    pub enum InfectiousnessReduction {
+        Partial,
+    }
+
+    pub const SUSCEPTIBLE_PARTIAL: f64 = 0.8;
+    pub const INFECTIOUS_PARTIAL: f64 = 0.5;
+
+    define_person_property_with_default!(InterventionStatus, Option<Intervention>, None);    
+    define_person_property_with_default!(InfectiousnessReductionStatus, Option<InfectiousnessReduction>, None);
+
+    fn setup(seed: u64) -> Context {
+        let mut context = Context::new();
+        context.init_random(0);
+        context
+            .set_global_property_value(
+                GlobalParams,
+                Params {
+                    initial_infections: 1,
+                    max_time: 10.0,
+                    seed,
+                    infectiousness_rate_fn: RateFnType::Constant {
+                        rate: 1.0,
+                        duration: 5.0,
+                    },
+                    symptom_progression_library: None,
+                    report_period: 1.0,
+                    synth_population_file: PathBuf::from("."),
+                    transmission_report_name: None,
+                    settings_properties: vec![],
+                    itinerary_fn_type: ItineraryWriteFnType::SplitEvenly,
+                },
+            )
+            .unwrap();
+        load_rate_fns(&mut context).unwrap();
+        context.register_setting_type(HomogeneousMixing {}, SettingProperties { alpha: 1.0 });
+
+        context.register_transmission_modifier(
+            InfectionStatusValue::Susceptible,
+            InterventionStatus,
+            &[
+                (Some(Intervention::Partial), SUSCEPTIBLE_PARTIAL), 
+                (Some(Intervention::Full), 0.0)
+            ],
+        );
+        context.register_transmission_modifier(
+            InfectionStatusValue::Infectious,
+            InterventionStatus,
+            &[
+                (Some(Intervention::Partial), INFECTIOUS_PARTIAL), 
+                (Some(Intervention::Full), 0.0)
+            ],
+        );
+        context.register_transmission_modifier(
+            InfectionStatusValue::Infectious, 
+            InfectiousnessReductionStatus,
+            &[(Some(InfectiousnessReduction::Partial), INFECTIOUS_PARTIAL)],
+        );
+        context
+    }
+
+    #[test]
+    fn test_transmission_modifier_registration() {
+        let mut context = setup(0);
+
+        let person_id_partial = context.add_person((InterventionStatus, Some(Intervention::Partial))).unwrap();
+        let person_id_full =  context.add_person((InterventionStatus, Some(Intervention::Full))).unwrap();
+
+        assert_eq!(
+            context.get_relative_intrinsic_transmission_person(person_id_partial),
+            SUSCEPTIBLE_PARTIAL
+        );
+        assert_eq!(
+            context.get_relative_intrinsic_transmission_person(person_id_full),
+            0.0
+        );
+    }
+
+    #[test]
+    fn test_get_relative_intrinsic_transmission_person() {
+        let mut context = setup(0);
+
+        let person_id = context.add_person((
+            (InterventionStatus, Some(Intervention::Partial)), 
+            (InfectionData, 
+                InfectionDataValue::Infectious {
+                    infection_time: 0.0, 
+                    rate_fn_id: context.get_random_rate_fn(), 
+                    infected_by: None
+            })
+        )).unwrap();
+
+        assert_eq!(
+            context.get_relative_intrinsic_transmission_person(person_id),
+            INFECTIOUS_PARTIAL
+        );
+
+        context.set_person_property(person_id, InfectiousnessReductionStatus, Some(InfectiousnessReduction::Partial));
+        assert_eq!(
+            context.get_relative_intrinsic_transmission_person(person_id),
+            INFECTIOUS_PARTIAL * INFECTIOUS_PARTIAL
+        );
+    }
 }
