@@ -152,16 +152,19 @@ pub fn init(context: &mut Context) {
 
 #[cfg(test)]
 mod test {
-    use ixa::{define_person_property_with_default, Context, ContextPeopleExt, ContextGlobalPropertiesExt, ContextRandomExt};
+    use ixa::{
+        define_person_property_with_default, Context, ContextGlobalPropertiesExt, ContextPeopleExt,
+        ContextRandomExt,
+    };
     use serde::{Deserialize, Serialize};
     use std::path::PathBuf;
 
     use crate::infectiousness_manager::{InfectionData, InfectionDataValue, InfectionStatusValue};
     use crate::interventions::transmission_modifier_manager::ContextTransmissionModifierExt;
-    use crate::parameters::{Params, GlobalParams, RateFnType, ItineraryWriteFnType};
-    use crate::settings::{ContextSettingExt, SettingProperties, define_setting_type};
+    use crate::parameters::{GlobalParams, ItineraryWriteFnType, Params, RateFnType};
     use crate::rate_fns::{load_rate_fns, InfectiousnessRateExt};
-    
+    use crate::settings::{define_setting_type, ContextSettingExt, SettingProperties};
+
     define_setting_type!(HomogeneousMixing);
 
     #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -178,8 +181,12 @@ mod test {
     pub const SUSCEPTIBLE_PARTIAL: f64 = 0.8;
     pub const INFECTIOUS_PARTIAL: f64 = 0.5;
 
-    define_person_property_with_default!(InterventionStatus, Option<Intervention>, None);    
-    define_person_property_with_default!(InfectiousnessReductionStatus, Option<InfectiousnessReduction>, None);
+    define_person_property_with_default!(InterventionStatus, Option<Intervention>, None);
+    define_person_property_with_default!(
+        InfectiousnessReductionStatus,
+        Option<InfectiousnessReduction>,
+        None
+    );
 
     fn setup(seed: u64) -> Context {
         let mut context = Context::new();
@@ -211,20 +218,20 @@ mod test {
             InfectionStatusValue::Susceptible,
             InterventionStatus,
             &[
-                (Some(Intervention::Partial), SUSCEPTIBLE_PARTIAL), 
-                (Some(Intervention::Full), 0.0)
+                (Some(Intervention::Partial), SUSCEPTIBLE_PARTIAL),
+                (Some(Intervention::Full), 0.0),
             ],
         );
         context.register_transmission_modifier(
             InfectionStatusValue::Infectious,
             InterventionStatus,
             &[
-                (Some(Intervention::Partial), INFECTIOUS_PARTIAL), 
-                (Some(Intervention::Full), 0.0)
+                (Some(Intervention::Partial), INFECTIOUS_PARTIAL),
+                (Some(Intervention::Full), 0.0),
             ],
         );
         context.register_transmission_modifier(
-            InfectionStatusValue::Infectious, 
+            InfectionStatusValue::Infectious,
             InfectiousnessReductionStatus,
             &[(Some(InfectiousnessReduction::Partial), INFECTIOUS_PARTIAL)],
         );
@@ -232,11 +239,16 @@ mod test {
     }
 
     #[test]
+    #[allow(clippy::float_cmp)]
     fn test_transmission_modifier_registration() {
         let mut context = setup(0);
 
-        let person_id_partial = context.add_person((InterventionStatus, Some(Intervention::Partial))).unwrap();
-        let person_id_full =  context.add_person((InterventionStatus, Some(Intervention::Full))).unwrap();
+        let person_id_partial = context
+            .add_person((InterventionStatus, Some(Intervention::Partial)))
+            .unwrap();
+        let person_id_full = context
+            .add_person((InterventionStatus, Some(Intervention::Full)))
+            .unwrap();
 
         assert_eq!(
             context.get_relative_intrinsic_transmission_person(person_id_partial),
@@ -249,25 +261,34 @@ mod test {
     }
 
     #[test]
+    #[allow(clippy::float_cmp)]
     fn test_get_relative_intrinsic_transmission_person() {
         let mut context = setup(0);
 
-        let person_id = context.add_person((
-            (InterventionStatus, Some(Intervention::Partial)), 
-            (InfectionData, 
-                InfectionDataValue::Infectious {
-                    infection_time: 0.0, 
-                    rate_fn_id: context.get_random_rate_fn(), 
-                    infected_by: None
-            })
-        )).unwrap();
+        let person_id = context
+            .add_person((
+                (InterventionStatus, Some(Intervention::Partial)),
+                (
+                    InfectionData,
+                    InfectionDataValue::Infectious {
+                        infection_time: 0.0,
+                        rate_fn_id: context.get_random_rate_fn(),
+                        infected_by: None,
+                    },
+                ),
+            ))
+            .unwrap();
 
         assert_eq!(
             context.get_relative_intrinsic_transmission_person(person_id),
             INFECTIOUS_PARTIAL
         );
 
-        context.set_person_property(person_id, InfectiousnessReductionStatus, Some(InfectiousnessReduction::Partial));
+        context.set_person_property(
+            person_id,
+            InfectiousnessReductionStatus,
+            Some(InfectiousnessReduction::Partial),
+        );
         assert_eq!(
             context.get_relative_intrinsic_transmission_person(person_id),
             INFECTIOUS_PARTIAL * INFECTIOUS_PARTIAL
