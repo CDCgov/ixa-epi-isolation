@@ -265,13 +265,17 @@ mod test {
             )
             .unwrap();
         load_rate_fns(&mut context).unwrap();
-        context.register_setting_type(
-            HomogeneousMixing,
-            SettingProperties {
-                alpha: 1.0,
-                itinerary_specification: Some(ItinerarySpecificationType::Constant { ratio: 1.0 }),
-            },
-        ).unwrap();
+        context
+            .register_setting_type(
+                HomogeneousMixing,
+                SettingProperties {
+                    alpha: 1.0,
+                    itinerary_specification: Some(ItinerarySpecificationType::Constant {
+                        ratio: 1.0,
+                    }),
+                },
+            )
+            .unwrap();
         context
     }
 

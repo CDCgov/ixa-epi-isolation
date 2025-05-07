@@ -149,13 +149,17 @@ mod test {
             .set_global_property_value(GlobalParams, parameters)
             .unwrap();
 
-        context.register_setting_type(
-            HomogeneousMixing,
-            SettingProperties {
-                alpha,
-                itinerary_specification: Some(ItinerarySpecificationType::Constant { ratio: 1.0 }),
-            },
-        ).unwrap();
+        context
+            .register_setting_type(
+                HomogeneousMixing,
+                SettingProperties {
+                    alpha,
+                    itinerary_specification: Some(ItinerarySpecificationType::Constant {
+                        ratio: 1.0,
+                    }),
+                },
+            )
+            .unwrap();
         context
     }
 
