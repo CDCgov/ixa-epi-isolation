@@ -153,8 +153,8 @@ pub fn init(context: &mut Context) {
 #[cfg(test)]
 mod test {
     use ixa::{
-        define_person_property_with_default, Context, ContextGlobalPropertiesExt, ContextPeopleExt,
-        ContextRandomExt,
+        define_person_property, define_person_property_with_default, Context,
+        ContextGlobalPropertiesExt, ContextPeopleExt, ContextRandomExt,
     };
     use serde::{Deserialize, Serialize};
     use std::path::PathBuf;
@@ -168,25 +168,24 @@ mod test {
     define_setting_type!(HomogeneousMixing);
 
     #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-    pub enum Intervention {
+    pub enum MandatoryIntervention {
         Partial,
         Full,
     }
+    define_person_property!(MandatoryInterventionStatus, MandatoryIntervention);
 
     #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
     pub enum InfectiousnessReduction {
         Partial,
     }
-
-    pub const SUSCEPTIBLE_PARTIAL: f64 = 0.8;
-    pub const INFECTIOUS_PARTIAL: f64 = 0.5;
-
-    define_person_property_with_default!(InterventionStatus, Option<Intervention>, None);
     define_person_property_with_default!(
         InfectiousnessReductionStatus,
         Option<InfectiousnessReduction>,
         None
     );
+
+    pub const SUSCEPTIBLE_PARTIAL: f64 = 0.8;
+    pub const INFECTIOUS_PARTIAL: f64 = 0.5;
 
     fn setup(seed: u64) -> Context {
         let mut context = Context::new();
@@ -216,18 +215,18 @@ mod test {
 
         context.register_transmission_modifier(
             InfectionStatusValue::Susceptible,
-            InterventionStatus,
+            MandatoryInterventionStatus,
             &[
-                (Some(Intervention::Partial), SUSCEPTIBLE_PARTIAL),
-                (Some(Intervention::Full), 0.0),
+                (MandatoryIntervention::Partial, SUSCEPTIBLE_PARTIAL),
+                (MandatoryIntervention::Full, 0.0),
             ],
         );
         context.register_transmission_modifier(
             InfectionStatusValue::Infectious,
-            InterventionStatus,
+            MandatoryInterventionStatus,
             &[
-                (Some(Intervention::Partial), INFECTIOUS_PARTIAL),
-                (Some(Intervention::Full), 0.0),
+                (MandatoryIntervention::Partial, INFECTIOUS_PARTIAL),
+                (MandatoryIntervention::Full, 0.0),
             ],
         );
         context.register_transmission_modifier(
@@ -240,16 +239,15 @@ mod test {
 
     #[test]
     #[allow(clippy::float_cmp)]
-    fn test_transmission_modifier_registration() {
+    fn test_transmission_modifier_registration_susceptible() {
         let mut context = setup(0);
 
-        let person_id_partial = context
-            .add_person((InterventionStatus, Some(Intervention::Partial)))
+        let person_id_partial: ixa::PersonId = context
+            .add_person((MandatoryInterventionStatus, MandatoryIntervention::Partial))
             .unwrap();
         let person_id_full = context
-            .add_person((InterventionStatus, Some(Intervention::Full)))
+            .add_person((MandatoryInterventionStatus, MandatoryIntervention::Full))
             .unwrap();
-
         assert_eq!(
             context.get_relative_intrinsic_transmission_person(person_id_partial),
             SUSCEPTIBLE_PARTIAL
@@ -262,12 +260,36 @@ mod test {
 
     #[test]
     #[allow(clippy::float_cmp)]
+    fn test_transmission_modifier_registration_infectious() {
+        let mut context = setup(0);
+
+        let infectious_id = context
+            .add_person((
+                (
+                    InfectionData,
+                    InfectionDataValue::Infectious {
+                        infection_time: 0.0,
+                        rate_fn_id: context.get_random_rate_fn(),
+                        infected_by: None,
+                    },
+                ),
+                (MandatoryInterventionStatus, MandatoryIntervention::Partial),
+            ))
+            .unwrap();
+        assert_eq!(
+            context.get_relative_intrinsic_transmission_person(infectious_id),
+            INFECTIOUS_PARTIAL
+        );
+    }
+
+    #[test]
+    #[allow(clippy::float_cmp)]
     fn test_get_relative_intrinsic_transmission_person() {
         let mut context = setup(0);
 
         let person_id = context
             .add_person((
-                (InterventionStatus, Some(Intervention::Partial)),
+                (MandatoryInterventionStatus, MandatoryIntervention::Partial),
                 (
                     InfectionData,
                     InfectionDataValue::Infectious {
