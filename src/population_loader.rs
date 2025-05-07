@@ -7,7 +7,9 @@ use serde::Deserialize;
 use std::path::PathBuf;
 
 use crate::parameters::{ContextParametersExt, Params};
-use crate::settings::{create_core_settings_itinerary, ContextSettingExt};
+use crate::settings::{
+    append_itinerary_entry, CensusTract, ContextSettingExt, Home, School, Workplace,
+};
 
 #[derive(Deserialize, Debug)]
 #[allow(non_snake_case)]
@@ -34,25 +36,26 @@ fn create_person_from_record(
     let school_string: String = String::from_utf8(person_record.schoolId.to_owned())?;
     let workplace_string: String = String::from_utf8(person_record.workplaceId.to_owned())?;
 
-    // Extract home and census tract id
-    let home_id = home_id.parse()?;
-    let tract = tract.parse()?;
-    // Set school and workplace id as none for now
-    let mut school_id = None;
-    let mut workplace_id = None;
+    // Initialize a vector of home and census tract since everyone has these settings
+    let mut itinerary = vec![];
+    append_itinerary_entry(&mut itinerary, context, Home, home_id.parse()?)?;
+    append_itinerary_entry(&mut itinerary, context, CensusTract, tract.parse()?)?;
 
     // Check for school and work memberships
     if !school_string.is_empty() {
-        school_id = Some(school_string.parse()?);
+        append_itinerary_entry(&mut itinerary, context, School, school_string.parse()?)?;
     }
     if !workplace_string.is_empty() {
-        workplace_id = Some(workplace_string.parse()?);
+        append_itinerary_entry(
+            &mut itinerary,
+            context,
+            Workplace,
+            workplace_string.parse()?,
+        )?;
     }
 
     // Create the itinerary using write rules stored in Context
-    let itinerary_person =
-        create_core_settings_itinerary(context, home_id, school_id, workplace_id, tract)?;
-    context.add_itinerary(person_id, itinerary_person)?;
+    context.add_itinerary(person_id, itinerary)?;
 
     Ok(())
 }

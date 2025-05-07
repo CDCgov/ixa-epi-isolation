@@ -38,7 +38,6 @@ pub struct SettingId<T: SettingType + 'static> {
     pub setting_type: PhantomData<*const T>,
 }
 
-#[allow(dead_code)]
 impl<T: SettingType + 'static> SettingId<T> {
     pub fn new(_setting_type: T, id: usize) -> SettingId<T> {
         SettingId {
@@ -65,101 +64,53 @@ impl ItineraryEntry {
     }
 }
 
-/// Creates an itinerary for use by `context.add_itinerary(PersonId, Vec<ItineraryEntry>)` based on
-/// the provided setting ids and the itinerary ratios specified in the setting properties.
-pub fn create_core_settings_itinerary(
-    context: &Context,
-    home_id: usize,
-    school_id: Option<usize>,
-    workplace_id: Option<usize>,
-    census_tract: usize,
-) -> Result<Vec<ItineraryEntry>, IxaError> {
-    let mut itinerary = vec![];
-    append_if_not_none(
-        &mut itinerary,
-        make_itinerary_entry(context, Home, home_id)?,
-    );
-    append_if_not_none(
-        &mut itinerary,
-        make_itinerary_entry(context, CensusTract, census_tract)?,
-    );
-    if let Some(school_id) = school_id {
-        append_if_not_none(
-            &mut itinerary,
-            make_itinerary_entry(context, School, school_id)?,
-        );
-    }
-    if let Some(workplace_id) = workplace_id {
-        append_if_not_none(
-            &mut itinerary,
-            make_itinerary_entry(context, Workplace, workplace_id)?,
-        );
-    }
-    Ok(itinerary)
-}
-
-fn append_if_not_none(v: &mut Vec<ItineraryEntry>, entry: Option<ItineraryEntry>) {
-    if let Some(entry) = entry {
-        v.push(entry);
-    }
-}
-
-fn make_itinerary_entry<T: SettingType + Copy + 'static>(
+pub fn append_itinerary_entry<T: SettingType + Copy + 'static>(
+    itinerary: &mut Vec<ItineraryEntry>,
     context: &Context,
     setting_type: T,
     setting_id: usize,
-) -> Result<Option<ItineraryEntry>, IxaError> {
-    // Our population loader model is hard coded to extract the information necessary to put
-    // people into the settings of home, school, work, and census tract. However, sometimes,
-    // we don't want all those settings but rather just the ones that are specified in the input.
+) -> Result<(), IxaError> {
+    // Is this setting type registered? Our population loader is hard coded to always try to put
+    // people in the core setting types, but sometimes we don't want all the core setting types
+    // (we didn't specify them). So, first check that the setting in question exists.
     if context
         .get_data_container(SettingDataPlugin)
         .ok_or(IxaError::IxaError(
-            "Settings must be initialized prior to making itineraries".to_string(),
+            "Settings must be initialized prior to making itineraries.".to_string(),
         ))?
-        .setting_types
+        .setting_properties
         .contains_key(&TypeId::of::<T>())
     {
-        let ratio = get_setting_type_ratio_sample(context, setting_type)?;
-        // If the setting is still specified but the itinerary ratio is 0, don't add it to the
-        // itinerary.
-        if ratio == 0.0 {
-            return Ok(None);
+        let ratio = get_itinerary_ratio(context, setting_type)?;
+        // No point in adding an itinerary entry if the ratio is zero
+        if ratio != 0.0 {
+            itinerary.push(ItineraryEntry::new(
+                &SettingId::new(setting_type, setting_id),
+                ratio,
+            ));
         }
-        Ok(Some(ItineraryEntry::new(
-            &SettingId::new(setting_type, setting_id),
-            ratio,
-        )))
-    } else {
-        Ok(None)
     }
+    Ok(())
 }
 
-fn get_setting_type_ratio_sample<T: SettingType + 'static>(
+// In the future, this method could take the person id as an argument for making individual-level
+// itineraries.
+fn get_itinerary_ratio<T: SettingType + 'static>(
     context: &Context,
     _setting_type: T,
 ) -> Result<f64, IxaError> {
-    let data_container =
-        context
-            .get_data_container(SettingDataPlugin)
-            .ok_or(IxaError::IxaError(
-                "Settings must be initialized prior to making itineraries.".to_string(),
-            ))?;
-
-    let setting_properties = data_container
+    let setting_properties = context
+        .get_data_container(SettingDataPlugin)
+        .unwrap() // We can unwrap here because we would have already propagated an error in the
+        // calling code if the settings data container did not exist.
         .setting_properties
         .get(&TypeId::of::<T>())
-        .ok_or(IxaError::IxaError(
-            "Setting type must be registered before setting up itineraries.".to_string(),
-        ))?;
+        .unwrap(); // We can unwrap here because we already checked that this setting type exists
 
     match setting_properties.itinerary_specification {
         Some(ItinerarySpecificationType::Constant { ratio }) => Ok(ratio),
         None => Err(IxaError::IxaError(
-            "Itinerary specification type is None.
-        This means that no method for specifying the itineraries has been provided,
-        but `create_core_settings_itinerary` is still being called.
-        Perhaps you mean to specify itineraries manually?"
+            "Itinerary specification type is None, so ratios must be specified manually."
                 .to_string(),
         )),
     }
@@ -243,6 +194,7 @@ define_data_plugin!(
 pub trait ContextSettingExt {
     fn get_setting_properties<T: SettingType + 'static>(
         &self,
+        setting_type: T,
     ) -> Result<SettingProperties, IxaError>;
     fn register_setting_type<T: SettingType + 'static>(
         &mut self,
@@ -347,9 +299,7 @@ impl ContextSettingInternalExt for Context {
 }
 
 impl ContextSettingExt for Context {
-    fn get_setting_properties<T: SettingType + 'static>(
-        &self,
-    ) -> Result<SettingProperties, IxaError> {
+    fn get_setting_properties<T: SettingType + 'static>(&self, _setting_properties: T) -> Result<SettingProperties, IxaError> {
         let data_container =
             self.get_data_container(SettingDataPlugin)
                 .ok_or(IxaError::IxaError(
@@ -593,8 +543,8 @@ mod test {
                 itinerary_specification: Some(ItinerarySpecificationType::Constant { ratio: 0.25 }),
             },
         ).unwrap();
-        let home_props = context.get_setting_properties::<Home>().unwrap();
-        let tract_props = context.get_setting_properties::<CensusTract>().unwrap();
+        let home_props = context.get_setting_properties(Home).unwrap();
+        let tract_props = context.get_setting_properties(CensusTract).unwrap();
 
         assert_almost_eq!(0.1, home_props.alpha, 0.0);
         assert_eq!(
@@ -611,7 +561,7 @@ mod test {
     #[test]
     fn test_get_properties_after_registration() {
         let mut context = Context::new();
-        let e = context.get_setting_properties::<Home>().err();
+        let e = context.get_setting_properties(Home).err();
         match e {
             Some(IxaError::IxaError(msg)) => {
                 assert_eq!(msg, "Setting plugin data is none");
@@ -626,8 +576,8 @@ mod test {
         context
             .register_setting_type(Home {}, SettingProperties { alpha: 0.1, itinerary_specification: None })
             .unwrap();
-        context.get_setting_properties::<Home>().unwrap();
-        let e = context.get_setting_properties::<CensusTract>().err();
+        context.get_setting_properties(Home).unwrap();
+        let e = context.get_setting_properties(CensusTract).err();
         match e {
             Some(IxaError::IxaError(msg)) => {
                 assert_eq!(msg, "Attempting to get properties of unregistered setting type");
@@ -1181,90 +1131,6 @@ mod test {
         );
     }
 
-    #[allow(clippy::unnecessary_literal_unwrap)]
-    #[test]
-    fn test_make_itinerary_entry() {
-        let mut context = Context::new();
-        context.register_setting_type(
-            Home,
-            SettingProperties {
-                alpha: 0.1,
-                itinerary_specification: Some(ItinerarySpecificationType::Constant { ratio: 0.5 }),
-            },
-        ).unwrap();
-        context.register_setting_type(
-            CensusTract,
-            SettingProperties {
-                alpha: 0.01,
-                itinerary_specification: Some(ItinerarySpecificationType::Constant { ratio: 0.25 }),
-            },
-        ).unwrap();
-        context.register_setting_type(
-            School,
-            SettingProperties {
-                alpha: 0.2,
-                itinerary_specification: Some(ItinerarySpecificationType::Constant { ratio: 0.0 }),
-            },
-        ).unwrap();
-        context.register_setting_type(
-            Workplace,
-            SettingProperties {
-                alpha: 0.05,
-                itinerary_specification: Some(ItinerarySpecificationType::Constant { ratio: 0.2 }),
-            },
-        ).unwrap();
-
-        let home_id = 1;
-        let census_tract_id = 2;
-        let school_id = Some(3);
-        let workplace_id = Some(4);
-
-        // Test creating an itinerary with all settings
-        let itinerary = create_core_settings_itinerary(
-            &context,
-            home_id,
-            school_id,
-            workplace_id,
-            census_tract_id,
-        )
-        .unwrap();
-
-        assert_eq!(itinerary.len(), 3);
-        // Home
-        assert_eq!(itinerary[0].setting_type, TypeId::of::<Home>());
-        assert_eq!(itinerary[0].setting_id, home_id);
-        assert_almost_eq!(itinerary[0].ratio, 0.5, 0.0);
-        // Census tract
-        assert_eq!(itinerary[1].setting_type, TypeId::of::<CensusTract>());
-        assert_eq!(itinerary[1].setting_id, census_tract_id);
-        assert_almost_eq!(itinerary[1].ratio, 0.25, 0.0);
-        // Workplace
-        assert_eq!(itinerary[2].setting_type, TypeId::of::<Workplace>());
-        assert_eq!(itinerary[2].setting_id, workplace_id.unwrap());
-        assert_almost_eq!(itinerary[2].ratio, 0.2, 0.0);
-
-        // Test creating an itinerary without school and workplace
-        let itinerary_no_school_workplace =
-            create_core_settings_itinerary(&context, home_id, None, None, census_tract_id).unwrap();
-
-        assert_eq!(itinerary_no_school_workplace.len(), 2);
-        // Home
-        assert_eq!(
-            itinerary_no_school_workplace[0].setting_type,
-            TypeId::of::<Home>()
-        );
-        assert_eq!(itinerary_no_school_workplace[0].setting_id, home_id);
-        assert_almost_eq!(itinerary_no_school_workplace[0].ratio, 0.5, 0.0);
-
-        // Census tract
-        assert_eq!(
-            itinerary_no_school_workplace[1].setting_type,
-            TypeId::of::<CensusTract>()
-        );
-        assert_eq!(itinerary_no_school_workplace[1].setting_id, census_tract_id);
-        assert_almost_eq!(itinerary_no_school_workplace[1].ratio, 0.25, 0.0);
-    }
-
     #[test]
     fn test_itinerary_specification_none() {
         let mut context = Context::new();
@@ -1275,22 +1141,12 @@ mod test {
                 itinerary_specification: None,
             },
         ).unwrap();
-        context.register_setting_type(
-            CensusTract,
-            SettingProperties {
-                alpha: 0.01,
-                itinerary_specification: None,
-            },
-        ).unwrap();
-        let e = create_core_settings_itinerary(&context, 1, None, None, 1).err();
+        let e = get_itinerary_ratio(&context, Home).err();
         match e {
             Some(IxaError::IxaError(msg)) => {
                 assert_eq!(
                     msg,
-                    "Itinerary specification type is None.
-        This means that no method for specifying the itineraries has been provided,
-        but `create_core_settings_itinerary` is still being called.
-        Perhaps you mean to specify itineraries manually?"
+                    "Itinerary specification type is None, so ratios must be specified manually."
                 );
             }
             Some(ue) => panic!(
@@ -1299,6 +1155,55 @@ mod test {
             ),
             None => panic!("Expected an error. Instead, validation passed with no errors."),
         }
+    }
+
+    #[test]
+    fn test_append_itinerary_entry() {
+        let mut context = Context::new();
+        context.register_setting_type(
+            Home,
+            SettingProperties {
+                alpha: 0.1,
+                itinerary_specification: Some(ItinerarySpecificationType::Constant { ratio: 0.5 }),
+            },
+        ).unwrap();
+        context.register_setting_type(
+            School,
+            SettingProperties {
+                alpha: 0.2,
+                itinerary_specification: Some(ItinerarySpecificationType::Constant { ratio: 0.25 }),
+            },
+        ).unwrap();
+        let mut itinerary = vec![];
+
+        // Test appending a valid entry
+        append_itinerary_entry(&mut itinerary, &context, Home, 1).unwrap();
+        assert_eq!(itinerary.len(), 1);
+        assert_eq!(itinerary[0].setting_type, TypeId::of::<Home>());
+        assert_eq!(itinerary[0].setting_id, 1);
+        assert_almost_eq!(itinerary[0].ratio, 0.5, 0.0);
+
+        // Test appending an entry with a different setting type
+        append_itinerary_entry(&mut itinerary, &context, School, 42).unwrap();
+        assert_eq!(itinerary.len(), 2);
+        assert_eq!(itinerary[1].setting_type, TypeId::of::<School>());
+        assert_eq!(itinerary[1].setting_id, 42);
+    }
+
+    #[test]
+    fn test_get_itinerary_ratio() {
+        let mut context = Context::new();
+        context.register_setting_type(
+            Home,
+            SettingProperties {
+                alpha: 0.1,
+                itinerary_specification: Some(ItinerarySpecificationType::Constant { ratio: 0.5 }),
+            },
+        ).unwrap();
+
+        // Test with a valid setting type
+        let ratio = get_itinerary_ratio(&context, Home).unwrap();
+        assert_almost_eq!(ratio, 0.5, 0.0);
     }
 
     #[test]
@@ -1316,26 +1221,15 @@ mod test {
             report_period: 1.0,
             synth_population_file: PathBuf::from("."),
             transmission_report_name: None,
-            settings_properties: HashMap::from([
-                (
-                    CoreSettingsTypes::Home,
-                    SettingProperties {
-                        alpha: 0.5,
-                        itinerary_specification: Some(ItinerarySpecificationType::Constant {
-                            ratio: 0.5,
-                        }),
-                    },
-                ),
-                (
-                    CoreSettingsTypes::School,
-                    SettingProperties {
-                        alpha: 0.5,
-                        itinerary_specification: Some(ItinerarySpecificationType::Constant {
-                            ratio: 0.5,
-                        }),
-                    },
-                ),
-            ]),
+            settings_properties: HashMap::from([(
+                CoreSettingsTypes::Home,
+                SettingProperties {
+                    alpha: 0.5,
+                    itinerary_specification: Some(ItinerarySpecificationType::Constant {
+                        ratio: 0.5,
+                    }),
+                },
+            )]),
         };
 
         context
@@ -1343,11 +1237,14 @@ mod test {
             .unwrap();
 
         init(&mut context);
-        let i = create_core_settings_itinerary(&context, 1, Some(1), Some(1), 1).unwrap();
+        let mut iitinerary = vec![];
+        append_itinerary_entry(&mut iitinerary, &context, Workplace, 1).unwrap();
 
-        assert_eq!(i.len(), 2);
-        assert_eq!(i[0].setting_type, TypeId::of::<Home>());
-        assert_eq!(i[1].setting_type, TypeId::of::<School>());
+        assert_eq!(iitinerary.len(), 0);
+
+        append_itinerary_entry(&mut iitinerary, &context, Home, 1).unwrap();
+        assert_eq!(iitinerary.len(), 1);
+        assert_eq!(iitinerary[0].setting_type, TypeId::of::<Home>());
     }
 
     #[test]
@@ -1360,24 +1257,28 @@ mod test {
                 alpha: 0.1,
                 itinerary_specification: Some(ItinerarySpecificationType::Constant { ratio: 5.0 }),
             },
-        );
+        ).unwrap();
         context.register_setting_type(
             CensusTract,
             SettingProperties {
                 alpha: 0.01,
                 itinerary_specification: Some(ItinerarySpecificationType::Constant { ratio: 2.5 }),
             },
-        );
+        ).unwrap();
         context.register_setting_type(
             School,
             SettingProperties {
                 alpha: 0.2,
                 itinerary_specification: Some(ItinerarySpecificationType::Constant { ratio: 2.5 }),
             },
-        );
+        ).unwrap();
 
         // Test creating an itinerary with all settings
-        let itinerary = create_core_settings_itinerary(&context, 1, Some(1), None, 1).unwrap();
+        let mut itinerary = vec![];
+        append_itinerary_entry(&mut itinerary, &context, Home, 1).unwrap();
+        append_itinerary_entry(&mut itinerary, &context, CensusTract, 1).unwrap();
+        append_itinerary_entry(&mut itinerary, &context, School, 1).unwrap();
+
         context.add_itinerary(person, itinerary).unwrap();
         let itinerary = context.get_itinerary(person).unwrap();
 

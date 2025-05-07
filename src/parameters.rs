@@ -64,18 +64,26 @@ fn validate_inputs(parameters: &Params) -> Result<(), IxaError> {
         ));
     }
 
+    // If all the itinerary ratios are None, we can't validate them.
+    // If some of them are zero and the rest are none, we still shouldn't fail.
+    // We only want to fail when all of them are 0.
+    // Instead of holding the itinerary ratios in a vector, we sum them because we error if they
+    // are negative, so if their sum is 0.0, they must all be 0.0.
     let mut itinerary_ratio_sum = None;
+    let mut some_none = false;
 
     for setting in parameters.settings_properties.values() {
         let alpha = setting.alpha;
         let itinerary_ratio = setting
             .itinerary_specification
             .map(|ItinerarySpecificationType::Constant { ratio }| ratio);
+        // Check alpha
         if !(0.0..=1.0).contains(&alpha) {
             return Err(IxaError::IxaError(
                 "The alpha values for each setting must be between 0 and 1, inclusive.".to_string(),
             ));
         }
+        // Check itinerary ratio
         if let Some(itinerary_ratio) = itinerary_ratio {
             if itinerary_ratio < 0.0 {
                 return Err(IxaError::IxaError(
@@ -87,10 +95,14 @@ fn validate_inputs(parameters: &Params) -> Result<(), IxaError> {
             } else {
                 itinerary_ratio_sum = Some(itinerary_ratio);
             }
+        } else {
+            // Means that we have a none variant, so even if the sum is 0.0, we can't error because
+            // we don't know how the None itinerary will be specified in the code.
+            some_none = true;
         }
     }
     if let Some(itinerary_ratio_sum) = itinerary_ratio_sum {
-        if itinerary_ratio_sum == 0.0 {
+        if !some_none && itinerary_ratio_sum == 0.0 {
             return Err(IxaError::IxaError(
                 "At least one itinerary ratio must be greater than zero.".to_string(),
             ));
@@ -308,6 +320,43 @@ mod test {
                     SettingProperties {
                         alpha: 0.5,
                         itinerary_specification: None,
+                    },
+                ),
+                (
+                    CoreSettingsTypes::School,
+                    SettingProperties {
+                        alpha: 0.5,
+                        itinerary_specification: None,
+                    },
+                ),
+            ]),
+        };
+        let e = validate_inputs(&parameters).err();
+        assert!(e.is_none(), "Expected no error, but got: {e:?}");
+    }
+
+    #[test]
+    fn test_validation_itinerary_one_some_zero_rest_none() {
+        let parameters = Params {
+            initial_infections: 1,
+            max_time: 100.0,
+            seed: 0,
+            infectiousness_rate_fn: RateFnType::Constant {
+                rate: 1.0,
+                duration: 5.0,
+            },
+            symptom_progression_library: None,
+            report_period: 1.0,
+            synth_population_file: PathBuf::from("."),
+            transmission_report_name: None,
+            settings_properties: HashMap::from([
+                (
+                    CoreSettingsTypes::Home,
+                    SettingProperties {
+                        alpha: 0.5,
+                        itinerary_specification: Some(ItinerarySpecificationType::Constant {
+                            ratio: 0.0,
+                        }),
                     },
                 ),
                 (
