@@ -99,7 +99,9 @@ impl ContextTransmissionModifierExt for Context {
 
         self.get_data_container_mut(TransmissionModifierPlugin)
             .transmission_modifier_map
-            .insert(infection_status, transmission_modifier_map);
+            .entry(infection_status)
+            .or_default()
+            .extend(transmission_modifier_map);
     }
 
     fn register_transmission_aggregator(
@@ -129,7 +131,6 @@ impl ContextTransmissionModifierExt for Context {
         let mut registered_modifiers = Vec::new();
         for (t, f) in transmission_modifer_map {
             registered_modifiers.push((*t, f(self, person_id)));
-            println!("value: {}", f(self, person_id));
         }
 
         transmission_modifier_plugin.run_aggregator(infection_status, &registered_modifiers)
@@ -157,9 +158,12 @@ mod test {
         ContextGlobalPropertiesExt, ContextPeopleExt, ContextRandomExt,
     };
     use serde::{Deserialize, Serialize};
+    use statrs::assert_almost_eq;
     use std::path::PathBuf;
 
-    use crate::infectiousness_manager::{InfectionData, InfectionDataValue, InfectionStatusValue};
+    use crate::infectiousness_manager::{
+        infection_attempt, InfectionData, InfectionDataValue, InfectionStatusValue,
+    };
     use crate::interventions::transmission_modifier_manager::ContextTransmissionModifierExt;
     use crate::parameters::{GlobalParams, ItineraryWriteFnType, Params, RateFnType};
     use crate::rate_fns::{load_rate_fns, InfectiousnessRateExt};
@@ -171,6 +175,7 @@ mod test {
     pub enum MandatoryIntervention {
         Partial,
         Full,
+        NoEffect,
     }
     define_person_property!(MandatoryInterventionStatus, MandatoryIntervention);
 
@@ -187,9 +192,9 @@ mod test {
     pub const SUSCEPTIBLE_PARTIAL: f64 = 0.8;
     pub const INFECTIOUS_PARTIAL: f64 = 0.5;
 
-    fn setup(seed: u64) -> Context {
+    fn setup(seed: u64, rate: f64) -> Context {
         let mut context = Context::new();
-        context.init_random(0);
+        context.init_random(seed);
         context
             .set_global_property_value(
                 GlobalParams,
@@ -198,7 +203,7 @@ mod test {
                     max_time: 10.0,
                     seed,
                     infectiousness_rate_fn: RateFnType::Constant {
-                        rate: 1.0,
+                        rate,
                         duration: 5.0,
                     },
                     symptom_progression_library: None,
@@ -240,7 +245,7 @@ mod test {
     #[test]
     #[allow(clippy::float_cmp)]
     fn test_transmission_modifier_registration_susceptible() {
-        let mut context = setup(0);
+        let mut context = setup(0, 1.0);
 
         let person_id_partial: ixa::PersonId = context
             .add_person((MandatoryInterventionStatus, MandatoryIntervention::Partial))
@@ -261,7 +266,7 @@ mod test {
     #[test]
     #[allow(clippy::float_cmp)]
     fn test_transmission_modifier_registration_infectious() {
-        let mut context = setup(0);
+        let mut context = setup(0, 1.0);
 
         let infectious_id = context
             .add_person((
@@ -285,7 +290,7 @@ mod test {
     #[test]
     #[allow(clippy::float_cmp)]
     fn test_get_relative_intrinsic_transmission_person() {
-        let mut context = setup(0);
+        let mut context = setup(0, 1.0);
 
         let person_id = context
             .add_person((
@@ -315,5 +320,22 @@ mod test {
             context.get_relative_intrinsic_transmission_person(person_id),
             INFECTIOUS_PARTIAL * INFECTIOUS_PARTIAL
         );
+    }
+
+    #[test]
+    #[allow(clippy::cast_precision_loss, clippy::cast_lossless)]
+    fn test_rejection_sample_intervention_infection_attempt() {
+        let n = 1000;
+        let mut count = 0;
+        for i in 0..n {
+            let mut context = setup(i, 1.0);
+            let person = context
+                .add_person((MandatoryInterventionStatus, MandatoryIntervention::Partial))
+                .unwrap();
+            if infection_attempt(&context, person) {
+                count += 1;
+            }
+        }
+        assert_almost_eq!(count as f64 / n as f64, SUSCEPTIBLE_PARTIAL, 0.01);
     }
 }
