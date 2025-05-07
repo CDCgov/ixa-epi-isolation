@@ -135,3 +135,19 @@ ixa_SIR_df |>
   scale_linewidth_manual(values = c(0.1, 1, 1)) +
   theme_minimal() + 
   geom_line(data = ode_results_df |> filter(InfectionStatus == "Recovered"), col = "blue")
+
+
+ixa_triangle_df <- read.csv("./output/output_simple_triangle.csv")
+
+ixa_triangle_df |>
+  filter(InfectionStatus == "Recovered") |>
+  ggplot(aes(x = t, y = count, group = paste(InfectionStatus, ixa_rep))) +
+  geom_line(
+    aes(color = InfectionStatus, linewidth = model, linetype = model)
+  ) +
+  xlab("Day") +
+  ylab("Number of people") +
+  scale_linetype_manual(values = c(1, 2, 3)) +
+  scale_linewidth_manual(values = c(0.1, 1, 1)) +
+  theme_minimal() + 
+  geom_line(data = ode_results_df |> filter(InfectionStatus == "Recovered"), col = "blue")
