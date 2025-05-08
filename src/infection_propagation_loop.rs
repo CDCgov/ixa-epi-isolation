@@ -20,8 +20,9 @@ fn schedule_next_forecasted_infection(context: &mut Context, person: PersonId) {
     {
         context.add_plan(next_time, move |context| {
             if evaluate_forecast(context, person, forecasted_total_infectiousness) {
-                if let Some(next_contact) =
-                    context.draw_contact_from_transmitter_itinerary(person, (Alive, true)).unwrap()
+                if let Some(next_contact) = context
+                    .draw_contact_from_transmitter_itinerary(person, (Alive, true))
+                    .unwrap()
                 {
                     if infection_attempt(context, next_contact) {
                         trace!("Person {person}: Forecast accepted, infecting {next_contact}");
