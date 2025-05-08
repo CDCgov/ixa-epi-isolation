@@ -90,11 +90,12 @@ pub fn init(context: &mut Context) -> Result<(), IxaError> {
 #[cfg(test)]
 #[allow(clippy::float_cmp)]
 mod test {
+    use serde::{Deserialize, Serialize};
     use std::{cell::RefCell, collections::HashMap, path::PathBuf, rc::Rc};
 
     use ixa::{
-        Context, ContextGlobalPropertiesExt, ContextPeopleExt, ContextRandomExt, ExecutionPhase,
-        IxaError, PersonId, PersonPropertyChangeEvent,
+        define_person_property_with_default, Context, ContextGlobalPropertiesExt, ContextPeopleExt,
+        ContextRandomExt, ExecutionPhase, IxaError, PersonId, PersonPropertyChangeEvent,
     };
     use statrs::{
         assert_almost_eq,
@@ -110,6 +111,7 @@ mod test {
             max_total_infectiousness_multiplier, InfectionContextExt, InfectionData,
             InfectionDataValue,
         },
+        interventions::ContextTransmissionModifierExt,
         parameters::{
             ContextParametersExt, GlobalParams, ItinerarySpecificationType, Params, RateFnType,
         },
@@ -273,6 +275,18 @@ mod test {
         );
     }
 
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+    pub enum InfectiousnessReduction {
+        Partial,
+    }
+    define_person_property_with_default!(
+        InfectiousnessReductionStatus,
+        Option<InfectiousnessReduction>,
+        None
+    );
+
+    pub const INFECTIOUS_PARTIAL: f64 = 0.7;
+
     #[test]
     fn test_number_timing_infections_one_time_unit() {
         // Does one infectious person generate the number of infections as expected by the rate?
@@ -295,6 +309,7 @@ mod test {
         let alpha = 0.42;
         // We need the total infectiousness multiplier for the person.
         let mut total_infectiousness_multiplier = None;
+        let mut modifier = 1.0;
         // Where we store the infection times.
         let infection_times = Rc::new(RefCell::new(Vec::<f64>::new()));
         let num_infected = Rc::new(RefCell::new(0usize));
@@ -302,6 +317,13 @@ mod test {
             let infection_times_clone = Rc::clone(&infection_times);
             let num_infected_clone = Rc::clone(&num_infected);
             let mut context = setup_context(seed, rate, alpha);
+
+            context.register_transmission_modifier(
+                InfectionStatusValue::Infectious,
+                InfectiousnessReductionStatus,
+                &[(Some(InfectiousnessReduction::Partial), INFECTIOUS_PARTIAL)],
+            );
+
             // We only run the simulation for 1.0 time units.
             context.add_plan_with_phase(1.0, ixa::Context::shutdown, ExecutionPhase::Last);
             // Add a a person who will get infected.
@@ -312,7 +334,12 @@ mod test {
             // people becoming infectious that lets them transmit.
             load_rate_fns(&mut context).unwrap();
             // Add our infectious fellow.
-            let infectious_person = context.add_person(()).unwrap();
+            let infectious_person = context
+                .add_person((
+                    InfectiousnessReductionStatus,
+                    Some(InfectiousnessReduction::Partial),
+                ))
+                .unwrap();
             set_homogeneous_mixing_itinerary(&mut context, infectious_person).unwrap();
 
             context.infect_person(infectious_person, None);
@@ -323,6 +350,7 @@ mod test {
                     infectious_person,
                 ));
             }
+            modifier = context.get_relative_intrinsic_transmission_person(infectious_person);
             // Add a watcher for when people are infected to record the infection times.
             context.subscribe_to_event::<PersonPropertyChangeEvent<InfectionStatus>>(
                 move |context, event| {
@@ -345,13 +373,15 @@ mod test {
             schedule_next_forecasted_infection(&mut context, infectious_person);
             context.execute();
         }
+
         #[allow(clippy::cast_precision_loss)]
         let avg_number_infections = num_infected.take() as f64 / num_sims as f64;
         assert_almost_eq!(
             avg_number_infections,
-            rate * total_infectiousness_multiplier.unwrap(),
+            modifier * rate * total_infectiousness_multiplier.unwrap(),
             0.05
         );
+        assert_eq!(modifier, INFECTIOUS_PARTIAL);
         // Check whether the times at when people are infected fall uniformly on [0, 1].
         check_ks_stat(&mut infection_times.borrow_mut(), |x| {
             Uniform::new(0.0, 1.0).unwrap().cdf(x)
