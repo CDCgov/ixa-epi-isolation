@@ -155,21 +155,22 @@ pub fn init(context: &mut Context) {
 mod test {
     use ixa::{
         define_person_property, define_person_property_with_default, Context,
-        ContextGlobalPropertiesExt, ContextPeopleExt, ContextRandomExt,
+        ContextGlobalPropertiesExt, ContextPeopleExt, ContextRandomExt, IxaError, PersonId,
     };
     use serde::{Deserialize, Serialize};
     use statrs::assert_almost_eq;
-    use std::path::PathBuf;
+    use std::{any::TypeId, path::PathBuf};
 
     use crate::infectiousness_manager::{
-        infection_attempt, InfectionData, InfectionDataValue, InfectionStatusValue,
+        evaluate_forecast, get_forecast, infection_attempt, InfectionContextExt, InfectionData,
+        InfectionDataValue, InfectionStatusValue,
     };
     use crate::interventions::transmission_modifier_manager::ContextTransmissionModifierExt;
     use crate::parameters::{GlobalParams, ItineraryWriteFnType, Params, RateFnType};
     use crate::rate_fns::{load_rate_fns, InfectiousnessRateExt};
-    use crate::settings::{define_setting_type, ContextSettingExt, SettingProperties};
-
-    define_setting_type!(HomogeneousMixing);
+    use crate::settings::{
+        create_itinerary, define_setting_type, ContextSettingExt, SettingProperties,
+    };
 
     #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
     pub enum MandatoryIntervention {
@@ -191,6 +192,15 @@ mod test {
 
     pub const SUSCEPTIBLE_PARTIAL: f64 = 0.8;
     pub const INFECTIOUS_PARTIAL: f64 = 0.5;
+
+    define_setting_type!(HomogeneousMixing);
+    fn set_homogenous_mixing_itinerary(
+        context: &mut Context,
+        person_id: PersonId,
+    ) -> Result<(), IxaError> {
+        let itinerary = create_itinerary(context, vec![(TypeId::of::<HomogeneousMixing>(), 0)])?;
+        context.add_itinerary(person_id, itinerary)
+    }
 
     fn setup(seed: u64, rate: f64) -> Context {
         let mut context = Context::new();
@@ -324,7 +334,7 @@ mod test {
 
     #[test]
     #[allow(clippy::cast_precision_loss, clippy::cast_lossless)]
-    fn test_rejection_sample_intervention_infection_attempt() {
+    fn test_rejection_sample_infection_attempt_intervention() {
         let n = 1000;
         let mut count = 0;
         for i in 0..n {
@@ -337,5 +347,36 @@ mod test {
             }
         }
         assert_almost_eq!(count as f64 / n as f64, SUSCEPTIBLE_PARTIAL, 0.01);
+    }
+
+    #[test]
+    #[allow(clippy::cast_precision_loss, clippy::cast_lossless)]
+    fn test_rejection_sample_forecast_intervention() {
+        let n = 10_000;
+        let mut count = 0;
+        for seed in 0..n {
+            let mut context = setup(seed, 3.0);
+
+            let infector = context
+                .add_person((MandatoryInterventionStatus, MandatoryIntervention::Partial))
+                .unwrap();
+            let target = context
+                .add_person((MandatoryInterventionStatus, MandatoryIntervention::NoEffect))
+                .unwrap();
+
+            set_homogenous_mixing_itinerary(&mut context, infector).unwrap();
+            set_homogenous_mixing_itinerary(&mut context, target).unwrap();
+
+            context.infect_person(infector, None);
+            let forecast = get_forecast(&context, infector).unwrap();
+            if evaluate_forecast(
+                &mut context,
+                infector,
+                forecast.forecasted_total_infectiousness,
+            ) {
+                count += 1;
+            }
+        }
+        assert_almost_eq!(count as f64 / n as f64, INFECTIOUS_PARTIAL, 0.01);
     }
 }
