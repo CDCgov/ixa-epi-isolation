@@ -208,9 +208,9 @@ mod test {
         infectiousness_manager::{
             InfectionData, InfectionDataValue, InfectionStatus, InfectionStatusValue,
         },
-        parameters::{ItinerarySpecificationType, GlobalParams, Params, RateFnType},
+        parameters::{GlobalParams, ItinerarySpecificationType, Params, RateFnType},
         rate_fns::{load_rate_fns, InfectiousnessRateExt},
-        settings::{ItineraryEntry, SettingId, ContextSettingExt, SettingProperties},
+        settings::{ContextSettingExt, ItineraryEntry, SettingId, SettingProperties},
     };
     use ixa::{
         Context, ContextGlobalPropertiesExt, ContextPeopleExt, ContextRandomExt, IxaError, PersonId,
