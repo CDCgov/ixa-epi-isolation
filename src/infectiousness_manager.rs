@@ -6,7 +6,7 @@ use serde::Serialize;
 use statrs::distribution::Exp;
 
 use crate::{
-    population_loader::Alive,
+    interventions::ContextTransmissionModifierExt,
     rate_fns::{InfectiousnessRateExt, InfectiousnessRateFn, RateFnId, ScaledRateFn},
     settings::ContextSettingExt,
 };
@@ -25,7 +25,7 @@ pub enum InfectionDataValue {
     },
 }
 
-#[derive(Serialize, PartialEq, Debug, Clone, Copy)]
+#[derive(Serialize, PartialEq, Debug, Clone, Copy, Eq, Hash)]
 pub enum InfectionStatusValue {
     Susceptible,
     Infectious,
@@ -53,29 +53,31 @@ define_derived_property!(
 /// for a person, given factors related to their environment, such as the number of people
 /// they come in contact with or how close they are.
 /// This is used to scale the intrinsic infectiousness function of that person.
+/// All modifiers of the infector's intrinsic infecitousness are calculated and passed
+/// to the `calculate_multiplier` Setting method
 pub fn calc_total_infectiousness_multiplier(context: &Context, person_id: PersonId) -> f64 {
-    // TODO: calculate current vs total infectiousness. This depends on interventions.
-    context.calculate_total_infectiousness_multiplier_for_person(person_id)
+    let modifier = context.get_relative_intrinsic_transmission_person(person_id);
+    context.calculate_total_infectiousness_multiplier_for_person(person_id, modifier)
 }
 
 /// Calculate the maximum possible scaling factor for total infectiousness
 /// for a person, given information we know at the time of a forecast.
+/// The modifier used for intrinsic infectiousness is set to 1.0
 pub fn max_total_infectiousness_multiplier(context: &Context, person_id: PersonId) -> f64 {
-    // TODO: Max and current total infectiousness are the same for now until the notion of
-    // being present in a setting is implemented
-    context.calculate_total_infectiousness_multiplier_for_person(person_id)
+    context.calculate_total_infectiousness_multiplier_for_person(person_id, 1.0)
 }
 
 define_rng!(ForecastRng);
 
-// Infection attempt function for a context and given `PersonId`
-pub fn infection_attempt(context: &Context, person_id: PersonId) -> Option<PersonId> {
-    let next_contact = context
-        .draw_contact_from_transmitter_itinerary(person_id, (Alive, true))
-        .unwrap()?;
-    match context.get_person_property(next_contact, InfectionStatus) {
-        InfectionStatusValue::Susceptible => Some(next_contact),
-        _ => None,
+// Infection attempt function to perform rejection sampling on particular contact given modifiers
+pub fn infection_attempt(context: &Context, contact: PersonId) -> bool {
+    match context.get_person_property(contact, InfectionStatus) {
+        InfectionStatusValue::Susceptible => {
+            let relative_transmission_success =
+                context.get_relative_intrinsic_transmission_person(contact);
+            context.sample_bool(ForecastRng, relative_transmission_success)
+        }
+        _ => false,
     }
 }
 
@@ -276,6 +278,7 @@ mod test {
                 },
             )
             .unwrap();
+        crate::interventions::transmission_modifier_manager::init(&mut context);
         context
     }
 

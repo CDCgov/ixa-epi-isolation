@@ -1,6 +1,7 @@
 mod contact;
 mod infection_propagation_loop;
 mod infectiousness_manager;
+mod interventions;
 mod parameters;
 mod population_loader;
 mod property_progression_manager;
@@ -57,6 +58,7 @@ fn main() {
         infection_propagation_loop::init(context)?;
         transmission_report::init(context)?;
         symptom_progression::init(context)?;
+        interventions::transmission_modifier_manager::init(context);
 
         Ok(())
     })
