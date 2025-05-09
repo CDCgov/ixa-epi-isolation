@@ -1,6 +1,7 @@
 mod contact;
 mod infection_propagation_loop;
 mod infectiousness_manager;
+mod natural_history_parameter_manager;
 mod parameters;
 mod population_loader;
 mod property_progression_manager;
