@@ -1,12 +1,9 @@
-use std::{
-    collections::HashMap,
-    fmt::Debug,
-    fmt::{Display, Formatter},
-    path::PathBuf,
-};
+use std::{collections::HashMap, fmt::Debug, path::PathBuf};
 
 use ixa::{define_global_property, ContextGlobalPropertiesExt, IxaError};
 use serde::{Deserialize, Serialize};
+
+use crate::settings::SettingProperties;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum RateFnType {
@@ -19,48 +16,17 @@ pub enum ProgressionLibraryType {
     EmpiricalFromFile { file: PathBuf },
 }
 
-#[derive(Debug, Clone, Copy, Deserialize, Serialize)]
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, Hash, PartialEq, Eq)]
 pub enum CoreSettingsTypes {
-    Home { alpha: f64 },
-    School { alpha: f64 },
-    Workplace { alpha: f64 },
-    CensusTract { alpha: f64 },
+    Home,
+    School,
+    Workplace,
+    CensusTract,
 }
 
-impl CoreSettingsTypes {
-    fn get_alpha(&self) -> &f64 {
-        match self {
-            CoreSettingsTypes::Home { alpha }
-            | CoreSettingsTypes::School { alpha }
-            | CoreSettingsTypes::Workplace { alpha }
-            | CoreSettingsTypes::CensusTract { alpha } => alpha,
-        }
-    }
-}
-
-impl Display for CoreSettingsTypes {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match self {
-            CoreSettingsTypes::Home { .. } => write!(f, "Home"),
-            CoreSettingsTypes::School { .. } => write!(f, "School"),
-            CoreSettingsTypes::Workplace { .. } => write!(f, "Workplace"),
-            CoreSettingsTypes::CensusTract { .. } => write!(f, "CensusTract"),
-        }
-    }
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone, Copy)]
-pub enum ItineraryWriteFnType {
-    /// Splits the ratio of infectiousness across all specified settings evenly
-    /// Useful for when we need to create a new setting in tests and have people in that setting only
-    SplitEvenly,
-    /// Split the ratio of infectiousness across the core settings according to the provided proportions
-    Split {
-        home: f64,
-        school: f64,
-        workplace: f64,
-        census_tract: f64,
-    },
+#[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq)]
+pub enum ItinerarySpecificationType {
+    Constant { ratio: f64 },
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -78,10 +44,8 @@ pub struct Params {
     pub symptom_progression_library: Option<ProgressionLibraryType>,
     /// The period at which to report tabulated values
     pub report_period: f64,
-    /// Setting properties, currently only the transmission modifier alpha values for each setting
-    pub settings_properties: Vec<CoreSettingsTypes>,
-    /// Rule set for writing itineraries
-    pub itinerary_fn_type: ItineraryWriteFnType,
+    /// Setting properties by setting type
+    pub settings_properties: HashMap<CoreSettingsTypes, SettingProperties>,
     /// The path to the synthetic population file loaded in `population_loader`
     pub synth_population_file: PathBuf,
     /// The path to the transmission report file
@@ -100,43 +64,49 @@ fn validate_inputs(parameters: &Params) -> Result<(), IxaError> {
         ));
     }
 
-    let mut settings_map: HashMap<String, f64> = HashMap::new();
+    // If all the itinerary ratios are None, we can't validate them.
+    // If some of them are zero and the rest are none, we still shouldn't fail.
+    // We only want to fail when all of them are 0.
+    // Instead of holding the itinerary ratios in a vector, we sum them because we error if they
+    // are negative, so if their sum is 0.0, they must all be 0.0.
+    let mut itinerary_ratio_sum = None;
+    let mut some_none = false;
 
-    for setting in &parameters.settings_properties {
-        let setting_string = setting.to_string();
-        let alpha = setting.get_alpha();
-        if *alpha < 0.0 || *alpha > 1.0 {
+    for setting in parameters.settings_properties.values() {
+        let alpha = setting.alpha;
+        let itinerary_ratio = setting
+            .itinerary_specification
+            .map(|ItinerarySpecificationType::Constant { ratio }| ratio);
+        // Check alpha
+        if !(0.0..=1.0).contains(&alpha) {
             return Err(IxaError::IxaError(
                 "The alpha values for each setting must be between 0 and 1, inclusive.".to_string(),
             ));
         }
-        if settings_map.insert(setting_string, *alpha).is_some() {
-            return Err(IxaError::IxaError(
-                "Setting types must be uniquely associated with an alpha value.".to_string(),
-            ));
-        }
-    }
-    // Check that none of the setting proportions are below zero
-    let setting_proportions = parameters.itinerary_fn_type;
-    match setting_proportions {
-        ItineraryWriteFnType::Split {
-            home,
-            school,
-            workplace,
-            census_tract,
-        } => {
-            if home < 0.0 || school < 0.0 || workplace < 0.0 || census_tract < 0.0 {
+        // Check itinerary ratio
+        if let Some(itinerary_ratio) = itinerary_ratio {
+            if itinerary_ratio < 0.0 {
                 return Err(IxaError::IxaError(
                     "The itinerary ratio for each setting must be non-negative.".to_string(),
                 ));
             }
-            if home == 0.0 && school == 0.0 && workplace == 0.0 && census_tract == 0.0 {
-                return Err(IxaError::IxaError(
-                    "At least one itinerary ratio must be greater than zero.".to_string(),
-                ));
+            if let Some(sum) = itinerary_ratio_sum {
+                itinerary_ratio_sum = Some(sum + itinerary_ratio);
+            } else {
+                itinerary_ratio_sum = Some(itinerary_ratio);
             }
+        } else {
+            // Means that we have a none variant, so even if the sum is 0.0, we can't error because
+            // we don't know how the None itinerary will be specified in the code.
+            some_none = true;
         }
-        ItineraryWriteFnType::SplitEvenly => {}
+    }
+    if let Some(itinerary_ratio_sum) = itinerary_ratio_sum {
+        if !some_none && itinerary_ratio_sum == 0.0 {
+            return Err(IxaError::IxaError(
+                "At least one itinerary ratio must be greater than zero.".to_string(),
+            ));
+        }
     }
     Ok(())
 }
@@ -158,11 +128,12 @@ impl ContextParametersExt for ixa::Context {
 mod test {
     use ixa::{Context, ContextGlobalPropertiesExt, IxaError};
 
-    use super::validate_inputs;
-    use crate::parameters::{
-        ContextParametersExt, GlobalParams, ItineraryWriteFnType, Params, RateFnType,
+    use super::{validate_inputs, CoreSettingsTypes, ItinerarySpecificationType};
+    use crate::{
+        parameters::{ContextParametersExt, GlobalParams, Params, RateFnType},
+        settings::SettingProperties,
     };
-    use std::path::PathBuf;
+    use std::{collections::HashMap, path::PathBuf};
 
     #[test]
     fn test_default_input_file() {
@@ -189,13 +160,7 @@ mod test {
             report_period: 1.0,
             synth_population_file: PathBuf::from("."),
             transmission_report_name: None,
-            settings_properties: vec![],
-            itinerary_fn_type: ItineraryWriteFnType::Split {
-                home: 0.25,
-                school: 0.25,
-                workplace: 0.25,
-                census_tract: 0.25,
-            },
+            settings_properties: HashMap::new(),
         };
         context
             .set_global_property_value(GlobalParams, parameters)
@@ -221,13 +186,7 @@ mod test {
             report_period: 1.0,
             synth_population_file: PathBuf::from("."),
             transmission_report_name: None,
-            settings_properties: vec![],
-            itinerary_fn_type: ItineraryWriteFnType::Split {
-                home: 0.25,
-                school: 0.25,
-                workplace: 0.25,
-                census_tract: 0.25,
-            },
+            settings_properties: HashMap::new(),
         };
         let e = validate_inputs(&parameters).err();
         match e {
@@ -256,13 +215,26 @@ mod test {
             report_period: 1.0,
             synth_population_file: PathBuf::from("."),
             transmission_report_name: None,
-            settings_properties: vec![],
-            itinerary_fn_type: ItineraryWriteFnType::Split {
-                home: 0.0,
-                school: 0.0,
-                workplace: 0.0,
-                census_tract: 0.0,
-            },
+            settings_properties: HashMap::from([
+                (
+                    CoreSettingsTypes::Home,
+                    SettingProperties {
+                        alpha: 0.5,
+                        itinerary_specification: Some(ItinerarySpecificationType::Constant {
+                            ratio: 0.0,
+                        }),
+                    },
+                ),
+                (
+                    CoreSettingsTypes::School,
+                    SettingProperties {
+                        alpha: 0.5,
+                        itinerary_specification: Some(ItinerarySpecificationType::Constant {
+                            ratio: 0.0,
+                        }),
+                    },
+                ),
+            ]),
         };
         let e = validate_inputs(&parameters).err();
         match e {
@@ -291,13 +263,26 @@ mod test {
             report_period: 1.0,
             synth_population_file: PathBuf::from("."),
             transmission_report_name: None,
-            settings_properties: vec![],
-            itinerary_fn_type: ItineraryWriteFnType::Split {
-                home: -0.1,
-                school: 0.0,
-                workplace: 0.0,
-                census_tract: 0.0,
-            },
+            settings_properties: HashMap::from([
+                (
+                    CoreSettingsTypes::Home,
+                    SettingProperties {
+                        alpha: 0.5,
+                        itinerary_specification: Some(ItinerarySpecificationType::Constant {
+                            ratio: -0.1,
+                        }),
+                    },
+                ),
+                (
+                    CoreSettingsTypes::School,
+                    SettingProperties {
+                        alpha: 0.5,
+                        itinerary_specification: Some(ItinerarySpecificationType::Constant {
+                            ratio: 0.0,
+                        }),
+                    },
+                ),
+            ]),
         };
         let e = validate_inputs(&parameters).err();
         match e {
@@ -313,6 +298,78 @@ mod test {
             ),
             None => panic!("Expected an error. Instead, validation passed with no errors."),
         }
+    }
+
+    #[test]
+    fn test_validation_itinerary_all_none() {
+        let parameters = Params {
+            initial_infections: 1,
+            max_time: 100.0,
+            seed: 0,
+            infectiousness_rate_fn: RateFnType::Constant {
+                rate: 1.0,
+                duration: 5.0,
+            },
+            symptom_progression_library: None,
+            report_period: 1.0,
+            synth_population_file: PathBuf::from("."),
+            transmission_report_name: None,
+            settings_properties: HashMap::from([
+                (
+                    CoreSettingsTypes::Home,
+                    SettingProperties {
+                        alpha: 0.5,
+                        itinerary_specification: None,
+                    },
+                ),
+                (
+                    CoreSettingsTypes::School,
+                    SettingProperties {
+                        alpha: 0.5,
+                        itinerary_specification: None,
+                    },
+                ),
+            ]),
+        };
+        let e = validate_inputs(&parameters).err();
+        assert!(e.is_none(), "Expected no error, but got: {e:?}");
+    }
+
+    #[test]
+    fn test_validation_itinerary_one_some_zero_rest_none() {
+        let parameters = Params {
+            initial_infections: 1,
+            max_time: 100.0,
+            seed: 0,
+            infectiousness_rate_fn: RateFnType::Constant {
+                rate: 1.0,
+                duration: 5.0,
+            },
+            symptom_progression_library: None,
+            report_period: 1.0,
+            synth_population_file: PathBuf::from("."),
+            transmission_report_name: None,
+            settings_properties: HashMap::from([
+                (
+                    CoreSettingsTypes::Home,
+                    SettingProperties {
+                        alpha: 0.5,
+                        itinerary_specification: Some(ItinerarySpecificationType::Constant {
+                            ratio: 0.0,
+                        }),
+                    },
+                ),
+                (
+                    CoreSettingsTypes::School,
+                    SettingProperties {
+                        alpha: 0.5,
+                        itinerary_specification: None,
+                    },
+                ),
+            ]),
+        };
+        let e = validate_inputs(&parameters).err();
+        assert!(e.is_none(), "Expected no error, but got: {e:?}");
     }
 
     #[test]

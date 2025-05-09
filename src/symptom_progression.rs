@@ -228,12 +228,12 @@ fn event_subscriptions(context: &mut Context) {
 
 #[cfg(test)]
 mod test {
-    use std::{cell::RefCell, path::PathBuf, rc::Rc};
+    use std::{cell::RefCell, collections::HashMap, path::PathBuf, rc::Rc};
 
     use super::{init, SymptomData, SymptomValue};
     use crate::{
         infectiousness_manager::InfectionContextExt,
-        parameters::{GlobalParams, ItineraryWriteFnType, RateFnType},
+        parameters::{GlobalParams, RateFnType},
         property_progression_manager::Progression,
         rate_fns::load_rate_fns,
         symptom_progression::{
@@ -263,8 +263,7 @@ mod test {
             report_period: 1.0,
             synth_population_file: PathBuf::from("."),
             transmission_report_name: None,
-            settings_properties: vec![],
-            itinerary_fn_type: ItineraryWriteFnType::SplitEvenly,
+            settings_properties: HashMap::new(),
         };
         context.init_random(parameters.seed);
         context

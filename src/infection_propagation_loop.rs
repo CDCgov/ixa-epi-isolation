@@ -85,7 +85,7 @@ pub fn init(context: &mut Context) -> Result<(), IxaError> {
 #[cfg(test)]
 #[allow(clippy::float_cmp)]
 mod test {
-    use std::{any::TypeId, cell::RefCell, path::PathBuf, rc::Rc};
+    use std::{cell::RefCell, collections::HashMap, path::PathBuf, rc::Rc};
 
     use ixa::{
         Context, ContextGlobalPropertiesExt, ContextPeopleExt, ContextRandomExt, ExecutionPhase,
@@ -106,21 +106,24 @@ mod test {
             InfectionDataValue,
         },
         parameters::{
-            ContextParametersExt, GlobalParams, ItineraryWriteFnType, Params, RateFnType,
+            ContextParametersExt, GlobalParams, ItinerarySpecificationType, Params, RateFnType,
         },
         rate_fns::load_rate_fns,
-        settings::{create_itinerary, ContextSettingExt, SettingProperties},
+        settings::{ContextSettingExt, ItineraryEntry, SettingId, SettingProperties},
     };
 
     use super::{schedule_recovery, seed_infections};
 
     define_setting_type!(HomogeneousMixing);
 
-    fn set_homogenous_mixing_itinerary(
+    fn set_homogeneous_mixing_itinerary(
         context: &mut Context,
         person_id: PersonId,
     ) -> Result<(), IxaError> {
-        let itinerary = create_itinerary(context, vec![(TypeId::of::<HomogeneousMixing>(), 0)])?;
+        let itinerary = vec![ItineraryEntry::new(
+            &SettingId::new(HomogeneousMixing, 0),
+            1.0,
+        )];
         context.add_itinerary(person_id, itinerary)
     }
 
@@ -138,8 +141,8 @@ mod test {
             report_period: 1.0,
             synth_population_file: PathBuf::from("."),
             transmission_report_name: None,
-            settings_properties: vec![],
-            itinerary_fn_type: ItineraryWriteFnType::SplitEvenly,
+            // We specify the itineraries manually in `set_homogeneous_mixing_itinerary`.
+            settings_properties: HashMap::new(),
         };
         context.init_random(parameters.seed);
         context
@@ -147,7 +150,15 @@ mod test {
             .unwrap();
 
         context
-            .register_setting_type(HomogeneousMixing {}, SettingProperties { alpha })
+            .register_setting_type(
+                HomogeneousMixing,
+                SettingProperties {
+                    alpha,
+                    itinerary_specification: Some(ItinerarySpecificationType::Constant {
+                        ratio: 1.0,
+                    }),
+                },
+            )
             .unwrap();
         context
     }
@@ -289,14 +300,14 @@ mod test {
             context.add_plan_with_phase(1.0, ixa::Context::shutdown, ExecutionPhase::Last);
             // Add a a person who will get infected.
             let p1 = context.add_person(()).unwrap();
-            set_homogenous_mixing_itinerary(&mut context, p1).unwrap();
+            set_homogeneous_mixing_itinerary(&mut context, p1).unwrap();
             // We don't want infectious people beyond our index case to be able to transmit, so we
             // have to do setup on our own since just calling `init` will trigger a watcher for
             // people becoming infectious that lets them transmit.
             load_rate_fns(&mut context).unwrap();
             // Add our infectious fellow.
             let infectious_person = context.add_person(()).unwrap();
-            set_homogenous_mixing_itinerary(&mut context, infectious_person).unwrap();
+            set_homogeneous_mixing_itinerary(&mut context, infectious_person).unwrap();
 
             context.infect_person(infectious_person, None);
             // Get the total infectiousness multiplier for comparison to total number of infections.
