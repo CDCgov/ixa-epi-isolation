@@ -545,10 +545,10 @@ mod test {
     #[allow(clippy::cast_lossless, clippy::cast_precision_loss)]
     fn test_community_masking_one_infector() {
         let rate = 2.0;
-        let alpha = 0.0;
+        let alpha = 0.1;
         let duration = 4.0;
         let masking_proportion = 0.4;
-        let community_size = 1000;
+        let community_size = 500;
         let n_reps = 1_000;
 
         let mut cases_count_sizes = vec![];
