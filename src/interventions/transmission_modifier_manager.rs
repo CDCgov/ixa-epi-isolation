@@ -159,17 +159,17 @@ mod test {
     };
     use serde::{Deserialize, Serialize};
     use statrs::assert_almost_eq;
-    use std::{any::TypeId, path::PathBuf};
+    use std::{collections::HashMap, path::PathBuf};
 
     use crate::infectiousness_manager::{
         evaluate_forecast, get_forecast, infection_attempt, InfectionContextExt, InfectionData,
         InfectionDataValue, InfectionStatusValue,
     };
     use crate::interventions::transmission_modifier_manager::ContextTransmissionModifierExt;
-    use crate::parameters::{GlobalParams, ItineraryWriteFnType, Params, RateFnType};
+    use crate::parameters::{GlobalParams, ItinerarySpecificationType, Params, RateFnType};
     use crate::rate_fns::{load_rate_fns, InfectiousnessRateExt};
     use crate::settings::{
-        create_itinerary, define_setting_type, ContextSettingExt, SettingProperties,
+        define_setting_type, ContextSettingExt, ItineraryEntry, SettingId, SettingProperties,
     };
 
     #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -194,11 +194,14 @@ mod test {
     pub const INFECTIOUS_PARTIAL: f64 = 0.5;
 
     define_setting_type!(HomogeneousMixing);
-    fn set_homogenous_mixing_itinerary(
+    fn set_homogeneous_mixing_itinerary(
         context: &mut Context,
         person_id: PersonId,
     ) -> Result<(), IxaError> {
-        let itinerary = create_itinerary(context, vec![(TypeId::of::<HomogeneousMixing>(), 0)])?;
+        let itinerary = vec![ItineraryEntry::new(
+            &SettingId::new(HomogeneousMixing, 0),
+            1.0,
+        )];
         context.add_itinerary(person_id, itinerary)
     }
 
@@ -220,14 +223,21 @@ mod test {
                     report_period: 1.0,
                     synth_population_file: PathBuf::from("."),
                     transmission_report_name: None,
-                    settings_properties: vec![],
-                    itinerary_fn_type: ItineraryWriteFnType::SplitEvenly,
+                    settings_properties: HashMap::new(),
                 },
             )
             .unwrap();
         load_rate_fns(&mut context).unwrap();
         context
-            .register_setting_type(HomogeneousMixing {}, SettingProperties { alpha: 1.0 })
+            .register_setting_type(
+                HomogeneousMixing,
+                SettingProperties {
+                    alpha: 1.0,
+                    itinerary_specification: Some(ItinerarySpecificationType::Constant {
+                        ratio: 1.0,
+                    }),
+                },
+            )
             .unwrap();
 
         context.register_transmission_modifier(
@@ -366,8 +376,8 @@ mod test {
                 .add_person((MandatoryInterventionStatus, MandatoryIntervention::NoEffect))
                 .unwrap();
 
-            set_homogenous_mixing_itinerary(&mut context, infector).unwrap();
-            set_homogenous_mixing_itinerary(&mut context, target).unwrap();
+            set_homogeneous_mixing_itinerary(&mut context, infector).unwrap();
+            set_homogeneous_mixing_itinerary(&mut context, target).unwrap();
 
             context.infect_person(infector, None);
             let forecast = get_forecast(&context, infector).unwrap();

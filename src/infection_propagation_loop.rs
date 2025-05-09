@@ -508,10 +508,10 @@ mod test {
         }
 
         // Set up the household
-        set_homogenous_mixing_itinerary(&mut context, infectious_person).unwrap();
+        set_homogeneous_mixing_itinerary(&mut context, infectious_person).unwrap();
         for _ in 0..community_size - 1 {
             let cohabitant = context.add_person(()).unwrap();
-            set_homogenous_mixing_itinerary(&mut context, cohabitant).unwrap();
+            set_homogeneous_mixing_itinerary(&mut context, cohabitant).unwrap();
         }
 
         // Listen for infection events

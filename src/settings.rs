@@ -875,7 +875,8 @@ mod test {
                 alpha: 0.1,
                 itinerary_specification: None,
             },
-        1.0);
+            1.0,
+        );
 
         // This is assuming we know what the function for Home is (N - 1) ^ alpha
         assert_almost_eq!(inf_multiplier, f64::from(6 - 1).powf(0.1), 0.0);
