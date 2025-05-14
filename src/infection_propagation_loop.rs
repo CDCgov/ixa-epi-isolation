@@ -22,11 +22,10 @@ fn schedule_next_forecasted_infection(context: &mut Context, person: PersonId) {
             if evaluate_forecast(context, person, forecasted_total_infectiousness) {
                 if let Some((setting_type, setting_id)) = context.get_setting_for_contact(person) {
                     let str_setting = setting_type.get_name();
-                    trace!("Person {person}: Forecast accepted, setting type {str_setting} setting {setting_id}");
                     if let Some(next_contact) =
                         infection_attempt(context, person, setting_type, setting_id)
                     {
-                        trace!("Person {person}: Forecast accepted, setting {setting_id}, infecting {next_contact}");
+                        trace!("Person {person}: Forecast accepted, setting type {str_setting} {setting_id}, infecting {next_contact}");
                         context.infect_person(next_contact, Some(person), Some(str_setting), Some(setting_id));
                     }
                 }
