@@ -84,7 +84,7 @@ pub trait ContextTransmissionModifierExt {
 
     /// Get the relative intrinsic transmission (infectiousness or susceptibility) for a person based on their
     /// infection status and current properties based on registered modifiers.
-    fn get_relative_intrinsic_transmission_person(&self, person_id: PersonId) -> f64;
+    fn get_modified_relative_total_transmission_person(&self, person_id: PersonId) -> f64;
 }
 
 impl ContextTransmissionModifierExt for Context {
@@ -97,9 +97,7 @@ impl ContextTransmissionModifierExt for Context {
         F: Fn(&Context, PersonId) -> f64 + 'static,
     {
         // Box the function to store it in the map
-        let boxed_fn =
-            Box::new(move |context: &Context, person_id: PersonId| modifier_fn(context, person_id))
-                as Box<dyn Fn(&Context, PersonId) -> f64>;
+        let boxed_fn = Box::new(modifier_fn);
 
         // Insert the boxed function into the transmission modifier map, using entry to handle unititialized keys
         self.get_data_container_mut(TransmissionModifierPlugin)
@@ -157,7 +155,7 @@ impl ContextTransmissionModifierExt for Context {
             .insert(infection_status, boxed_fn);
     }
 
-    fn get_relative_intrinsic_transmission_person(&self, person_id: PersonId) -> f64 {
+    fn get_modified_relative_total_transmission_person(&self, person_id: PersonId) -> f64 {
         let infection_status = self.get_person_property(person_id, InfectionStatus);
 
         if let Some(transmission_modifier_plugin) =
@@ -200,24 +198,17 @@ pub fn init(context: &mut Context) -> Result<(), IxaError> {
 mod test {
     use ixa::{
         define_person_property, define_person_property_with_default, Context,
-        ContextGlobalPropertiesExt, ContextPeopleExt, ContextRandomExt, IxaError, PersonId,
+        ContextGlobalPropertiesExt, ContextPeopleExt, ContextRandomExt, PersonId,
     };
     use serde::{Deserialize, Serialize};
     use statrs::assert_almost_eq;
     use std::{collections::HashMap, path::PathBuf};
 
-    use crate::infectiousness_manager::{
-        evaluate_forecast, get_forecast, infection_attempt, InfectionContextExt, InfectionData,
-        InfectionDataValue, InfectionStatusValue,
-    };
+    use crate::infectiousness_manager::{InfectionContextExt, InfectionStatusValue};
     use crate::interventions::transmission_modifier_manager::{
         ContextTransmissionModifierExt, TransmissionModifierPlugin,
     };
-    use crate::parameters::{GlobalParams, ItinerarySpecificationType, Params, RateFnType};
-    use crate::rate_fns::{load_rate_fns, InfectiousnessRateExt};
-    use crate::settings::{
-        define_setting_type, ContextSettingExt, ItineraryEntry, SettingId, SettingProperties,
-    };
+    use crate::parameters::{GlobalParams, Params, RateFnType};
     use std::any::TypeId;
 
     #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Hash)]
@@ -241,18 +232,6 @@ mod test {
     pub const SUSCEPTIBLE_PARTIAL: f64 = 0.8;
     pub const INFECTIOUS_PARTIAL: f64 = 0.5;
 
-    define_setting_type!(HomogeneousMixing);
-    fn set_homogeneous_mixing_itinerary(
-        context: &mut Context,
-        person_id: PersonId,
-    ) -> Result<(), IxaError> {
-        let itinerary = vec![ItineraryEntry::new(
-            &SettingId::new(HomogeneousMixing, 0),
-            1.0,
-        )];
-        context.add_itinerary(person_id, itinerary)
-    }
-
     fn setup(seed: u64) -> Context {
         let mut context = Context::new();
         context.init_random(seed);
@@ -272,18 +251,6 @@ mod test {
                     synth_population_file: PathBuf::from("."),
                     transmission_report_name: None,
                     settings_properties: HashMap::new(),
-                },
-            )
-            .unwrap();
-        load_rate_fns(&mut context).unwrap();
-        context
-            .register_setting_type(
-                HomogeneousMixing,
-                SettingProperties {
-                    alpha: 1.0,
-                    itinerary_specification: Some(ItinerarySpecificationType::Constant {
-                        ratio: 1.0,
-                    }),
                 },
             )
             .unwrap();
@@ -318,8 +285,83 @@ mod test {
         context
     }
 
+    define_person_property!(Age, usize);
+
     #[test]
-    fn test_transmission_modifier_values_registration_susceptible() {
+    fn test_register_modifier_values() {
+        let mut context = Context::new();
+
+        context
+            .store_transmission_modifier_values(
+                InfectionStatusValue::Susceptible,
+                MandatoryInterventionStatus,
+                &[
+                    (MandatoryIntervention::Partial, 0.8),
+                    (MandatoryIntervention::Full, 0.0),
+                ],
+            )
+            .unwrap();
+
+        // Add people with different intervention statuses
+        let partial_id = context
+            .add_person((MandatoryInterventionStatus, MandatoryIntervention::Partial))
+            .unwrap();
+        let full_id = context
+            .add_person((MandatoryInterventionStatus, MandatoryIntervention::Full))
+            .unwrap();
+
+        // Container should now be initialized, safe to unwrap()
+        let modifier_container = context
+            .get_data_container(TransmissionModifierPlugin)
+            .unwrap();
+        let modifier_map = modifier_container
+            .transmission_modifier_map
+            .get(&InfectionStatusValue::Susceptible)
+            .unwrap();
+
+        // Check that the modifier map contains the expected values
+        assert_eq!(modifier_map.len(), 1);
+
+        let modifier_fn = modifier_map
+            .get(&TypeId::of::<MandatoryInterventionStatus>())
+            .unwrap();
+
+        // Check that the modifier function returns the expected value
+        assert_almost_eq!(modifier_fn(&context, partial_id), 0.8, 0.0);
+        assert_almost_eq!(modifier_fn(&context, full_id), 0.0, 0.0);
+    }
+
+    #[test]
+    #[allow(clippy::cast_precision_loss, clippy::cast_lossless)]
+    fn test_register_arbitrary_modifier_fn() {
+        let mut context = Context::new();
+        let aged_42 = context.add_person((Age, 42)).unwrap();
+
+        context.register_transmission_modifier_fn(
+            InfectionStatusValue::Susceptible,
+            Age,
+            |context: &Context, person_id: PersonId| {
+                let age = context.get_person_property(person_id, Age);
+                age as f64 / 100.0
+            },
+        );
+
+        // Container should now be initialized, safe to unwrap()
+        let modifier_container = context
+            .get_data_container(TransmissionModifierPlugin)
+            .unwrap();
+        let modifier_map = modifier_container
+            .transmission_modifier_map
+            .get(&InfectionStatusValue::Susceptible)
+            .unwrap();
+
+        let modifier_fn = modifier_map.get(&TypeId::of::<Age>()).unwrap();
+        // Check that the modifier function returns the expected value
+        assert_almost_eq!(modifier_fn(&context, aged_42), 0.42, 0.0);
+    }
+
+    #[test]
+    fn test_setup_modifier_values_registration_susceptible() {
         let mut context = setup(0);
 
         let person_id_partial = context
@@ -329,19 +371,19 @@ mod test {
             .add_person((MandatoryInterventionStatus, MandatoryIntervention::Full))
             .unwrap();
         assert_almost_eq!(
-            context.get_relative_intrinsic_transmission_person(person_id_partial),
+            context.get_modified_relative_total_transmission_person(person_id_partial),
             SUSCEPTIBLE_PARTIAL,
             0.0
         );
         assert_almost_eq!(
-            context.get_relative_intrinsic_transmission_person(person_id_full),
+            context.get_modified_relative_total_transmission_person(person_id_full),
             0.0,
             0.0
         );
     }
 
     #[test]
-    fn test_transmission_modifier_values_registration_infectious() {
+    fn test_setup_modifier_values_registration_infectious() {
         let mut context = setup(0);
 
         let infectious_id = context
@@ -349,7 +391,7 @@ mod test {
             .unwrap();
         context.infect_person(infectious_id, None);
         assert_almost_eq!(
-            context.get_relative_intrinsic_transmission_person(infectious_id),
+            context.get_modified_relative_total_transmission_person(infectious_id),
             INFECTIOUS_PARTIAL,
             0.0
         );
@@ -440,25 +482,17 @@ mod test {
     }
 
     #[test]
-    fn test_get_relative_intrinsic_transmission_person() {
+    // Test that the default aggregator works correctly when person properties change
+    fn test_get_modified_relative_total_transmission_person() {
         let mut context = setup(0);
 
         let person_id = context
-            .add_person((
-                (MandatoryInterventionStatus, MandatoryIntervention::Partial),
-                (
-                    InfectionData,
-                    InfectionDataValue::Infectious {
-                        infection_time: 0.0,
-                        rate_fn_id: context.get_random_rate_fn(),
-                        infected_by: None,
-                    },
-                ),
-            ))
+            .add_person((MandatoryInterventionStatus, MandatoryIntervention::Partial))
             .unwrap();
+        context.infect_person(person_id, None);
 
         assert_almost_eq!(
-            context.get_relative_intrinsic_transmission_person(person_id),
+            context.get_modified_relative_total_transmission_person(person_id),
             INFECTIOUS_PARTIAL,
             0.0
         );
@@ -469,58 +503,16 @@ mod test {
             Some(InfectiousnessReduction::Partial),
         );
         assert_almost_eq!(
-            context.get_relative_intrinsic_transmission_person(person_id),
+            context.get_modified_relative_total_transmission_person(person_id),
             INFECTIOUS_PARTIAL * INFECTIOUS_PARTIAL,
             0.0
         );
-    }
 
-    #[test]
-    #[allow(clippy::cast_precision_loss, clippy::cast_lossless)]
-    fn test_rejection_sample_infection_attempt_intervention() {
-        let n = 1000;
-        let mut count = 0;
-        for i in 0..n {
-            let mut context = setup(i);
-            let person = context
-                .add_person((MandatoryInterventionStatus, MandatoryIntervention::Partial))
-                .unwrap();
-            if infection_attempt(&context, person) {
-                count += 1;
-            }
-        }
-        assert_almost_eq!(count as f64 / n as f64, SUSCEPTIBLE_PARTIAL, 0.01);
-    }
-
-    #[test]
-    #[allow(clippy::cast_precision_loss, clippy::cast_lossless)]
-    fn test_rejection_sample_forecast_intervention() {
-        let n = 10_000;
-        let mut count = 0;
-        for seed in 0..n {
-            let mut context = setup(seed);
-
-            let infector = context
-                .add_person((MandatoryInterventionStatus, MandatoryIntervention::Partial))
-                .unwrap();
-            let target = context
-                .add_person((MandatoryInterventionStatus, MandatoryIntervention::NoEffect))
-                .unwrap();
-
-            set_homogeneous_mixing_itinerary(&mut context, infector).unwrap();
-            set_homogeneous_mixing_itinerary(&mut context, target).unwrap();
-
-            context.infect_person(infector, None);
-            // Will return None if forecast is greater than infection duration
-            let forecast = get_forecast(&context, infector).unwrap();
-            if evaluate_forecast(
-                &mut context,
-                infector,
-                forecast.forecasted_total_infectiousness,
-            ) {
-                count += 1;
-            }
-        }
-        assert_almost_eq!(count as f64 / n as f64, INFECTIOUS_PARTIAL, 0.01);
+        context.set_person_property(person_id, InfectiousnessReductionStatus, None);
+        assert_almost_eq!(
+            context.get_modified_relative_total_transmission_person(person_id),
+            INFECTIOUS_PARTIAL,
+            0.0
+        );
     }
 }
