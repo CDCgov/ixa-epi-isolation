@@ -441,21 +441,13 @@ mod test {
 
     #[test]
     fn test_location_infections_one_time_unit() {
-        // Does one infectious person generate the number of infections as expected by the rate?
-        // We're going to run many simulations that each start with one infectious and one
-        // susceptible person. The susceptible person gets moved back to susceptible when becoming
-        // infected, so this is really a setup where there is no susceptible depletion/an
-        // infinitely large starting population. We stop the simulation at the end of 1.0 time units
-        // and compare the number of infected people to the infectious rate.
-        // We're also going to check the times at which they are infected. In this test simulation,
-        // we are using a constant hazard of infection, and we only record infection times that are
-        // within 1.0 time units, so we expect the timing of infection attempts to follow U(0, 1).
-        // First, we should not expect to observe an exponential distribution because we may observe
-        // multiple infection attempts in the same experiment, not just the first. This also helps
-        // provide intuition for why we expect a uniform distribution -- if the first infection
-        // attempt happens quickly, that increases the chance we see another in 1.0 time units, and
-        // because there is basically this compensating relationship between the time and the number
-        // of events, they "cancel" each other out to give a uniform distribution (handwavingly).
+        // Does one infectious person generate the number of infections as expected in different
+        // settings? We're going to run many simulations that each start with one infectious and three
+        // susceptible person. Each susceptible person belongs in one of three setting types
+        // and the infectious person is in all three settings. The susceptible people get moved back
+        // to susceptible when becoming infected, so this is really a setup where there is no susceptible
+        // depletion. We stop the simulation at the end of 1.0 time units and compare the number of
+        // infected people in each setting to the expected infectious rate.
         let num_sims: u64 = 15_000;
         let rate = 1.5;
         let alpha = 0.42;
