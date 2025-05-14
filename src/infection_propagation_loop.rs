@@ -351,7 +351,7 @@ mod test {
                     infectious_person,
                 ));
             }
-            modifier = context.get_relative_intrinsic_transmission_person(infectious_person);
+            modifier = context.get_modified_relative_total_transmission_person(infectious_person);
             // Add a watcher for when people are infected to record the infection times.
             context.subscribe_to_event::<PersonPropertyChangeEvent<InfectionStatus>>(
                 move |context, event| {
