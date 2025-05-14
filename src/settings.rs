@@ -23,13 +23,14 @@ pub struct SettingProperties {
     pub itinerary_specification: Option<ItinerarySpecificationType>,
 }
 
-pub trait SettingType {
+pub trait SettingType: std::fmt::Debug {
     fn calculate_multiplier(
         &self,
         members: &[PersonId],
         setting_properties: SettingProperties,
     ) -> f64;
     fn get_type_id(&self) -> TypeId;
+    fn get_name(&self) -> &'static str;
 }
 
 #[derive(Debug, Hash, Eq, PartialEq, Ord, PartialOrd)]
@@ -177,6 +178,9 @@ macro_rules! define_setting_type {
             }
             fn get_type_id(&self) -> std::any::TypeId {
                 std::any::TypeId::of::<$name>()
+            }
+            fn get_name(&self) -> &'static str {
+                stringify!($name)
             }
         }
     };

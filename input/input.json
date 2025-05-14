@@ -11,6 +11,6 @@
     "symptom_progression_library" : {"EmpiricalFromFile": {"file": "input/library_symptom_parameters.csv"}},
     "report_period": 1.0,
     "synth_population_file": "input/people_test.csv",
-    "transmission_report_name": "transmission_report.csv"
+    "transmission_report_name": "output/transmission_report.csv"
   }
 }
