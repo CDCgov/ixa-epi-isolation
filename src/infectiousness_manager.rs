@@ -407,12 +407,12 @@ mod test {
     }
 
     #[test]
-    fn test_infected_by() {
+    fn test_infected_options() {
         let mut context = setup_context();
         let index = context.add_person(()).unwrap();
         let contact = context.add_person(()).unwrap();
 
-        context.infect_person(contact, Some(index), None, None);
+        context.infect_person(contact, Some(index), Some("Home"), Some(0));
         context.execute();
 
         assert_eq!(
@@ -420,12 +420,18 @@ mod test {
             InfectionStatusValue::Infectious
         );
 
-        let InfectionDataValue::Infectious { infected_by, .. } =
-            context.get_person_property(contact, InfectionData)
+        let InfectionDataValue::Infectious {
+            infected_by,
+            infection_setting_type,
+            infection_setting_id,
+            ..
+        } = context.get_person_property(contact, InfectionData)
         else {
             panic!("Person {contact} is not infectious")
         };
 
         assert_eq!(infected_by.unwrap(), index);
+        assert_eq!(infection_setting_type.unwrap(), "Home");
+        assert_eq!(infection_setting_id.unwrap(), 0);
     }
 }
