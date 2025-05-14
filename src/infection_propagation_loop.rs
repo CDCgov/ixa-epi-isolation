@@ -318,7 +318,7 @@ mod test {
             let mut context = setup_context(seed, rate, alpha, duration);
 
             context
-                .register_transmission_modifier_values(
+                .store_transmission_modifier_values(
                     InfectionStatusValue::Infectious,
                     InfectiousnessReductionStatus,
                     &[(Some(InfectiousnessReduction::Partial), INFECTIOUS_PARTIAL)],
@@ -468,7 +468,7 @@ mod test {
 
         // Set up the intervention of facemask and register a perfect facemask modifier
         context
-            .register_transmission_modifier_values(
+            .store_transmission_modifier_values(
                 InfectionStatusValue::Infectious,
                 MaskingStatus,
                 &[(Masking::Wearing, 0.0)],
