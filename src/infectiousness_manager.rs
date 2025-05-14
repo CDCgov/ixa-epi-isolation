@@ -18,6 +18,8 @@ pub enum InfectionDataValue {
         infection_time: f64,
         rate_fn_id: RateFnId,
         infected_by: Option<PersonId>,
+        infection_setting_type: Option<&'static str>,
+        infection_setting_id: Option<usize>,
     },
     Recovered {
         infection_time: f64,
@@ -151,7 +153,13 @@ pub fn evaluate_forecast(
 }
 
 pub trait InfectionContextExt {
-    fn infect_person(&mut self, target_id: PersonId, source_id: Option<PersonId>);
+    fn infect_person(
+        &mut self,
+        target_id: PersonId,
+        source_id: Option<PersonId>,
+        setting_type: Option<&'static str>,
+        setting_id: Option<usize>,
+    );
     fn recover_person(&mut self, person_id: PersonId);
     fn get_elapsed_infection_time(&self, person_id: PersonId) -> f64;
     fn get_person_rate_fn(&self, person_id: PersonId) -> &dyn InfectiousnessRateFn;
@@ -161,7 +169,13 @@ impl InfectionContextExt for Context {
     // This function should be called from the main loop whenever
     // someone is first infected. It assigns all their properties needed to
     // calculate intrinsic infectiousness
-    fn infect_person(&mut self, target_id: PersonId, source_id: Option<PersonId>) {
+    fn infect_person(
+        &mut self,
+        target_id: PersonId,
+        source_id: Option<PersonId>,
+        setting_type: Option<&'static str>,
+        setting_id: Option<usize>,
+    ) {
         let infection_time = self.get_current_time();
         let rate_fn_id = self.get_random_rate_fn();
         trace!("Person {target_id}: Infected at {infection_time}");
@@ -172,6 +186,8 @@ impl InfectionContextExt for Context {
                 infection_time,
                 rate_fn_id,
                 infected_by: source_id,
+                infection_setting_type: setting_type,
+                infection_setting_id: setting_id,
             },
         );
     }
@@ -289,7 +305,7 @@ mod test {
         let mut context = setup_context();
         let p1 = context.add_person(()).unwrap();
         context.add_plan(2.0, move |context| {
-            context.infect_person(p1, None);
+            context.infect_person(p1, None, None, None);
         });
         context.execute();
         let InfectionDataValue::Infectious { infection_time, .. } =
@@ -306,7 +322,7 @@ mod test {
         let mut context = setup_context();
         let p1 = context.add_person(()).unwrap();
         context.add_plan(2.0, move |context| {
-            context.infect_person(p1, None);
+            context.infect_person(p1, None, None, None);
         });
         context.add_plan(3.0, move |context| {
             context.recover_person(p1);
@@ -328,7 +344,7 @@ mod test {
         let mut context = setup_context();
         let p1 = context.add_person(()).unwrap();
         context.add_plan(2.0, move |context| {
-            context.infect_person(p1, None);
+            context.infect_person(p1, None, None, None);
         });
         context.add_plan(3.0, move |_| {});
         context.execute();
@@ -366,7 +382,7 @@ mod test {
         let p3 = context.add_person(()).unwrap();
         set_homogeneous_mixing_itinerary(&mut context, p3).unwrap();
 
-        context.infect_person(p1, None);
+        context.infect_person(p1, None, None, None);
 
         let f = get_forecast(&context, p1).expect("Forecast should be returned");
         // The expected rate is 2.0, because intrinsic is 1.0 and there are 2 contacts.
@@ -380,7 +396,7 @@ mod test {
         let mut context = setup_context();
         let p1 = context.add_person(()).unwrap();
         set_homogeneous_mixing_itinerary(&mut context, p1).unwrap();
-        context.infect_person(p1, None);
+        context.infect_person(p1, None, None, None);
         let p2 = context.add_person(()).unwrap();
         set_homogeneous_mixing_itinerary(&mut context, p2).unwrap();
 
@@ -394,7 +410,7 @@ mod test {
         let index = context.add_person(()).unwrap();
         let contact = context.add_person(()).unwrap();
 
-        context.infect_person(contact, Some(index));
+        context.infect_person(contact, Some(index), None, None);
         context.execute();
 
         assert_eq!(

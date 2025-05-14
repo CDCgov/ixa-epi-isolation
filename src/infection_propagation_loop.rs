@@ -21,12 +21,13 @@ fn schedule_next_forecasted_infection(context: &mut Context, person: PersonId) {
             // TODO<ryl8@cc.gov>: We will choose a setting here
             if evaluate_forecast(context, person, forecasted_total_infectiousness) {
                 if let Some((setting_type, setting_id)) = context.get_setting_for_contact(person) {
-                    trace!("Person {person}: Forecast accepted, setting {setting_id}");
+                    let str_setting = setting_type.get_name();
+                    trace!("Person {person}: Forecast accepted, setting type {str_setting} setting {setting_id}");
                     if let Some(next_contact) =
                         infection_attempt(context, person, setting_type, setting_id)
                     {
-                        trace!("Person {person}: Forecast accepted, infecting {next_contact}");
-                        context.infect_person(next_contact, Some(person));
+                        trace!("Person {person}: Forecast accepted, setting {setting_id}, infecting {next_contact}");
+                        context.infect_person(next_contact, Some(person), Some(str_setting), Some(setting_id));
                     }
                 }
             }
@@ -56,7 +57,7 @@ fn seed_infections(context: &mut Context, initial_infections: usize) -> Result<(
         );
         match person {
             Some(person) => {
-                context.infect_person(person, None);
+                context.infect_person(person, None, None, None);
             }
             None => {
                 return Err(IxaError::IxaError("The number of initial infections to seed is greater than the population size. ".to_string() + &format!("The population size is {}, and the number of initial infections to seed is {}. Instead, the entire population was infected.", context.get_current_population(), initial_infections)));
@@ -315,7 +316,7 @@ mod test {
             let infectious_person = context.add_person(()).unwrap();
             set_homogeneous_mixing_itinerary(&mut context, infectious_person).unwrap();
 
-            context.infect_person(infectious_person, None);
+            context.infect_person(infectious_person, None, None, None);
             // Get the total infectiousness multiplier for comparison to total number of infections.
             if total_infectiousness_multiplier.is_none() {
                 total_infectiousness_multiplier = Some(max_total_infectiousness_multiplier(
