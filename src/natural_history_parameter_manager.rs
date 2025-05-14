@@ -88,9 +88,7 @@ impl ContextNaturalHistoryParameterExt for Context {
         // registered assignment function.
         match container.parameter_id_assigners.entry(TypeId::of::<T>()) {
             Entry::Vacant(entry) => {
-                entry.insert(Box::new(move |ctx, person_id| {
-                    assignment_fn(ctx, person_id)
-                }));
+                entry.insert(Box::new(assignment_fn));
                 Ok(())
             }
 
