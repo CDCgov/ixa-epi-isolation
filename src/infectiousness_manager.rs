@@ -267,7 +267,7 @@ mod test {
                 },
             )
             .unwrap();
-        crate::interventions::transmission_modifier_manager::init(&mut context);
+        crate::interventions::transmission_modifier_manager::init(&mut context).unwrap();
         context
     }
 
