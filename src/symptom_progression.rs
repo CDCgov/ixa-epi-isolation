@@ -330,7 +330,7 @@ mod test {
         let mut context = setup();
         let person = context.add_person(()).unwrap();
         event_subscriptions(&mut context);
-        context.infect_person(person, None);
+        context.infect_person(person, None, None, None);
         context.execute();
         // The person should be presymptomatic
         assert_eq!(
@@ -344,7 +344,7 @@ mod test {
         let mut context = setup();
         let person = context.add_person(()).unwrap();
         init(&mut context).unwrap();
-        context.infect_person(person, None);
+        context.infect_person(person, None, None, None);
         // At time 0, the person should become presymptomatic (because `event_subscriptions`)
         context.add_plan(0.0, move |ctx| {
             assert_eq!(
