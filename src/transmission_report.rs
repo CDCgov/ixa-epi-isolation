@@ -174,12 +174,14 @@ mod test {
 
         let source = context.add_person(()).unwrap();
         let target = context.add_person(()).unwrap();
+        let setting_type = Some("test_setting");
+        let setting_id: Option<usize> = Some(1);
         let infection_time = 1.0;
 
         context.infect_person(source, None, None, None);
 
         context.add_plan(infection_time, move |context| {
-            context.infect_person(target, Some(source), None, None);
+            context.infect_person(target, Some(source), setting_type, setting_id);
         });
         context.execute();
 
@@ -192,6 +194,11 @@ mod test {
             assert_eq!(record.time, infection_time);
             assert_eq!(record.target_id, target);
             assert_eq!(record.infected_by.unwrap(), source);
+            assert_eq!(
+                record.infection_setting_type,
+                Some("test_setting".to_string())
+            );
+            assert_eq!(record.infection_setting_id, Some(1));
         }
     }
 }
