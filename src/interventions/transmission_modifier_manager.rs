@@ -1,4 +1,4 @@
-use ixa::{define_data_plugin, Context, ContextPeopleExt, PersonId, PersonProperty};
+use ixa::{define_data_plugin, Context, ContextPeopleExt, IxaError, PersonId, PersonProperty};
 use std::{any::TypeId, collections::HashMap};
 
 use crate::{
@@ -23,20 +23,12 @@ impl TransmissionModifierContainer {
     ) -> f64 {
         self.modifier_aggregator
             .get(&infection_status)
-            .unwrap_or(&Self::default_aggregator())(modifiers)
+            .map_or_else(|| default_aggregator(modifiers), |agg| agg(modifiers))
     }
+}
 
-    fn default_aggregator() -> Box<TransmissionAggregatorFn> {
-        Box::new(|modifiers: &Vec<(TypeId, f64)>| -> f64 {
-            let mut aggregate_effects = 1.0;
-
-            for (_, effect) in modifiers {
-                aggregate_effects *= effect;
-            }
-
-            aggregate_effects
-        })
-    }
+fn default_aggregator(modifiers: &[(TypeId, f64)]) -> f64 {
+    modifiers.iter().map(|&(_, f)| f).product()
 }
 
 define_data_plugin!(
@@ -49,15 +41,26 @@ define_data_plugin!(
 );
 
 pub trait ContextTransmissionModifierExt {
-    /// Register a transmission modifier for a specific infection status and person property.
-    /// Modifier key must have specified lifetime to outlive the Box'd `TrasnmissionModifierFn`.
-    /// Modifier key is taken as a slice to avoid new object creation through Vec
-    fn register_transmission_modifier<T: PersonProperty + 'static>(
+    /// Register a transmission modifier function for a specific infection status and person property.
+    fn register_transmission_modifier_fn<T: PersonProperty + 'static, F>(
         &mut self,
         infection_status: InfectionStatusValue,
         person_property: T,
-        modifier_key: &'static [(T::Value, f64)],
-    );
+        modifier_fn: F,
+    ) where
+        F: Fn(&Context, PersonId) -> f64 + 'static;
+
+    /// Register a transmission modifier value tuple set for a specific infection status and person property.
+    /// Modifier key must have specified lifetime to outlive the Box'd `TrasnmissionModifierFn`.
+    /// Modifier key is taken as a slice to avoid new object creation through Vec
+    fn register_transmission_modifier_values<T: PersonProperty + 'static>(
+        &mut self,
+        infection_status: InfectionStatusValue,
+        person_property: T,
+        modifier_key: &[(T::Value, f64)],
+    ) -> Result<(), IxaError>
+    where
+        T::Value: std::hash::Hash + Eq;
 
     /// Register a transmission aggregator for a specific infection status.
     /// The aggregator is a function that takes a vector of tuples containing the type ID of the person property
@@ -70,38 +73,62 @@ pub trait ContextTransmissionModifierExt {
         agg_function: Box<TransmissionAggregatorFn>,
     );
 
-    /// Get the relative intrinsic transmission (infectiousness or susceptiblity) for a person based on their
+    /// Get the relative intrinsic transmission (infectiousness or susceptibility) for a person based on their
     /// infection status and current properties based on registered modifiers.
     fn get_relative_intrinsic_transmission_person(&self, person_id: PersonId) -> f64;
 }
 
 impl ContextTransmissionModifierExt for Context {
-    fn register_transmission_modifier<T: PersonProperty + 'static>(
+    fn register_transmission_modifier_fn<T: PersonProperty + 'static, F>(
         &mut self,
         infection_status: InfectionStatusValue,
-        person_property: T,
-        modifier_key: &'static [(T::Value, f64)],
-    ) {
-        let transmission_modifier_map: HashMap<TypeId, Box<TransmissionModifierFn>> =
-            HashMap::from([(
-                TypeId::of::<T>(),
-                Box::new(move |context: &Context, person_id| -> f64 {
-                    let property_val = context.get_person_property(person_id, person_property);
-                    for item in modifier_key {
-                        if property_val == item.0 {
-                            return item.1;
-                        }
-                    }
-                    // Return a default 1.0 (no relative change if unregistered)
-                    1.0
-                }) as Box<dyn Fn(&Context, PersonId) -> f64>,
-            )]);
+        _person_property: T,
+        modifier_fn: F,
+    ) where
+        F: Fn(&Context, PersonId) -> f64 + 'static,
+    {
+        // Box the function to store it in the map
+        let boxed_fn =
+            Box::new(move |context: &Context, person_id: PersonId| modifier_fn(context, person_id))
+                as Box<dyn Fn(&Context, PersonId) -> f64>;
 
+        // Insert the boxed function into the transmission modifier map, using entry to handle unititialized keys
         self.get_data_container_mut(TransmissionModifierPlugin)
             .transmission_modifier_map
             .entry(infection_status)
-            .or_default()
-            .extend(transmission_modifier_map);
+            .or_insert_with(|| HashMap::from([(TypeId::of::<T>(), boxed_fn)]));
+    }
+
+    fn register_transmission_modifier_values<T: PersonProperty + 'static>(
+        &mut self,
+        infection_status: InfectionStatusValue,
+        person_property: T,
+        modifier_key: &[(T::Value, f64)],
+    ) -> Result<(), IxaError>
+    where
+        T::Value: std::hash::Hash + Eq,
+    {
+        let mut modifier_map = HashMap::new();
+        for &(key, value) in modifier_key {
+            if let Some(value) = modifier_map.insert(key, value) {
+                return Err(IxaError::IxaError(
+                    "Duplicate values provided in modifier key ".to_string()
+                        + &format!("Value {value} was replaced for key {key:?}"),
+                ));
+            }
+        }
+
+        self.register_transmission_modifier_fn(
+            infection_status,
+            person_property,
+            move |context: &Context, person_id: PersonId| -> f64 {
+                let property_val = context.get_person_property(person_id, person_property);
+                // Convert modifiers to HashMap
+                // Return the corresponding value from the map, or 1.0 if not found
+                *modifier_map.get(&property_val).unwrap_or(&1.0)
+            },
+        );
+        Ok(())
     }
 
     fn register_transmission_aggregator(
@@ -138,17 +165,18 @@ impl ContextTransmissionModifierExt for Context {
 }
 
 // Initialize the transmission modifier plugin with guaranteed values
-pub fn init(context: &mut Context) {
-    context.register_transmission_modifier(
+pub fn init(context: &mut Context) -> Result<(), IxaError> {
+    context.register_transmission_modifier_values(
         InfectionStatusValue::Susceptible,
         Alive,
         &[(true, 1.0), (false, 0.0)],
-    );
-    context.register_transmission_modifier(
+    )?;
+    context.register_transmission_modifier_values(
         InfectionStatusValue::Infectious,
         Alive,
         &[(true, 1.0), (false, 0.0)],
-    );
+    )?;
+    Ok(())
 }
 
 #[cfg(test)]
@@ -172,7 +200,7 @@ mod test {
         define_setting_type, ContextSettingExt, ItineraryEntry, SettingId, SettingProperties,
     };
 
-    #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Hash)]
     pub enum MandatoryIntervention {
         Partial,
         Full,
@@ -180,7 +208,7 @@ mod test {
     }
     define_person_property!(MandatoryInterventionStatus, MandatoryIntervention);
 
-    #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Hash)]
     pub enum InfectiousnessReduction {
         Partial,
     }
@@ -240,27 +268,33 @@ mod test {
             )
             .unwrap();
 
-        context.register_transmission_modifier(
-            InfectionStatusValue::Susceptible,
-            MandatoryInterventionStatus,
-            &[
-                (MandatoryIntervention::Partial, SUSCEPTIBLE_PARTIAL),
-                (MandatoryIntervention::Full, 0.0),
-            ],
-        );
-        context.register_transmission_modifier(
-            InfectionStatusValue::Infectious,
-            MandatoryInterventionStatus,
-            &[
-                (MandatoryIntervention::Partial, INFECTIOUS_PARTIAL),
-                (MandatoryIntervention::Full, 0.0),
-            ],
-        );
-        context.register_transmission_modifier(
-            InfectionStatusValue::Infectious,
-            InfectiousnessReductionStatus,
-            &[(Some(InfectiousnessReduction::Partial), INFECTIOUS_PARTIAL)],
-        );
+        context
+            .register_transmission_modifier_values(
+                InfectionStatusValue::Susceptible,
+                MandatoryInterventionStatus,
+                &[
+                    (MandatoryIntervention::Partial, SUSCEPTIBLE_PARTIAL),
+                    (MandatoryIntervention::Full, 0.0),
+                ],
+            )
+            .unwrap();
+        context
+            .register_transmission_modifier_values(
+                InfectionStatusValue::Infectious,
+                MandatoryInterventionStatus,
+                &[
+                    (MandatoryIntervention::Partial, INFECTIOUS_PARTIAL),
+                    (MandatoryIntervention::Full, 0.0),
+                ],
+            )
+            .unwrap();
+        context
+            .register_transmission_modifier_values(
+                InfectionStatusValue::Infectious,
+                InfectiousnessReductionStatus,
+                &[(Some(InfectiousnessReduction::Partial), INFECTIOUS_PARTIAL)],
+            )
+            .unwrap();
         context
     }
 

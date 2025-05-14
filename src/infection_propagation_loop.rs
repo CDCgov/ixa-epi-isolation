@@ -165,7 +165,7 @@ mod test {
                 },
             )
             .unwrap();
-        crate::interventions::transmission_modifier_manager::init(&mut context);
+        crate::interventions::transmission_modifier_manager::init(&mut context).unwrap();
         context
     }
 
@@ -273,7 +273,7 @@ mod test {
         );
     }
 
-    #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Hash)]
     pub enum InfectiousnessReduction {
         Partial,
     }
@@ -317,11 +317,13 @@ mod test {
             let num_infected_clone = Rc::clone(&num_infected);
             let mut context = setup_context(seed, rate, alpha, duration);
 
-            context.register_transmission_modifier(
-                InfectionStatusValue::Infectious,
-                InfectiousnessReductionStatus,
-                &[(Some(InfectiousnessReduction::Partial), INFECTIOUS_PARTIAL)],
-            );
+            context
+                .register_transmission_modifier_values(
+                    InfectionStatusValue::Infectious,
+                    InfectiousnessReductionStatus,
+                    &[(Some(InfectiousnessReduction::Partial), INFECTIOUS_PARTIAL)],
+                )
+                .unwrap();
 
             // We only run the simulation for 1.0 time units.
             context.add_plan_with_phase(1.0, ixa::Context::shutdown, ExecutionPhase::Last);
@@ -434,7 +436,7 @@ mod test {
     // 2. Person 1 wears a mask that is 100% effective at periodic intervals during the day for some proportion of time
     // 3. No subsequent infectious individuals contribute to transmission
 
-    #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Hash)]
     pub enum Masking {
         None,
         Wearing,
@@ -465,11 +467,13 @@ mod test {
         });
 
         // Set up the intervention of facemask and register a perfect facemask modifier
-        context.register_transmission_modifier(
-            InfectionStatusValue::Infectious,
-            MaskingStatus,
-            &[(Masking::Wearing, 0.0)],
-        );
+        context
+            .register_transmission_modifier_values(
+                InfectionStatusValue::Infectious,
+                MaskingStatus,
+                &[(Masking::Wearing, 0.0)],
+            )
+            .unwrap();
 
         // Switch back and forth between masking or not masking every `masking_duration`, one tenth of the infectious period spent masking
         // If masking duration is 0, meaning no intervention is applied, this is skipped.
@@ -517,12 +521,13 @@ mod test {
         // Listen for infection events
         // We do not schedule the next forecasted infection for the secondary cases, as we want to see how many
         // secondary cases are created by only the initial infectious person before they recover
-        let secondary_cases = Rc::new(RefCell::new(vec![]));
-        let secondary_cases_clone = Rc::clone(&secondary_cases);
+        let secondary_infection_times = Rc::new(RefCell::new(vec![]));
+        let secondary_infection_times_clone: Rc<RefCell<Vec<_>>> =
+            Rc::clone(&secondary_infection_times);
         context.subscribe_to_event::<PersonPropertyChangeEvent<InfectionStatus>>(
             move |context, event| {
                 if event.current == InfectionStatusValue::Infectious {
-                    secondary_cases_clone
+                    secondary_infection_times_clone
                         .borrow_mut()
                         .push(context.get_current_time());
                 }
@@ -537,7 +542,7 @@ mod test {
         context.execute();
 
         // The distirbution of infection times should be derived and is returned here for convenience
-        let returned_vec = secondary_cases.borrow().clone();
+        let returned_vec = secondary_infection_times.borrow().clone();
         returned_vec
     }
 
@@ -546,7 +551,7 @@ mod test {
     fn test_community_masking_one_infector() {
         let rate = 2.0;
         let alpha = 0.1;
-        let duration = 4.0;
+        let duration = 5.0;
         let masking_proportion = 0.4;
         let community_size = 500;
         let n_reps = 1_000;
