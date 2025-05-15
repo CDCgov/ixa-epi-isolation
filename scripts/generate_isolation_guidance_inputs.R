@@ -10,9 +10,10 @@ set.seed(108)
 # to get the time of infection. We can calibrate this time and use
 # it to check our assumption that infectiousness starts at logVL > 0.
 # The time we add is the disease latent period, and the latent period
-# plus the time to symptom onset is the incubation period.
-pre_infectiousness_mean <- 0.5
-pre_infectiousness_std_dev <- 1
+# plus the time from infectiousness onset to symptom onset is the
+# disease incubation period.
+log_pre_infectiousness_mean <- 0.5
+log_pre_infectiousness_std_dev <- 1
 dt <- 0.2
 max_time <- 28
 
@@ -25,37 +26,43 @@ sampled_params <- readr::read_csv(
   file = posterior_sampled_path
 )
 
-# Our isolation guidance parameters provide the viral load _with respect to_
-# time since symptom. We need to convert times to be with respect to _infection_
-# onset. For this reason, we need to estimate the time of infection.
-# We do this by assuming that infection happens sometime before whenever we
-# assume infectiousness starts (logVL > 0), a calibratable amount of time.
-# Note that this time is the disease latent period, and the time from the start
-# of the infection to symptom onset is the incubation period
-# (this is -infection_start_time), so we can interpret these parameters
-# epidemiologically.
-# There core assumption here is really that infectiousness starts at logVL > 0.
-# If that is not true, we should see the pre infectiousness period run up
-# against 0 in the calibration, and we can adjust accordingly.
+# Our isolation guidance parameters provide the viral load with respect to
+# time since _symptom onset_. We need to convert times to be with respect to
+# _infection_ onset because in our ABM we need to start forecasting
+# infectiousness the moment the agent becomes infectious rather than when they
+# start showing symptoms.
+# For this reason, we need to estimate the time of infection.
+# We do this by assuming that the actual infection event happens sometime
+# before whenever we assume infectiousness starts (logVL > 0).
+# This time is calibratable and is biologically the disease latent period.
+# The time from the start of the infection to symptom onset is the incubation
+# period (this is -infection_start_time), so we can interpret these parameters
+# and relationships among them epidemiologically.
+# The core assumption here is really that infectiousness starts at logVL > 0.
+# If that is not true, when we do model calibration of the pre infectiousness
+# period, we should see the posterior for the pre infectiousness period run up
+# against 0, and we can adjust the assumption that logVL > 0 marks the start of
+# infectiousness accordingly, making the start of infectiousness at a lower
+# logVL instead.
 lognorm_with_constraints <- function(minimum, mu, sd) {
   # Generate a log-normal random variable with a minimum value
   repeat {
-    x <- exp(rnorm(1, mean = log(mu), sd = sd))
-    if (x > minimum) {
-      return(x)
+    l <- rlnorm(1, meanlog = mu, sdlog = sd)
+    if (l > minimum) {
+      return(l)
     }
   }
 }
 
 sampled_params <- sampled_params |>
-  dplyr::mutate(minimum_incubation_period = tp - wp) |>
+  dplyr::mutate(minimum_latent_period = tp - wp) |>
   dplyr::mutate(
-    pre_infectiousness_period =
+    latent_period =
       purrr::map_dbl(
-        minimum_incubation_period,
+        minimum_latent_period,
         lognorm_with_constraints,
-        pre_infectiousness_mean,
-        pre_infectiousness_std_dev
+        log_pre_infectiousness_mean,
+        log_pre_infectiousness_std_dev
       )
   ) |>
   # wp is the proliferation period -- time from logVL = 0 to peak logVL
@@ -63,7 +70,11 @@ sampled_params <- sampled_params |>
   # so wp - tp is the time from logVL = 0 to symptom onset, and -(wp - tp)
   # is the time at which infectiousness starts. We want to have the
   # infection start before that, so we subtract some time.
-  dplyr::mutate(infection_start_time = tp - wp - pre_infectiousness_period)
+  dplyr::mutate(infection_start_time = tp - wp - latent_period)
+
+stopifnot(
+  all(sampled_params$infection_start_time <= 0)
+)
 
 # Our triangle_vl function from our isolation guidance work (copied and put in
 # `functions.R` for now) is defined in terms of the time since symptom onset.
@@ -80,6 +91,11 @@ triangle_vl_wrt_infected_time <- function(
   # which transforms the viral load to an infectiousness function using our
   # isolation guidance assumptions for the different functional forms of
   # infectiousness.
+  # When we do that, we also need to figure out a more mature way to handle
+  # the start of infectiousness. Do we stick with saying that infectiousness
+  # starts at logVL > 0 even though our other curves are no longer just the
+  # the logVL? Or, do we pick some threshold based on the specific viral load
+  # to infectiousness function we are using?
   list(curve)
 }
 
@@ -107,9 +123,6 @@ names(trajectories) <- times # As column names
 trajectories <- trajectories |>
   dplyr::mutate(id = row_number()) |>
   pivot_longer(cols = -c("id"), names_to = "time", values_to = "value") |>
-  # Due to numerical instability, it is possible to have the rate go to infinity
-  # at the end of a timeseries -- we need to remove these.
-  dplyr::filter(is.finite(value)) |>
   # We can save space by removing zeros since the Rust code assumes that the
   # rate is 0 for values outside the time series.
   dplyr::filter(value != 0)
