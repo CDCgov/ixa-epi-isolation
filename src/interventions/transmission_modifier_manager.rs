@@ -209,6 +209,7 @@ mod test {
         ContextTransmissionModifierExt, TransmissionModifierPlugin,
     };
     use crate::parameters::{GlobalParams, Params, RateFnType};
+    use crate::rate_fns::load_rate_fns;
     use std::any::TypeId;
 
     #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Hash)]
@@ -254,6 +255,8 @@ mod test {
                 },
             )
             .unwrap();
+
+        load_rate_fns(&mut context).unwrap();
 
         context
             .store_transmission_modifier_values(
