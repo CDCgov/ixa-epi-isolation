@@ -149,9 +149,22 @@ impl ContextNaturalHistoryParameterExt for Context {
 
 #[cfg(test)]
 mod test {
-    use std::any::TypeId;
+    use std::{
+        any::TypeId,
+        collections::HashMap,
+        path::{Path, PathBuf},
+    };
 
-    use ixa::{context::Context, ContextPeopleExt, ContextRandomExt, IxaError};
+    use ixa::{
+        context::Context, ContextGlobalPropertiesExt, ContextPeopleExt, ContextRandomExt, IxaError,
+    };
+
+    use crate::{
+        infectiousness_manager::InfectionContextExt,
+        parameters::{GlobalParams, Params, ProgressionLibraryType, RateFnType},
+        rate_fns::{load_rate_fns, RateFn},
+        symptom_progression::Symptoms,
+    };
 
     use super::{
         ContextNaturalHistoryParameterExt, NaturalHistoryParameterLibrary, NaturalHistoryParameters,
@@ -308,5 +321,50 @@ mod test {
         let culture_id = context.get_parameter_id(CulturePositivity, person);
         let testing_id = context.get_parameter_id(TestingPatterns, person);
         assert_eq!(culture_id, testing_id);
+    }
+
+    #[test]
+    fn test_real_file_ids() {
+        let mut context = init_context();
+
+        let parameters = Params {
+            initial_infections: 1,
+            max_time: 100.0,
+            seed: 0,
+            infectiousness_rate_fn: RateFnType::EmpiricalFromFile {
+                file: Path::new(env!("CARGO_MANIFEST_DIR"))
+                    .join("input/library_empirical_rate_fns.csv"),
+                scale: 1.0,
+            },
+            symptom_progression_library: Some(ProgressionLibraryType::EmpiricalFromFile {
+                file: Path::new(env!("CARGO_MANIFEST_DIR"))
+                    .join("input/library_symptom_parameters.csv"),
+            }),
+            report_period: 1.0,
+            synth_population_file: PathBuf::from("."),
+            transmission_report_name: None,
+            settings_properties: HashMap::new(),
+        };
+
+        context
+            .set_global_property_value(GlobalParams, parameters)
+            .unwrap();
+
+        // Add a person
+        let person = context.add_person(()).unwrap();
+        // Infect the person -- we have to do this above the call to the symptom progression
+        // init because otherwise it panics that the people module has not been initialized?
+        context.infect_person(person, None);
+
+        // Initialize symptoms -- reads in the symptom progression library
+        load_rate_fns(&mut context).unwrap();
+        crate::symptom_progression::init(&mut context).unwrap();
+        // Read in the rate function library
+
+        // See if the person's symptom id is the same as their rate function id
+        assert_eq!(
+            context.get_parameter_id(Symptoms, person),
+            context.get_parameter_id(RateFn, person)
+        );
     }
 }
