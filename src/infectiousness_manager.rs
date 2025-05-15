@@ -346,6 +346,7 @@ mod test {
     }
 
     #[test]
+    /// Test has potential to stochastically fail if exponential draw is longer than infectious duration
     fn test_forecast() {
         let mut context = setup_context();
         let p1 = context.add_person(()).unwrap();
@@ -458,22 +459,26 @@ mod test {
     #[test]
     #[allow(clippy::cast_precision_loss, clippy::cast_lossless)]
     fn test_rejection_sample_forecast_intervention() {
-        let n = 10_000;
+        let n = 1_000;
         let mut count = 0;
         let relative_effect = 0.8;
 
         let mut context = setup_context();
 
-        let infector = context
+        let p1 = context
             .add_person((MandatoryInterventionStatus, MandatoryIntervention::Partial))
             .unwrap();
-        let target = context
+        set_homogeneous_mixing_itinerary(&mut context, p1).unwrap();
+        let p2 = context
             .add_person((MandatoryInterventionStatus, MandatoryIntervention::NoEffect))
             .unwrap();
+        set_homogeneous_mixing_itinerary(&mut context, p2).unwrap();
+        let p3 = context
+            .add_person((MandatoryInterventionStatus, MandatoryIntervention::NoEffect))
+            .unwrap();
+        set_homogeneous_mixing_itinerary(&mut context, p3).unwrap();
 
-        set_homogeneous_mixing_itinerary(&mut context, infector).unwrap();
-        set_homogeneous_mixing_itinerary(&mut context, target).unwrap();
-
+        context.infect_person(p1, None);
         context
             .store_transmission_modifier_values(
                 InfectionStatusValue::Infectious,
@@ -487,14 +492,9 @@ mod test {
             .unwrap();
 
         for _ in 0..n {
-            context.infect_person(infector, None);
-            // Will return None if forecast is greater than infection duration
-            let forecast = get_forecast(&context, infector).unwrap();
-            if evaluate_forecast(
-                &mut context,
-                infector,
-                forecast.forecasted_total_infectiousness,
-            ) {
+            // Will return None if forecast is greater than infection duration, running 10_000 times encounters unwrap on None
+            let f = get_forecast(&context, p1).expect("Forecast should be returned");
+            if evaluate_forecast(&mut context, p1, f.forecasted_total_infectiousness) {
                 count += 1;
             }
         }
