@@ -384,6 +384,7 @@ mod test {
         let p1 = context.add_person(()).unwrap();
         set_homogeneous_mixing_itinerary(&mut context, p1).unwrap();
         context.infect_person(p1, None);
+        // We need to add another person so that our total infectiousness is 1.
         let p2 = context.add_person(()).unwrap();
         set_homogeneous_mixing_itinerary(&mut context, p2).unwrap();
 
@@ -392,15 +393,16 @@ mod test {
     }
 
     #[test]
-    fn test_evaluate_fails_when_forecast_slightly_bigger() {
+    fn test_evaluate_still_succeeds_when_forecast_slightly_bigger() {
         let mut context = setup_context();
         let p1 = context.add_person(()).unwrap();
+        set_homogeneous_mixing_itinerary(&mut context, p1).unwrap();
         context.infect_person(p1, None);
-        let _ = context.add_person(()).unwrap();
-        crate::settings::init(&mut context);
+        let p2 = context.add_person(()).unwrap();
+        set_homogeneous_mixing_itinerary(&mut context, p2).unwrap();
 
         let still_valid_forecast = 1.0 - 9e-11;
-        evaluate_forecast(&mut context, p1, still_valid_forecast);
+        assert!(evaluate_forecast(&mut context, p1, still_valid_forecast));
     }
 
     #[test]
