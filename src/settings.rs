@@ -33,31 +33,15 @@ pub trait SettingType: std::fmt::Debug {
 }
 
 #[derive(Debug, PartialEq)]
-pub struct SettingId<'a, T: SettingType> {
+pub struct SettingId<'a, T: SettingType + ?Sized> {
     pub id: usize,
     // Marker to say this group id is associated with T (but does not own it)
     pub setting_type: &'a T,
 }
 
-impl<'a, T: SettingType> SettingId<'a, T> {
+impl<'a, T: SettingType + ?Sized> SettingId<'a, T> {
     pub fn new(setting_type: &'a T, id: usize) -> SettingId<'a, T> {
         SettingId { id, setting_type }
-    }
-}
-
-impl SettingType for Box<dyn SettingType> {
-    fn calculate_multiplier(
-        &self,
-        members: &[PersonId],
-        setting_properties: SettingProperties,
-    ) -> f64 {
-        (self.as_ref()).calculate_multiplier(members, setting_properties)
-    }
-    fn get_type_id(&self) -> TypeId {
-        (self.as_ref()).get_type_id()
-    }
-    fn get_name(&self) -> &'static str {
-        (self.as_ref()).get_name()
     }
 }
 
@@ -234,10 +218,10 @@ pub trait ContextSettingExt {
     ) -> Option<&Vec<PersonId>>;
     fn calculate_total_infectiousness_multiplier_for_person(&self, person_id: PersonId) -> f64;
     fn get_itinerary(&self, person_id: PersonId) -> Option<&Vec<ItineraryEntry>>;
-    fn get_contact<Q: Query + 'static>(
+    fn get_contact<T: SettingType + ?Sized, Q: Query + 'static>(
         &self,
         person_id: PersonId,
-        setting_id: SettingId<Box<dyn SettingType>>,
+        setting_id: SettingId<T>,
         q: Q,
     ) -> Result<Option<PersonId>, IxaError>;
     fn draw_contact_from_transmitter_itinerary<Q: Query>(
@@ -245,10 +229,7 @@ pub trait ContextSettingExt {
         person_id: PersonId,
         q: Q,
     ) -> Result<Option<PersonId>, IxaError>;
-    fn get_setting_for_contact(
-        &self,
-        person_id: PersonId,
-    ) -> Option<SettingId<Box<dyn SettingType>>>;
+    fn get_setting_for_contact(&self, person_id: PersonId) -> Option<SettingId<dyn SettingType>>;
 }
 
 trait ContextSettingInternalExt {
@@ -473,10 +454,10 @@ impl ContextSettingExt for Context {
             .get(&person_id)
     }
 
-    fn get_contact<Q: Query + 'static>(
+    fn get_contact<T: SettingType + ?Sized, Q: Query + 'static>(
         &self,
         person_id: PersonId,
-        setting_id: SettingId<Box<dyn SettingType>>,
+        setting_id: SettingId<T>,
         q: Q,
     ) -> Result<Option<PersonId>, IxaError> {
         // let container: &SettingDataContainer = self.get_data_container(SettingDataPlugin).unwrap();
@@ -513,10 +494,7 @@ impl ContextSettingExt for Context {
             Ok(None)
         }
     }
-    fn get_setting_for_contact(
-        &self,
-        person_id: PersonId,
-    ) -> Option<SettingId<Box<dyn SettingType>>> {
+    fn get_setting_for_contact(&self, person_id: PersonId) -> Option<SettingId<dyn SettingType>> {
         let container = self.get_data_container(SettingDataPlugin).unwrap();
         let mut itinerary_multiplier = Vec::new();
         container.with_itinerary(person_id, |setting_type, setting_props, members, ratio| {
@@ -531,7 +509,8 @@ impl ContextSettingExt for Context {
             let setting_type = container
                 .setting_types
                 .get(&itinerary_entry.setting_type)
-                .unwrap();
+                .unwrap()
+                .as_ref();
             Some(SettingId::new(setting_type, itinerary_entry.setting_id))
         } else {
             None
@@ -1080,7 +1059,8 @@ mod test {
             .unwrap()
             .setting_types
             .get(&TypeId::of::<CensusTract>())
-            .unwrap();
+            .unwrap()
+            .as_ref();
 
         assert!(context
             .get_contact(person_a, SettingId::new(temp_census_tract, 0), ())
@@ -1096,7 +1076,8 @@ mod test {
             .unwrap()
             .setting_types
             .get(&TypeId::of::<CensusTract>())
-            .unwrap();
+            .unwrap()
+            .as_ref();
 
         let e = context
             .get_contact(person_b, SettingId::new(temp_census_tract, 0), ())

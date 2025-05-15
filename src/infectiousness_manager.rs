@@ -71,10 +71,10 @@ pub fn max_total_infectiousness_multiplier(context: &Context, person_id: PersonI
 define_rng!(ForecastRng);
 
 // Infection attempt function for a context and given `PersonId`
-pub fn infection_attempt(
+pub fn infection_attempt<T: SettingType + ?Sized>(
     context: &Context,
     person_id: PersonId,
-    setting_id: SettingId<Box<dyn SettingType>>,
+    setting_id: SettingId<T>,
 ) -> Option<PersonId> {
     let next_contact = context
         .get_contact(person_id, setting_id, (Alive, true))
