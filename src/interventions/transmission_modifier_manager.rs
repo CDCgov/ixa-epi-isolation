@@ -1,4 +1,6 @@
-use ixa::{define_data_plugin, Context, ContextPeopleExt, IxaError, PersonId, PersonProperty};
+use ixa::{
+    define_data_plugin, trace, Context, ContextPeopleExt, IxaError, PersonId, PersonProperty,
+};
 use std::{any::TypeId, collections::HashMap};
 
 use crate::{
@@ -44,7 +46,7 @@ pub trait ContextTransmissionModifierExt {
     /// Register a transmission modifier function for a specific infection status and person property.
     /// All float values returned should return the relative infectiousness or susceptibility
     /// of the person with respect to the base value of 1.0.
-    fn register_transmission_modifier_fn<T: PersonProperty + 'static, F>(
+    fn register_transmission_modifier_fn<T: PersonProperty + 'static + std::fmt::Debug, F>(
         &mut self,
         infection_status: InfectionStatusValue,
         person_property: T,
@@ -55,13 +57,14 @@ pub trait ContextTransmissionModifierExt {
     /// Register a transmission modifier value tuple set for a specific infection status and person
     /// property.
     /// This supplies a default transmission modifier function that maps person property values to
-    /// floats as specified in the modifier key.
+    /// floats as specified in the modifier key. All floats decalred in this fashion have to be between
+    /// zero and one.
     ///
     /// Any modifiers based on efficacy (e.g. facemask transmission prevention) should be
     /// subtracted from 1.0 for modifier effect value.
     ///
     /// Modifier key is taken as a slice to avoid new object creation through Vec
-    fn store_transmission_modifier_values<T: PersonProperty + 'static>(
+    fn store_transmission_modifier_values<T: PersonProperty + 'static + std::fmt::Debug>(
         &mut self,
         infection_status: InfectionStatusValue,
         person_property: T,
@@ -88,10 +91,10 @@ pub trait ContextTransmissionModifierExt {
 }
 
 impl ContextTransmissionModifierExt for Context {
-    fn register_transmission_modifier_fn<T: PersonProperty + 'static, F>(
+    fn register_transmission_modifier_fn<T: PersonProperty + 'static + std::fmt::Debug, F>(
         &mut self,
         infection_status: InfectionStatusValue,
-        _person_property: T,
+        person_property: T,
         modifier_fn: F,
     ) where
         F: Fn(&Context, PersonId) -> f64 + 'static,
@@ -100,14 +103,18 @@ impl ContextTransmissionModifierExt for Context {
         let boxed_fn = Box::new(modifier_fn);
 
         // Insert the boxed function into the transmission modifier map, using entry to handle unititialized keys
-        self.get_data_container_mut(TransmissionModifierPlugin)
+        if let Some(_modifier_fxn) = self
+            .get_data_container_mut(TransmissionModifierPlugin)
             .transmission_modifier_map
             .entry(infection_status)
             .or_default()
-            .insert(TypeId::of::<T>(), boxed_fn);
+            .insert(TypeId::of::<T>(), boxed_fn)
+        {
+            trace!("Overwriting existing transmission modifier function for infection status {infection_status:?} and property {person_property:?}");
+        }
     }
 
-    fn store_transmission_modifier_values<T: PersonProperty + 'static>(
+    fn store_transmission_modifier_values<T: PersonProperty + 'static + std::fmt::Debug>(
         &mut self,
         infection_status: InfectionStatusValue,
         person_property: T,
@@ -119,6 +126,13 @@ impl ContextTransmissionModifierExt for Context {
         // Convert modifiers to HashMap
         let mut modifier_map = HashMap::new();
         for &(key, value) in modifier_key {
+            if !(0.0..=1.0).contains(&value) {
+                return Err(IxaError::IxaError(
+                    "Scalar modifier values stored must be between 0.0 and 1.0. ".to_string()
+                        + &format!("Value {value} for {person_property:?}::{key:?} is not."),
+                ));
+            }
+
             if let Some(value) = modifier_map.insert(key, value) {
                 return Err(IxaError::IxaError(
                     "Duplicate values provided in modifier key ".to_string()
@@ -198,7 +212,7 @@ pub fn init(context: &mut Context) -> Result<(), IxaError> {
 mod test {
     use ixa::{
         define_person_property, define_person_property_with_default, Context,
-        ContextGlobalPropertiesExt, ContextPeopleExt, ContextRandomExt, PersonId,
+        ContextGlobalPropertiesExt, ContextPeopleExt, ContextRandomExt, IxaError, PersonId,
     };
     use serde::{Deserialize, Serialize};
     use statrs::assert_almost_eq;
@@ -293,13 +307,14 @@ mod test {
     #[test]
     fn test_register_modifier_values() {
         let mut context = Context::new();
+        let relative_effect = 0.8;
 
         context
             .store_transmission_modifier_values(
                 InfectionStatusValue::Susceptible,
                 MandatoryInterventionStatus,
                 &[
-                    (MandatoryIntervention::Partial, 0.8),
+                    (MandatoryIntervention::Partial, relative_effect),
                     (MandatoryIntervention::Full, 0.0),
                 ],
             )
@@ -330,8 +345,96 @@ mod test {
             .unwrap();
 
         // Check that the modifier function returns the expected value
-        assert_almost_eq!(modifier_fn(&context, partial_id), 0.8, 0.0);
+        assert_almost_eq!(modifier_fn(&context, partial_id), relative_effect, 0.0);
         assert_almost_eq!(modifier_fn(&context, full_id), 0.0, 0.0);
+    }
+
+    #[test]
+    fn test_register_modifier_value_overwrite() {
+        let mut context = Context::new();
+        let relative_effect = 0.8;
+
+        // Store initial modifier values to be overwritten
+        context
+            .store_transmission_modifier_values(
+                InfectionStatusValue::Susceptible,
+                MandatoryInterventionStatus,
+                &[
+                    (MandatoryIntervention::Partial, relative_effect - 0.2),
+                    (MandatoryIntervention::Full, 0.2),
+                ],
+            )
+            .unwrap();
+
+        // Overwrite previous modifier values
+        context
+            .store_transmission_modifier_values(
+                InfectionStatusValue::Susceptible,
+                MandatoryInterventionStatus,
+                &[
+                    (MandatoryIntervention::Partial, relative_effect),
+                    (MandatoryIntervention::Full, 0.0),
+                ],
+            )
+            .unwrap();
+
+        // Add people with different intervention statuses
+        let partial_id = context
+            .add_person((MandatoryInterventionStatus, MandatoryIntervention::Partial))
+            .unwrap();
+        let full_id = context
+            .add_person((MandatoryInterventionStatus, MandatoryIntervention::Full))
+            .unwrap();
+
+        // Container should now be initialized, safe to unwrap()
+        let modifier_container = context
+            .get_data_container(TransmissionModifierPlugin)
+            .unwrap();
+        let modifier_map = modifier_container
+            .transmission_modifier_map
+            .get(&InfectionStatusValue::Susceptible)
+            .unwrap();
+
+        // Check that the modifier map contains the expected values
+        assert_eq!(modifier_map.len(), 1);
+
+        let modifier_fn = modifier_map
+            .get(&TypeId::of::<MandatoryInterventionStatus>())
+            .unwrap();
+
+        // Check that the modifier function returns the expected value of the overwritten registration
+        // The log should also be checked here to make sure the overwrite is recorded
+        assert_almost_eq!(modifier_fn(&context, partial_id), relative_effect, 0.0);
+        assert_almost_eq!(modifier_fn(&context, full_id), 0.0, 0.0);
+    }
+
+    #[test]
+    fn test_register_modifier_value_invalid() {
+        let mut context = Context::new();
+
+        // Attempt to store invalid modifier values
+        let result = context.store_transmission_modifier_values(
+            InfectionStatusValue::Susceptible,
+            MandatoryInterventionStatus,
+            &[
+                (MandatoryIntervention::Partial, 1.2), // Invalid value
+                (MandatoryIntervention::Full, 0.0),
+            ],
+        );
+
+        match result.err() {
+            Some(IxaError::IxaError(msg)) => {
+                assert_eq!(
+                    msg,
+                    "Scalar modifier values stored must be between 0.0 and 1.0. Value 1.2 for MandatoryInterventionStatus::Partial is not."
+                );
+            }
+            Some(ue) => panic!(
+                "Expected an error that Partial attempts to store an invalid modifier. Instead got {:?}",
+                ue.to_string()
+            ),
+            None => panic!("Expected an error. Instead, seeded infections with no errors."),
+        }
     }
 
     #[test]
