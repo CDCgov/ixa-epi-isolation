@@ -133,10 +133,10 @@ impl ContextTransmissionModifierExt for Context {
                 ));
             }
 
-            if let Some(value) = modifier_map.insert(key, value) {
+            if let Some(old_value) = modifier_map.insert(key, value) {
                 return Err(IxaError::IxaError(
                     "Duplicate values provided in modifier key ".to_string()
-                        + &format!("Value {value} was replaced for key {key:?}"),
+                        + &format!("Values {old_value} and {value} were both attempted to be registered to key {person_property:?}::{key:?}"),
                 ));
             }
         }
@@ -431,6 +431,35 @@ mod test {
             }
             Some(ue) => panic!(
                 "Expected an error that Partial attempts to store an invalid modifier. Instead got {:?}",
+                ue.to_string()
+            ),
+            None => panic!("Expected an error. Instead, seeded infections with no errors."),
+        }
+    }
+
+    #[test]
+    fn test_register_modifier_value_duplicate() {
+        let mut context = Context::new();
+
+        // Attempt to store duplicate modifier values
+        let result = context.store_transmission_modifier_values(
+            InfectionStatusValue::Susceptible,
+            MandatoryInterventionStatus,
+            &[
+                (MandatoryIntervention::Partial, 0.8),
+                (MandatoryIntervention::Partial, 0.5), // Duplicate value
+            ],
+        );
+
+        match result.err() {
+            Some(IxaError::IxaError(msg)) => {
+                assert_eq!(
+                    msg,
+                    "Duplicate values provided in modifier key Values 0.8 and 0.5 were both attempted to be registered to key MandatoryInterventionStatus::Partial"
+                );
+            }
+            Some(ue) => panic!(
+                "Expected an error that Partial attempts to store a duplicate modifier. Instead got {:?}",
                 ue.to_string()
             ),
             None => panic!("Expected an error. Instead, seeded infections with no errors."),
