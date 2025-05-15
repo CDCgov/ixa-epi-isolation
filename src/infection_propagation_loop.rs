@@ -100,7 +100,7 @@ mod test {
     };
     use statrs::{
         assert_almost_eq,
-        distribution::{ContinuousCDF, Discrete, DiscreteCDF, Poisson, Uniform},
+        distribution::{ContinuousCDF, Discrete, Poisson, Uniform},
     };
 
     use crate::{
@@ -443,18 +443,19 @@ mod test {
     }
     define_person_property_with_default!(MaskingStatus, Masking, Masking::None);
 
-    // Function to return a vector of infection times for each secondary case created according to the scenairo described above
-    // For large community sizes, i.e. much greater than the expected number of secondary cases, this should be identical to the test above
-    // For smaller community sizes, i.e. on par with the expected number of secondary cases, this test will fail due to the divergence from
-    // a Poisson distribution
+    // Function to return a vector of infection times for each secondary case created according to the scenario described above
+    // This is identical to the test_number_timing_infections_one_time_unit function, but with the addition of a facemask modifier
+    // and making community size greater than 1 allows for testing alpha with calculating the total infectiousness multiplier
+    #[allow(clippy::cast_sign_loss, clippy::cast_possible_truncation)]
     fn run_masking_community_scenario(
         seed: u64,
         rate: f64,
         alpha: f64,
         duration: f64,
         masking_proportion: f64,
+        mask_changes: f64,
         community_size: usize,
-    ) -> Vec<f64> {
+    ) -> Vec<(usize, f64)> {
         let mut context = setup_context(seed, rate, alpha, duration);
         load_rate_fns(&mut context).unwrap();
 
@@ -475,10 +476,12 @@ mod test {
             )
             .unwrap();
 
-        // Switch back and forth between masking or not masking every `masking_duration`, one tenth of the infectious period spent masking
+        // Switch back and forth between masking or not masking every `masking_duration`, if mask changes is 10.0,
+        // this results in one tenth of the infectious period spent masking is done before the infector switches to unmasked.
         // If masking duration is 0, meaning no intervention is applied, this is skipped.
-        let masking_duration = duration * masking_proportion * 0.1;
-        let nonmasking_duration = duration * (1.0 - masking_proportion) * 0.1;
+        let masking_duration = duration * masking_proportion / mask_changes;
+        let nonmasking_duration = duration * (1.0 - masking_proportion) / mask_changes;
+
         if masking_duration > 0.0 {
             context.subscribe_to_event::<PersonPropertyChangeEvent<MaskingStatus>>(
                 move |context, event| {
@@ -527,9 +530,26 @@ mod test {
         context.subscribe_to_event::<PersonPropertyChangeEvent<InfectionStatus>>(
             move |context, event| {
                 if event.current == InfectionStatusValue::Infectious {
+                    let period_id =
+                        (context.get_current_time() * mask_changes / duration).trunc() as usize;
                     secondary_infection_times_clone
                         .borrow_mut()
-                        .push(context.get_current_time());
+                        .push((period_id, context.get_current_time()));
+
+                    let InfectionDataValue::Infectious { infected_by, .. } =
+                        context.get_person_property(event.person_id, InfectionData)
+                    else {
+                        panic!("Unexpected InfectionDataValue variant encountered");
+                    };
+                    let infector_masking =
+                        context.get_person_property(infected_by.unwrap(), MaskingStatus);
+                    assert_eq!(infector_masking, Masking::None);
+                    assert_eq!(infected_by.unwrap(), infectious_person);
+                    context.set_person_property(
+                        event.person_id,
+                        InfectionData,
+                        InfectionDataValue::Susceptible,
+                    );
                 }
             },
         );
@@ -547,16 +567,29 @@ mod test {
     }
 
     #[test]
-    #[allow(clippy::cast_lossless, clippy::cast_precision_loss)]
+    #[allow(
+        clippy::cast_lossless,
+        clippy::cast_precision_loss,
+        clippy::cast_sign_loss,
+        clippy::cast_possible_truncation
+    )]
     fn test_community_masking_one_infector() {
         let rate = 2.0;
         let alpha = 0.1;
         let duration = 5.0;
         let masking_proportion = 0.4;
-        let community_size = 500;
-        let n_reps = 1_000;
+        let mask_changes = 10.0;
+        let community_size = 5;
+        let n_reps = 5_000;
 
         let mut cases_count_sizes = vec![];
+
+        // Check that the number of secondary cases is as expected
+        let expected_cases = (1.0 - masking_proportion)
+            * rate
+            * duration
+            * ((community_size - 1) as f64).powf(alpha);
+        let mut case_count_distribution = [0; 10];
 
         // Run the simulation
         for seed in 0..n_reps {
@@ -566,48 +599,36 @@ mod test {
                 alpha,
                 duration,
                 masking_proportion,
+                mask_changes,
                 community_size,
             );
             cases_count_sizes.push(infection_times.len());
-            assert!(infection_times.len() < community_size);
-        }
 
-        // Check that the number of secondary cases is as expected following a truncated Poisson distribution
-        let expected_cases = (1.0 - masking_proportion)
-            * rate
-            * duration
-            * ((community_size - 1) as f64).powf(alpha);
+            // Check that infection counts in each nonmasking period are Poisson distributed
+            // First, we find how many cases were generated during each period where the infector was unmasked
+            let mut cases_per_masking_period = vec![0; mask_changes as usize];
+            for (period_id, _) in infection_times {
+                cases_per_masking_period[period_id] += 1;
+            }
 
-        // Perform a goodness-of-fit test to check if the case count sizes follow a Poisson distribution
-        let poisson = Poisson::new(expected_cases).unwrap();
-        let mut observed_counts = vec![0; community_size];
-        for &count in &cases_count_sizes {
-            if count < community_size {
-                observed_counts[count] += 1;
+            // Then, we get the distribution of case counts per period, which is tracked across all experiments
+            for &count in &cases_per_masking_period {
+                if count < 10 {
+                    case_count_distribution[count] += 1;
+                }
             }
         }
 
-        let mut chi_square_stat = 0.0;
-        for (i, &observed) in observed_counts.iter().enumerate() {
-            let expected =
-                n_reps as f64 * poisson.pmf(i as u64) / (poisson.cdf((community_size - 1) as u64));
-            if expected > 1.0 {
-                println!("{i}: Observed: {observed}, Expected: {expected}");
-            }
-            if expected > 0.0 {
-                chi_square_stat += (observed as f64 - expected).powi(2) / expected;
-            }
+        // Finally, we check that the distribution of case counts is approximately Poisson distributed using the pmf
+        let poisson_dist = Poisson::new(expected_cases / mask_changes).unwrap();
+        for (i, &counts) in case_count_distribution.iter().enumerate() {
+            let poisson_prob = poisson_dist.pmf(i as u64);
+            let empirical_prob = counts as f64 / (mask_changes * n_reps as f64);
+            assert_almost_eq!(poisson_prob, empirical_prob, 0.05);
         }
 
-        // Degrees of freedom = number of bins - 1
-        let degrees_of_freedom = observed_counts.len() - 1;
-        let chi_square_critical = statrs::distribution::ChiSquared::new(degrees_of_freedom as f64)
-            .unwrap()
-            .inverse_cdf(0.95);
-
-        assert!(
-            chi_square_stat < chi_square_critical,
-            "The case count sizes do not follow the expected Poisson distribution (chi-square stat: {chi_square_stat}, critical value: {chi_square_critical})."
-        );
+        // And we compare the overall case count average across experiments
+        let average_case_count = cases_count_sizes.iter().sum::<usize>() as f64 / n_reps as f64;
+        assert_almost_eq!(expected_cases, average_case_count, expected_cases / 100.0);
     }
 }
