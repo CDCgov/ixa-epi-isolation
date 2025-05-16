@@ -8,7 +8,7 @@ use statrs::distribution::Exp;
 use crate::{
     population_loader::Alive,
     rate_fns::{InfectiousnessRateExt, InfectiousnessRateFn, ScaledRateFn},
-    settings::{ContextSettingExt, SettingType},
+    settings::{ContextSettingExt, SettingId, SettingType},
 };
 
 #[derive(Serialize, PartialEq, Debug, Clone, Copy)]
@@ -70,14 +70,13 @@ pub fn max_total_infectiousness_multiplier(context: &Context, person_id: PersonI
 define_rng!(ForecastRng);
 
 // Infection attempt function for a context and given `PersonId`
-pub fn infection_attempt(
+pub fn infection_attempt<T: SettingType + ?Sized>(
     context: &Context,
     person_id: PersonId,
-    setting_type: &dyn SettingType,
-    setting_id: usize,
+    setting_id: SettingId<T>,
 ) -> Option<PersonId> {
     let next_contact = context
-        .get_contact(person_id, setting_type, setting_id, (Alive, true))
+        .get_contact(person_id, setting_id, (Alive, true))
         .unwrap()?;
     match context.get_person_property(next_contact, InfectionStatus) {
         InfectionStatusValue::Susceptible => Some(next_contact),
@@ -244,7 +243,7 @@ mod test {
         person_id: PersonId,
     ) -> Result<(), IxaError> {
         let itinerary = vec![ItineraryEntry::new(
-            &SettingId::new(HomogeneousMixing, 0),
+            SettingId::new(&HomogeneousMixing, 0),
             1.0,
         )];
         context.add_itinerary(person_id, itinerary)

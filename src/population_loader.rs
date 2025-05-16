@@ -185,7 +185,7 @@ mod test {
             assert_eq!(
                 1,
                 context
-                    .get_setting_members::<Home>(SettingId::new(Home, home_id[i]))
+                    .get_setting_members(SettingId::new(&Home, home_id[i]))
                     .unwrap()
                     .len()
             );
@@ -193,7 +193,7 @@ mod test {
         assert_eq!(
             2,
             context
-                .get_setting_members::<CensusTract>(SettingId::new(CensusTract, census_tract_id))
+                .get_setting_members(SettingId::new(&CensusTract, census_tract_id))
                 .unwrap()
                 .len()
         );
@@ -229,14 +229,14 @@ mod test {
             assert_eq!(
                 1,
                 context
-                    .get_setting_members::<School>(SettingId::new(School, school_id[i]))
+                    .get_setting_members(SettingId::new(&School, school_id[i]))
                     .unwrap()
                     .len()
             );
             assert_eq!(
                 1,
                 context
-                    .get_setting_members::<Home>(SettingId::new(Home, home_id[i]))
+                    .get_setting_members(SettingId::new(&Home, home_id[i]))
                     .unwrap()
                     .len()
             );
@@ -244,7 +244,7 @@ mod test {
         assert_eq!(
             2,
             context
-                .get_setting_members::<CensusTract>(SettingId::new(CensusTract, census_tract_id))
+                .get_setting_members(SettingId::new(&CensusTract, census_tract_id))
                 .unwrap()
                 .len()
         );
@@ -270,14 +270,14 @@ mod test {
             assert_eq!(
                 1,
                 context
-                    .get_setting_members::<Workplace>(SettingId::new(Workplace, workplace_id[i]))
+                    .get_setting_members(SettingId::new(&Workplace, workplace_id[i]))
                     .unwrap()
                     .len()
             );
             assert_eq!(
                 1,
                 context
-                    .get_setting_members::<Home>(SettingId::new(Home, home_id[i]))
+                    .get_setting_members(SettingId::new(&Home, home_id[i]))
                     .unwrap()
                     .len()
             );
@@ -285,7 +285,7 @@ mod test {
         assert_eq!(
             2,
             context
-                .get_setting_members::<CensusTract>(SettingId::new(CensusTract, census_tract_id))
+                .get_setting_members(SettingId::new(&CensusTract, census_tract_id))
                 .unwrap()
                 .len()
         );
