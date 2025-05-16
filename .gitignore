@@ -387,5 +387,18 @@ docs/site/
 # lock file should be personalized
 Cargo.lock
 
+# Operating system junk
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon[]
+
+# Thumbnails
+._*
+
 # Emacs
 *~
+
+# Other IDEs
+.vscode
+.idea
