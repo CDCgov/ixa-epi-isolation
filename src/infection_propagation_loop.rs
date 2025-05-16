@@ -165,7 +165,6 @@ mod test {
                 },
             )
             .unwrap();
-        crate::interventions::transmission_modifier_manager::init(&mut context).unwrap();
         context
     }
 
@@ -476,7 +475,7 @@ mod test {
             )
             .unwrap();
 
-        // Switch back and forth between masking or not masking every `masking_duration`, if mask changes is 10.0,
+        // Switch back and forth between masking or not masking every `masking_duration`. If `mask_changes` is 10.0,
         // this results in one tenth of the infectious period spent masking is done before the infector switches to unmasked.
         // If masking duration is 0, meaning no intervention is applied, this is skipped.
         let masking_duration = duration * masking_proportion / mask_changes;
@@ -539,7 +538,7 @@ mod test {
                     let InfectionDataValue::Infectious { infected_by, .. } =
                         context.get_person_property(event.person_id, InfectionData)
                     else {
-                        panic!("Unexpected InfectionDataValue variant encountered");
+                        panic!("{} is not infected.", event.person_id);
                     };
                     let infector_masking =
                         context.get_person_property(infected_by.unwrap(), MaskingStatus);
@@ -555,13 +554,11 @@ mod test {
         );
 
         // Shut down manually to avoid infinite plan loop from masking application
-        context.add_plan(duration, move |context| {
-            context.shutdown();
-        });
+        context.add_plan(duration, ixa::Context::shutdown);
 
         context.execute();
 
-        // The distirbution of infection times should be derived and is returned here for convenience
+        // Infection times are returned here for convenience but the usize masking period is used in the test below
         let returned_vec = secondary_infection_times.borrow().clone();
         returned_vec
     }
@@ -624,7 +621,7 @@ mod test {
         for (i, &counts) in case_count_distribution.iter().enumerate() {
             let poisson_prob = poisson_dist.pmf(i as u64);
             let empirical_prob = counts as f64 / (mask_changes * n_reps as f64);
-            assert_almost_eq!(poisson_prob, empirical_prob, 0.05);
+            assert_almost_eq!(poisson_prob, empirical_prob, 0.005);
         }
 
         // And we compare the overall case count average across experiments
