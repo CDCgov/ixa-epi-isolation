@@ -5,14 +5,16 @@ use std::{
 };
 
 use ixa::{
-    define_data_plugin, define_rng, Context, ContextPeopleExt, ContextRandomExt, IxaError,
-    PersonId, PersonProperty, PersonPropertyChangeEvent,
+    define_data_plugin, trace, Context, ContextPeopleExt, IxaError, PersonId, PersonProperty,
+    PersonPropertyChangeEvent,
 };
 use serde::Deserialize;
 
 use crate::{parameters::ProgressionLibraryType, symptom_progression::SymptomData};
 
-define_rng!(ProgressionRng);
+use crate::natural_history_parameter_manager::{
+    ContextNaturalHistoryParameterExt, NaturalHistoryParameterLibrary,
+};
 
 /// Defines a semi-Markovian method for getting the next value based on the last.
 /// `T` is the person property being mapped in the progression.
@@ -50,6 +52,20 @@ pub trait ContextPropertyProgressionExt {
     );
 }
 
+impl<T> NaturalHistoryParameterLibrary for T
+where
+    T: PersonProperty + 'static,
+{
+    fn library_size(&self, context: &Context) -> usize {
+        let container = context.get_data_container(PropertyProgressions).unwrap();
+        let progressions = container
+            .progressions
+            .get(&TypeId::of::<T>())
+            .expect("Property");
+        progressions.len()
+    }
+}
+
 impl ContextPropertyProgressionExt for Context {
     fn register_property_progression<T: PersonProperty + 'static>(
         &mut self,
@@ -67,9 +83,7 @@ impl ContextPropertyProgressionExt for Context {
             self.subscribe_to_event(move |context, event: PersonPropertyChangeEvent<T>| {
                 let container = context.get_data_container(PropertyProgressions).unwrap();
                 let progressions = container.progressions.get(&TypeId::of::<T>()).unwrap();
-                // Todo(kzs9): Make this not random but rather we pick the same index as the rate
-                // function id/some way of correlation between natural history
-                let id = context.sample_range(ProgressionRng, 0..progressions.len());
+                let id = context.get_parameter_id(property, event.person_id);
                 let tcr = progressions[id]
                     .downcast_ref::<Box<dyn Progression<T>>>()
                     .unwrap()
@@ -123,6 +137,7 @@ fn add_progressions_from_file(context: &mut Context, file: PathBuf) -> Result<()
     // Pop out the first record so we can initialize the trackers
     let record = reader.next().unwrap()?;
     let mut last_id = record.id;
+    trace!("Progression ids start at {last_id}.");
     let mut last_progression_type = record.progression_type;
     let mut parameter_names = vec![record.parameter_name];
     let mut parameters = vec![record.parameter_value];
@@ -141,16 +156,22 @@ fn add_progressions_from_file(context: &mut Context, file: PathBuf) -> Result<()
             parameters.push(record.parameter_value);
         } else {
             // Take the last values of times and values and make them into a rate function
-            if !parameters.is_empty() {
-                match last_progression_type {
-                    ProgressionType::SymptomData => {
-                        SymptomData::register(context, parameter_names, parameters)?;
-                    }
-                    ProgressionType::Unimplemented => {}
+            match last_progression_type {
+                ProgressionType::SymptomData => {
+                    SymptomData::register(context, parameter_names, parameters)?;
                 }
-                last_id = record.id;
-                last_progression_type = record.progression_type;
+                ProgressionType::Unimplemented => {}
             }
+            // Check that the ids are contiguous
+            if record.id != last_id + 1 {
+                return Err(IxaError::IxaError(format!(
+                    "Ids are not contiguous: expected {}, got {}",
+                    last_id + 1,
+                    record.id
+                )));
+            }
+            last_id = record.id;
+            last_progression_type = record.progression_type;
             // Start the new values off
             parameter_names = vec![record.parameter_name];
             parameters = vec![record.parameter_value];
@@ -175,6 +196,7 @@ mod test {
     use statrs::assert_almost_eq;
 
     use crate::{
+        natural_history_parameter_manager::ContextNaturalHistoryParameterExt,
         parameters::ProgressionLibraryType,
         population_loader::Age,
         symptom_progression::{SymptomValue, Symptoms},
@@ -218,6 +240,9 @@ mod test {
     fn test_register_property_progression_automates_moves() {
         let mut context = Context::new();
         context.init_random(0);
+        context
+            .register_parameter_id_assigner(Age, |_, _| 0)
+            .unwrap();
         context.register_property_progression(
             Age,
             AgeProgression {
@@ -310,6 +335,9 @@ mod test {
     fn test_multiple_properties_registered() {
         let mut context = Context::new();
         context.init_random(0);
+        context
+            .register_parameter_id_assigner(Age, |_, _| 0)
+            .unwrap();
         let age_progression = AgeProgression {
             time_to_next_age: 1.0,
         };
