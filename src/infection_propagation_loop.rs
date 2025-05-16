@@ -20,13 +20,14 @@ fn schedule_next_forecasted_infection(context: &mut Context, person: PersonId) {
         context.add_plan(next_time, move |context| {
             // TODO<ryl8@cc.gov>: We will choose a setting here
             if evaluate_forecast(context, person, forecasted_total_infectiousness) {
-                if let Some((setting_type, setting_id)) = context.get_setting_for_contact(person) {
-                    let str_setting = setting_type.get_name();
+                if let Some(setting_id) = context.get_setting_for_contact(person) {
+                    let str_setting = setting_id.setting_type.get_name();
+                    let id = setting_id.id;
                     if let Some(next_contact) =
-                        infection_attempt(context, person, setting_type, setting_id)
+                        infection_attempt(context, person, setting_id)
                     {
-                        trace!("Person {person}: Forecast accepted, setting type {str_setting} {setting_id}, infecting {next_contact}");
-                        context.infect_person(next_contact, Some(person), Some(str_setting), Some(setting_id));
+                        trace!("Person {person}: Forecast accepted, setting type {str_setting} {id}, infecting {next_contact}");
+                        context.infect_person(next_contact, Some(person), Some(str_setting), Some(id));
                     }
                 }
             }
@@ -131,7 +132,7 @@ mod test {
         person_id: PersonId,
     ) -> Result<(), IxaError> {
         let itinerary = vec![ItineraryEntry::new(
-            &SettingId::new(HomogeneousMixing, 0),
+            SettingId::new(&HomogeneousMixing, 0),
             1.0,
         )];
         context.add_itinerary(person_id, itinerary)
@@ -471,14 +472,14 @@ mod test {
             let person_censustract = context.add_person(()).unwrap();
             let person_workplace = context.add_person(()).unwrap();
             let itinerary_all = vec![
-                ItineraryEntry::new(&SettingId::new(Home, 0), 1.0),
-                ItineraryEntry::new(&SettingId::new(CensusTract, 0), 1.0),
-                ItineraryEntry::new(&SettingId::new(Workplace, 0), 1.0),
+                ItineraryEntry::new(SettingId::new(&Home, 0), 1.0),
+                ItineraryEntry::new(SettingId::new(&CensusTract, 0), 1.0),
+                ItineraryEntry::new(SettingId::new(&Workplace, 0), 1.0),
             ];
-            let itinerary_home = vec![ItineraryEntry::new(&SettingId::new(Home, 0), 1.0)];
+            let itinerary_home = vec![ItineraryEntry::new(SettingId::new(&Home, 0), 1.0)];
             let itinerary_censustract =
-                vec![ItineraryEntry::new(&SettingId::new(CensusTract, 0), 1.0)];
-            let itinerary_workplace = vec![ItineraryEntry::new(&SettingId::new(Workplace, 0), 1.0)];
+                vec![ItineraryEntry::new(SettingId::new(&CensusTract, 0), 1.0)];
+            let itinerary_workplace = vec![ItineraryEntry::new(SettingId::new(&Workplace, 0), 1.0)];
             context
                 .add_itinerary(infectious_person, itinerary_all)
                 .unwrap();
