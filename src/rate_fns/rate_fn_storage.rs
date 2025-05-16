@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use ixa::{define_data_plugin, define_rng, Context, ContextRandomExt, IxaError, PersonId};
+use ixa::{define_data_plugin, define_rng, trace, Context, ContextRandomExt, IxaError, PersonId};
 use serde::Deserialize;
 
 use crate::{
@@ -102,6 +102,7 @@ fn add_rate_fns_from_file(context: &mut Context, file: PathBuf) -> Result<(), Ix
     // Pop out the first record so we can initialize the vectors
     let record = reader.next().unwrap()?;
     let mut last_id = record.id;
+    trace!("Rate function ids start at {last_id}.");
     let mut times = vec![record.time];
     let mut values = vec![record.value * scale];
     for record in reader {
@@ -114,11 +115,17 @@ fn add_rate_fns_from_file(context: &mut Context, file: PathBuf) -> Result<(), Ix
             values.push(record.value * scale);
         } else {
             // Take the last values of times and values and make them into a rate function
-            if !times.is_empty() {
-                let fcn = EmpiricalRate::new(times, values)?;
-                context.add_rate_fn(fcn);
-                last_id = record.id;
+            let fcn = EmpiricalRate::new(times, values)?;
+            context.add_rate_fn(fcn);
+            // Check that the ids are contiguous
+            if record.id != last_id + 1 {
+                return Err(IxaError::IxaError(format!(
+                    "Ids are not contiguous: expected {}, got {}",
+                    last_id + 1,
+                    record.id
+                )));
             }
+            last_id = record.id;
             // Start the new values off
             times = vec![record.time];
             values = vec![record.value * scale];
@@ -250,5 +257,40 @@ mod tests {
         assert_almost_eq!(rate_fn.rate(3.0), 2.0 * scale, 0.0);
         assert_almost_eq!(rate_fn.infection_duration(), 3.0, 0.0);
         assert_almost_eq!(rate_fn.cum_rate(3.0), 6.0 * scale, 0.0);
+    }
+
+    #[test]
+    fn test_read_rate_function_discontiguous_ids() {
+        let mut context = Context::new();
+        let parameters = Params {
+            initial_infections: 3,
+            max_time: 100.0,
+            seed: 0,
+            infectiousness_rate_fn: RateFnType::EmpiricalFromFile {
+                file: PathBuf::from("./tests/data/two_rate_fns_discontiguous_ids.csv"),
+                scale: 1.0,
+            },
+            symptom_progression_library: None,
+            report_period: 1.0,
+            synth_population_file: PathBuf::from("."),
+            transmission_report_name: None,
+            settings_properties: HashMap::new(),
+        };
+        context
+            .set_global_property_value(GlobalParams, parameters)
+            .unwrap();
+        let e = load_rate_fns(&mut context).err();
+        match e {
+            Some(IxaError::IxaError(msg)) => {
+                assert_eq!(msg, "Ids are not contiguous: expected 2, got 3".to_string());
+            }
+            Some(ue) => panic!(
+                "Expected an error that the the ids are not contiguous. Instead got {:?}",
+                ue.to_string()
+            ),
+            None => panic!(
+                "Expected an error. Instead, reading the rate functions passed with no errors."
+            ),
+        }
     }
 }

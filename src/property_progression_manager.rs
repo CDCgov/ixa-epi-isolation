@@ -5,7 +5,7 @@ use std::{
 };
 
 use ixa::{
-    define_data_plugin, Context, ContextPeopleExt, IxaError, PersonId, PersonProperty,
+    define_data_plugin, trace, Context, ContextPeopleExt, IxaError, PersonId, PersonProperty,
     PersonPropertyChangeEvent,
 };
 use serde::Deserialize;
@@ -137,6 +137,7 @@ fn add_progressions_from_file(context: &mut Context, file: PathBuf) -> Result<()
     // Pop out the first record so we can initialize the trackers
     let record = reader.next().unwrap()?;
     let mut last_id = record.id;
+    trace!("Progression ids start at {last_id}.");
     let mut last_progression_type = record.progression_type;
     let mut parameter_names = vec![record.parameter_name];
     let mut parameters = vec![record.parameter_value];
@@ -155,16 +156,22 @@ fn add_progressions_from_file(context: &mut Context, file: PathBuf) -> Result<()
             parameters.push(record.parameter_value);
         } else {
             // Take the last values of times and values and make them into a rate function
-            if !parameters.is_empty() {
-                match last_progression_type {
-                    ProgressionType::SymptomData => {
-                        SymptomData::register(context, parameter_names, parameters)?;
-                    }
-                    ProgressionType::Unimplemented => {}
+            match last_progression_type {
+                ProgressionType::SymptomData => {
+                    SymptomData::register(context, parameter_names, parameters)?;
                 }
-                last_id = record.id;
-                last_progression_type = record.progression_type;
+                ProgressionType::Unimplemented => {}
             }
+            // Check that the ids are contiguous
+            if record.id != last_id + 1 {
+                return Err(IxaError::IxaError(format!(
+                    "Ids are not contiguous: expected {}, got {}",
+                    last_id + 1,
+                    record.id
+                )));
+            }
+            last_id = record.id;
+            last_progression_type = record.progression_type;
             // Start the new values off
             parameter_names = vec![record.parameter_name];
             parameters = vec![record.parameter_value];

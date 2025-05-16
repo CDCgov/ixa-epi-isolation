@@ -149,11 +149,7 @@ impl ContextNaturalHistoryParameterExt for Context {
 
 #[cfg(test)]
 mod test {
-    use std::{
-        any::TypeId,
-        collections::HashMap,
-        path::{Path, PathBuf},
-    };
+    use std::{any::TypeId, collections::HashMap, path::PathBuf};
 
     use ixa::{
         context::Context, ContextGlobalPropertiesExt, ContextPeopleExt, ContextRandomExt, IxaError,
@@ -332,13 +328,11 @@ mod test {
             max_time: 100.0,
             seed: 0,
             infectiousness_rate_fn: RateFnType::EmpiricalFromFile {
-                file: Path::new(env!("CARGO_MANIFEST_DIR"))
-                    .join("input/library_empirical_rate_fns.csv"),
+                file: PathBuf::from("./input/library_empirical_rate_fns.csv"),
                 scale: 1.0,
             },
             symptom_progression_library: Some(ProgressionLibraryType::EmpiricalFromFile {
-                file: Path::new(env!("CARGO_MANIFEST_DIR"))
-                    .join("input/library_symptom_parameters.csv"),
+                file: PathBuf::from("./input/library_symptom_parameters.csv"),
             }),
             report_period: 1.0,
             synth_population_file: PathBuf::from("."),
