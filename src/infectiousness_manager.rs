@@ -52,15 +52,19 @@ define_derived_property!(
 /// for a person, given factors related to their environment, such as the number of people
 /// they come in contact with or how close they are.
 /// This is used to scale the intrinsic infectiousness function of that person.
-/// All modifiers of the infector's intrinsic infecitousness are calculated and passed
-/// to the `calculate_multiplier` Setting method
+/// All modifiers of the infector's intrinsic infecitousness are aggregated and returned
+/// as a single float to multiply by the base total infectiousness.
+/// This assumes that transmission modifiers of total infectiousness are independent of
+/// the setting type and are linear
 pub fn calc_total_infectiousness_multiplier(context: &Context, person_id: PersonId) -> f64 {
-    context.calculate_effective_infectiousness_multiplier_for_person(person_id)
+    let modifier = context.get_modified_relative_total_transmission_person(person_id);
+    modifier * context.calculate_total_infectiousness_multiplier_for_person(person_id)
 }
 
 /// Calculate the maximum possible scaling factor for total infectiousness
 /// for a person, given information we know at the time of a forecast.
-/// The modifier used for intrinsic infectiousness is set to 1.0
+/// The modifier used for intrinsic infectiousness is ignored because all modifiers must
+/// be less than or equal to one.
 pub fn max_total_infectiousness_multiplier(context: &Context, person_id: PersonId) -> f64 {
     context.calculate_total_infectiousness_multiplier_for_person(person_id)
 }
@@ -270,7 +274,7 @@ mod test {
                 },
             )
             .unwrap();
-        crate::interventions::transmission_modifier_manager::init(&mut context).unwrap();
+
         context
     }
 
@@ -498,6 +502,6 @@ mod test {
                 count += 1;
             }
         }
-        assert_almost_eq!(count as f64 / n as f64, relative_effect, 0.01);
+        assert_almost_eq!(count as f64 / n as f64, relative_effect, 0.005);
     }
 }

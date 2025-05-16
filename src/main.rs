@@ -60,7 +60,6 @@ fn main() {
         infection_propagation_loop::init(context)?;
         transmission_report::init(context)?;
         symptom_progression::init(context)?;
-        interventions::transmission_modifier_manager::init(context)?;
 
         Ok(())
     })

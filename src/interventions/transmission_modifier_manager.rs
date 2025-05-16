@@ -3,10 +3,7 @@ use ixa::{
 };
 use std::{any::TypeId, collections::HashMap};
 
-use crate::{
-    infectiousness_manager::{InfectionStatus, InfectionStatusValue},
-    population_loader::Alive,
-};
+use crate::infectiousness_manager::{InfectionStatus, InfectionStatusValue};
 
 type TransmissionModifierFn = dyn Fn(&Context, PersonId) -> f64;
 type TransmissionAggregatorFn = dyn Fn(&Vec<(TypeId, f64)>) -> f64;
@@ -46,6 +43,10 @@ pub trait ContextTransmissionModifierExt {
     /// Register a transmission modifier function for a specific infection status and person property.
     /// All float values returned should return the relative infectiousness or susceptibility
     /// of the person with respect to the base value of 1.0.
+    ///
+    /// `PersonProperty` `TypeId`s are not necessarily called by the modifier function, but each
+    /// function must be associated with a `PersonProperty` to ensure unique methods are being stored
+    /// when declared by the user to be associated with a particular property
     fn register_transmission_modifier_fn<T: PersonProperty + 'static + std::fmt::Debug, F>(
         &mut self,
         infection_status: InfectionStatusValue,
@@ -64,6 +65,7 @@ pub trait ContextTransmissionModifierExt {
     /// subtracted from 1.0 for modifier effect value.
     ///
     /// Modifier key is taken as a slice to avoid new object creation through Vec
+    #[allow(dead_code)]
     fn store_transmission_modifier_values<T: PersonProperty + 'static + std::fmt::Debug>(
         &mut self,
         infection_status: InfectionStatusValue,
@@ -78,7 +80,7 @@ pub trait ContextTransmissionModifierExt {
     /// and its corresponding modifier value.
     /// The default aggregator multiplies all the modifier values together independently.
     #[allow(dead_code)]
-    fn register_transmission_aggregator<F>(
+    fn register_transmission_modifier_aggregator<F>(
         &mut self,
         infection_status: InfectionStatusValue,
         agg_function: F,
@@ -154,7 +156,7 @@ impl ContextTransmissionModifierExt for Context {
         Ok(())
     }
 
-    fn register_transmission_aggregator<F>(
+    fn register_transmission_modifier_aggregator<F>(
         &mut self,
         infection_status: InfectionStatusValue,
         agg_function: F,
@@ -175,37 +177,25 @@ impl ContextTransmissionModifierExt for Context {
         if let Some(transmission_modifier_plugin) =
             self.get_data_container(TransmissionModifierPlugin)
         {
-            let transmission_modifier_map = transmission_modifier_plugin
+            if let Some(transmission_modifier_map) = transmission_modifier_plugin
                 .transmission_modifier_map
                 .get(&infection_status)
-                .unwrap();
+            {
+                let mut registered_modifiers = Vec::new();
+                for (t, f) in transmission_modifier_map {
+                    registered_modifiers.push((*t, f(self, person_id)));
+                }
 
-            let mut registered_modifiers = Vec::new();
-            for (t, f) in transmission_modifier_map {
-                registered_modifiers.push((*t, f(self, person_id)));
+                transmission_modifier_plugin.run_aggregator(infection_status, &registered_modifiers)
+            } else {
+                // If the infection status is not found in the map, return 1.0
+                1.0
             }
-
-            transmission_modifier_plugin.run_aggregator(infection_status, &registered_modifiers)
         } else {
             // If the plugin is not initialized, return 1.0
             1.0
         }
     }
-}
-
-// Initialize the transmission modifier plugin with guaranteed values
-pub fn init(context: &mut Context) -> Result<(), IxaError> {
-    context.store_transmission_modifier_values(
-        InfectionStatusValue::Susceptible,
-        Alive,
-        &[(true, 1.0), (false, 0.0)],
-    )?;
-    context.store_transmission_modifier_values(
-        InfectionStatusValue::Infectious,
-        Alive,
-        &[(true, 1.0), (false, 0.0)],
-    )?;
-    Ok(())
 }
 
 #[cfg(test)]
@@ -574,7 +564,7 @@ mod test {
     fn test_register_aggregator() {
         let mut context = setup(0);
 
-        context.register_transmission_aggregator(
+        context.register_transmission_modifier_aggregator(
             InfectionStatusValue::Infectious,
             |modifiers: &Vec<(TypeId, f64)>| {
                 // Custom aggregator that sums the values
