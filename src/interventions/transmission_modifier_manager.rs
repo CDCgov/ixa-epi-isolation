@@ -6,12 +6,13 @@ use std::{any::TypeId, collections::HashMap};
 use crate::infectiousness_manager::{InfectionStatus, InfectionStatusValue};
 
 type TransmissionModifierFn = dyn Fn(&Context, PersonId) -> f64;
-type TransmissionAggregatorFn = dyn Fn(&Vec<(TypeId, f64)>) -> f64;
+type TransmissionAggregatorFn = dyn Fn(&Context, PersonId) -> f64;
 
 pub trait TransmissionModifier: std::fmt::Debug + 'static {}
 
 impl<T> TransmissionModifier for T where T: PersonProperty + std::fmt::Debug + 'static {}
 
+#[derive(Default)]
 struct TransmissionModifierContainer {
     transmission_modifier_map:
         HashMap<InfectionStatusValue, HashMap<TypeId, Box<TransmissionModifierFn>>>,
@@ -21,12 +22,15 @@ struct TransmissionModifierContainer {
 impl TransmissionModifierContainer {
     fn run_aggregator(
         &self,
+        context: &Context,
+        person_id: PersonId,
         infection_status: InfectionStatusValue,
-        modifiers: &Vec<(TypeId, f64)>,
+        modifiers: &[(TypeId, f64)],
     ) -> f64 {
-        self.modifier_aggregator
-            .get(&infection_status)
-            .map_or_else(|| default_aggregator(modifiers), |agg| agg(modifiers))
+        self.modifier_aggregator.get(&infection_status).map_or_else(
+            || default_aggregator(modifiers),
+            |agg| agg(context, person_id),
+        )
     }
 }
 
@@ -37,10 +41,7 @@ fn default_aggregator(modifiers: &[(TypeId, f64)]) -> f64 {
 define_data_plugin!(
     TransmissionModifierPlugin,
     TransmissionModifierContainer,
-    TransmissionModifierContainer {
-        transmission_modifier_map: HashMap::new(),
-        modifier_aggregator: HashMap::new(),
-    }
+    TransmissionModifierContainer::default()
 );
 
 pub trait ContextTransmissionModifierExt {
@@ -79,6 +80,16 @@ pub trait ContextTransmissionModifierExt {
     where
         T::Value: std::hash::Hash + Eq;
 
+    /// Evaluate a transmission modifier function for a given person.
+    #[allow(dead_code)]
+    fn evaluate_transmission_modifier<T>(
+        &self,
+        transmission_modifier: T,
+        person_id: PersonId,
+    ) -> f64
+    where
+        T: TransmissionModifier;
+
     /// Register a transmission aggregator for a specific infection status.
     /// The aggregator is a function that takes a vector of tuples containing the type ID of the person property
     /// and its corresponding modifier value.
@@ -89,7 +100,7 @@ pub trait ContextTransmissionModifierExt {
         infection_status: InfectionStatusValue,
         agg_function: F,
     ) where
-        F: Fn(&Vec<(TypeId, f64)>) -> f64 + 'static;
+        F: Fn(&Context, PersonId) -> f64 + 'static;
 
     /// Get the relative intrinsic transmission (infectiousness or susceptibility) for a person based on their
     /// infection status and current properties based on registered modifiers.
@@ -160,12 +171,32 @@ impl ContextTransmissionModifierExt for Context {
         Ok(())
     }
 
+    fn evaluate_transmission_modifier<T>(
+        &self,
+        _transmission_modifier: T,
+        person_id: PersonId,
+    ) -> f64
+    where
+        T: TransmissionModifier,
+    {
+        let infection_status = self.get_person_property(person_id, InfectionStatus);
+
+        self.get_data_container(TransmissionModifierPlugin)
+            .expect("Register a transmission modifier before evaluating.")
+            .transmission_modifier_map
+            .get(&infection_status)
+            .expect("No transmission modifiers registered for person {person_id:?}'s infection status {infection_status:?}.")
+            .get(&TypeId::of::<T>())
+            .expect("The transmission modifier function is not registered for infection status {infection_status:?}.")
+            (self, person_id)
+    }
+
     fn register_transmission_modifier_aggregator<F>(
         &mut self,
         infection_status: InfectionStatusValue,
         agg_function: F,
     ) where
-        F: Fn(&Vec<(TypeId, f64)>) -> f64 + 'static,
+        F: Fn(&Context, PersonId) -> f64 + 'static,
     {
         // Box the function to store it in the map
         let boxed_fn = Box::new(agg_function);
@@ -190,7 +221,12 @@ impl ContextTransmissionModifierExt for Context {
                     registered_modifiers.push((*t, f(self, person_id)));
                 }
 
-                transmission_modifier_plugin.run_aggregator(infection_status, &registered_modifiers)
+                transmission_modifier_plugin.run_aggregator(
+                    self,
+                    person_id,
+                    infection_status,
+                    &registered_modifiers,
+                )
             } else {
                 // If the infection status is not found in the map, return 1.0
                 1.0
@@ -553,15 +589,24 @@ mod test {
     fn test_register_aggregator() {
         let mut context = setup(0);
 
+        // If the person has mandatory intervention turned on, return that as the transmission
+        // modifier, ignoring everything else
         context.register_transmission_modifier_aggregator(
             InfectionStatusValue::Infectious,
-            |modifiers: &Vec<(TypeId, f64)>| {
-                // Custom aggregator that sums the values
-                modifiers.iter().map(|&(_, f)| f).sum()
+            |context, person_id| {
+                if context.get_person_property(person_id, MandatoryInterventionStatus)
+                    == MandatoryIntervention::Partial
+                {
+                    context.evaluate_transmission_modifier(MandatoryInterventionStatus, person_id)
+                } else {
+                    context.evaluate_transmission_modifier(InfectiousnessReductionStatus, person_id)
+                        * context
+                            .evaluate_transmission_modifier(MandatoryInterventionStatus, person_id)
+                }
             },
         );
 
-        let person_id = context
+        let mandatory_on_person = context
             .add_person((
                 (MandatoryInterventionStatus, MandatoryIntervention::Partial),
                 (
@@ -571,11 +616,29 @@ mod test {
             ))
             .unwrap();
 
-        context.infect_person(person_id, None);
+        context.infect_person(mandatory_on_person, None);
 
         assert_almost_eq!(
-            context.get_modified_relative_total_transmission_person(person_id),
-            INFECTIOUS_PARTIAL + INFECTIOUS_PARTIAL,
+            context.get_modified_relative_total_transmission_person(mandatory_on_person),
+            INFECTIOUS_PARTIAL,
+            0.0
+        );
+
+        let mandatory_off_person = context
+            .add_person((
+                (MandatoryInterventionStatus, MandatoryIntervention::NoEffect),
+                (
+                    InfectiousnessReductionStatus,
+                    Some(InfectiousnessReduction::Partial),
+                ),
+            ))
+            .unwrap();
+
+        context.infect_person(mandatory_off_person, None);
+
+        assert_almost_eq!(
+            context.get_modified_relative_total_transmission_person(mandatory_off_person),
+            INFECTIOUS_PARTIAL,
             0.0
         );
     }
