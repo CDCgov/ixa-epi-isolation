@@ -19,25 +19,6 @@ struct TransmissionModifierContainer {
     modifier_aggregator: HashMap<InfectionStatusValue, Box<TransmissionAggregatorFn>>,
 }
 
-impl TransmissionModifierContainer {
-    fn run_aggregator(
-        &self,
-        context: &Context,
-        person_id: PersonId,
-        infection_status: InfectionStatusValue,
-        modifiers: &[(TypeId, f64)],
-    ) -> f64 {
-        self.modifier_aggregator.get(&infection_status).map_or_else(
-            || default_aggregator(modifiers),
-            |agg| agg(context, person_id),
-        )
-    }
-}
-
-fn default_aggregator(modifiers: &[(TypeId, f64)]) -> f64 {
-    modifiers.iter().map(|&(_, f)| f).product()
-}
-
 define_data_plugin!(
     TransmissionModifierPlugin,
     TransmissionModifierContainer,
@@ -221,12 +202,15 @@ impl ContextTransmissionModifierExt for Context {
                     registered_modifiers.push((*t, f(self, person_id)));
                 }
 
-                transmission_modifier_plugin.run_aggregator(
-                    self,
-                    person_id,
-                    infection_status,
-                    &registered_modifiers,
-                )
+                // Run the aggregator function, defaulting to the default (independence of all
+                // modifiers, a simple product) if no aggregator has been registered
+                transmission_modifier_plugin
+                    .modifier_aggregator
+                    .get(&infection_status)
+                    .map_or_else(
+                        || default_aggregator(&registered_modifiers),
+                        |agg| agg(self, person_id),
+                    )
             } else {
                 // If the infection status is not found in the map, return 1.0
                 1.0
@@ -236,6 +220,10 @@ impl ContextTransmissionModifierExt for Context {
             1.0
         }
     }
+}
+
+fn default_aggregator(modifiers: &[(TypeId, f64)]) -> f64 {
+    modifiers.iter().map(|&(_, f)| f).product()
 }
 
 #[cfg(test)]
