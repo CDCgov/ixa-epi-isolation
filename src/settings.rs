@@ -22,7 +22,7 @@ pub struct SettingProperties {
     pub itinerary_specification: Option<ItinerarySpecificationType>,
 }
 
-pub trait SettingType: std::fmt::Debug {
+pub trait SettingType {
     fn calculate_multiplier(
         &self,
         members: &[PersonId],
@@ -1009,9 +1009,13 @@ mod test {
             context.add_itinerary(person_a, itinerary_a).unwrap();
             context.add_itinerary(person_b, itinerary_b).unwrap();
 
+            // When person a is used to select a setting for contact, it should return Home. While they are
+            // also a member of CensusTract, since they are the only member the multiplier used to weight the
+            // selection is 0.0 from calculate_multiplier. Thus the probability CensusTract is selected is 0.0.
             let setting_id = context.get_setting_for_contact(person_a).unwrap();
             assert_eq!(setting_id.setting_type.get_type_id(), TypeId::of::<Home>());
             assert_eq!(setting_id.id, 0);
+
             let setting_id = context.get_setting_for_contact(person_b).unwrap();
             assert_eq!(setting_id.setting_type.get_type_id(), TypeId::of::<Home>());
             assert_eq!(setting_id.id, 0);
@@ -1067,16 +1071,8 @@ mod test {
             context.get_contact(person_a, setting_id, ()).unwrap()
         );
 
-        let temp_census_tract = context
-            .get_data_container(SettingDataPlugin)
-            .unwrap()
-            .setting_types
-            .get(&TypeId::of::<CensusTract>())
-            .unwrap()
-            .as_ref();
-
         assert!(context
-            .get_contact(person_a, SettingId::new(temp_census_tract, 0), ())
+            .get_contact(person_a, SettingId::new(&CensusTract, 0), ())
             .unwrap()
             .is_none());
 
@@ -1084,16 +1080,8 @@ mod test {
         let itinerary_c = vec![ItineraryEntry::new(SettingId::new(&CensusTract, 0), 0.5)];
         context.add_itinerary(person_c, itinerary_c).unwrap();
 
-        let temp_census_tract = context
-            .get_data_container(SettingDataPlugin)
-            .unwrap()
-            .setting_types
-            .get(&TypeId::of::<CensusTract>())
-            .unwrap()
-            .as_ref();
-
         let e = context
-            .get_contact(person_b, SettingId::new(temp_census_tract, 0), ())
+            .get_contact(person_b, SettingId::new(&CensusTract, 0), ())
             .err();
         match e {
             Some(IxaError::IxaError(msg)) => {
@@ -1106,7 +1094,7 @@ mod test {
             None => panic!("Expected an error. Instead, validation passed with no errors."),
         }
 
-        let e = context.get_contact(person_b, SettingId::new(temp_census_tract, 10), ());
+        let e = context.get_contact(person_b, SettingId::new(&CensusTract, 10), ());
         match e {
             Err(IxaError::IxaError(msg)) => {
                 assert_eq!(msg, "Group membership is None");

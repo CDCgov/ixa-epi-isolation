@@ -8,6 +8,7 @@ use ixa::{
     Context, IxaError, PersonId, PersonPropertyChangeEvent,
 };
 use serde::{Deserialize, Serialize};
+use std::string::ToString;
 
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
 struct TransmissionReport {
@@ -52,7 +53,7 @@ fn create_transmission_report(context: &mut Context, file_name: &str) -> Result<
                 context,
                 event.person_id,
                 infected_by,
-                infection_setting_type.map(std::string::ToString::to_string),
+                infection_setting_type.map(ToString::to_string),
                 infection_setting_id,
             );
         }
