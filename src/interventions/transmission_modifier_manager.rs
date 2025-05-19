@@ -8,6 +8,10 @@ use crate::infectiousness_manager::{InfectionStatus, InfectionStatusValue};
 type TransmissionModifierFn = dyn Fn(&Context, PersonId) -> f64;
 type TransmissionAggregatorFn = dyn Fn(&Vec<(TypeId, f64)>) -> f64;
 
+pub trait TransmissionModifier: std::fmt::Debug + 'static {}
+
+impl<T> TransmissionModifier for T where T: PersonProperty + std::fmt::Debug + 'static {}
+
 struct TransmissionModifierContainer {
     transmission_modifier_map:
         HashMap<InfectionStatusValue, HashMap<TypeId, Box<TransmissionModifierFn>>>,
@@ -47,7 +51,7 @@ pub trait ContextTransmissionModifierExt {
     /// `PersonProperty` `TypeId`s are not necessarily called by the modifier function, but each
     /// function must be associated with a `PersonProperty` to ensure unique methods are being stored
     /// when declared by the user to be associated with a particular property
-    fn register_transmission_modifier_fn<T: PersonProperty + 'static + std::fmt::Debug, F>(
+    fn register_transmission_modifier_fn<T: TransmissionModifier + 'static + std::fmt::Debug, F>(
         &mut self,
         infection_status: InfectionStatusValue,
         person_property: T,
@@ -93,10 +97,10 @@ pub trait ContextTransmissionModifierExt {
 }
 
 impl ContextTransmissionModifierExt for Context {
-    fn register_transmission_modifier_fn<T: PersonProperty + 'static + std::fmt::Debug, F>(
+    fn register_transmission_modifier_fn<T: TransmissionModifier, F>(
         &mut self,
         infection_status: InfectionStatusValue,
-        person_property: T,
+        transmission_modifier: T,
         modifier_fn: F,
     ) where
         F: Fn(&Context, PersonId) -> f64 + 'static,
@@ -112,7 +116,7 @@ impl ContextTransmissionModifierExt for Context {
             .or_default()
             .insert(TypeId::of::<T>(), boxed_fn)
         {
-            trace!("Overwriting existing transmission modifier function for infection status {infection_status:?} and property {person_property:?}");
+            trace!("Overwriting existing transmission modifier function for infection status {infection_status:?} and modifier {transmission_modifier:?}");
         }
     }
 
