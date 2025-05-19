@@ -542,23 +542,8 @@ mod test {
 
         context.infect_person(person_id, None);
 
-        let transmission_modifier_plugin = context
-            .get_data_container(TransmissionModifierPlugin)
-            .unwrap();
-
-        let transmission_modifier_map = transmission_modifier_plugin
-            .transmission_modifier_map
-            .get(&InfectionStatusValue::Infectious)
-            .unwrap();
-
-        let mut registered_modifiers = Vec::new();
-        for (t, f) in transmission_modifier_map {
-            registered_modifiers.push((*t, f(&context, person_id)));
-        }
-
         assert_almost_eq!(
-            transmission_modifier_plugin
-                .run_aggregator(InfectionStatusValue::Infectious, &registered_modifiers),
+            context.get_modified_relative_total_transmission_person(person_id),
             INFECTIOUS_PARTIAL * INFECTIOUS_PARTIAL,
             0.0
         );
@@ -588,23 +573,8 @@ mod test {
 
         context.infect_person(person_id, None);
 
-        let transmission_modifier_plugin = context
-            .get_data_container(TransmissionModifierPlugin)
-            .unwrap();
-
-        let transmission_modifier_map = transmission_modifier_plugin
-            .transmission_modifier_map
-            .get(&InfectionStatusValue::Infectious)
-            .unwrap();
-
-        let mut registered_modifiers = Vec::new();
-        for (t, f) in transmission_modifier_map {
-            registered_modifiers.push((*t, f(&context, person_id)));
-        }
-
         assert_almost_eq!(
-            transmission_modifier_plugin
-                .run_aggregator(InfectionStatusValue::Infectious, &registered_modifiers),
+            context.get_modified_relative_total_transmission_person(person_id),
             INFECTIOUS_PARTIAL + INFECTIOUS_PARTIAL,
             0.0
         );
