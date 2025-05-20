@@ -1,17 +1,33 @@
 use std::path::PathBuf;
 
-use ixa::{define_data_plugin, define_rng, Context, ContextRandomExt, IxaError};
-use serde::{Deserialize, Serialize};
+use ixa::{define_data_plugin, define_rng, Context, ContextRandomExt, IxaError, PersonId};
+use serde::Deserialize;
 
-use crate::parameters::{ContextParametersExt, Params, RateFnType};
+use crate::{
+    natural_history_parameter_manager::{
+        ContextNaturalHistoryParameterExt, NaturalHistoryParameterLibrary,
+    },
+    parameters::{ContextParametersExt, Params, RateFnType},
+};
 
 use super::{rate_fn::InfectiousnessRateFn, ConstantRate, EmpiricalRate};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
-pub struct RateFnId(usize);
+define_rng!(InfectiousnessRng);
 
 struct RateFnContainer {
     rates: Vec<Box<dyn InfectiousnessRateFn>>,
+}
+
+pub struct RateFn;
+
+impl NaturalHistoryParameterLibrary for RateFn {
+    fn library_size(&self, context: &Context) -> usize {
+        context
+            .get_data_container(RateFnPlugin)
+            .unwrap()
+            .rates
+            .len()
+    }
 }
 
 define_data_plugin!(
@@ -20,38 +36,27 @@ define_data_plugin!(
     RateFnContainer { rates: Vec::new() }
 );
 
-define_rng!(InfectiousnessRateRng);
-
 pub trait InfectiousnessRateExt {
-    fn add_rate_fn(&mut self, dist: impl InfectiousnessRateFn + 'static) -> RateFnId;
-    fn get_random_rate_fn(&self) -> RateFnId;
-    fn get_rate_fn(&self, index: RateFnId) -> &dyn InfectiousnessRateFn;
+    fn add_rate_fn(&mut self, dist: impl InfectiousnessRateFn + 'static);
+    fn get_person_rate_fn(&self, person_id: PersonId) -> &dyn InfectiousnessRateFn;
 }
 
 impl InfectiousnessRateExt for Context {
-    fn add_rate_fn(&mut self, dist: impl InfectiousnessRateFn + 'static) -> RateFnId {
+    fn add_rate_fn(&mut self, dist: impl InfectiousnessRateFn + 'static) {
         let container = self.get_data_container_mut(RateFnPlugin);
         container.rates.push(Box::new(dist));
-        RateFnId(container.rates.len() - 1)
     }
 
-    fn get_random_rate_fn(&self) -> RateFnId {
-        let max = self
-            .get_data_container(RateFnPlugin)
-            .expect("Expected rate functions to be loaded.")
-            .rates
-            .len();
-        RateFnId(self.sample_range(InfectiousnessRateRng, 0..max))
-    }
-
-    fn get_rate_fn(&self, index: RateFnId) -> &dyn InfectiousnessRateFn {
+    fn get_person_rate_fn(&self, person_id: PersonId) -> &dyn InfectiousnessRateFn {
+        let id = self.get_parameter_id(RateFn, person_id);
         self.get_data_container(RateFnPlugin)
             .expect("Expected rate functions to be loaded.")
-            .rates[index.0]
+            .rates[id]
             .as_ref()
     }
 }
 
+#[allow(clippy::missing_panics_doc)]
 /// Turn the information specified in the global parameter `infectiousness_rate_fn` into actual
 /// infectiousness rate functions for the simulation.
 /// # Errors
@@ -68,6 +73,12 @@ pub fn load_rate_fns(context: &mut Context) -> Result<(), IxaError> {
             add_rate_fns_from_file(context, file)?;
         }
     }
+
+    context.register_parameter_id_assigner(RateFn, |context, _| {
+        let container = context.get_data_container(RateFnPlugin).unwrap();
+        let len = container.rates.len();
+        context.sample_range(InfectiousnessRng, 0..len)
+    })?;
     Ok(())
 }
 
@@ -91,6 +102,12 @@ fn add_rate_fns_from_file(context: &mut Context, file: PathBuf) -> Result<(), Ix
     // Pop out the first record so we can initialize the vectors
     let record = reader.next().unwrap()?;
     let mut last_id = record.id;
+    // Require that the first id is 1
+    if last_id != 1 {
+        return Err(IxaError::IxaError(format!(
+            "First id in the file should be 1, got {last_id}."
+        )));
+    }
     let mut times = vec![record.time];
     let mut values = vec![record.value * scale];
     for record in reader {
@@ -103,11 +120,17 @@ fn add_rate_fns_from_file(context: &mut Context, file: PathBuf) -> Result<(), Ix
             values.push(record.value * scale);
         } else {
             // Take the last values of times and values and make them into a rate function
-            if !times.is_empty() {
-                let fcn = EmpiricalRate::new(times, values)?;
-                context.add_rate_fn(fcn);
-                last_id = record.id;
+            let fcn = EmpiricalRate::new(times, values)?;
+            context.add_rate_fn(fcn);
+            // Check that the ids are contiguous
+            if record.id != last_id + 1 {
+                return Err(IxaError::IxaError(format!(
+                    "Ids are not contiguous: expected {}, got {}",
+                    last_id + 1,
+                    record.id
+                )));
             }
+            last_id = record.id;
             // Start the new values off
             times = vec![record.time];
             values = vec![record.value * scale];
@@ -126,7 +149,7 @@ mod tests {
     use crate::parameters::{GlobalParams, Params};
 
     use super::*;
-    use ixa::{Context, ContextGlobalPropertiesExt};
+    use ixa::{Context, ContextGlobalPropertiesExt, ContextPeopleExt};
     use statrs::assert_almost_eq;
 
     struct TestRateFn;
@@ -150,18 +173,26 @@ mod tests {
         let mut context = Context::new();
         context.init_random(0);
         context
+            .register_parameter_id_assigner(RateFn, |context, _| {
+                let container = context.get_data_container(RateFnPlugin).unwrap();
+                let len = container.rates.len();
+                context.sample_range(InfectiousnessRng, 0..len)
+            })
+            .unwrap();
+        context
     }
 
     #[test]
     fn test_add_rate_fn_and_get_random() {
         let mut context = init_context();
+        let person = context.add_person(()).unwrap();
 
         let rate_fn = TestRateFn {};
         context.add_rate_fn(rate_fn);
+        let rate_fns = context.get_data_container(RateFnPlugin).unwrap();
+        assert_eq!(rate_fns.rates.len(), 1);
 
-        let i = context.get_random_rate_fn();
-        assert!(i.0 == 0);
-        assert_almost_eq!(context.get_rate_fn(i).rate(0.0), 1.0, 0.0);
+        assert_almost_eq!(context.get_person_rate_fn(person).rate(0.0), 1.0, 0.0);
     }
 
     #[test]
@@ -231,5 +262,75 @@ mod tests {
         assert_almost_eq!(rate_fn.rate(3.0), 2.0 * scale, 0.0);
         assert_almost_eq!(rate_fn.infection_duration(), 3.0, 0.0);
         assert_almost_eq!(rate_fn.cum_rate(3.0), 6.0 * scale, 0.0);
+    }
+
+    #[test]
+    fn test_read_rate_function_discontiguous_ids() {
+        let mut context = Context::new();
+        let parameters = Params {
+            initial_infections: 3,
+            max_time: 100.0,
+            seed: 0,
+            infectiousness_rate_fn: RateFnType::EmpiricalFromFile {
+                file: PathBuf::from("./tests/data/two_rate_fns_discontiguous_ids.csv"),
+                scale: 1.0,
+            },
+            symptom_progression_library: None,
+            report_period: 1.0,
+            synth_population_file: PathBuf::from("."),
+            transmission_report_name: None,
+            settings_properties: HashMap::new(),
+        };
+        context
+            .set_global_property_value(GlobalParams, parameters)
+            .unwrap();
+        let e = load_rate_fns(&mut context).err();
+        match e {
+            Some(IxaError::IxaError(msg)) => {
+                assert_eq!(msg, "Ids are not contiguous: expected 2, got 3".to_string());
+            }
+            Some(ue) => panic!(
+                "Expected an error that the the ids are not contiguous. Instead got {:?}",
+                ue.to_string()
+            ),
+            None => panic!(
+                "Expected an error. Instead, reading the rate functions passed with no errors."
+            ),
+        }
+    }
+
+    #[test]
+    fn test_read_rate_function_id_starts_at_two() {
+        let mut context = Context::new();
+        let parameters = Params {
+            initial_infections: 3,
+            max_time: 100.0,
+            seed: 0,
+            infectiousness_rate_fn: RateFnType::EmpiricalFromFile {
+                file: PathBuf::from("./tests/data/rate_fn_id_starts_at_two.csv"),
+                scale: 1.0,
+            },
+            symptom_progression_library: None,
+            report_period: 1.0,
+            synth_population_file: PathBuf::from("."),
+            transmission_report_name: None,
+            settings_properties: HashMap::new(),
+        };
+        context
+            .set_global_property_value(GlobalParams, parameters)
+            .unwrap();
+        let e = load_rate_fns(&mut context).err();
+        match e {
+            Some(IxaError::IxaError(msg)) => {
+                assert_eq!(msg, "First id in the file should be 1, got 2.".to_string());
+            }
+            Some(ue) => panic!(
+                "Expected an error that the the ids do not start at 1. Instead got {:?}",
+                ue.to_string()
+            ),
+            None => panic!(
+                "Expected an error. Instead, reading the rate functions passed with no errors."
+            ),
+        }
     }
 }

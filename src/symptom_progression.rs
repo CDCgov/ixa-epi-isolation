@@ -8,9 +8,11 @@ use ixa::{
 use serde::{Deserialize, Serialize};
 use statrs::distribution::Weibull;
 
+use crate::natural_history_parameter_manager::ContextNaturalHistoryParameterExt;
+use crate::parameters::ContextParametersExt;
+use crate::rate_fns::RateFn;
 use crate::{
     infectiousness_manager::{InfectionStatus, InfectionStatusValue},
-    parameters::ContextParametersExt,
     property_progression_manager::{load_progressions, ContextPropertyProgressionExt, Progression},
 };
 
@@ -205,6 +207,12 @@ fn schedule_recovery(data: &SymptomData, context: &Context) -> (Option<SymptomVa
 }
 
 pub fn init(context: &mut Context) -> Result<(), IxaError> {
+    // For isolation guidance, each rate function has a corresponding symptom improvement time
+    // distribution, so we enforce a 1:1 relationship between the two.
+    context.register_parameter_id_assigner(Symptoms, |context, person_id| {
+        context.get_parameter_id(RateFn, person_id)
+    })?;
+
     let params = context.get_params();
     load_progressions(context, params.symptom_progression_library.clone())?;
 
