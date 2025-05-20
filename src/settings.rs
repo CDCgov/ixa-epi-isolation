@@ -993,33 +993,27 @@ mod test {
             )
             .unwrap();
 
-        // This section needs to be in its own scope to avoid borrow checker issues.
-        // Basically, adding a new person requires a mutable borrow of context, and calling
-        // methods of setting type requires an immutable borrow of context. Since we add
-        // person c afterwards, this means we have a mutable borrow of context followed by
-        // immutable borrows.
-        {
-            let person_a = context.add_person(()).unwrap();
-            let person_b = context.add_person(()).unwrap();
-            let itinerary_a = vec![
-                ItineraryEntry::new(SettingId::new(&Home, 0), 0.5),
-                ItineraryEntry::new(SettingId::new(&CensusTract, 0), 0.5),
-            ];
-            let itinerary_b = vec![ItineraryEntry::new(SettingId::new(&Home, 0), 1.0)];
-            context.add_itinerary(person_a, itinerary_a).unwrap();
-            context.add_itinerary(person_b, itinerary_b).unwrap();
+        let person_a = context.add_person(()).unwrap();
+        let person_b = context.add_person(()).unwrap();
+        let itinerary_a = vec![
+            ItineraryEntry::new(SettingId::new(&Home, 0), 0.5),
+            ItineraryEntry::new(SettingId::new(&CensusTract, 0), 0.5),
+        ];
+        let itinerary_b = vec![ItineraryEntry::new(SettingId::new(&Home, 0), 1.0)];
+        context.add_itinerary(person_a, itinerary_a).unwrap();
+        context.add_itinerary(person_b, itinerary_b).unwrap();
 
-            // When person a is used to select a setting for contact, it should return Home. While they are
-            // also a member of CensusTract, since they are the only member the multiplier used to weight the
-            // selection is 0.0 from calculate_multiplier. Thus the probability CensusTract is selected is 0.0.
-            let setting_id = context.get_setting_for_contact(person_a).unwrap();
-            assert_eq!(setting_id.setting_type.get_type_id(), TypeId::of::<Home>());
-            assert_eq!(setting_id.id, 0);
+        // When person a is used to select a setting for contact, it should return Home. While they are
+        // also a member of CensusTract, since they are the only member the multiplier used to weight the
+        // selection is 0.0 from calculate_multiplier. Thus the probability CensusTract is selected is 0.0.
+        let setting_id = context.get_setting_for_contact(person_a).unwrap();
+        assert_eq!(setting_id.setting_type.get_type_id(), TypeId::of::<Home>());
+        assert_eq!(setting_id.id, 0);
 
-            let setting_id = context.get_setting_for_contact(person_b).unwrap();
-            assert_eq!(setting_id.setting_type.get_type_id(), TypeId::of::<Home>());
-            assert_eq!(setting_id.id, 0);
-        }
+        let setting_id = context.get_setting_for_contact(person_b).unwrap();
+        assert_eq!(setting_id.setting_type.get_type_id(), TypeId::of::<Home>());
+        assert_eq!(setting_id.id, 0);
+
         let person_c = context.add_person(()).unwrap();
         let itinerary_c = vec![ItineraryEntry::new(SettingId::new(&CensusTract, 0), 0.5)];
         context.add_itinerary(person_c, itinerary_c).unwrap();
