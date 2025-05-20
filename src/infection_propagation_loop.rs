@@ -461,10 +461,12 @@ mod test {
             [0.5, 0.5, 0.5],
         ];
         for ratio in ratios {
+            // We add home workplace and census tract settings to context
+            // in the test setup for this unit test.
             // We need the total infectiousness multiplier for the person.
             let sum_of_ratio: f64 = ratio.iter().sum();
             let mut total_infectiousness_multiplier = None;
-            // Where we store the infection times.
+            // Where we store the infection counts.
             let num_infected_home = Rc::new(RefCell::new(0usize));
             let num_infected_censustract = Rc::new(RefCell::new(0usize));
             let num_infected_workplace = Rc::new(RefCell::new(0usize));
@@ -515,7 +517,7 @@ mod test {
                         infectious_person,
                     ));
                 }
-                // Add a watcher for when people are infected to record the infection times.
+                // Add a watcher for when people are infected to record their infection settings.
                 context.subscribe_to_event::<PersonPropertyChangeEvent<InfectionStatus>>(
                     move |context, event| {
                         if event.current == InfectionStatusValue::Infectious {
