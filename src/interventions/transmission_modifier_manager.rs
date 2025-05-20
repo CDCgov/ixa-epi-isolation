@@ -1,22 +1,38 @@
 use ixa::{
     define_data_plugin, trace, Context, ContextPeopleExt, IxaError, PersonId, PersonProperty,
 };
-use std::{any::TypeId, collections::HashMap};
+use std::{any::TypeId, cell::RefCell, collections::HashMap};
 
 use crate::infectiousness_manager::{InfectionStatus, InfectionStatusValue};
 
+/// A marker trait for identifying a transmission modifier. Only needs to be implemented when the
+/// user is specifying a custom transmission modifier function and is usually implemented on unit
+/// structs. Each type that implements the trait can invoke the default method implementation.
+pub trait TransmissionModifier: std::fmt::Debug + 'static {
+    fn type_id(&self) -> TypeId {
+        TypeId::of::<Self>()
+    }
+}
+
+// Since person properties are used as transmission modifier identifiers when registering a
+// transmission modifier that depends on a person property, we provide a blanket implementation
+// of the transmission modifier trait for all person properties.
+impl<T> TransmissionModifier for T where T: PersonProperty + std::fmt::Debug + 'static {}
+
 type TransmissionModifierFn = dyn Fn(&Context, PersonId) -> f64;
 type TransmissionAggregatorFn = dyn Fn(&Context, PersonId) -> f64;
-
-pub trait TransmissionModifier: std::fmt::Debug + 'static {}
-
-impl<T> TransmissionModifier for T where T: PersonProperty + std::fmt::Debug + 'static {}
+type TransmissionAggregatorFnAndModifiersUsed = (
+    Box<TransmissionAggregatorFn>,
+    Vec<&'static dyn TransmissionModifier>,
+);
 
 #[derive(Default)]
 struct TransmissionModifierContainer {
     transmission_modifier_map:
         HashMap<InfectionStatusValue, HashMap<TypeId, Box<TransmissionModifierFn>>>,
-    modifier_aggregator: HashMap<InfectionStatusValue, Box<TransmissionAggregatorFn>>,
+    modifier_aggregator:
+        HashMap<InfectionStatusValue, Vec<TransmissionAggregatorFnAndModifiersUsed>>,
+    used_yet_aggregation: RefCell<HashMap<InfectionStatusValue, HashMap<TypeId, bool>>>,
 }
 
 define_data_plugin!(
@@ -26,33 +42,26 @@ define_data_plugin!(
 );
 
 pub trait ContextTransmissionModifierExt {
-    /// Register a transmission modifier function for a specific infection status and person property.
-    /// All float values returned should return the relative infectiousness or susceptibility
-    /// of the person with respect to the base value of 1.0.
-    ///
-    /// `PersonProperty` `TypeId`s are not necessarily called by the modifier function, but each
-    /// function must be associated with a `PersonProperty` to ensure unique methods are being stored
-    /// when declared by the user to be associated with a particular property
+    /// Register a generic transmission modifier function for a specific infection status.
+    /// Float values returned from the modifier function indicate the relative infectiousness or
+    /// susceptibility of the person with respect to the base value of 1.0.
     fn register_transmission_modifier_fn<T: TransmissionModifier + 'static + std::fmt::Debug, F>(
         &mut self,
         infection_status: InfectionStatusValue,
-        person_property: T,
+        transmission_modifier_name: T,
         modifier_fn: F,
     ) where
         F: Fn(&Context, PersonId) -> f64 + 'static;
 
-    /// Register a transmission modifier value tuple set for a specific infection status and person
-    /// property.
-    /// This supplies a default transmission modifier function that maps person property values to
-    /// floats as specified in the modifier key. All floats decalred in this fashion have to be between
-    /// zero and one.
+    /// Register a transmission modifier that depends solely on the value of one person property.
+    /// Internally, this method registers a transmission modifier function that returns the float
+    /// value associated the person's property value for the given person property as specified in
+    /// the `modifier_key` map. All floats declared in this fashion must be between zero and one.
     ///
     /// Any modifiers based on efficacy (e.g. facemask transmission prevention) should be
     /// subtracted from 1.0 for modifier effect value.
-    ///
-    /// Modifier key is taken as a slice to avoid new object creation through Vec
     #[allow(dead_code)]
-    fn store_transmission_modifier_values<T: PersonProperty + 'static + std::fmt::Debug>(
+    fn store_transmission_modifier_values<T: PersonProperty + std::fmt::Debug + 'static>(
         &mut self,
         infection_status: InfectionStatusValue,
         person_property: T,
@@ -61,7 +70,8 @@ pub trait ContextTransmissionModifierExt {
     where
         T::Value: std::hash::Hash + Eq;
 
-    /// Evaluate a transmission modifier function for a given person.
+    /// Evaluate a transmission modifier function for a given person. Useful when defining a custom
+    /// aggregator function that depends on a set of transmission modifiers.
     #[allow(dead_code)]
     fn evaluate_transmission_modifier<T>(
         &self,
@@ -71,20 +81,29 @@ pub trait ContextTransmissionModifierExt {
     where
         T: TransmissionModifier;
 
-    /// Register a transmission aggregator for a specific infection status.
-    /// The aggregator is a function that takes a vector of tuples containing the type ID of the person property
-    /// and its corresponding modifier value.
-    /// The default aggregator multiplies all the modifier values together independently.
+    /// Register a transmission aggregator function for a specific infection status and set of
+    /// transmission modifiers. The aggregator function takes `Context` and `PersonId` and calls
+    /// `context.evaluate_transmission_modifier` to get the value of a particular transmission
+    /// modifier for the person, aggregating those values as is necessary and returning a float.
+    /// The `modifiers_included` vector is used to track which transmission modifiers are considered
+    /// in this aggregation function. All transmission modifiers not included in at least one
+    /// aggregator function are aggregated using the default aggregator and its assumption of
+    /// independence of interventions -- returning a final value by multiplying all transmission
+    /// modifier values together. Values returned by custom aggregators are aggregated with other
+    /// values with the default aggregator of multiplication.
     #[allow(dead_code)]
     fn register_transmission_modifier_aggregator<F>(
         &mut self,
         infection_status: InfectionStatusValue,
         agg_function: F,
+        modifiers_included: Vec<&'static dyn TransmissionModifier>,
     ) where
         F: Fn(&Context, PersonId) -> f64 + 'static;
 
-    /// Get the relative intrinsic transmission (infectiousness or susceptibility) for a person based on their
-    /// infection status and current properties based on registered modifiers.
+    /// Get the relative intrinsic transmission (infectiousness or susceptibility) for a person
+    /// based on their infection status. Queries all registered modifier functions and evaluates
+    /// them based on the person's properties. Aggregates according to specified aggregator methods
+    /// or defaults to multiplying all modifier values together to return the final value.
     fn get_modified_relative_total_transmission_person(&self, person_id: PersonId) -> f64;
 }
 
@@ -92,7 +111,7 @@ impl ContextTransmissionModifierExt for Context {
     fn register_transmission_modifier_fn<T: TransmissionModifier, F>(
         &mut self,
         infection_status: InfectionStatusValue,
-        transmission_modifier: T,
+        transmission_modifier_name: T,
         modifier_fn: F,
     ) where
         F: Fn(&Context, PersonId) -> f64 + 'static,
@@ -108,11 +127,20 @@ impl ContextTransmissionModifierExt for Context {
             .or_default()
             .insert(TypeId::of::<T>(), boxed_fn)
         {
-            trace!("Overwriting existing transmission modifier function for infection status {infection_status:?} and modifier {transmission_modifier:?}");
+            trace!("Overwriting existing transmission modifier function for infection status {infection_status:?} and modifier {transmission_modifier_name:?}");
         }
+
+        // Register the transmission modifier typeid among those that we will use for aggregation.
+        // This lets us track what has been used in aggregation and what has not as we aggregate.
+        self.get_data_container_mut(TransmissionModifierPlugin)
+            .used_yet_aggregation
+            .borrow_mut()
+            .entry(infection_status)
+            .or_default()
+            .insert(TypeId::of::<T>(), false);
     }
 
-    fn store_transmission_modifier_values<T: PersonProperty + 'static + std::fmt::Debug>(
+    fn store_transmission_modifier_values<T: PersonProperty + std::fmt::Debug + 'static>(
         &mut self,
         infection_status: InfectionStatusValue,
         person_property: T,
@@ -149,6 +177,15 @@ impl ContextTransmissionModifierExt for Context {
                 *modifier_map.get(&property_val).unwrap_or(&1.0)
             },
         );
+
+        // Register the transmission modifier for tracking whether we use it when aggregating
+        self.get_data_container_mut(TransmissionModifierPlugin)
+            .used_yet_aggregation
+            .borrow_mut()
+            .entry(infection_status)
+            .or_default()
+            .insert(TypeId::of::<T>(), false);
+
         Ok(())
     }
 
@@ -162,6 +199,7 @@ impl ContextTransmissionModifierExt for Context {
     {
         let infection_status = self.get_person_property(person_id, InfectionStatus);
 
+        // Get the registered transmission modifier fn for this person's infection status
         self.get_data_container(TransmissionModifierPlugin)
             .expect("Register a transmission modifier before evaluating.")
             .transmission_modifier_map
@@ -169,6 +207,7 @@ impl ContextTransmissionModifierExt for Context {
             .expect("No transmission modifiers registered for person {person_id:?}'s infection status {infection_status:?}.")
             .get(&TypeId::of::<T>())
             .expect("The transmission modifier function is not registered for infection status {infection_status:?}.")
+            // Evaluate the function
             (self, person_id)
     }
 
@@ -176,6 +215,7 @@ impl ContextTransmissionModifierExt for Context {
         &mut self,
         infection_status: InfectionStatusValue,
         agg_function: F,
+        modifiers_included: Vec<&'static dyn TransmissionModifier>,
     ) where
         F: Fn(&Context, PersonId) -> f64 + 'static,
     {
@@ -184,7 +224,16 @@ impl ContextTransmissionModifierExt for Context {
 
         self.get_data_container_mut(TransmissionModifierPlugin)
             .modifier_aggregator
-            .insert(infection_status, boxed_fn);
+            .entry(infection_status)
+            .or_default()
+            // Store the boxed function as the next in the vector of aggregator functions
+            // This allows multiple aggregator functions to be registered for the same infection status.
+            // We use this functionality to enable modularity between aggregator functions and
+            // modifiers. This way, a user can register the aggregator functions pertinent to their
+            // interventions without needing to globally know about all interventions, which would be
+            // the case if we only supported one aggregator function that just replaced the default
+            // aggregator.
+            .push((boxed_fn, modifiers_included));
     }
 
     fn get_modified_relative_total_transmission_person(&self, person_id: PersonId) -> f64 {
@@ -197,20 +246,69 @@ impl ContextTransmissionModifierExt for Context {
                 .transmission_modifier_map
                 .get(&infection_status)
             {
-                let mut registered_modifiers = Vec::new();
-                for (t, f) in transmission_modifier_map {
-                    registered_modifiers.push((*t, f(self, person_id)));
+                // Reset the used_yet_aggregation map for this aggregation call
+                for value in self
+                    .get_data_container(TransmissionModifierPlugin)
+                    // We know that if we have gotten this far, the plugin is initialized
+                    .unwrap()
+                    .used_yet_aggregation
+                    .borrow_mut()
+                    .get_mut(&infection_status)
+                    // Similarly we know that there are some interventions for the infection status
+                    .unwrap()
+                    .values_mut()
+                {
+                    *value = false;
                 }
 
-                // Run the aggregator function, defaulting to the default (independence of all
-                // modifiers, a simple product) if no aggregator has been registered
-                transmission_modifier_plugin
+                // Run the custom aggregator functions
+                let mut modifier_values = vec![];
+                if let Some(aggregators) = transmission_modifier_plugin
                     .modifier_aggregator
                     .get(&infection_status)
-                    .map_or_else(
-                        || default_aggregator(&registered_modifiers),
-                        |agg| agg(self, person_id),
-                    )
+                {
+                    // Iterate through and apply each aggregator function
+                    for (aggregator_fn, modifiers_included) in aggregators {
+                        modifier_values.push(aggregator_fn(self, person_id));
+                        for &modifier in modifiers_included {
+                            // Mark the used transmission modifiers
+                            *self
+                                .get_data_container(TransmissionModifierPlugin)
+                                .unwrap()
+                                .used_yet_aggregation
+                                .borrow_mut()
+                                .get_mut(&infection_status)
+                                .unwrap()
+                                .get_mut(&modifier.type_id())
+                                .unwrap() = true;
+                        }
+                    }
+                }
+
+                // Run the default aggregator on all interventions not yet used in the custom
+                // aggregator
+                let unused_transmission_modifiers: Vec<TypeId> = transmission_modifier_plugin
+                    .used_yet_aggregation
+                    .borrow()
+                    .get(&infection_status)
+                    .unwrap()
+                    .iter()
+                    .filter_map(|(key, used)| if *used { None } else { Some(*key) })
+                    .collect();
+
+                for key in &unused_transmission_modifiers {
+                    // Add to the value of the transmission modifier floats for those where a custom
+                    // aggregator did not use them.
+                    // It's safe to unwrap here because we know the modifier function is set up
+                    // if it's in our map of used_yet_aggregation
+                    modifier_values
+                        .push(transmission_modifier_map.get(key).unwrap()(self, person_id));
+                }
+                // Multiply all the modifier values together to get the final result
+                // (This is the default aggregator/independence assumption)
+                // What we are really doing here is assuming independence among transmission modifiers
+                // where we don't have a custom aggregator specified.
+                modifier_values.iter().product()
             } else {
                 // If the infection status is not found in the map, return 1.0
                 1.0
@@ -220,10 +318,6 @@ impl ContextTransmissionModifierExt for Context {
             1.0
         }
     }
-}
-
-fn default_aggregator(modifiers: &[(TypeId, f64)]) -> f64 {
-    modifiers.iter().map(|&(_, f)| f).product()
 }
 
 #[cfg(test)]
@@ -243,6 +337,8 @@ mod test {
     use crate::parameters::{GlobalParams, Params, RateFnType};
     use crate::rate_fns::load_rate_fns;
     use std::any::TypeId;
+
+    use super::TransmissionModifier;
 
     #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Hash)]
     pub enum MandatoryIntervention {
@@ -573,9 +669,20 @@ mod test {
         );
     }
 
+    #[derive(Debug)]
+    struct CustomTransmissionModifierIdentifier;
+    impl TransmissionModifier for CustomTransmissionModifierIdentifier {}
+
     #[test]
-    fn test_register_aggregator() {
+    fn test_register_custom_aggregator() {
         let mut context = setup(0);
+
+        // Register a custom modifier function
+        context.register_transmission_modifier_fn(
+            InfectionStatusValue::Infectious,
+            CustomTransmissionModifierIdentifier,
+            |_context: &Context, _person_id: PersonId| 0.42,
+        );
 
         // If the person has mandatory intervention turned on, return that as the transmission
         // modifier, ignoring everything else
@@ -592,6 +699,7 @@ mod test {
                             .evaluate_transmission_modifier(MandatoryInterventionStatus, person_id)
                 }
             },
+            vec![&MandatoryInterventionStatus, &InfectiousnessReductionStatus],
         );
 
         let mandatory_on_person = context
@@ -608,7 +716,7 @@ mod test {
 
         assert_almost_eq!(
             context.get_modified_relative_total_transmission_person(mandatory_on_person),
-            INFECTIOUS_PARTIAL,
+            INFECTIOUS_PARTIAL * 0.42,
             0.0
         );
 
@@ -626,7 +734,7 @@ mod test {
 
         assert_almost_eq!(
             context.get_modified_relative_total_transmission_person(mandatory_off_person),
-            INFECTIOUS_PARTIAL,
+            INFECTIOUS_PARTIAL * 0.42,
             0.0
         );
     }
