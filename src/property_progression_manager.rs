@@ -5,7 +5,7 @@ use std::{
 };
 
 use ixa::{
-    define_data_plugin, trace, Context, ContextPeopleExt, IxaError, PersonId, PersonProperty,
+    define_data_plugin, Context, ContextPeopleExt, IxaError, PersonId, PersonProperty,
     PersonPropertyChangeEvent,
 };
 use serde::Deserialize;
@@ -137,7 +137,12 @@ fn add_progressions_from_file(context: &mut Context, file: PathBuf) -> Result<()
     // Pop out the first record so we can initialize the trackers
     let record = reader.next().unwrap()?;
     let mut last_id = record.id;
-    trace!("Progression ids start at {last_id}.");
+    // Check that the first id is 1
+    if last_id != 1 {
+        return Err(IxaError::IxaError(format!(
+            "First id in the file should be 1, got {last_id}."
+        )));
+    }
     let mut last_progression_type = record.progression_type;
     let mut parameter_names = vec![record.parameter_name];
     let mut parameters = vec![record.parameter_value];
@@ -559,5 +564,53 @@ mod test {
                 .0,
             Some(SymptomValue::Category3)
         );
+    }
+
+    #[test]
+    fn test_read_symptom_progression_discontiguous_ids() {
+        let mut context = Context::new();
+        let file = PathBuf::from("./tests/data/progression_ids_discontiguous.csv");
+        // Load the library and check for an error
+        let result = load_progressions(
+            &mut context,
+            Some(ProgressionLibraryType::EmpiricalFromFile { file }),
+        );
+        let e = result.err();
+        match e {
+            Some(IxaError::IxaError(msg)) => {
+                assert_eq!(msg, "Ids are not contiguous: expected 2, got 3".to_string());
+            }
+            Some(ue) => panic!(
+                "Expected an error that the the ids are not contiguous. Instead got {:?}",
+                ue.to_string()
+            ),
+            None => panic!(
+                "Expected an error. Instead, reading the rate functions passed with no errors."
+            ),
+        }
+    }
+
+    #[test]
+    fn test_read_symptom_progression_id_starts_at_two() {
+        let mut context = Context::new();
+        let file = PathBuf::from("./tests/data/progression_ids_start_at_two.csv");
+        // Load the library and check for an error
+        let result = load_progressions(
+            &mut context,
+            Some(ProgressionLibraryType::EmpiricalFromFile { file }),
+        );
+        let e = result.err();
+        match e {
+            Some(IxaError::IxaError(msg)) => {
+                assert_eq!(msg, "First id in the file should be 1, got 2.".to_string());
+            }
+            Some(ue) => panic!(
+                "Expected an error that the the ids do not start at 1. Instead got {:?}",
+                ue.to_string()
+            ),
+            None => panic!(
+                "Expected an error. Instead, reading the rate functions passed with no errors."
+            ),
+        }
     }
 }

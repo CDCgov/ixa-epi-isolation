@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use ixa::{define_data_plugin, define_rng, trace, Context, ContextRandomExt, IxaError, PersonId};
+use ixa::{define_data_plugin, define_rng, Context, ContextRandomExt, IxaError, PersonId};
 use serde::Deserialize;
 
 use crate::{
@@ -102,7 +102,12 @@ fn add_rate_fns_from_file(context: &mut Context, file: PathBuf) -> Result<(), Ix
     // Pop out the first record so we can initialize the vectors
     let record = reader.next().unwrap()?;
     let mut last_id = record.id;
-    trace!("Rate function ids start at {last_id}.");
+    // Require that the first id is 1
+    if last_id != 1 {
+        return Err(IxaError::IxaError(format!(
+            "First id in the file should be 1, got {last_id}."
+        )));
+    }
     let mut times = vec![record.time];
     let mut values = vec![record.value * scale];
     for record in reader {
@@ -286,6 +291,41 @@ mod tests {
             }
             Some(ue) => panic!(
                 "Expected an error that the the ids are not contiguous. Instead got {:?}",
+                ue.to_string()
+            ),
+            None => panic!(
+                "Expected an error. Instead, reading the rate functions passed with no errors."
+            ),
+        }
+    }
+
+    #[test]
+    fn test_read_rate_function_id_starts_at_two() {
+        let mut context = Context::new();
+        let parameters = Params {
+            initial_infections: 3,
+            max_time: 100.0,
+            seed: 0,
+            infectiousness_rate_fn: RateFnType::EmpiricalFromFile {
+                file: PathBuf::from("./tests/data/rate_fn_id_starts_at_two.csv"),
+                scale: 1.0,
+            },
+            symptom_progression_library: None,
+            report_period: 1.0,
+            synth_population_file: PathBuf::from("."),
+            transmission_report_name: None,
+            settings_properties: HashMap::new(),
+        };
+        context
+            .set_global_property_value(GlobalParams, parameters)
+            .unwrap();
+        let e = load_rate_fns(&mut context).err();
+        match e {
+            Some(IxaError::IxaError(msg)) => {
+                assert_eq!(msg, "First id in the file should be 1, got 2.".to_string());
+            }
+            Some(ue) => panic!(
+                "Expected an error that the the ids do not start at 1. Instead got {:?}",
                 ue.to_string()
             ),
             None => panic!(
