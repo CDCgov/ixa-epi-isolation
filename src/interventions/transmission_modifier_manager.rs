@@ -45,7 +45,7 @@ pub trait ContextTransmissionModifierExt {
     /// Register a generic transmission modifier function for a specific infection status.
     /// Float values returned from the modifier function indicate the relative infectiousness or
     /// susceptibility of the person with respect to the base value of 1.0.
-    fn register_transmission_modifier_fn<T: TransmissionModifier + 'static + std::fmt::Debug, F>(
+    fn register_transmission_modifier_fn<T: TransmissionModifier, F>(
         &mut self,
         infection_status: InfectionStatusValue,
         transmission_modifier_name: T,
