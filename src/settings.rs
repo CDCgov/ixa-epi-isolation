@@ -371,9 +371,9 @@ impl ContextSettingExt for Context {
         }
         let container = self.get_data_container_mut(SettingDataPlugin);
 
-        // Clean up settings that from previous itinerary, if there is one
-        if let Some(previous_itinerary) = container.modified_itineraries.get(&person_id) {
-            for itinerary_entry in previous_itinerary {
+        // If there's a modified itinerary present, replace with this 
+        if let Some(previous_mod_itinerary) = container.modified_itineraries.get(&person_id) {
+            for itinerary_entry in previous_mod_itinerary {
                 // Remove the person from the previous itinerary
                 container
                     .members
@@ -385,6 +385,22 @@ impl ContextSettingExt for Context {
             }
         }
 
+        // Remove people from default itinerary, if there's one
+        match container.itineraries.get(&person_id) {
+            None => return Err(IxaError::from("Can't modify itinerary if there isn't one present")),
+            Some(previous_itinerary) => {
+                for itinerary_entry in previous_itinerary {
+                    // Remove the person from the previous itinerary
+                    container
+                        .members
+                        .entry(itinerary_entry.setting_type)
+                        .or_default()
+                        .entry(itinerary_entry.setting_id)
+                        .or_default()
+                        .retain(|&x| x != person_id);
+                }
+            }
+        }
         for itinerary_entry in &itinerary {
             // TODO: If we are changing a person's itinerary, the person_id should be removed from vector
             // This isn't the same as the concept of being present or not.
@@ -850,14 +866,13 @@ mod test {
         assert_eq!(members1_removed.len(), 0);
     }
 
-        #[test]
-    fn test_itinerary_modifiers() {
+    #[test]
+    fn test_one_person_itinerary_modifier() {
         /*
         Create two itineraries: default (home, work, censustract), and modified (home)
-        Add one person to the simulation, modify its itinerary
+        Add one person to the simulation, modify its itinerary and check membership
          */
         let mut context = Context::new();
-        context.init_random(1234);
         context
             .register_setting_type(
                 Home,
@@ -901,19 +916,172 @@ mod test {
         let members = context
             .get_setting_members::<Home>(SettingId::new(Home, 0))
             .unwrap();
+        assert_eq!(members.len(), 1);
+        
+        let _ = context.add_modified_itinerary(person, isolation_itinerary);
+        let h_members = context
+            .get_setting_members::<Home>(SettingId::new(Home, 0))
+            .unwrap();
+        assert_eq!(h_members.len(), 1);
+        
+        let w_members = context
+            .get_setting_members::<Workplace>(SettingId::new(Workplace, 0))
+            .unwrap();
+
+        assert_eq!(w_members.len(), 0); 
+
+    }
+    
+    #[test]
+    fn test_itinerary_modifiers() {
+        /* For the settings:
+        H(0) = [0, 1, 2]
+        H(1) = [3, 4, 5]
+        W(0) = [0, 1, 2, 5]
+        SCH(0) = [0, 3, 4]
+        **Isolate person 0**
+         */
+        let mut context = Context::new();
+        context
+            .register_setting_type(
+                Home,
+                SettingProperties {
+                    alpha: 0.1,
+                    itinerary_specification: None,
+                },
+            )
+            .unwrap();
+        context
+            .register_setting_type(
+                Workplace,
+                SettingProperties {
+                    alpha: 0.3,
+                    itinerary_specification: None,
+                },
+            )
+            .unwrap();
+        context
+            .register_setting_type(
+                School,
+                SettingProperties {
+                    alpha: 0.01,
+                    itinerary_specification: None,
+                },
+            )
+            .unwrap();
+        
+        let itinerary_map = HashMap::from([
+            (0, HashMap::from([
+                ("Home",0), ("Workplace", 0), ("School",0)
+            ])),
+            (1, HashMap::from([
+                ("Home",0), ("Workplace", 0)
+            ])),
+            (2, HashMap::from([
+                ("Home",0), ("Workplace", 0)
+            ])),
+            (3, HashMap::from([
+                ("Home",1), ("School", 0)
+            ])),
+            (4, HashMap::from([
+                ("Home",1), ("Workplace", 0)
+            ])),
+            (5, HashMap::from([
+                ("Home",1), ("Workplace", 0)
+            ])),                        
+        ]);
+
+        let mut person_0: Option<PersonId> = None;
+        for p_id in 0..itinerary_map.len() {
+            let p_map = itinerary_map.get(&p_id).unwrap();
+            let mut p_itinerary = Vec::<ItineraryEntry>::new();
+            for (s_type, s_id) in p_map.iter() {
+                match *s_type {
+                    "Home" => p_itinerary.push(ItineraryEntry::new(&SettingId::new(Home, *s_id), 1.0)),
+                    "School" => p_itinerary.push(ItineraryEntry::new(&SettingId::new(School, *s_id), 1.0)),
+                    "Workplace" => p_itinerary.push(ItineraryEntry::new(&SettingId::new(Workplace, *s_id), 1.0)),
+                    _ => println!("Setting type not found"),
+                    
+                }                
+            }
+            let person = context.add_person(()).unwrap();
+            let _e = context.add_itinerary(person, p_itinerary);
+            if p_id == 0 {
+                person_0 = Some(person);
+            }
+        }
+        // 1. Verify that initial members are right
+        let h_members = context
+            .get_setting_members::<Home>(SettingId::new(Home, 0))
+            .unwrap();
+        let h1_members = context
+            .get_setting_members::<Home>(SettingId::new(Home, 1))
+            .unwrap();
+        let w_members = context
+            .get_setting_members::<Workplace>(SettingId::new(Workplace, 0))
+            .unwrap();
+        let s_members = context
+            .get_setting_members::<School>(SettingId::new(School, 0))
+            .unwrap();
+        assert_eq!(h_members.len(), 3);        
+        assert_eq!(h1_members.len(), 3);
+        assert_eq!(w_members.len(), 5);
+        assert_eq!(s_members.len(), 2);
+
+        // 2. Isolate person with itinerary [Home 0 , 1.0]
+        let isolation_itinerary = vec![
+            ItineraryEntry::new(&SettingId::new(Home, 0), 1.0),
+        ];        
+        let _ = context.add_modified_itinerary(person_0.unwrap(), isolation_itinerary);
+        let h_members = context
+            .get_setting_members::<Home>(SettingId::new(Home, 0))
+            .unwrap();
+        let h1_members = context
+            .get_setting_members::<Home>(SettingId::new(Home, 1))
+            .unwrap();
+        let w_members = context
+            .get_setting_members::<Workplace>(SettingId::new(Workplace, 0))
+            .unwrap();
+        let s_members = context
+            .get_setting_members::<School>(SettingId::new(School, 0))
+            .unwrap();
+        assert_eq!(h_members.len(), 3);        
+        assert_eq!(h1_members.len(), 3);
+        assert_eq!(w_members.len(), 4);
+        assert_eq!(s_members.len(), 1);
+
+        /*
+        let person = context.add_person(()).unwrap();
+        let itinerary = vec![
+            ItineraryEntry::new(&SettingId::new(Home, 0), 1.0),
+            ItineraryEntry::new(&SettingId::new(CensusTract, 0), 1.0),
+            ItineraryEntry::new(&SettingId::new(Workplace, 0), 1.0),
+        ];
+        let isolation_itinerary = vec![
+            ItineraryEntry::new(&SettingId::new(Home, 0), 1.0),
+        ];
+        
+        let _ = context.add_itinerary(person, itinerary);
+        let members = context
+            .get_setting_members::<Home>(SettingId::new(Home, 0))
+            .unwrap();
         println!("H MEMBERS: {:?}", members);
-        assert_eq!(members.len(), 1); 
-        let _ = context.add_itinerary(person, isolation_itinerary);
+        assert_eq!(members.len(), 1);
+        
+        let _ = context.add_modified_itinerary(person, isolation_itinerary);
         let h_members = context
             .get_setting_members::<Home>(SettingId::new(Home, 0))
             .unwrap();
         println!("H MEMBERS - isolation: {:?}", h_members);
-        assert_eq!(h_members.len(), 1);
+
         let w_members = context
             .get_setting_members::<Workplace>(SettingId::new(Workplace, 0))
             .unwrap();
         println!("WORK MEMBERS: {:?}", w_members);
-        assert_eq!(w_members.len(), 0); 
+
+        assert_eq!(h_members.len(), 1);
+        assert_eq!(w_members.len(), 0);
+*/
 
     }
 
