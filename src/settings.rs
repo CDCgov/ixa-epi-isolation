@@ -378,6 +378,8 @@ impl ContextSettingExt for Context {
             }
         }
 
+        container.modified_itineraries.remove(&person_id);
+        
         // Get people back to default itinerary, if there's one
         match container.itineraries.get(&person_id) {
             None => return Err(IxaError::from("Can't modify itinerary if there isn't one present")),
@@ -1052,6 +1054,10 @@ mod test {
                 person_0 = Some(person);
             }
         }
+        let alpha_h = context.get_setting_properties(Home).unwrap().alpha;
+        let alpha_w = context.get_setting_properties(Workplace).unwrap().alpha;
+        let alpha_s = context.get_setting_properties(School).unwrap().alpha;
+        
         // 1. Verify that initial members are right
         let h_members = context
             .get_setting_members::<Home>(SettingId::new(Home, 0))
@@ -1070,6 +1076,13 @@ mod test {
         assert_eq!(w_members.len(), 5);
         assert_eq!(s_members.len(), 2);
         println!("WORK MEMBERS (default): {:?}", w_members);
+
+        let inf_multiplier = context.calculate_total_infectiousness_multiplier_for_person(person_0.unwrap());
+        let expected_multiplier = (1.0/3.0) * (2_f64).powf(alpha_h) +
+            (1.0/3.0) * (4_f64).powf(alpha_w) +
+            (1.0/3.0) * (1_f64).powf(alpha_s);
+        println!("MULTIPLIER (pre-isolation): {:?} -- expected {:?}", inf_multiplier, expected_multiplier);       
+        assert_almost_eq!(inf_multiplier, expected_multiplier, 0.0);
         
         // 2. Isolate person with itinerary [Home 0 , 1.0]
         let isolation_itinerary = vec![
@@ -1093,6 +1106,12 @@ mod test {
         assert_eq!(w_members.len(), 4);
         assert_eq!(s_members.len(), 1);
         println!("WORK MEMBERS (isolation): {:?}", w_members);
+
+
+        let inf_multiplier = context.calculate_total_infectiousness_multiplier_for_person(person_0.unwrap());
+        let expected_multiplier = (1.0) * (2_f64).powf(alpha_h);        
+        println!("MULTIPLIER (isolation): {:?} -- expected {:?}", inf_multiplier, expected_multiplier);
+        assert_almost_eq!(inf_multiplier, expected_multiplier, 0.0);
         
         // 3. Remove modified itinerary; get back to normal
         let _ = context.remove_modified_itinerary(person_0.unwrap());
@@ -1113,6 +1132,13 @@ mod test {
         assert_eq!(w_members.len(), 5);
         assert_eq!(s_members.len(), 2);
         println!("WORK MEMBERS (post-isolation): {:?}", w_members);
+        
+        let inf_multiplier = context.calculate_total_infectiousness_multiplier_for_person(person_0.unwrap());
+        let expected_multiplier = (1.0/3.0) * (2_f64).powf(alpha_h) +
+            (1.0/3.0) * (4_f64).powf(alpha_w) +
+            (1.0/3.0) * (1_f64).powf(alpha_s);
+        println!("MULTIPLIER (post-isolation): {:?} -- expected {:?}", inf_multiplier, expected_multiplier);       
+        assert_almost_eq!(inf_multiplier, expected_multiplier, 0.0);
     }
 
     #[test]
@@ -1137,7 +1163,6 @@ mod test {
             )
             .unwrap();
         for s in 0..5 {
-            // Create 5 people
             for _ in 0..5 {
                 let person = context.add_person(()).unwrap();
                 let itinerary = vec![
@@ -1152,7 +1177,7 @@ mod test {
             let tract_members = context
                 .get_setting_members::<CensusTract>(SettingId::new(CensusTract, s))
                 .unwrap();
-            // Get the number of people for these settings and should be 5
+            
             assert_eq!(members.len(), 5);
             assert_eq!(tract_members.len(), 5);
         }
