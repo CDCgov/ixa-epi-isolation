@@ -224,6 +224,11 @@ pub trait ContextSettingExt {
         person_id: PersonId,
         itinerary: Vec<ItineraryEntry>,
     ) -> Result<(), IxaError>;
+    fn limit_itinerary_by_setting_types<T: SettingType + 'static>(
+        &mut self,
+        person_id: PersonId,
+        _setting_type: T,
+    ) -> Result<(), IxaError>;
     fn remove_modified_itinerary(
         &mut self,
         person_id: PersonId,
@@ -357,6 +362,33 @@ impl ContextSettingExt for Context {
             .setting_properties
             .insert(TypeId::of::<T>(), setting_props);
         Ok(())
+    }
+
+    // TODO: Limit itinerary to a vector of setting types instead of one setting type
+    fn limit_itinerary_by_setting_types<T: SettingType + 'static>(
+        &mut self,
+        person_id: PersonId,
+        _setting_type: T,
+    ) -> Result<(), IxaError> {
+        let container = self.get_data_container_mut(SettingDataPlugin);
+        match container.itineraries.get(&person_id) {
+            None => Err(IxaError::from("Can't find itinerary for person")),
+            Some(itineraries) => {
+                let mut modified_itinerary = Vec::<ItineraryEntry>::new();
+                for entry in itineraries.iter() {
+                    if entry.setting_type == TypeId::of::<T>() {
+                        modified_itinerary.push(*entry);
+                    }
+                }
+                if modified_itinerary.is_empty() {
+                    return Err(IxaError::from("limit itinerary resulted in empty modified itinerary"));
+                }
+                println!("LIMIT ITINERARY: {:?}", modified_itinerary);
+                
+                self.add_modified_itinerary(person_id, modified_itinerary)?;
+                Ok(())                
+            }
+        }        
     }
 
     fn remove_modified_itinerary(
@@ -1105,12 +1137,9 @@ mod test {
         assert_eq!(h1_members.len(), 3);
         assert_eq!(w_members.len(), 4);
         assert_eq!(s_members.len(), 1);
-        println!("WORK MEMBERS (isolation): {:?}", w_members);
-
 
         let inf_multiplier = context.calculate_total_infectiousness_multiplier_for_person(person_0.unwrap());
-        let expected_multiplier = (1.0) * (2_f64).powf(alpha_h);        
-        println!("MULTIPLIER (isolation): {:?} -- expected {:?}", inf_multiplier, expected_multiplier);
+        let expected_multiplier = (1.0) * (2_f64).powf(alpha_h);
         assert_almost_eq!(inf_multiplier, expected_multiplier, 0.0);
         
         // 3. Remove modified itinerary; get back to normal
@@ -1131,16 +1160,113 @@ mod test {
         assert_eq!(h1_members.len(), 3);
         assert_eq!(w_members.len(), 5);
         assert_eq!(s_members.len(), 2);
-        println!("WORK MEMBERS (post-isolation): {:?}", w_members);
         
         let inf_multiplier = context.calculate_total_infectiousness_multiplier_for_person(person_0.unwrap());
         let expected_multiplier = (1.0/3.0) * (2_f64).powf(alpha_h) +
             (1.0/3.0) * (4_f64).powf(alpha_w) +
             (1.0/3.0) * (1_f64).powf(alpha_s);
-        println!("MULTIPLIER (post-isolation): {:?} -- expected {:?}", inf_multiplier, expected_multiplier);       
+        
         assert_almost_eq!(inf_multiplier, expected_multiplier, 0.0);
     }
 
+        #[test]
+    fn test_limited_itinerary_modifier() {
+        /* H(0) = [0, 1, 2]
+           W(0) = [0,3,4] - 
+          Person 0 isolates using limited itinerary by setting type. Hence, members of 
+         */
+        let mut context = Context::new();
+        context.init_random(42);
+
+        context
+            .register_setting_type(
+                Home,
+                SettingProperties {
+                    alpha: 0.1,
+                    itinerary_specification: None,
+                },
+            )
+            .unwrap();
+        context
+            .register_setting_type(
+                Workplace,
+                SettingProperties {
+                    alpha: 0.3,
+                    itinerary_specification: None,
+                },
+            )
+            .unwrap();
+
+        let person = context.add_person(()).unwrap();
+        let itinerary = vec![
+            ItineraryEntry::new(&SettingId::new(Home, 0), 1.0),
+            ItineraryEntry::new(&SettingId::new(Workplace, 0), 1.0),
+        ];
+        
+        let _isolation_itinerary = [
+            ItineraryEntry::new(&SettingId::new(Home, 0), 1.0),
+        ];
+        
+        let _ = context.add_itinerary(person, itinerary.clone());
+
+        for _ in 0..2 {
+            let itinerary_home = vec![
+            ItineraryEntry::new(&SettingId::new(Home, 0), 1.0),
+            ];
+
+            let p_id = context.add_person(()).unwrap();
+            let _ = context.add_itinerary(p_id, itinerary_home);                        
+        }
+        for _ in 0..2 {
+            let itinerary_work = vec![
+                ItineraryEntry::new(&SettingId::new(Workplace, 0), 1.0),
+            ];
+
+            let p_id = context.add_person(()).unwrap();
+            let _ = context.add_itinerary(p_id, itinerary_work);                        
+        }
+        // Check membership
+        let h_members = context
+            .get_setting_members::<Home>(SettingId::new(Home, 0))
+            .unwrap();
+        let w_members = context
+            .get_setting_members::<Workplace>(SettingId::new(Workplace, 0))
+            .unwrap();
+        assert_eq!(h_members.len(), 3);        
+        assert_eq!(w_members.len(), 3);
+        println!("HOME MEMBERS (limit default): {:?}", h_members);
+        println!("WORK MEMBERS (limit default): {:?}", w_members);
+        
+        // Reduce itinerary to only Home
+        let _ = context.limit_itinerary_by_setting_types(person, Home);
+                // Check membership
+        let h_members = context
+            .get_setting_members::<Home>(SettingId::new(Home, 0))
+            .unwrap();
+        let w_members = context
+            .get_setting_members::<Workplace>(SettingId::new(Workplace, 0))
+            .unwrap();
+        assert_eq!(h_members.len(), 3);        
+        assert_eq!(w_members.len(), 2);
+        println!("HOME MEMBERS (limit isolation): {:?}", h_members);
+        println!("WORK MEMBERS (limit isolation): {:?}", w_members);
+
+        let _ = context.remove_modified_itinerary(person);
+        let h_members = context
+            .get_setting_members::<Home>(SettingId::new(Home, 0))
+            .unwrap();
+        let w_members = context
+            .get_setting_members::<Workplace>(SettingId::new(Workplace, 0))
+            .unwrap();
+        assert_eq!(h_members.len(), 3);        
+        assert_eq!(w_members.len(), 3);
+        
+        println!("HOME MEMBERS (limit isolation): {:?}", h_members);
+        println!("WORK MEMBERS (limit isolation): {:?}", w_members);       
+
+    }
+
+    
     #[test]
     fn test_setting_registration() {
         let mut context = Context::new();
