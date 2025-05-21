@@ -8,13 +8,15 @@ use ixa::{
     Context, IxaError, PersonId, PersonPropertyChangeEvent,
 };
 use serde::{Deserialize, Serialize};
+use std::string::ToString;
 
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
 struct TransmissionReport {
     time: f64,
     target_id: PersonId,
     infected_by: Option<PersonId>,
-    // setting_id: SettingId,
+    infection_setting_type: Option<String>,
+    infection_setting_id: Option<usize>,
 }
 
 create_report_trait!(TransmissionReport);
@@ -23,13 +25,16 @@ fn record_transmission_event(
     context: &mut Context,
     target_id: PersonId,
     infected_by: Option<PersonId>,
+    infection_setting_type: Option<String>,
+    infection_setting_id: Option<usize>,
 ) {
     if infected_by.is_some() {
         context.send_report(TransmissionReport {
             time: context.get_current_time(),
             target_id,
             infected_by,
-            // setting_id: setting,
+            infection_setting_type,
+            infection_setting_id,
         });
     }
 }
@@ -37,8 +42,20 @@ fn record_transmission_event(
 fn create_transmission_report(context: &mut Context, file_name: &str) -> Result<(), IxaError> {
     context.add_report::<TransmissionReport>(file_name)?;
     context.subscribe_to_event::<PersonPropertyChangeEvent<InfectionData>>(|context, event| {
-        if let InfectionDataValue::Infectious { infected_by, .. } = event.current {
-            record_transmission_event(context, event.person_id, infected_by);
+        if let InfectionDataValue::Infectious {
+            infected_by,
+            infection_setting_type,
+            infection_setting_id,
+            ..
+        } = event.current
+        {
+            record_transmission_event(
+                context,
+                event.person_id,
+                infected_by,
+                infection_setting_type.map(ToString::to_string),
+                infection_setting_id,
+            );
         }
     });
     Ok(())
@@ -158,12 +175,14 @@ mod test {
 
         let source = context.add_person(()).unwrap();
         let target = context.add_person(()).unwrap();
+        let setting_type = Some("test_setting");
+        let setting_id: Option<usize> = Some(1);
         let infection_time = 1.0;
 
-        context.infect_person(source, None);
+        context.infect_person(source, None, None, None);
 
         context.add_plan(infection_time, move |context| {
-            context.infect_person(target, Some(source));
+            context.infect_person(target, Some(source), setting_type, setting_id);
         });
         context.execute();
 
@@ -176,6 +195,11 @@ mod test {
             assert_eq!(record.time, infection_time);
             assert_eq!(record.target_id, target);
             assert_eq!(record.infected_by.unwrap(), source);
+            assert_eq!(
+                record.infection_setting_type,
+                Some("test_setting".to_string())
+            );
+            assert_eq!(record.infection_setting_id, Some(1));
         }
     }
 }
