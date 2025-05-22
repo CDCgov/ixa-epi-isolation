@@ -32,7 +32,7 @@ where
         *modifier_map.get(&property_val).unwrap_or(&1.0)
     }
     fn get_name(&self) -> String {
-        format!("{:?}", self.1)
+        format!("{:?}", self.0)
     }
 }
 
