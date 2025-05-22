@@ -12,6 +12,10 @@ pub trait TransmissionModifier: std::fmt::Debug + 'static {
     /// Return the relative potential for infection (infectiousness or susceptibility) for a person
     /// based on their infection status.
     fn get_relative_transmission_modifier(&self, context: &Context, person_id: PersonId) -> f64;
+
+    /// For debugging purposes. The name of the transmission modifier. The default implementation
+    /// returns the `Debug` representation of the transmission modifier struct on which this trait
+    /// is implemented.
     fn get_name(&self) -> String {
         format!("{self:?}")
     }
