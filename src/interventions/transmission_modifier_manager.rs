@@ -5,68 +5,60 @@ use std::{any::TypeId, collections::HashMap};
 
 use crate::infectiousness_manager::{InfectionStatus, InfectionStatusValue};
 
-type TransmissionModifierFn = dyn Fn(&Context, PersonId) -> f64;
-type TransmissionAggregatorFn = dyn Fn(&Vec<(TypeId, f64)>) -> f64;
-
-struct TransmissionModifierContainer {
-    transmission_modifier_map:
-        HashMap<InfectionStatusValue, HashMap<TypeId, Box<TransmissionModifierFn>>>,
-    modifier_aggregator: HashMap<InfectionStatusValue, Box<TransmissionAggregatorFn>>,
+/// Defines a transmission modifier that is used to modify the infectiousness or susceptibility
+/// of a person based on their infection status.
+// We require debug for easy logging
+pub trait TransmissionModifier: std::fmt::Debug + 'static {
+    /// Return the relative potential for infection (infectiousness or susceptibility) for a person
+    /// based on their infection status.
+    fn get_relative_transmission_modifier(&self, context: &Context, person_id: PersonId) -> f64;
 }
 
-impl TransmissionModifierContainer {
-    fn run_aggregator(
-        &self,
-        infection_status: InfectionStatusValue,
-        modifiers: &Vec<(TypeId, f64)>,
-    ) -> f64 {
-        self.modifier_aggregator
-            .get(&infection_status)
-            .map_or_else(|| default_aggregator(modifiers), |agg| agg(modifiers))
+impl<T> TransmissionModifier for (T, HashMap<T::Value, f64>)
+where
+    // All person properties implement Debug and are static
+    T: PersonProperty + std::fmt::Debug + 'static,
+    // For now, this limits us to person property values that are not floats for use in the
+    // transmisison modifier map convienience method.
+    T::Value: std::hash::Hash + Eq,
+{
+    fn get_relative_transmission_modifier(&self, context: &Context, person_id: PersonId) -> f64 {
+        let (person_property, modifier_map) = self;
+        let property_val = context.get_person_property(person_id, *person_property);
+        // Return the corresponding value from the map, or 1.0 if not found
+        *modifier_map.get(&property_val).unwrap_or(&1.0)
     }
 }
 
-fn default_aggregator(modifiers: &[(TypeId, f64)]) -> f64 {
-    modifiers.iter().map(|&(_, f)| f).product()
+#[derive(Default)]
+struct TransmissionModifierContainer {
+    transmission_modifier_map:
+        HashMap<InfectionStatusValue, HashMap<TypeId, Box<dyn TransmissionModifier>>>,
 }
 
 define_data_plugin!(
     TransmissionModifierPlugin,
     TransmissionModifierContainer,
-    TransmissionModifierContainer {
-        transmission_modifier_map: HashMap::new(),
-        modifier_aggregator: HashMap::new(),
-    }
+    TransmissionModifierContainer::default()
 );
 
 pub trait ContextTransmissionModifierExt {
-    /// Register a transmission modifier function for a specific infection status and person property.
-    /// All float values returned should return the relative infectiousness or susceptibility
-    /// of the person with respect to the base value of 1.0.
-    ///
-    /// `PersonProperty` `TypeId`s are not necessarily called by the modifier function, but each
-    /// function must be associated with a `PersonProperty` to ensure unique methods are being stored
-    /// when declared by the user to be associated with a particular property
-    fn register_transmission_modifier_fn<T: PersonProperty + 'static + std::fmt::Debug, F>(
+    /// Register a generic transmission modifier for a specific infection status.
+    fn register_transmission_modifier_fn<T: TransmissionModifier>(
         &mut self,
         infection_status: InfectionStatusValue,
-        person_property: T,
-        modifier_fn: F,
-    ) where
-        F: Fn(&Context, PersonId) -> f64 + 'static;
+        transmission_modifier: T,
+    );
 
-    /// Register a transmission modifier value tuple set for a specific infection status and person
-    /// property.
-    /// This supplies a default transmission modifier function that maps person property values to
-    /// floats as specified in the modifier key. All floats decalred in this fashion have to be between
-    /// zero and one.
+    /// Register a transmission modifier that depends solely on the value of one person property.
+    /// Internally, this method registers a transmission modifier function that returns the float
+    /// value associated the person's property value for the given person property as specified in
+    /// the `modifier_key` map. All floats declared in this fashion must be between zero and one.
     ///
     /// Any modifiers based on efficacy (e.g. facemask transmission prevention) should be
     /// subtracted from 1.0 for modifier effect value.
-    ///
-    /// Modifier key is taken as a slice to avoid new object creation through Vec
     #[allow(dead_code)]
-    fn store_transmission_modifier_values<T: PersonProperty + 'static + std::fmt::Debug>(
+    fn store_transmission_modifier_values<T: PersonProperty + std::fmt::Debug + 'static>(
         &mut self,
         infection_status: InfectionStatusValue,
         person_property: T,
@@ -75,34 +67,24 @@ pub trait ContextTransmissionModifierExt {
     where
         T::Value: std::hash::Hash + Eq;
 
-    /// Register a transmission aggregator for a specific infection status.
-    /// The aggregator is a function that takes a vector of tuples containing the type ID of the person property
-    /// and its corresponding modifier value.
-    /// The default aggregator multiplies all the modifier values together independently.
-    #[allow(dead_code)]
-    fn register_transmission_modifier_aggregator<F>(
-        &mut self,
-        infection_status: InfectionStatusValue,
-        agg_function: F,
-    ) where
-        F: Fn(&Vec<(TypeId, f64)>) -> f64 + 'static;
-
-    /// Get the relative intrinsic transmission (infectiousness or susceptibility) for a person based on their
-    /// infection status and current properties based on registered modifiers.
+    /// Get the relative potential for infection (infectiousness or susceptibility) for a person
+    /// based on their infection status based on all registered modifiers. Queries all registered
+    /// modifier functions and evaluates them based on the person's properties. Multiplies them
+    /// together to get the total relative transmission modifier for the person.
+    /// Returns 1.0 if no modifiers are registered for the person's infection status.
     fn get_modified_relative_total_transmission_person(&self, person_id: PersonId) -> f64;
 }
 
 impl ContextTransmissionModifierExt for Context {
-    fn register_transmission_modifier_fn<T: PersonProperty + 'static + std::fmt::Debug, F>(
+    fn register_transmission_modifier_fn<T: TransmissionModifier>(
         &mut self,
         infection_status: InfectionStatusValue,
-        person_property: T,
-        modifier_fn: F,
-    ) where
-        F: Fn(&Context, PersonId) -> f64 + 'static,
-    {
-        // Box the function to store it in the map
-        let boxed_fn = Box::new(modifier_fn);
+        transmission_modifier: T,
+    ) {
+        // Box the transmission modifier to store it in the map
+        // Transmission modifiers must implement debug so that we can more easily log their addition
+        let name = format!("{transmission_modifier:?}");
+        let boxed_transmission_modifier = Box::new(transmission_modifier);
 
         // Insert the boxed function into the transmission modifier map, using entry to handle unititialized keys
         if let Some(_modifier_fxn) = self
@@ -110,13 +92,13 @@ impl ContextTransmissionModifierExt for Context {
             .transmission_modifier_map
             .entry(infection_status)
             .or_default()
-            .insert(TypeId::of::<T>(), boxed_fn)
+            .insert(TypeId::of::<T>(), boxed_transmission_modifier)
         {
-            trace!("Overwriting existing transmission modifier function for infection status {infection_status:?} and property {person_property:?}");
+            trace!("Overwriting existing transmission modifier function for infection status {infection_status:?} and transmission modifier {name}");
         }
     }
 
-    fn store_transmission_modifier_values<T: PersonProperty + 'static + std::fmt::Debug>(
+    fn store_transmission_modifier_values<T: PersonProperty + std::fmt::Debug + 'static>(
         &mut self,
         infection_status: InfectionStatusValue,
         person_property: T,
@@ -144,31 +126,8 @@ impl ContextTransmissionModifierExt for Context {
         }
 
         // Register a default function to simply map floats with T::Values
-        self.register_transmission_modifier_fn(
-            infection_status,
-            person_property,
-            move |context: &Context, person_id: PersonId| -> f64 {
-                let property_val = context.get_person_property(person_id, person_property);
-                // Return the corresponding value from the map, or 1.0 if not found
-                *modifier_map.get(&property_val).unwrap_or(&1.0)
-            },
-        );
+        self.register_transmission_modifier_fn(infection_status, (person_property, modifier_map));
         Ok(())
-    }
-
-    fn register_transmission_modifier_aggregator<F>(
-        &mut self,
-        infection_status: InfectionStatusValue,
-        agg_function: F,
-    ) where
-        F: Fn(&Vec<(TypeId, f64)>) -> f64 + 'static,
-    {
-        // Box the function to store it in the map
-        let boxed_fn = Box::new(agg_function);
-
-        self.get_data_container_mut(TransmissionModifierPlugin)
-            .modifier_aggregator
-            .insert(infection_status, boxed_fn);
     }
 
     fn get_modified_relative_total_transmission_person(&self, person_id: PersonId) -> f64 {
@@ -181,12 +140,14 @@ impl ContextTransmissionModifierExt for Context {
                 .transmission_modifier_map
                 .get(&infection_status)
             {
-                let mut registered_modifiers = Vec::new();
-                for (t, f) in transmission_modifier_map {
-                    registered_modifiers.push((*t, f(self, person_id)));
-                }
-
-                transmission_modifier_plugin.run_aggregator(infection_status, &registered_modifiers)
+                // Calculate the relative modifier for each registered function and multiply them
+                // together to get the total relative transmission modifier for the person
+                transmission_modifier_map
+                    .iter()
+                    .scan(1.0, |state, (_, tm)| {
+                        Some(*state * tm.get_relative_transmission_modifier(self, person_id))
+                    })
+                    .product()
             } else {
                 // If the infection status is not found in the map, return 1.0
                 1.0
@@ -208,12 +169,12 @@ mod test {
     use statrs::assert_almost_eq;
     use std::{collections::HashMap, path::PathBuf};
 
-    use crate::infectiousness_manager::{InfectionContextExt, InfectionStatusValue};
-    use crate::interventions::transmission_modifier_manager::{
-        ContextTransmissionModifierExt, TransmissionModifierPlugin,
+    use super::{ContextTransmissionModifierExt, TransmissionModifier, TransmissionModifierPlugin};
+    use crate::{
+        infectiousness_manager::{InfectionContextExt, InfectionStatusValue},
+        parameters::{GlobalParams, Params, RateFnType},
+        rate_fns::load_rate_fns,
     };
-    use crate::parameters::{GlobalParams, Params, RateFnType};
-    use crate::rate_fns::load_rate_fns;
     use std::any::TypeId;
 
     #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Hash)]
@@ -331,12 +292,23 @@ mod test {
         assert_eq!(modifier_map.len(), 1);
 
         let modifier_fn = modifier_map
-            .get(&TypeId::of::<MandatoryInterventionStatus>())
+            .get(&TypeId::of::<(
+                MandatoryInterventionStatus,
+                HashMap<MandatoryIntervention, f64>,
+            )>())
             .unwrap();
 
         // Check that the modifier function returns the expected value
-        assert_almost_eq!(modifier_fn(&context, partial_id), relative_effect, 0.0);
-        assert_almost_eq!(modifier_fn(&context, full_id), 0.0, 0.0);
+        assert_almost_eq!(
+            modifier_fn.get_relative_transmission_modifier(&context, partial_id),
+            relative_effect,
+            0.0
+        );
+        assert_almost_eq!(
+            modifier_fn.get_relative_transmission_modifier(&context, full_id),
+            0.0,
+            0.0
+        );
     }
 
     #[test]
@@ -389,13 +361,24 @@ mod test {
         assert_eq!(modifier_map.len(), 1);
 
         let modifier_fn = modifier_map
-            .get(&TypeId::of::<MandatoryInterventionStatus>())
+            .get(&TypeId::of::<(
+                MandatoryInterventionStatus,
+                HashMap<MandatoryIntervention, f64>,
+            )>())
             .unwrap();
 
         // Check that the modifier function returns the expected value of the overwritten registration
         // The log should also be checked here to make sure the overwrite is recorded
-        assert_almost_eq!(modifier_fn(&context, partial_id), relative_effect, 0.0);
-        assert_almost_eq!(modifier_fn(&context, full_id), 0.0, 0.0);
+        assert_almost_eq!(
+            modifier_fn.get_relative_transmission_modifier(&context, partial_id),
+            relative_effect,
+            0.0
+        );
+        assert_almost_eq!(
+            modifier_fn.get_relative_transmission_modifier(&context, full_id),
+            0.0,
+            0.0
+        );
     }
 
     #[test]
@@ -456,6 +439,23 @@ mod test {
         }
     }
 
+    #[derive(Debug)]
+    struct AgeModifier {
+        age_multiplier: f64,
+    }
+
+    impl TransmissionModifier for AgeModifier {
+        #[allow(clippy::cast_precision_loss)]
+        fn get_relative_transmission_modifier(
+            &self,
+            context: &Context,
+            person_id: PersonId,
+        ) -> f64 {
+            let age = context.get_person_property(person_id, Age);
+            age as f64 * self.age_multiplier
+        }
+    }
+
     #[test]
     #[allow(clippy::cast_precision_loss, clippy::cast_lossless)]
     fn test_register_arbitrary_modifier_fn() {
@@ -464,10 +464,8 @@ mod test {
 
         context.register_transmission_modifier_fn(
             InfectionStatusValue::Susceptible,
-            Age,
-            |context: &Context, person_id: PersonId| {
-                let age = context.get_person_property(person_id, Age);
-                age as f64 / 100.0
+            AgeModifier {
+                age_multiplier: 0.01,
             },
         );
 
@@ -480,9 +478,13 @@ mod test {
             .get(&InfectionStatusValue::Susceptible)
             .unwrap();
 
-        let modifier_fn = modifier_map.get(&TypeId::of::<Age>()).unwrap();
+        let modifier_fn = modifier_map.get(&TypeId::of::<AgeModifier>()).unwrap();
         // Check that the modifier function returns the expected value
-        assert_almost_eq!(modifier_fn(&context, aged_42), 0.42, 0.0);
+        assert_almost_eq!(
+            modifier_fn.get_relative_transmission_modifier(&context, aged_42),
+            0.42,
+            0.0
+        );
     }
 
     #[test]
@@ -538,70 +540,9 @@ mod test {
 
         context.infect_person(person_id, None);
 
-        let transmission_modifier_plugin = context
-            .get_data_container(TransmissionModifierPlugin)
-            .unwrap();
-
-        let transmission_modifier_map = transmission_modifier_plugin
-            .transmission_modifier_map
-            .get(&InfectionStatusValue::Infectious)
-            .unwrap();
-
-        let mut registered_modifiers = Vec::new();
-        for (t, f) in transmission_modifier_map {
-            registered_modifiers.push((*t, f(&context, person_id)));
-        }
-
         assert_almost_eq!(
-            transmission_modifier_plugin
-                .run_aggregator(InfectionStatusValue::Infectious, &registered_modifiers),
+            context.get_modified_relative_total_transmission_person(person_id),
             INFECTIOUS_PARTIAL * INFECTIOUS_PARTIAL,
-            0.0
-        );
-    }
-
-    #[test]
-    fn test_register_aggregator() {
-        let mut context = setup(0);
-
-        context.register_transmission_modifier_aggregator(
-            InfectionStatusValue::Infectious,
-            |modifiers: &Vec<(TypeId, f64)>| {
-                // Custom aggregator that sums the values
-                modifiers.iter().map(|&(_, f)| f).sum()
-            },
-        );
-
-        let person_id = context
-            .add_person((
-                (MandatoryInterventionStatus, MandatoryIntervention::Partial),
-                (
-                    InfectiousnessProportionStatus,
-                    Some(InfectiousnessProportion::Partial),
-                ),
-            ))
-            .unwrap();
-
-        context.infect_person(person_id, None);
-
-        let transmission_modifier_plugin = context
-            .get_data_container(TransmissionModifierPlugin)
-            .unwrap();
-
-        let transmission_modifier_map = transmission_modifier_plugin
-            .transmission_modifier_map
-            .get(&InfectionStatusValue::Infectious)
-            .unwrap();
-
-        let mut registered_modifiers = Vec::new();
-        for (t, f) in transmission_modifier_map {
-            registered_modifiers.push((*t, f(&context, person_id)));
-        }
-
-        assert_almost_eq!(
-            transmission_modifier_plugin
-                .run_aggregator(InfectionStatusValue::Infectious, &registered_modifiers),
-            INFECTIOUS_PARTIAL + INFECTIOUS_PARTIAL,
             0.0
         );
     }
