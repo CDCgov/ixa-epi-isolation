@@ -12,6 +12,9 @@ pub trait TransmissionModifier: std::fmt::Debug + 'static {
     /// Return the relative potential for infection (infectiousness or susceptibility) for a person
     /// based on their infection status.
     fn get_relative_transmission_modifier(&self, context: &Context, person_id: PersonId) -> f64;
+    fn get_name(&self) -> String {
+        format!("{self:?}")
+    }
 }
 
 impl<T> TransmissionModifier for (T, HashMap<T::Value, f64>)
@@ -27,6 +30,9 @@ where
         let property_val = context.get_person_property(person_id, *person_property);
         // Return the corresponding value from the map, or 1.0 if not found
         *modifier_map.get(&property_val).unwrap_or(&1.0)
+    }
+    fn get_name(&self) -> String {
+        format!("{:?}", self.1)
     }
 }
 
@@ -83,7 +89,7 @@ impl ContextTransmissionModifierExt for Context {
     ) {
         // Box the transmission modifier to store it in the map
         // Transmission modifiers must implement debug so that we can more easily log their addition
-        let name = format!("{transmission_modifier:?}");
+        let name = transmission_modifier.get_name();
         let boxed_transmission_modifier = Box::new(transmission_modifier);
 
         // Insert the boxed function into the transmission modifier map, using entry to handle unititialized keys
