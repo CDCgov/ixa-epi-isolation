@@ -170,6 +170,7 @@ mod test {
     use ixa::{
         define_person_property, define_person_property_with_default, Context,
         ContextGlobalPropertiesExt, ContextPeopleExt, ContextRandomExt, IxaError, PersonId,
+        PersonProperty,
     };
     use serde::{Deserialize, Serialize};
     use statrs::assert_almost_eq;
@@ -203,6 +204,14 @@ mod test {
 
     pub const SUSCEPTIBLE_PARTIAL: f64 = 0.8;
     pub const INFECTIOUS_PARTIAL: f64 = 0.5;
+
+    // A type alias for the type of the transmission modifiers when specified via a hashmap of values
+    // and floats -- i.e., `modifier_key: &[(T::Value, f64)]`
+    type PersonPropertyModifier<T> = (
+        T,
+        // Use fully qualified syntax for the associated type
+        HashMap<<T as PersonProperty>::Value, f64>,
+    );
 
     fn setup(seed: u64) -> Context {
         let mut context = Context::new();
@@ -298,10 +307,9 @@ mod test {
         assert_eq!(modifier_map.len(), 1);
 
         let modifier_fn = modifier_map
-            .get(&TypeId::of::<(
-                MandatoryInterventionStatus,
-                HashMap<MandatoryIntervention, f64>,
-            )>())
+            .get(&TypeId::of::<
+                PersonPropertyModifier<MandatoryInterventionStatus>,
+            >())
             .unwrap();
 
         // Check that the modifier function returns the expected value
@@ -367,10 +375,9 @@ mod test {
         assert_eq!(modifier_map.len(), 1);
 
         let modifier_fn = modifier_map
-            .get(&TypeId::of::<(
-                MandatoryInterventionStatus,
-                HashMap<MandatoryIntervention, f64>,
-            )>())
+            .get(&TypeId::of::<
+                PersonPropertyModifier<MandatoryInterventionStatus>,
+            >())
             .unwrap();
 
         // Check that the modifier function returns the expected value of the overwritten registration
