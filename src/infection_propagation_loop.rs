@@ -273,12 +273,12 @@ mod test {
     }
 
     #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Hash)]
-    pub enum InfectiousnessReduction {
+    pub enum InfectiousnessProportion {
         Partial,
     }
     define_person_property_with_default!(
-        InfectiousnessReductionStatus,
-        Option<InfectiousnessReduction>,
+        InfectiousnessProportionStatus,
+        Option<InfectiousnessProportion>,
         None
     );
 
@@ -319,8 +319,8 @@ mod test {
             context
                 .store_transmission_modifier_values(
                     InfectionStatusValue::Infectious,
-                    InfectiousnessReductionStatus,
-                    &[(Some(InfectiousnessReduction::Partial), INFECTIOUS_PARTIAL)],
+                    InfectiousnessProportionStatus,
+                    &[(Some(InfectiousnessProportion::Partial), INFECTIOUS_PARTIAL)],
                 )
                 .unwrap();
 
@@ -336,8 +336,8 @@ mod test {
             // Add our infectious fellow.
             let infectious_person = context
                 .add_person((
-                    InfectiousnessReductionStatus,
-                    Some(InfectiousnessReduction::Partial),
+                    InfectiousnessProportionStatus,
+                    Some(InfectiousnessProportion::Partial),
                 ))
                 .unwrap();
             set_homogeneous_mixing_itinerary(&mut context, infectious_person).unwrap();

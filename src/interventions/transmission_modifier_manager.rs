@@ -225,12 +225,12 @@ mod test {
     define_person_property!(MandatoryInterventionStatus, MandatoryIntervention);
 
     #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Hash)]
-    pub enum InfectiousnessReduction {
+    pub enum InfectiousnessProportion {
         Partial,
     }
     define_person_property_with_default!(
-        InfectiousnessReductionStatus,
-        Option<InfectiousnessReduction>,
+        InfectiousnessProportionStatus,
+        Option<InfectiousnessProportion>,
         None
     );
 
@@ -285,8 +285,8 @@ mod test {
         context
             .store_transmission_modifier_values(
                 InfectionStatusValue::Infectious,
-                InfectiousnessReductionStatus,
-                &[(Some(InfectiousnessReduction::Partial), INFECTIOUS_PARTIAL)],
+                InfectiousnessProportionStatus,
+                &[(Some(InfectiousnessProportion::Partial), INFECTIOUS_PARTIAL)],
             )
             .unwrap();
         context
@@ -530,8 +530,8 @@ mod test {
             .add_person((
                 (MandatoryInterventionStatus, MandatoryIntervention::Partial),
                 (
-                    InfectiousnessReductionStatus,
-                    Some(InfectiousnessReduction::Partial),
+                    InfectiousnessProportionStatus,
+                    Some(InfectiousnessProportion::Partial),
                 ),
             ))
             .unwrap();
@@ -576,8 +576,8 @@ mod test {
             .add_person((
                 (MandatoryInterventionStatus, MandatoryIntervention::Partial),
                 (
-                    InfectiousnessReductionStatus,
-                    Some(InfectiousnessReduction::Partial),
+                    InfectiousnessProportionStatus,
+                    Some(InfectiousnessProportion::Partial),
                 ),
             ))
             .unwrap();
@@ -624,8 +624,8 @@ mod test {
 
         context.set_person_property(
             person_id,
-            InfectiousnessReductionStatus,
-            Some(InfectiousnessReduction::Partial),
+            InfectiousnessProportionStatus,
+            Some(InfectiousnessProportion::Partial),
         );
         assert_almost_eq!(
             context.get_modified_relative_total_transmission_person(person_id),
@@ -633,7 +633,7 @@ mod test {
             0.0
         );
 
-        context.set_person_property(person_id, InfectiousnessReductionStatus, None);
+        context.set_person_property(person_id, InfectiousnessProportionStatus, None);
         assert_almost_eq!(
             context.get_modified_relative_total_transmission_person(person_id),
             INFECTIOUS_PARTIAL,
