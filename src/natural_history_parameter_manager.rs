@@ -348,7 +348,7 @@ mod test {
         let person = context.add_person(()).unwrap();
         // Infect the person -- we have to do this above the call to the symptom progression
         // init because otherwise it panics that the people module has not been initialized?
-        context.infect_person(person, None);
+        context.infect_person(person, None, None, None);
 
         // Initialize symptoms -- reads in the symptom progression library
         load_rate_fns(&mut context).unwrap();
