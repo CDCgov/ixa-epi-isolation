@@ -21,7 +21,15 @@ pub trait TransmissionModifier: std::fmt::Debug + 'static {
     }
 }
 
-impl<T> TransmissionModifier for (T, HashMap<T::Value, f64>)
+// A type alias for the type of the transmission modifiers specified via a hashmap of person
+// property values and floats -- i.e., `modifier_key: &[(T::Value, f64)]`
+type PersonPropertyModifier<T> = (
+    T,
+    // Use fully qualified syntax for the associated type
+    HashMap<<T as PersonProperty>::Value, f64>,
+);
+
+impl<T> TransmissionModifier for PersonPropertyModifier<T>
 where
     // All person properties implement Debug and are static
     T: PersonProperty + std::fmt::Debug + 'static,
@@ -174,13 +182,15 @@ mod test {
     use ixa::{
         define_person_property, define_person_property_with_default, Context,
         ContextGlobalPropertiesExt, ContextPeopleExt, ContextRandomExt, IxaError, PersonId,
-        PersonProperty,
     };
     use serde::{Deserialize, Serialize};
     use statrs::assert_almost_eq;
     use std::{collections::HashMap, path::PathBuf};
 
-    use super::{ContextTransmissionModifierExt, TransmissionModifier, TransmissionModifierPlugin};
+    use super::{
+        ContextTransmissionModifierExt, PersonPropertyModifier, TransmissionModifier,
+        TransmissionModifierPlugin,
+    };
     use crate::{
         infectiousness_manager::{InfectionContextExt, InfectionStatusValue},
         parameters::{GlobalParams, Params, RateFnType},
@@ -208,14 +218,6 @@ mod test {
 
     pub const SUSCEPTIBLE_PARTIAL: f64 = 0.8;
     pub const INFECTIOUS_PARTIAL: f64 = 0.5;
-
-    // A type alias for the type of the transmission modifiers when specified via a hashmap of values
-    // and floats -- i.e., `modifier_key: &[(T::Value, f64)]`
-    type PersonPropertyModifier<T> = (
-        T,
-        // Use fully qualified syntax for the associated type
-        HashMap<<T as PersonProperty>::Value, f64>,
-    );
 
     fn setup(seed: u64) -> Context {
         let mut context = Context::new();
