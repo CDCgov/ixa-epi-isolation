@@ -5,11 +5,11 @@ use std::{any::TypeId, collections::HashMap};
 
 use crate::infectiousness_manager::{InfectionStatus, InfectionStatusValue};
 
-/// Defines a transmission modifier that is used to modify the infectiousness or susceptibility
+/// Defines a transmission modifier that is used to modify the transmissiveness or susceptibility
 /// of a person based on their infection status.
-// We require debug for easy logging
+// We require `Debug` for easy logging of the trait so the user can see what is happening.
 pub trait TransmissionModifier: std::fmt::Debug + 'static {
-    /// Return the relative potential for infection (infectiousness or susceptibility) for a person
+    /// Return the relative potential for infection (transmissiveness or susceptibility) for a person
     /// based on their infection status.
     fn get_relative_transmission_modifier(&self, context: &Context, person_id: PersonId) -> f64;
 
@@ -25,13 +25,13 @@ pub trait TransmissionModifier: std::fmt::Debug + 'static {
 // property values and floats -- i.e., `modifier_key: &[(T::Value, f64)]`
 type PersonPropertyModifier<T> = (
     T,
-    // Use fully qualified syntax for the associated type
+    // Use fully qualified syntax for the associated type because type aliases do not have type checking
     HashMap<<T as PersonProperty>::Value, f64>,
 );
 
 impl<T> TransmissionModifier for PersonPropertyModifier<T>
 where
-    // All person properties implement Debug and are static
+    // All person properties implement `Debug` and are static
     T: PersonProperty + std::fmt::Debug + 'static,
     // For now, this limits us to person property values that are not floats for use in the
     // transmisison modifier map convienience method.
