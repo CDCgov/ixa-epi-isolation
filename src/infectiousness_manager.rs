@@ -7,9 +7,9 @@ use statrs::distribution::Exp;
 
 use crate::{
     interventions::ContextTransmissionModifierExt,
+    population_loader::Alive,
     rate_fns::{InfectiousnessRateExt, InfectiousnessRateFn, ScaledRateFn},
     settings::{ContextSettingExt, SettingId, SettingType},
-    population_loader::Alive
 };
 
 #[derive(Serialize, PartialEq, Debug, Clone, Copy)]
@@ -60,8 +60,9 @@ define_derived_property!(
 /// This assumes that transmission modifiers of total infectiousness are independent of
 /// the setting type and are linear
 pub fn calc_total_infectiousness_multiplier(context: &Context, person_id: PersonId) -> f64 {
-    let modifier = context.get_modified_relative_total_transmission_person(person_id);
-    modifier * context.calculate_total_infectiousness_multiplier_for_person(person_id)
+    let relative_transmission_potential = context.get_relative_total_transmission(person_id);
+    relative_transmission_potential
+        * context.calculate_total_infectiousness_multiplier_for_person(person_id)
 }
 
 /// Calculate the maximum possible scaling factor for total infectiousness
@@ -87,13 +88,13 @@ pub fn infection_attempt<T: SettingType + ?Sized>(
         InfectionStatusValue::Susceptible => {
             if context.sample_bool(
                 ForecastRng,
-                context.get_modified_relative_total_transmission_person(next_contact)
+                context.get_relative_total_transmission(next_contact),
             ) {
                 Some(next_contact)
             } else {
                 None
             }
-        },
+        }
         _ => None,
     }
 }
@@ -484,11 +485,19 @@ mod test {
             )
             .unwrap();
 
-        let person = context
+        let contact = context
             .add_person((MandatoryInterventionStatus, MandatoryIntervention::Partial))
             .unwrap();
+        set_homogeneous_mixing_itinerary(&mut context, contact).unwrap();
+
+        let source = context
+            .add_person((MandatoryInterventionStatus, MandatoryIntervention::NoEffect))
+            .unwrap();
+        set_homogeneous_mixing_itinerary(&mut context, source).unwrap();
+
         for _ in 0..n {
-            if infection_attempt(&context, person, SettingId::new(&HomogeneousMixing, 0)).is_some() {
+            if infection_attempt(&context, source, SettingId::new(&HomogeneousMixing, 0)).is_some()
+            {
                 count += 1;
             }
         }

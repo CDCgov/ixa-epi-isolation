@@ -3,7 +3,6 @@ use crate::infectiousness_manager::{
     InfectionStatus, InfectionStatusValue,
 };
 use crate::parameters::{ContextParametersExt, Params};
-use crate::population_loader::Alive;
 use crate::rate_fns::{load_rate_fns, InfectiousnessRateExt};
 use crate::settings::ContextSettingExt;
 use ixa::{
@@ -384,7 +383,7 @@ mod test {
                     infectious_person,
                 ));
             }
-            modifier = context.get_modified_relative_total_transmission_person(infectious_person);
+            modifier = context.get_relative_total_transmission(infectious_person);
             // Add a watcher for when people are infected to record the infection times.
             context.subscribe_to_event::<PersonPropertyChangeEvent<InfectionStatus>>(
                 move |context, event| {
@@ -504,7 +503,7 @@ mod test {
                 let num_infected_home_clone = Rc::clone(&num_infected_home);
                 let num_infected_cenustract_clone = Rc::clone(&num_infected_censustract);
                 let num_infected_workplace_clone = Rc::clone(&num_infected_workplace);
-                let mut context = setup_context(seed, rate, alpha);
+                let mut context = setup_context(seed, rate, alpha, 5.0);
                 settings_init(&mut context);
 
                 // Add a a person who will get infected.
@@ -618,7 +617,7 @@ mod test {
 
         // Initialize the infectious person
         let infectious_person = context.add_person(()).unwrap();
-        context.infect_person(infectious_person, None);
+        context.infect_person(infectious_person, None, None, None);
         context.add_plan(0.0, move |context| {
             schedule_next_forecasted_infection(context, infectious_person);
             schedule_recovery(context, infectious_person);

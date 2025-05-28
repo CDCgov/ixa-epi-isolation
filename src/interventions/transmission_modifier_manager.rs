@@ -11,7 +11,7 @@ use crate::infectiousness_manager::{InfectionStatus, InfectionStatusValue};
 pub trait TransmissionModifier: std::fmt::Debug + 'static {
     /// Return the relative potential for infection (transmissiveness or susceptibility) for a person
     /// based on their infection status.
-    fn get_relative_transmission_modifier(&self, context: &Context, person_id: PersonId) -> f64;
+    fn get_relative_transmission(&self, context: &Context, person_id: PersonId) -> f64;
 
     /// For debugging purposes. The name of the transmission modifier. The default implementation
     /// returns the `Debug` representation of the transmission modifier struct on which this trait
@@ -37,7 +37,7 @@ where
     // transmisison modifier map convienience method.
     T::Value: std::hash::Hash + Eq,
 {
-    fn get_relative_transmission_modifier(&self, context: &Context, person_id: PersonId) -> f64 {
+    fn get_relative_transmission(&self, context: &Context, person_id: PersonId) -> f64 {
         let (person_property, modifier_map) = self;
         let property_val = context.get_person_property(person_id, *person_property);
         // Return the corresponding value from the map, or 1.0 if not found
@@ -96,7 +96,7 @@ pub trait ContextTransmissionModifierExt {
     /// modifier functions and evaluates them based on the person's properties. Multiplies them
     /// together to get the total relative transmission modifier for the person.
     /// Returns 1.0 if no modifiers are registered for the person's infection status.
-    fn get_modified_relative_total_transmission_person(&self, person_id: PersonId) -> f64;
+    fn get_relative_total_transmission(&self, person_id: PersonId) -> f64;
 }
 
 impl ContextTransmissionModifierExt for Context {
@@ -154,7 +154,7 @@ impl ContextTransmissionModifierExt for Context {
         Ok(())
     }
 
-    fn get_modified_relative_total_transmission_person(&self, person_id: PersonId) -> f64 {
+    fn get_relative_total_transmission(&self, person_id: PersonId) -> f64 {
         let infection_status = self.get_person_property(person_id, InfectionStatus);
 
         if let Some(transmission_modifier_plugin) =
@@ -169,7 +169,7 @@ impl ContextTransmissionModifierExt for Context {
                 transmission_modifier_map
                     .iter()
                     .scan(1.0, |state, (_, tm)| {
-                        Some(*state * tm.get_relative_transmission_modifier(self, person_id))
+                        Some(*state * tm.get_relative_transmission(self, person_id))
                     })
                     .product()
             } else {
@@ -326,12 +326,12 @@ mod test {
 
         // Check that the modifier function returns the expected value
         assert_almost_eq!(
-            modifier_fn.get_relative_transmission_modifier(&context, partial_id),
+            modifier_fn.get_relative_transmission(&context, partial_id),
             relative_effect,
             0.0
         );
         assert_almost_eq!(
-            modifier_fn.get_relative_transmission_modifier(&context, full_id),
+            modifier_fn.get_relative_transmission(&context, full_id),
             0.0,
             0.0
         );
@@ -395,12 +395,12 @@ mod test {
         // Check that the modifier function returns the expected value of the overwritten registration
         // The log should also be checked here to make sure the overwrite is recorded
         assert_almost_eq!(
-            modifier_fn.get_relative_transmission_modifier(&context, partial_id),
+            modifier_fn.get_relative_transmission(&context, partial_id),
             relative_effect,
             0.0
         );
         assert_almost_eq!(
-            modifier_fn.get_relative_transmission_modifier(&context, full_id),
+            modifier_fn.get_relative_transmission(&context, full_id),
             0.0,
             0.0
         );
@@ -471,11 +471,7 @@ mod test {
 
     impl TransmissionModifier for AgeModifier {
         #[allow(clippy::cast_precision_loss)]
-        fn get_relative_transmission_modifier(
-            &self,
-            context: &Context,
-            person_id: PersonId,
-        ) -> f64 {
+        fn get_relative_transmission(&self, context: &Context, person_id: PersonId) -> f64 {
             let age = context.get_person_property(person_id, Age);
             age as f64 * self.age_multiplier
         }
@@ -506,7 +502,7 @@ mod test {
         let modifier_fn = modifier_map.get(&TypeId::of::<AgeModifier>()).unwrap();
         // Check that the modifier function returns the expected value
         assert_almost_eq!(
-            modifier_fn.get_relative_transmission_modifier(&context, aged_42),
+            modifier_fn.get_relative_transmission(&context, aged_42),
             0.42,
             0.0
         );
@@ -523,12 +519,12 @@ mod test {
             .add_person((MandatoryInterventionStatus, MandatoryIntervention::Full))
             .unwrap();
         assert_almost_eq!(
-            context.get_modified_relative_total_transmission_person(person_id_partial),
+            context.get_relative_total_transmission(person_id_partial),
             SUSCEPTIBLE_PARTIAL,
             0.0
         );
         assert_almost_eq!(
-            context.get_modified_relative_total_transmission_person(person_id_full),
+            context.get_relative_total_transmission(person_id_full),
             0.0,
             0.0
         );
@@ -541,9 +537,9 @@ mod test {
         let infectious_id = context
             .add_person((MandatoryInterventionStatus, MandatoryIntervention::Partial))
             .unwrap();
-        context.infect_person(infectious_id, None);
+        context.infect_person(infectious_id, None, None, None);
         assert_almost_eq!(
-            context.get_modified_relative_total_transmission_person(infectious_id),
+            context.get_relative_total_transmission(infectious_id),
             INFECTIOUS_PARTIAL,
             0.0
         );
@@ -563,10 +559,10 @@ mod test {
             ))
             .unwrap();
 
-        context.infect_person(person_id, None);
+        context.infect_person(person_id, None, None, None);
 
         assert_almost_eq!(
-            context.get_modified_relative_total_transmission_person(person_id),
+            context.get_relative_total_transmission(person_id),
             INFECTIOUS_PARTIAL * INFECTIOUS_PARTIAL,
             0.0
         );
@@ -574,16 +570,16 @@ mod test {
 
     #[test]
     // Test that the default aggregator works correctly when person properties change
-    fn test_get_modified_relative_total_transmission_person() {
+    fn test_get_relative_total_transmission() {
         let mut context = setup(0);
 
         let person_id = context
             .add_person((MandatoryInterventionStatus, MandatoryIntervention::Partial))
             .unwrap();
-        context.infect_person(person_id, None);
+        context.infect_person(person_id, None, None, None);
 
         assert_almost_eq!(
-            context.get_modified_relative_total_transmission_person(person_id),
+            context.get_relative_total_transmission(person_id),
             INFECTIOUS_PARTIAL,
             0.0
         );
@@ -594,14 +590,14 @@ mod test {
             Some(InfectiousnessProportion::Partial),
         );
         assert_almost_eq!(
-            context.get_modified_relative_total_transmission_person(person_id),
+            context.get_relative_total_transmission(person_id),
             INFECTIOUS_PARTIAL * INFECTIOUS_PARTIAL,
             0.0
         );
 
         context.set_person_property(person_id, InfectiousnessProportionStatus, None);
         assert_almost_eq!(
-            context.get_modified_relative_total_transmission_person(person_id),
+            context.get_relative_total_transmission(person_id),
             INFECTIOUS_PARTIAL,
             0.0
         );

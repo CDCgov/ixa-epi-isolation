@@ -49,7 +49,7 @@ context
     .unwrap();
 ```
 
-In this case, calling `get_modified_relative_total_transmission_person` on someone who is
+In this case, calling `get_relative_total_transmission` on someone who is
 `Susceptible` or somone who is `Infectious` but is not currently wearing a facemask will yield
 an unmodified transmission potential (susceptibility or infectiousness multiplied by 1.0).pre-commit -m
 
@@ -74,7 +74,7 @@ This method registers an aggregator function for a specific infection status. Th
 combines multiple modifier functions into a single value, with the default behavior being the
 product of all outputs from each modifier function.
 
-### `get_modified_relative_total_transmission_person`
+### `get_relative_total_transmission`
 This method calculates the total modified transmission for a person by applying all registered
 modifiers and aggregating their effects according to the registered aggregator.
 
