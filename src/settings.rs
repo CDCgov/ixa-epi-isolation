@@ -164,13 +164,13 @@ macro_rules! define_setting_type {
         pub struct $name;
 
         impl $crate::settings::SettingType for $name {
+            #[allow(clippy::cast_precision_loss)]
             fn calculate_multiplier(
                 &self,
                 members: &[ixa::PersonId],
                 setting_properties: $crate::settings::SettingProperties,
             ) -> f64 {
                 let n_members = members.len();
-                #[allow(clippy::cast_precision_loss)]
                 ((n_members - 1) as f64).powf(setting_properties.alpha)
             }
             fn get_type_id(&self) -> std::any::TypeId {
@@ -216,7 +216,12 @@ pub trait ContextSettingExt {
         &self,
         setting_id: SettingId<T>,
     ) -> Option<&Vec<PersonId>>;
+    /// Get the total infectiousness multiplier for a person
+    /// This is the sum of the infectiousness multipliers for each setting derived from the itinerary
+    /// These are generated without modification from the general formula of ratio * (N - 1) ^ alpha
+    /// where N is the number of members in the setting
     fn calculate_total_infectiousness_multiplier_for_person(&self, person_id: PersonId) -> f64;
+
     fn get_itinerary(&self, person_id: PersonId) -> Option<&Vec<ItineraryEntry>>;
     fn get_contact<T: SettingType + ?Sized, Q: Query + 'static>(
         &self,
