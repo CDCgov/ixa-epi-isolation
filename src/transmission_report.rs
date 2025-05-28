@@ -121,7 +121,9 @@ mod test {
                 "proportion_asymptomatic": 0.0,
                 "relative_infectiousness_asymptomatics": 0.0,
                 "settings_properties": {},
-                "synth_population_file": "input/people_test.csv"
+                "synth_population_file": "input/people_test.csv",
+                "post_isolation_intervention_duration": 5.0,
+                "isolation_guidance_uptake_probability": 0.5
                 }
             }
         "#;
@@ -145,7 +147,9 @@ mod test {
                 "relative_infectiousness_asymptomatics": 0.0,
                 "settings_properties": {},
                 "synth_population_file": "input/people_test.csv",
-                "transmission_report_name": "output.csv"
+                "transmission_report_name": "output.csv",
+                "post_isolation_intervention_duration": 5.0,
+                "isolation_guidance_uptake_probability": 0.5
                 }
             }
         "#;
@@ -169,7 +173,9 @@ mod test {
                 "report_period": 1.0,
                 "settings_properties": {},
                 "synth_population_file": "input/people_test.csv",
-                "transmission_report_name": "output.csv"
+                "transmission_report_name": "output.csv",
+                "post_isolation_intervention_duration": 5.0,
+                "isolation_guidance_uptake_probability": 0.5
                 }
             }
         "#;

@@ -1939,6 +1939,8 @@ mod test {
                     }),
                 },
             )]),
+            post_isolation_intervention_duration: 5.0,
+            isolation_guidance_uptake_probability: 0.5,
         };
 
         context

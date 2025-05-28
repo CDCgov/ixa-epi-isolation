@@ -216,6 +216,8 @@ mod test {
                     },
                 ),
             ]),
+            post_isolation_intervention_duration: 5.0,
+            isolation_guidance_uptake_probability: 0.5,
         };
         context.init_random(parameters.seed);
         context
@@ -511,6 +513,7 @@ mod test {
         let num_sims: u64 = 1000;
         let rate = 1.5;
         let alpha = 0.42;
+        let duration = 5.0;
 
         // ratios is a matrix of ratio values for the three settings. The first value in each row
         // corresponds to the home setting, the second to the census tract setting, and the third to

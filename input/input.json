@@ -1,6 +1,6 @@
 {
   "epi_isolation.GlobalParams": {
-    "max_time": 200.0,
+    "max_time": 50.0,
     "seed": 123,
     "infectiousness_rate_fn": {"EmpiricalFromFile": {"file": "input/library_empirical_rate_fns.csv",
                                                      "scale": 1.0}},
@@ -19,6 +19,8 @@
     "symptom_progression_library" : {"EmpiricalFromFile": {"file": "input/library_symptom_parameters.csv"}},
     "report_period": 1.0,
     "synth_population_file": "input/people_test.csv",
-    "transmission_report_name": "transmission_report.csv"
+    "transmission_report_name": "transmission_report.csv",
+    "post_isolation_intervention_duration": 5.0,
+    "isolation_guidance_uptake_probability": 1.0
   }
 }
