@@ -18,7 +18,6 @@ fn schedule_next_forecasted_infection(context: &mut Context, person: PersonId) {
     }) = get_forecast(context, person)
     {
         context.add_plan(next_time, move |context| {
-            // TODO<ryl8@cc.gov>: We will choose a setting here
             if evaluate_forecast(context, person, forecasted_total_infectiousness) {
                 if let Some(setting_id) = context.get_setting_for_contact(person) {
                     let str_setting = setting_id.setting_type.get_name();
@@ -92,17 +91,17 @@ pub fn init(context: &mut Context) -> Result<(), IxaError> {
 #[cfg(test)]
 #[allow(clippy::float_cmp)]
 mod test {
-
+    use serde::{Deserialize, Serialize};
     use std::{cell::RefCell, collections::HashMap, path::PathBuf, rc::Rc};
 
     use ixa::{
-        Context, ContextGlobalPropertiesExt, ContextPeopleExt, ContextRandomExt, ExecutionPhase,
-        IxaError, PersonId, PersonPropertyChangeEvent,
+        define_person_property_with_default, Context, ContextGlobalPropertiesExt, ContextPeopleExt,
+        ContextRandomExt, ExecutionPhase, IxaError, PersonId, PersonPropertyChangeEvent,
     };
 
     use statrs::{
         assert_almost_eq,
-        distribution::{ContinuousCDF, Uniform},
+        distribution::{ContinuousCDF, Discrete, Poisson, Uniform},
     };
 
     use crate::{
@@ -114,6 +113,7 @@ mod test {
             max_total_infectiousness_multiplier, InfectionContextExt, InfectionData,
             InfectionDataValue,
         },
+        interventions::ContextTransmissionModifierExt,
         parameters::CoreSettingsTypes,
         parameters::{
             ContextParametersExt, GlobalParams, ItinerarySpecificationType, Params, RateFnType,
@@ -140,16 +140,13 @@ mod test {
         context.add_itinerary(person_id, itinerary)
     }
 
-    fn setup_context(seed: u64, rate: f64, alpha: f64) -> Context {
+    fn setup_context(seed: u64, rate: f64, alpha: f64, duration: f64) -> Context {
         let mut context = Context::new();
         let parameters = Params {
             initial_infections: 3,
             max_time: 100.0,
             seed,
-            infectiousness_rate_fn: RateFnType::Constant {
-                rate,
-                duration: 5.0,
-            },
+            infectiousness_rate_fn: RateFnType::Constant { rate, duration },
             symptom_progression_library: None,
             report_period: 1.0,
             synth_population_file: PathBuf::from("."),
@@ -206,7 +203,7 @@ mod test {
 
     #[test]
     fn test_seed_infections_errors() {
-        let mut context = setup_context(0, 1.0, 1.0);
+        let mut context = setup_context(0, 1.0, 1.0, 5.0);
         for _ in 0..3 {
             context.add_person(()).unwrap();
         }
@@ -229,7 +226,7 @@ mod test {
 
     #[test]
     fn test_seed_infections() {
-        let mut context = setup_context(0, 1.0, 1.0);
+        let mut context = setup_context(0, 1.0, 1.0, 5.0);
         for _ in 0..10 {
             context.add_person(()).unwrap();
         }
@@ -244,7 +241,7 @@ mod test {
 
     #[test]
     fn test_init_loop() {
-        let mut context = setup_context(42, 1.0, 1.0);
+        let mut context = setup_context(42, 1.0, 1.0, 5.0);
         for _ in 0..10 {
             context.add_person(()).unwrap();
         }
@@ -283,7 +280,7 @@ mod test {
 
     #[test]
     fn test_zero_rate_no_infections() {
-        let mut context = setup_context(0, 0.0, 1.0);
+        let mut context = setup_context(0, 0.0, 1.0, 5.0);
         for _ in 0..=context.get_params().initial_infections {
             context.add_person(()).unwrap();
         }
@@ -308,6 +305,18 @@ mod test {
         );
     }
 
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Hash)]
+    pub enum InfectiousnessProportion {
+        Partial,
+    }
+    define_person_property_with_default!(
+        InfectiousnessProportionStatus,
+        Option<InfectiousnessProportion>,
+        None
+    );
+
+    pub const INFECTIOUS_PARTIAL: f64 = 0.7;
+
     #[test]
     fn test_number_timing_infections_one_time_unit() {
         // Does one infectious person generate the number of infections as expected by the rate?
@@ -328,15 +337,26 @@ mod test {
         let num_sims: u64 = 15_000;
         let rate = 1.5;
         let alpha = 0.42;
+        let duration = 5.0;
         // We need the total infectiousness multiplier for the person.
         let mut total_infectiousness_multiplier = None;
+        let mut modifier = 1.0;
         // Where we store the infection times.
         let infection_times = Rc::new(RefCell::new(Vec::<f64>::new()));
         let num_infected = Rc::new(RefCell::new(0usize));
         for seed in 0..num_sims {
             let infection_times_clone = Rc::clone(&infection_times);
             let num_infected_clone = Rc::clone(&num_infected);
-            let mut context = setup_context(seed, rate, alpha);
+            let mut context = setup_context(seed, rate, alpha, duration);
+
+            context
+                .store_transmission_modifier_values(
+                    InfectionStatusValue::Infectious,
+                    InfectiousnessProportionStatus,
+                    &[(Some(InfectiousnessProportion::Partial), INFECTIOUS_PARTIAL)],
+                )
+                .unwrap();
+
             // We only run the simulation for 1.0 time units.
             context.add_plan_with_phase(1.0, ixa::Context::shutdown, ExecutionPhase::Last);
             // Add a a person who will get infected.
@@ -347,7 +367,12 @@ mod test {
             // people becoming infectious that lets them transmit.
             load_rate_fns(&mut context).unwrap();
             // Add our infectious fellow.
-            let infectious_person = context.add_person(()).unwrap();
+            let infectious_person = context
+                .add_person((
+                    InfectiousnessProportionStatus,
+                    Some(InfectiousnessProportion::Partial),
+                ))
+                .unwrap();
             set_homogeneous_mixing_itinerary(&mut context, infectious_person).unwrap();
 
             context.infect_person(infectious_person, None, None, None);
@@ -358,6 +383,7 @@ mod test {
                     infectious_person,
                 ));
             }
+            modifier = context.get_relative_total_transmission(infectious_person);
             // Add a watcher for when people are infected to record the infection times.
             context.subscribe_to_event::<PersonPropertyChangeEvent<InfectionStatus>>(
                 move |context, event| {
@@ -380,13 +406,15 @@ mod test {
             schedule_next_forecasted_infection(&mut context, infectious_person);
             context.execute();
         }
+
         #[allow(clippy::cast_precision_loss)]
         let avg_number_infections = num_infected.take() as f64 / num_sims as f64;
         assert_almost_eq!(
             avg_number_infections,
-            rate * total_infectiousness_multiplier.unwrap(),
+            modifier * rate * total_infectiousness_multiplier.unwrap(),
             0.05
         );
+        assert_eq!(modifier, INFECTIOUS_PARTIAL);
         // Check whether the times at when people are infected fall uniformly on [0, 1].
         check_ks_stat(&mut infection_times.borrow_mut(), |x| {
             Uniform::new(0.0, 1.0).unwrap().cdf(x)
@@ -415,7 +443,7 @@ mod test {
 
     #[test]
     fn test_schedule_recovery() {
-        let mut context = setup_context(0, 0.0, 1.0);
+        let mut context = setup_context(0, 0.0, 1.0, 5.0);
         load_rate_fns(&mut context).unwrap();
         let person = context.add_person(()).unwrap();
         seed_infections(&mut context, 1).unwrap();
@@ -475,7 +503,7 @@ mod test {
                 let num_infected_home_clone = Rc::clone(&num_infected_home);
                 let num_infected_cenustract_clone = Rc::clone(&num_infected_censustract);
                 let num_infected_workplace_clone = Rc::clone(&num_infected_workplace);
-                let mut context = setup_context(seed, rate, alpha);
+                let mut context = setup_context(seed, rate, alpha, 5.0);
                 settings_init(&mut context);
 
                 // Add a a person who will get infected.
@@ -557,5 +585,204 @@ mod test {
                 0.05
             );
         }
+    }
+
+    // Scenario for three person household with random intervention
+    // 1. Person 1 is infectious and lives with a community of other people who are not yet infected
+    // 2. Person 1 wears a mask that is 100% effective at periodic intervals during the day for some proportion of time
+    // 3. No subsequent infectious individuals contribute to transmission
+
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Hash)]
+    pub enum Masking {
+        None,
+        Wearing,
+    }
+    define_person_property_with_default!(MaskingStatus, Masking, Masking::None);
+
+    // Function to return a vector of infection times for each secondary case created according to the scenario described above
+    // This is identical to the test_number_timing_infections_one_time_unit function, but with the addition of a facemask modifier
+    // and making community size greater than 1 allows for testing alpha with calculating the total infectiousness multiplier
+    #[allow(clippy::cast_sign_loss, clippy::cast_possible_truncation)]
+    fn run_masking_community_scenario(
+        seed: u64,
+        rate: f64,
+        alpha: f64,
+        duration: f64,
+        masking_proportion: f64,
+        mask_changes: f64,
+        community_size: usize,
+    ) -> Vec<(usize, f64)> {
+        let mut context = setup_context(seed, rate, alpha, duration);
+        load_rate_fns(&mut context).unwrap();
+
+        // Initialize the infectious person
+        let infectious_person = context.add_person(()).unwrap();
+        context.infect_person(infectious_person, None, None, None);
+        context.add_plan(0.0, move |context| {
+            schedule_next_forecasted_infection(context, infectious_person);
+            schedule_recovery(context, infectious_person);
+        });
+
+        // Set up the intervention of facemask and register a perfect facemask modifier
+        context
+            .store_transmission_modifier_values(
+                InfectionStatusValue::Infectious,
+                MaskingStatus,
+                &[(Masking::Wearing, 0.0)],
+            )
+            .unwrap();
+
+        // Switch back and forth between masking or not masking every `masking_duration`. If `mask_changes` is 10.0,
+        // this results in one tenth of the infectious period spent masking is done before the infector switches to unmasked.
+        // If masking duration is 0, meaning no intervention is applied, this is skipped.
+        let masking_duration = duration * masking_proportion / mask_changes;
+        let nonmasking_duration = duration * (1.0 - masking_proportion) / mask_changes;
+
+        if masking_duration > 0.0 {
+            context.subscribe_to_event::<PersonPropertyChangeEvent<MaskingStatus>>(
+                move |context, event| {
+                    let t = context.get_current_time();
+                    match event.current {
+                        Masking::None => {
+                            context.add_plan(t + nonmasking_duration, move |context| {
+                                context.set_person_property(
+                                    event.person_id,
+                                    MaskingStatus,
+                                    Masking::Wearing,
+                                );
+                            });
+                        }
+                        Masking::Wearing => {
+                            context.add_plan(t + masking_duration, move |context| {
+                                context.set_person_property(
+                                    event.person_id,
+                                    MaskingStatus,
+                                    Masking::None,
+                                );
+                            });
+                        }
+                    }
+                },
+            );
+            // Plan first switch to putting on the mask
+            context.add_plan(0.0, move |context| {
+                context.set_person_property(infectious_person, MaskingStatus, Masking::Wearing);
+            });
+        }
+
+        // Set up the household
+        set_homogeneous_mixing_itinerary(&mut context, infectious_person).unwrap();
+        for _ in 0..community_size - 1 {
+            let cohabitant = context.add_person(()).unwrap();
+            set_homogeneous_mixing_itinerary(&mut context, cohabitant).unwrap();
+        }
+
+        // Listen for infection events
+        // We do not schedule the next forecasted infection for the secondary cases, as we want to see how many
+        // secondary cases are created by only the initial infectious person before they recover
+        let secondary_infection_times = Rc::new(RefCell::new(vec![]));
+        let secondary_infection_times_clone: Rc<RefCell<Vec<_>>> =
+            Rc::clone(&secondary_infection_times);
+        context.subscribe_to_event::<PersonPropertyChangeEvent<InfectionStatus>>(
+            move |context, event| {
+                if event.current == InfectionStatusValue::Infectious {
+                    let period_id =
+                        (context.get_current_time() * mask_changes / duration).trunc() as usize;
+                    secondary_infection_times_clone
+                        .borrow_mut()
+                        .push((period_id, context.get_current_time()));
+
+                    let InfectionDataValue::Infectious { infected_by, .. } =
+                        context.get_person_property(event.person_id, InfectionData)
+                    else {
+                        panic!("{} is not infected.", event.person_id);
+                    };
+                    let infector_masking =
+                        context.get_person_property(infected_by.unwrap(), MaskingStatus);
+                    assert_eq!(infector_masking, Masking::None);
+                    assert_eq!(infected_by.unwrap(), infectious_person);
+                    context.set_person_property(
+                        event.person_id,
+                        InfectionData,
+                        InfectionDataValue::Susceptible,
+                    );
+                }
+            },
+        );
+
+        // Shut down manually to avoid infinite plan loop from masking application
+        context.add_plan(duration, ixa::Context::shutdown);
+
+        context.execute();
+
+        // Infection times are returned here for convenience but the usize masking period is used in the test below
+        let returned_vec = secondary_infection_times.borrow().clone();
+        returned_vec
+    }
+
+    #[test]
+    #[allow(
+        clippy::cast_lossless,
+        clippy::cast_precision_loss,
+        clippy::cast_sign_loss,
+        clippy::cast_possible_truncation
+    )]
+    fn test_community_masking_one_infector() {
+        let rate = 2.0;
+        let alpha = 0.1;
+        let duration = 5.0;
+        let masking_proportion = 0.4;
+        let mask_changes = 10.0;
+        let community_size = 5;
+        let n_reps = 5_000;
+
+        let mut cases_count_sizes = vec![];
+
+        // Check that the number of secondary cases is as expected
+        let expected_cases = (1.0 - masking_proportion)
+            * rate
+            * duration
+            * ((community_size - 1) as f64).powf(alpha);
+        let mut case_count_distribution = [0; 10];
+
+        // Run the simulation
+        for seed in 0..n_reps {
+            let infection_times = run_masking_community_scenario(
+                seed,
+                rate,
+                alpha,
+                duration,
+                masking_proportion,
+                mask_changes,
+                community_size,
+            );
+            cases_count_sizes.push(infection_times.len());
+
+            // Check that infection counts in each nonmasking period are Poisson distributed
+            // First, we find how many cases were generated during each period where the infector was unmasked
+            let mut cases_per_masking_period = vec![0; mask_changes as usize];
+            for (period_id, _) in infection_times {
+                cases_per_masking_period[period_id] += 1;
+            }
+
+            // Then, we get the distribution of case counts per period, which is tracked across all experiments
+            for &count in &cases_per_masking_period {
+                if count < 10 {
+                    case_count_distribution[count] += 1;
+                }
+            }
+        }
+
+        // Finally, we check that the distribution of case counts is approximately Poisson distributed using the pmf
+        let poisson_dist = Poisson::new(expected_cases / mask_changes).unwrap();
+        for (i, &counts) in case_count_distribution.iter().enumerate() {
+            let poisson_prob = poisson_dist.pmf(i as u64);
+            let empirical_prob = counts as f64 / (mask_changes * n_reps as f64);
+            assert_almost_eq!(poisson_prob, empirical_prob, 0.005);
+        }
+
+        // And we compare the overall case count average across experiments
+        let average_case_count = cases_count_sizes.iter().sum::<usize>() as f64 / n_reps as f64;
+        assert_almost_eq!(expected_cases, average_case_count, expected_cases / 100.0);
     }
 }

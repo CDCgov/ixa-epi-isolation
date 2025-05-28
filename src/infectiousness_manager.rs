@@ -6,6 +6,7 @@ use serde::Serialize;
 use statrs::distribution::Exp;
 
 use crate::{
+    interventions::ContextTransmissionModifierExt,
     population_loader::Alive,
     rate_fns::{InfectiousnessRateExt, InfectiousnessRateFn, ScaledRateFn},
     settings::{ContextSettingExt, SettingId, SettingType},
@@ -26,7 +27,7 @@ pub enum InfectionDataValue {
     },
 }
 
-#[derive(Serialize, PartialEq, Debug, Clone, Copy)]
+#[derive(Serialize, PartialEq, Debug, Clone, Copy, Eq, Hash)]
 pub enum InfectionStatusValue {
     Susceptible,
     Infectious,
@@ -54,16 +55,21 @@ define_derived_property!(
 /// for a person, given factors related to their environment, such as the number of people
 /// they come in contact with or how close they are.
 /// This is used to scale the intrinsic infectiousness function of that person.
+/// All modifiers of the infector's intrinsic infecitousness are aggregated and returned
+/// as a single float to multiply by the base total infectiousness.
+/// This assumes that transmission modifiers of total infectiousness are independent of
+/// the setting type and are linear
 pub fn calc_total_infectiousness_multiplier(context: &Context, person_id: PersonId) -> f64 {
-    // TODO: calculate current vs total infectiousness. This depends on interventions.
-    context.calculate_total_infectiousness_multiplier_for_person(person_id)
+    let relative_transmission_potential = context.get_relative_total_transmission(person_id);
+    relative_transmission_potential
+        * context.calculate_total_infectiousness_multiplier_for_person(person_id)
 }
 
 /// Calculate the maximum possible scaling factor for total infectiousness
 /// for a person, given information we know at the time of a forecast.
+/// The modifier used for intrinsic infectiousness is ignored because all modifiers must
+/// be less than or equal to one.
 pub fn max_total_infectiousness_multiplier(context: &Context, person_id: PersonId) -> f64 {
-    // TODO: Max and current total infectiousness are the same for now until the notion of
-    // being present in a setting is implemented
     context.calculate_total_infectiousness_multiplier_for_person(person_id)
 }
 
@@ -79,7 +85,16 @@ pub fn infection_attempt<T: SettingType + ?Sized>(
         .get_contact(person_id, setting_id, (Alive, true))
         .unwrap()?;
     match context.get_person_property(next_contact, InfectionStatus) {
-        InfectionStatusValue::Susceptible => Some(next_contact),
+        InfectionStatusValue::Susceptible => {
+            if context.sample_bool(
+                ForecastRng,
+                context.get_relative_total_transmission(next_contact),
+            ) {
+                Some(next_contact)
+            } else {
+                None
+            }
+        }
         _ => None,
     }
 }
@@ -218,22 +233,27 @@ impl InfectionContextExt for Context {
 #[cfg(test)]
 #[allow(clippy::float_cmp)]
 mod test {
+    use serde::{Deserialize, Serialize};
+    use statrs::assert_almost_eq;
     use std::{collections::HashMap, path::PathBuf};
 
     use super::{
-        evaluate_forecast, get_forecast, max_total_infectiousness_multiplier, InfectionContextExt,
+        evaluate_forecast, get_forecast, infection_attempt, max_total_infectiousness_multiplier,
+        InfectionContextExt,
     };
     use crate::{
         define_setting_type,
         infectiousness_manager::{
             InfectionData, InfectionDataValue, InfectionStatus, InfectionStatusValue,
         },
+        interventions::ContextTransmissionModifierExt,
         parameters::{GlobalParams, ItinerarySpecificationType, Params, RateFnType},
         rate_fns::{load_rate_fns, InfectiousnessRateExt},
         settings::{ContextSettingExt, ItineraryEntry, SettingId, SettingProperties},
     };
     use ixa::{
-        Context, ContextGlobalPropertiesExt, ContextPeopleExt, ContextRandomExt, IxaError, PersonId,
+        define_person_property, Context, ContextGlobalPropertiesExt, ContextPeopleExt,
+        ContextRandomExt, IxaError, PersonId,
     };
 
     define_setting_type!(HomogeneousMixing);
@@ -284,6 +304,7 @@ mod test {
                 },
             )
             .unwrap();
+
         context
     }
 
@@ -359,6 +380,7 @@ mod test {
     }
 
     #[test]
+    /// Test has potential to stochastically fail if exponential draw is longer than infectious duration
     fn test_forecast() {
         let mut context = setup_context();
         let p1 = context.add_person(()).unwrap();
@@ -432,5 +454,98 @@ mod test {
         assert_eq!(infected_by.unwrap(), index);
         assert_eq!(infection_setting_type.unwrap(), "Home");
         assert_eq!(infection_setting_id.unwrap(), 0);
+    }
+
+    #[derive(Serialize, Deserialize, PartialEq, Debug, Clone, Copy, Hash, Eq)]
+    pub enum MandatoryIntervention {
+        NoEffect,
+        Partial,
+        Full,
+    }
+
+    define_person_property!(MandatoryInterventionStatus, MandatoryIntervention);
+
+    #[test]
+    #[allow(clippy::cast_precision_loss, clippy::cast_lossless)]
+    fn test_rejection_sample_infection_attempt_intervention() {
+        let n = 1000;
+        let mut count = 0;
+        let mut context = setup_context();
+        let relative_effect = 0.8;
+
+        context
+            .store_transmission_modifier_values(
+                InfectionStatusValue::Susceptible,
+                MandatoryInterventionStatus,
+                &[
+                    (MandatoryIntervention::NoEffect, 1.0),
+                    (MandatoryIntervention::Partial, relative_effect),
+                    (MandatoryIntervention::Full, 0.0),
+                ],
+            )
+            .unwrap();
+
+        let contact = context
+            .add_person((MandatoryInterventionStatus, MandatoryIntervention::Partial))
+            .unwrap();
+        set_homogeneous_mixing_itinerary(&mut context, contact).unwrap();
+
+        let source = context
+            .add_person((MandatoryInterventionStatus, MandatoryIntervention::NoEffect))
+            .unwrap();
+        set_homogeneous_mixing_itinerary(&mut context, source).unwrap();
+
+        for _ in 0..n {
+            if infection_attempt(&context, source, SettingId::new(&HomogeneousMixing, 0)).is_some()
+            {
+                count += 1;
+            }
+        }
+        assert_almost_eq!(count as f64 / n as f64, relative_effect, 0.01);
+    }
+
+    #[test]
+    #[allow(clippy::cast_precision_loss, clippy::cast_lossless)]
+    fn test_rejection_sample_forecast_intervention() {
+        let n = 1_000;
+        let mut count = 0;
+        let relative_effect = 0.8;
+
+        let mut context = setup_context();
+
+        let p1 = context
+            .add_person((MandatoryInterventionStatus, MandatoryIntervention::Partial))
+            .unwrap();
+        set_homogeneous_mixing_itinerary(&mut context, p1).unwrap();
+        let p2 = context
+            .add_person((MandatoryInterventionStatus, MandatoryIntervention::NoEffect))
+            .unwrap();
+        set_homogeneous_mixing_itinerary(&mut context, p2).unwrap();
+        let p3 = context
+            .add_person((MandatoryInterventionStatus, MandatoryIntervention::NoEffect))
+            .unwrap();
+        set_homogeneous_mixing_itinerary(&mut context, p3).unwrap();
+
+        context.infect_person(p1, None, None, None);
+        context
+            .store_transmission_modifier_values(
+                InfectionStatusValue::Infectious,
+                MandatoryInterventionStatus,
+                &[
+                    (MandatoryIntervention::NoEffect, 1.0),
+                    (MandatoryIntervention::Partial, relative_effect),
+                    (MandatoryIntervention::Full, 0.0),
+                ],
+            )
+            .unwrap();
+
+        for _ in 0..n {
+            // Will return None if forecast is greater than infection duration, running 10_000 times encounters unwrap on None
+            let f = get_forecast(&context, p1).expect("Forecast should be returned");
+            if evaluate_forecast(&mut context, p1, f.forecasted_total_infectiousness) {
+                count += 1;
+            }
+        }
+        assert_almost_eq!(count as f64 / n as f64, relative_effect, 0.005);
     }
 }
