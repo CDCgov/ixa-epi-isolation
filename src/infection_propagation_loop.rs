@@ -45,45 +45,86 @@ fn schedule_recovery(context: &mut Context, person: PersonId) {
     });
 }
 
-/// Seeds the initial population with a number of infectious people.
+/// Takes susceptible people from the population and changes them according to a provided `seed_fn`.
 /// # Errors
-/// - If `initial_infections` is greater than the population size.
-fn seed_infections(context: &mut Context, initial_infections: usize) -> Result<(), IxaError> {
-    for _ in 0..initial_infections {
+/// - If the total number of people to seed is greater than the population size.
+fn query_susceptibles_and_seed(
+    context: &mut Context,
+    to_seed: usize,
+    seed_fn: impl Fn(&mut Context, PersonId),
+) -> Result<(), IxaError> {
+    for _ in 0..to_seed {
         let person = context.sample_person(
             InfectionRng,
+            // Since the default value for `InfectionStatus` is `Susceptible`, we use it to grab
+            // people to whom nothing has happened yet.
             (InfectionStatus, InfectionStatusValue::Susceptible),
         );
         match person {
             Some(person) => {
-                context.infect_person(person, None, None, None);
+                seed_fn(context, person);
             }
             None => {
-                return Err(IxaError::IxaError("The number of initial infections to seed is greater than the population size. ".to_string() + &format!("The population size is {}, and the number of initial infections to seed is {}. Instead, the entire population was infected.", context.get_current_population(), initial_infections)));
+                return Err(IxaError::IxaError("The number of people to seed with initial conditions has surpassed the population size.".to_string()));
             }
         }
     }
     Ok(())
 }
 
+fn seed_initial_infections(
+    context: &mut Context,
+    initial_infections: usize,
+) -> Result<(), IxaError> {
+    trace!("Seeding initial infections.");
+    query_susceptibles_and_seed(context, initial_infections, |context, person_id| {
+        trace!("Infecting person {person_id} as an initial infection.");
+        context.infect_person(person_id, None, None, None);
+    })
+}
+
+fn seed_initial_recovered(context: &mut Context, initial_recovered: usize) -> Result<(), IxaError> {
+    trace!("Seeding initial recovered.");
+    query_susceptibles_and_seed(context, initial_recovered, |context, person_id| {
+        // First immediately infect the person so that the infection data is properly set up
+        context.infect_person(person_id, None, None, None);
+        // Then recover them
+        trace!("Recovering person {person_id} as an initial recovered.");
+        context.recover_person(person_id);
+    })
+}
+
 pub fn init(context: &mut Context) -> Result<(), IxaError> {
     let &Params {
-        initial_infections, ..
+        initial_infections,
+        initial_recovered,
+        ..
     } = context.get_params();
 
     load_rate_fns(context)?;
 
-    // Seed the initial population
+    // First we seed recovered people. Since recovering people requires setting them as infectious
+    // first to set the infection data, this will trigger the `PersonPropertyChangeEvent` for people
+    // becoming infectious if we do this after setting up the event subscription. Instead, we do this
+    // first, so it happens silently.
     context.add_plan(0.0, move |context| {
-        seed_infections(context, initial_infections).unwrap();
+        seed_initial_recovered(context, initial_recovered).unwrap();
     });
 
-    context.subscribe_to_event::<PersonPropertyChangeEvent<InfectionStatus>>(|context, event| {
-        if event.current != InfectionStatusValue::Infectious {
-            return;
-        }
-        schedule_next_forecasted_infection(context, event.person_id);
-        schedule_recovery(context, event.person_id);
+    context.add_plan(0.0, |context| {
+        context.subscribe_to_event::<PersonPropertyChangeEvent<InfectionStatus>>(
+            |context, event| {
+                if event.current != InfectionStatusValue::Infectious {
+                    return;
+                }
+                schedule_next_forecasted_infection(context, event.person_id);
+                schedule_recovery(context, event.person_id);
+            },
+        );
+    });
+
+    context.add_plan(0.0, move |context| {
+        seed_initial_infections(context, initial_infections).unwrap();
     });
     Ok(())
 }
@@ -107,7 +148,8 @@ mod test {
     use crate::{
         define_setting_type,
         infection_propagation_loop::{
-            init, schedule_next_forecasted_infection, InfectionStatus, InfectionStatusValue,
+            init, schedule_next_forecasted_infection, schedule_recovery, seed_initial_infections,
+            seed_initial_recovered, InfectionStatus, InfectionStatusValue,
         },
         infectiousness_manager::{
             max_total_infectiousness_multiplier, InfectionContextExt, InfectionData,
@@ -125,8 +167,6 @@ mod test {
         },
     };
 
-    use super::{schedule_recovery, seed_infections};
-
     define_setting_type!(HomogeneousMixing);
 
     fn set_homogeneous_mixing_itinerary(
@@ -140,10 +180,17 @@ mod test {
         context.add_itinerary(person_id, itinerary)
     }
 
-    fn setup_context(seed: u64, rate: f64, alpha: f64, duration: f64) -> Context {
+    fn setup_context(
+        seed: u64,
+        rate: f64,
+        alpha: f64,
+        duration: f64,
+        initial_recovered: usize,
+    ) -> Context {
         let mut context = Context::new();
         let parameters = Params {
             initial_infections: 3,
+            initial_recovered,
             max_time: 100.0,
             seed,
             infectiousness_rate_fn: RateFnType::Constant { rate, duration },
@@ -151,7 +198,6 @@ mod test {
             report_period: 1.0,
             synth_population_file: PathBuf::from("."),
             transmission_report_name: None,
-            // We specify the itineraries manually in `set_homogeneous_mixing_itinerary`.
             settings_properties: HashMap::from([
                 (
                     CoreSettingsTypes::Home,
@@ -175,9 +221,9 @@ mod test {
                     CoreSettingsTypes::CensusTract,
                     SettingProperties {
                         alpha: 0.5,
-                        itinerary_specification: Some(ItinerarySpecificationType::Constant {
-                            ratio: 1.0,
-                        }),
+                        // Itinerary is specified in the `set_homogeneous_mixing_itinerary` function
+                        // so we do not need to set it here.
+                        itinerary_specification: None,
                     },
                 ),
             ]),
@@ -187,6 +233,8 @@ mod test {
             .set_global_property_value(GlobalParams, parameters)
             .unwrap();
 
+        // We also set up a homogenous mixing itinerary so that when we don't call `settings::init`,
+        // we still have people in settings.
         context
             .register_setting_type(
                 HomogeneousMixing,
@@ -203,17 +251,17 @@ mod test {
 
     #[test]
     fn test_seed_infections_errors() {
-        let mut context = setup_context(0, 1.0, 1.0, 5.0);
+        let mut context = setup_context(0, 1.0, 1.0, 5.0, 0);
         for _ in 0..3 {
             context.add_person(()).unwrap();
         }
         load_rate_fns(&mut context).unwrap();
-        let e = seed_infections(&mut context, 5).err();
+        let e = seed_initial_infections(&mut context, 5).err();
         match e {
             Some(IxaError::IxaError(msg)) => {
                 assert_eq!(
                     msg,
-                    "The number of initial infections to seed is greater than the population size. The population size is 3, and the number of initial infections to seed is 5. Instead, the entire population was infected."
+                    "The number of people to seed with initial conditions has surpassed the population size."
                 );
             }
             Some(ue) => panic!(
@@ -225,23 +273,35 @@ mod test {
     }
 
     #[test]
-    fn test_seed_infections() {
-        let mut context = setup_context(0, 1.0, 1.0, 5.0);
+    fn test_seed_initial_conditions() {
+        let initial_recovered = 1;
+        let mut context = setup_context(0, 1.0, 1.0, 5.0, initial_recovered);
         for _ in 0..10 {
             context.add_person(()).unwrap();
         }
 
-        load_rate_fns(&mut context).unwrap();
-        seed_infections(&mut context, 5).unwrap();
+        let &Params {
+            initial_infections,
+            initial_recovered,
+            ..
+        } = context.get_params();
+
+        seed_initial_infections(&mut context, initial_infections).unwrap();
         let infectious_count = context
             .query_people((InfectionStatus, InfectionStatusValue::Infectious))
             .len();
-        assert_eq!(infectious_count, 5);
+        assert_eq!(infectious_count, initial_infections);
+
+        seed_initial_recovered(&mut context, initial_recovered).unwrap();
+        let recovered_count = context
+            .query_people((InfectionStatus, InfectionStatusValue::Recovered))
+            .len();
+        assert_eq!(recovered_count, initial_recovered);
     }
 
     #[test]
     fn test_init_loop() {
-        let mut context = setup_context(42, 1.0, 1.0, 5.0);
+        let mut context = setup_context(42, 1.0, 1.0, 5.0, 0);
         for _ in 0..10 {
             context.add_person(()).unwrap();
         }
@@ -280,7 +340,7 @@ mod test {
 
     #[test]
     fn test_zero_rate_no_infections() {
-        let mut context = setup_context(0, 0.0, 1.0, 5.0);
+        let mut context = setup_context(0, 0.0, 1.0, 5.0, 1);
         for _ in 0..=context.get_params().initial_infections {
             context.add_person(()).unwrap();
         }
@@ -299,9 +359,15 @@ mod test {
 
         context.execute();
 
+        let &Params {
+            initial_infections,
+            initial_recovered,
+            ..
+        } = context.get_params();
+
         assert_eq!(
             *num_new_infections.borrow(),
-            context.get_params().initial_infections
+            initial_infections + initial_recovered,
         );
     }
 
@@ -348,7 +414,7 @@ mod test {
         for seed in 0..num_sims {
             let infection_times_clone = Rc::clone(&infection_times);
             let num_infected_clone = Rc::clone(&num_infected);
-            let mut context = setup_context(seed, rate, alpha, duration);
+            let mut context = setup_context(seed, rate, alpha, duration, 0);
 
             context
                 .store_transmission_modifier_values(
@@ -444,10 +510,10 @@ mod test {
 
     #[test]
     fn test_schedule_recovery() {
-        let mut context = setup_context(0, 0.0, 1.0, 5.0);
+        let mut context = setup_context(0, 0.0, 1.0, 5.0, 0);
         load_rate_fns(&mut context).unwrap();
         let person = context.add_person(()).unwrap();
-        seed_infections(&mut context, 1).unwrap();
+        seed_initial_infections(&mut context, 1).unwrap();
         // For later, we need to get the recovery time from the rate function.
         let recovery_time = context.get_person_rate_fn(person).infection_duration();
         schedule_recovery(&mut context, person);
@@ -504,7 +570,7 @@ mod test {
                 let num_infected_home_clone = Rc::clone(&num_infected_home);
                 let num_infected_cenustract_clone = Rc::clone(&num_infected_censustract);
                 let num_infected_workplace_clone = Rc::clone(&num_infected_workplace);
-                let mut context = setup_context(seed, rate, alpha, 5.0);
+                let mut context = setup_context(seed, rate, alpha, 5.0, 0);
                 settings_init(&mut context);
 
                 // Add a a person who will get infected.
@@ -613,7 +679,7 @@ mod test {
         mask_changes: f64,
         community_size: usize,
     ) -> Vec<(usize, f64)> {
-        let mut context = setup_context(seed, rate, alpha, duration);
+        let mut context = setup_context(seed, rate, alpha, duration, 0);
         load_rate_fns(&mut context).unwrap();
 
         // Initialize the infectious person

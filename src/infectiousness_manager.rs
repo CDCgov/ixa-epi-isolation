@@ -276,7 +276,8 @@ mod test {
             .set_global_property_value(
                 GlobalParams,
                 Params {
-                    initial_infections: 1,
+                    initial_infections: 0,
+                    initial_recovered: 0,
                     max_time: 10.0,
                     seed: 0,
                     infectiousness_rate_fn: RateFnType::Constant {

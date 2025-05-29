@@ -115,6 +115,7 @@ mod test {
                 "seed": 123,
                 "infectiousness_rate_fn": {"Constant": {"rate": 1.0, "duration": 5.0}},
                 "initial_infections": 1,
+                "initial_recovered": 0,
                 "report_period": 1.0,
                 "settings_properties": {},
                 "synth_population_file": "input/people_test.csv"
@@ -135,6 +136,7 @@ mod test {
                 "seed": 123,
                 "infectiousness_rate_fn": {"Constant": {"rate": 1.0, "duration": 5.0}},
                 "initial_infections": 1,
+                "initial_recovered": 0,
                 "report_period": 1.0,
                 "settings_properties": {},
                 "synth_population_file": "input/people_test.csv",
@@ -157,6 +159,7 @@ mod test {
                 "seed": 123,
                 "infectiousness_rate_fn": {"Constant": {"rate": 1.0, "duration": 5.0}},
                 "initial_infections": 1,
+                "initial_recovered": 0,
                 "report_period": 1.0,
                 "settings_properties": {},
                 "synth_population_file": "input/people_test.csv",
