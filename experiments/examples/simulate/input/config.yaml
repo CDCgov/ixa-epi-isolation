@@ -1,0 +1,18 @@
+azb:
+  azure_batch: false
+local_path:
+  exe_file: target/release/epi-isolation
+  super_experiment_name: examples
+  sub_experiment_name: simulate
+  target_data_file: null
+  default_params_file: input/input.json
+experiment_conditions:
+  tolerance: null
+  seed: 12345
+  scenario_key: epi_isolation.GlobalParams
+  samples_per_step: 1
+  replicates_per_particle: 10
+  changed_baseline_params:
+    initial_infections: 2
+    transmission_report_name: "some_transmission_chain.csv"
+
