@@ -260,7 +260,8 @@ mod test {
     fn setup() -> Context {
         let mut context = Context::new();
         let parameters = Params {
-            initial_infections: 3,
+            initial_infections: 0,
+            initial_recovered: 0,
             max_time: 100.0,
             seed: 0,
             infectiousness_rate_fn: RateFnType::Constant {

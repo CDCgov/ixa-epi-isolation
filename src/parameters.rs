@@ -44,6 +44,8 @@ pub enum ItinerarySpecificationType {
 pub struct Params {
     /// The number of infections we seed the population with.
     pub initial_infections: usize,
+    /// The number of people that are initially recovered (not susceptible).
+    pub initial_recovered: usize,
     /// The maximum run time of the simulation; even if there are still infections
     /// scheduled to occur, the simulation will stop at this time.
     pub max_time: f64,
@@ -183,6 +185,7 @@ mod test {
         let mut context = Context::new();
         let parameters = Params {
             initial_infections: 1,
+            initial_recovered: 0,
             max_time: 100.0,
             seed: 0,
             infectiousness_rate_fn: RateFnType::Constant {
@@ -208,7 +211,8 @@ mod test {
     #[test]
     fn test_validate_max_time() {
         let parameters = Params {
-            initial_infections: 1,
+            initial_infections: 0,
+            initial_recovered: 0,
             max_time: -100.0,
             seed: 0,
             infectiousness_rate_fn: RateFnType::Constant {
@@ -237,7 +241,8 @@ mod test {
     #[test]
     fn test_validate_split_zeros() {
         let parameters = Params {
-            initial_infections: 1,
+            initial_infections: 0,
+            initial_recovered: 0,
             max_time: 100.0,
             seed: 0,
             infectiousness_rate_fn: RateFnType::Constant {
@@ -285,7 +290,8 @@ mod test {
     #[test]
     fn test_validate_split_negative() {
         let parameters = Params {
-            initial_infections: 1,
+            initial_infections: 0,
+            initial_recovered: 0,
             max_time: 100.0,
             seed: 0,
             infectiousness_rate_fn: RateFnType::Constant {
@@ -336,7 +342,8 @@ mod test {
     #[test]
     fn test_validation_itinerary_all_none() {
         let parameters = Params {
-            initial_infections: 1,
+            initial_infections: 0,
+            initial_recovered: 0,
             max_time: 100.0,
             seed: 0,
             infectiousness_rate_fn: RateFnType::Constant {
@@ -371,7 +378,8 @@ mod test {
     #[test]
     fn test_validation_itinerary_one_some_zero_rest_none() {
         let parameters = Params {
-            initial_infections: 1,
+            initial_infections: 0,
+            initial_recovered: 0,
             max_time: 100.0,
             seed: 0,
             infectiousness_rate_fn: RateFnType::Constant {
