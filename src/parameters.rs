@@ -162,7 +162,7 @@ fn check_rate_fn(rate_fn: &RateFnType) -> Result<(), IxaError> {
                 ));
             }
         }
-    };
+    }
 
     Ok(())
 }
