@@ -1,58 +1,71 @@
 use std::path::PathBuf;
 
-use ixa::{define_data_plugin, define_rng, Context, ContextRandomExt, IxaError, PersonId};
+use ixa::{
+    define_data_plugin, define_rng, Context, ContextPeopleExt, ContextRandomExt, IxaError, PersonId,
+};
 use serde::Deserialize;
 
 use crate::{
+    infectiousness_manager::{InfectionData, InfectionDataValue},
     natural_history_parameter_manager::{
         ContextNaturalHistoryParameterExt, NaturalHistoryParameterLibrary,
     },
-    parameters::{ContextParametersExt, Params, RateFnType},
+    parameters::{ContextParametersExt, RateFnType},
 };
 
 use super::{rate_fn::InfectiousnessRateFn, ConstantRate, EmpiricalRate};
 
 define_rng!(InfectiousnessRng);
 
+#[derive(Default)]
 struct RateFnContainer {
     rates: Vec<Box<dyn InfectiousnessRateFn>>,
+    asymptomatic_rates: Vec<Box<dyn InfectiousnessRateFn>>,
 }
 
 pub struct RateFn;
 
 impl NaturalHistoryParameterLibrary for RateFn {
-    fn library_size(&self, context: &Context) -> usize {
-        context
-            .get_data_container(RateFnPlugin)
-            .unwrap()
-            .rates
-            .len()
+    fn library_size(&self, _context: &Context) -> usize {
+        unreachable!("We manually specify the assignment function for RateFn, so this should never be called.")
     }
 }
 
-define_data_plugin!(
-    RateFnPlugin,
-    RateFnContainer,
-    RateFnContainer { rates: Vec::new() }
-);
+define_data_plugin!(RateFnPlugin, RateFnContainer, RateFnContainer::default());
+
+fn add_rate_fn(
+    rate_fns: &mut Vec<Box<dyn InfectiousnessRateFn>>,
+    rate_fn: impl InfectiousnessRateFn + 'static,
+) {
+    rate_fns.push(Box::new(rate_fn));
+}
 
 pub trait InfectiousnessRateExt {
-    fn add_rate_fn(&mut self, dist: impl InfectiousnessRateFn + 'static);
     fn get_person_rate_fn(&self, person_id: PersonId) -> &dyn InfectiousnessRateFn;
 }
 
 impl InfectiousnessRateExt for Context {
-    fn add_rate_fn(&mut self, dist: impl InfectiousnessRateFn + 'static) {
-        let container = self.get_data_container_mut(RateFnPlugin);
-        container.rates.push(Box::new(dist));
-    }
-
+    /// Get the infectiousness rate function for a person.
     fn get_person_rate_fn(&self, person_id: PersonId) -> &dyn InfectiousnessRateFn {
+        let container = self
+            .get_data_container(RateFnPlugin)
+            .expect("Expected rate functions to be loaded.");
         let id = self.get_parameter_id(RateFn, person_id);
-        self.get_data_container(RateFnPlugin)
-            .expect("Expected rate functions to be loaded.")
-            .rates[id]
-            .as_ref()
+        // Get if the person is symptomatic or not and chose rates accordingly if we have separate
+        // asymptomatic rates loaded
+        let separate_asymptomatic_rates = self.get_params().asymptomatic_rate_fn.is_some();
+        let InfectionDataValue::Infectious { symptomatic, .. } =
+            self.get_person_property(person_id, InfectionData)
+        else {
+            panic!("Person {person_id} is not infectious")
+        };
+        if symptomatic || !separate_asymptomatic_rates {
+            // If the person is symptomatic, use the symptomatic rate functions
+            container.rates[id].as_ref()
+        } else {
+            // If the person is asymptomatic, use the asymptomatic rate functions
+            container.asymptomatic_rates[id].as_ref()
+        }
     }
 }
 
@@ -64,21 +77,51 @@ impl InfectiousnessRateExt for Context {
 /// - If the file specified in the parameters cannot be read and turned into `EmpiricalRate` objects
 pub fn load_rate_fns(context: &mut Context) -> Result<(), IxaError> {
     let rate_of_infection = context.get_params().infectiousness_rate_fn.clone();
+    let asymptomatic_rate_of_infection = context.get_params().asymptomatic_rate_fn.clone();
+    let container = context.get_data_container_mut(RateFnPlugin);
 
-    match rate_of_infection {
-        RateFnType::Constant { rate, duration } => {
-            context.add_rate_fn(ConstantRate::new(rate, duration)?);
-        }
-        RateFnType::EmpiricalFromFile { file, .. } => {
-            add_rate_fns_from_file(context, file)?;
-        }
+    // Load the base infectiousness rate functions
+    append_based_on_rate_fn_type(rate_of_infection, &mut container.rates)?;
+
+    // Load the asymptomatic infectiousness rate functions if they are specified
+    if let Some(rate_of_infection) = asymptomatic_rate_of_infection {
+        append_based_on_rate_fn_type(rate_of_infection, &mut container.asymptomatic_rates)?;
     }
 
-    context.register_parameter_id_assigner(RateFn, |context, _| {
+    context.register_parameter_id_assigner(RateFn, |context, person_id| {
+        // If the person is symptomatic, use the symptomatic rate functions, and if they are asymptomatic,
+        // we use the asymptomatic rate functions if they are loaded.
+        let InfectionDataValue::Infectious { symptomatic, .. } =
+            context.get_person_property(person_id, InfectionData)
+        else {
+            panic!("Person {person_id} is not infectious")
+        };
+        let separate_asymptomatic_rates = context.get_params().asymptomatic_rate_fn.is_some();
         let container = context.get_data_container(RateFnPlugin).unwrap();
-        let len = container.rates.len();
-        context.sample_range(InfectiousnessRng, 0..len)
+        if symptomatic || !separate_asymptomatic_rates {
+            let len = container.rates.len();
+            context.sample_range(InfectiousnessRng, 0..len)
+        } else {
+            // If there are asymptomatic rates loaded, use them
+            let len = container.asymptomatic_rates.len();
+            context.sample_range(InfectiousnessRng, 0..len)
+        }
     })?;
+    Ok(())
+}
+
+fn append_based_on_rate_fn_type(
+    rate_fn_type: RateFnType,
+    rate_fns: &mut Vec<Box<dyn InfectiousnessRateFn>>,
+) -> Result<(), IxaError> {
+    match rate_fn_type {
+        RateFnType::Constant { rate, duration } => {
+            add_rate_fn(rate_fns, ConstantRate::new(rate, duration)?);
+        }
+        RateFnType::EmpiricalFromFile { file, scale, .. } => {
+            add_empirical_rate_fns_from_file(file, scale, rate_fns)?;
+        }
+    }
     Ok(())
 }
 
@@ -89,14 +132,11 @@ pub struct EmpiricalRateFnRecord {
     value: f64,
 }
 
-fn add_rate_fns_from_file(context: &mut Context, file: PathBuf) -> Result<(), IxaError> {
-    let Params {
-        infectiousness_rate_fn,
-        ..
-    } = context.get_params();
-    let &RateFnType::EmpiricalFromFile { scale, .. } = infectiousness_rate_fn else {
-        unreachable!("This function should only be called for empirical rate functions");
-    };
+fn add_empirical_rate_fns_from_file(
+    file: PathBuf,
+    scale: f64,
+    rate_fns: &mut Vec<Box<dyn InfectiousnessRateFn>>,
+) -> Result<(), IxaError> {
     let mut reader = csv::Reader::from_path(file)?;
     let mut reader = reader.deserialize::<EmpiricalRateFnRecord>();
     // Pop out the first record so we can initialize the vectors
@@ -121,7 +161,7 @@ fn add_rate_fns_from_file(context: &mut Context, file: PathBuf) -> Result<(), Ix
         } else {
             // Take the last values of times and values and make them into a rate function
             let fcn = EmpiricalRate::new(times, values)?;
-            context.add_rate_fn(fcn);
+            add_rate_fn(rate_fns, fcn);
             // Check that the ids are contiguous
             if record.id != last_id + 1 {
                 return Err(IxaError::IxaError(format!(
@@ -138,18 +178,26 @@ fn add_rate_fns_from_file(context: &mut Context, file: PathBuf) -> Result<(), Ix
     }
     // Add the last rate function in the CSV
     let fcn = EmpiricalRate::new(times, values)?;
-    context.add_rate_fn(fcn);
+    add_rate_fn(rate_fns, fcn);
     Ok(())
 }
 
 #[cfg(test)]
-mod tests {
-    use std::collections::HashMap;
+mod test {
+    use std::{collections::HashMap, path::PathBuf};
 
-    use crate::parameters::{GlobalParams, Params};
+    use crate::{
+        infectiousness_manager::InfectionContextExt,
+        natural_history_parameter_manager::ContextNaturalHistoryParameterExt,
+        parameters::{ContextParametersExt, GlobalParams, Params, RateFnType},
+        rate_fns::{
+            load_rate_fns,
+            rate_fn_storage::{add_rate_fn, InfectiousnessRng, RateFnPlugin},
+            InfectiousnessRateExt, InfectiousnessRateFn, RateFn,
+        },
+    };
 
-    use super::*;
-    use ixa::{Context, ContextGlobalPropertiesExt, ContextPeopleExt};
+    use ixa::{Context, ContextGlobalPropertiesExt, ContextPeopleExt, ContextRandomExt, IxaError};
     use statrs::assert_almost_eq;
 
     struct TestRateFn;
@@ -185,10 +233,31 @@ mod tests {
     #[test]
     fn test_add_rate_fn_and_get_random() {
         let mut context = init_context();
+        let parameters = Params {
+            initial_infections: 3,
+            max_time: 100.0,
+            seed: 0,
+            infectiousness_rate_fn: RateFnType::Constant {
+                rate: 1.0,
+                duration: 5.0,
+            },
+            symptom_progression_library: None,
+            fraction_asymptomatic: 0.0,
+            asymptomatic_rate_fn: None,
+            report_period: 1.0,
+            synth_population_file: PathBuf::from("."),
+            transmission_report_name: None,
+            settings_properties: HashMap::new(),
+        };
+        context
+            .set_global_property_value(GlobalParams, parameters)
+            .unwrap();
         let person = context.add_person(()).unwrap();
+        context.infect_person(person, None, None, None);
 
         let rate_fn = TestRateFn {};
-        context.add_rate_fn(rate_fn);
+        let container = context.get_data_container_mut(RateFnPlugin);
+        add_rate_fn(&mut container.rates, rate_fn);
         let rate_fns = context.get_data_container(RateFnPlugin).unwrap();
         assert_eq!(rate_fns.rates.len(), 1);
 
@@ -207,6 +276,8 @@ mod tests {
                 duration: 5.0,
             },
             symptom_progression_library: None,
+            fraction_asymptomatic: 0.0,
+            asymptomatic_rate_fn: None,
             report_period: 1.0,
             synth_population_file: PathBuf::from("."),
             transmission_report_name: None,
@@ -237,6 +308,8 @@ mod tests {
                 scale,
             },
             symptom_progression_library: None,
+            fraction_asymptomatic: 0.0,
+            asymptomatic_rate_fn: None,
             report_period: 1.0,
             synth_population_file: PathBuf::from("."),
             transmission_report_name: None,
@@ -276,6 +349,8 @@ mod tests {
                 scale: 1.0,
             },
             symptom_progression_library: None,
+            fraction_asymptomatic: 0.0,
+            asymptomatic_rate_fn: None,
             report_period: 1.0,
             synth_population_file: PathBuf::from("."),
             transmission_report_name: None,
@@ -311,6 +386,8 @@ mod tests {
                 scale: 1.0,
             },
             symptom_progression_library: None,
+            fraction_asymptomatic: 0.0,
+            asymptomatic_rate_fn: None,
             report_period: 1.0,
             synth_population_file: PathBuf::from("."),
             transmission_report_name: None,
@@ -332,5 +409,76 @@ mod tests {
                 "Expected an error. Instead, reading the rate functions passed with no errors."
             ),
         }
+    }
+
+    #[test]
+    fn test_asymptomatics_get_normal_rates_when_no_asymptomatic_rates_loaded() {
+        let mut context = Context::new();
+        let parameters = Params {
+            initial_infections: 3,
+            max_time: 100.0,
+            seed: 0,
+            infectiousness_rate_fn: RateFnType::Constant {
+                rate: 1.0,
+                duration: 5.0,
+            },
+            symptom_progression_library: None,
+            // All people are asymptomatic
+            fraction_asymptomatic: 1.0,
+            asymptomatic_rate_fn: None,
+            report_period: 1.0,
+            synth_population_file: PathBuf::from("."),
+            transmission_report_name: None,
+            settings_properties: HashMap::new(),
+        };
+        context
+            .set_global_property_value(GlobalParams, parameters)
+            .unwrap();
+        context.init_random(context.get_params().seed);
+        load_rate_fns(&mut context).unwrap();
+        let person = context.add_person(()).unwrap();
+        context.infect_person(person, None, None, None);
+        let rate_fn = context.get_person_rate_fn(person);
+        // Since we have no asymptomatic rates loaded, we should get the normal rates
+        assert_almost_eq!(rate_fn.rate(0.0), 1.0, 0.0);
+        assert_almost_eq!(rate_fn.infection_duration(), 5.0, 0.0);
+        assert_almost_eq!(rate_fn.cum_rate(5.0), 5.0, 0.0);
+    }
+
+    #[test]
+    fn test_asymptomatics_get_asympomatic_rates_when_loaded() {
+        let mut context = Context::new();
+        let parameters = Params {
+            initial_infections: 3,
+            max_time: 100.0,
+            seed: 0,
+            infectiousness_rate_fn: RateFnType::Constant {
+                rate: 1.0,
+                duration: 5.0,
+            },
+            symptom_progression_library: None,
+            // All people are asymptomatic
+            fraction_asymptomatic: 1.0,
+            asymptomatic_rate_fn: Some(RateFnType::Constant {
+                rate: 0.5,
+                duration: 2.5,
+            }),
+            report_period: 1.0,
+            synth_population_file: PathBuf::from("."),
+            transmission_report_name: None,
+            settings_properties: HashMap::new(),
+        };
+        context
+            .set_global_property_value(GlobalParams, parameters)
+            .unwrap();
+        context.init_random(context.get_params().seed);
+        load_rate_fns(&mut context).unwrap();
+        let person = context.add_person(()).unwrap();
+        context.infect_person(person, None, None, None);
+        let rate_fn = context.get_person_rate_fn(person);
+        // Since we have no asymptomatic rates loaded, we should get the normal rates
+        assert_almost_eq!(rate_fn.rate(0.0), 0.5, 0.0);
+        assert_almost_eq!(rate_fn.infection_duration(), 2.5, 0.0);
+        assert_almost_eq!(rate_fn.cum_rate(2.5), 1.25, 0.0);
     }
 }

@@ -70,7 +70,9 @@ sampled_params <- sampled_params |>
   # so wp - tp is the time from logVL = 0 to symptom onset, and -(wp - tp)
   # is the time at which infectiousness starts. We want to have the
   # infection start before that, so we subtract some time.
-  dplyr::mutate(infection_start_time = tp - wp - latent_period)
+  dplyr::mutate(infection_start_time = tp - wp - latent_period) |>
+  # Create an id for easy bookkeeping
+  dplyr::mutate(id = row_number())
 
 stopifnot(
   all(sampled_params$infection_start_time <= 0)
@@ -135,6 +137,27 @@ write_csv(trajectories,
   col_names = TRUE
 )
 
+# We need rate functions for asymptomatics. For now, we just use category 3 & 4
+# trajectories for these individuals. This needs more scientific consideration
+# because doing so implicitly assigns asymptomatics an incubation period because
+# we need that quantity to convert the rate functions to be in terms of time
+# since infection rather than time since symptom onset.
+cat_34_ids <- sampled_params |>
+  dplyr::filter(symp_type_cat %in% c(3, 4)) |>
+  dplyr::pull(id)
+write_csv(
+  trajectories |>
+    dplyr::filter(id %in% cat_34_ids) |>
+    # Reset the ids to be contiguous
+    dplyr::mutate(id = dplyr::consecutive_id(id)),
+  file.path(
+    "..", "ixa-epi-isolation", "input",
+    "library_asymptomatic_empirical_rate_fns.csv"
+  ),
+  col_names = TRUE
+)
+
+# Now we need to prepare the symptom parameters.
 sampled_params <- sampled_params |>
   dplyr::mutate(
     si_scale =
