@@ -42,9 +42,9 @@ pub enum ItinerarySpecificationType {
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Params {
-    /// The number of infections we seed the population with.
+    /// The number of infections with which we seed the population.
     pub initial_infections: usize,
-    /// The number of people that are initially recovered (not susceptible).
+    /// The number of people that are initially recovered (fully immune to disease).
     pub initial_recovered: usize,
     /// The maximum run time of the simulation; even if there are still infections
     /// scheduled to occur, the simulation will stop at this time.
