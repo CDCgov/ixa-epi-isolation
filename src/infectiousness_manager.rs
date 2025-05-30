@@ -7,6 +7,7 @@ use statrs::distribution::Exp;
 
 use crate::{
     interventions::ContextTransmissionModifierExt,
+    parameters::ContextParametersExt,
     population_loader::Alive,
     rate_fns::{InfectiousnessRateExt, InfectiousnessRateFn, ScaledRateFn},
     settings::{ContextSettingExt, SettingId, SettingType},
@@ -20,6 +21,7 @@ pub enum InfectionDataValue {
         infected_by: Option<PersonId>,
         infection_setting_type: Option<&'static str>,
         infection_setting_id: Option<usize>,
+        symptomatic: bool,
     },
     Recovered {
         infection_time: f64,
@@ -185,20 +187,22 @@ impl InfectionContextExt for Context {
     fn infect_person(
         &mut self,
         target_id: PersonId,
-        source_id: Option<PersonId>,
-        setting_type: Option<&'static str>,
-        setting_id: Option<usize>,
+        infected_by: Option<PersonId>,
+        infection_setting_type: Option<&'static str>,
+        infection_setting_id: Option<usize>,
     ) {
         let infection_time = self.get_current_time();
         trace!("Person {target_id}: Infected at {infection_time}");
+        let fraction_asymptomatic = self.get_params().fraction_asymptomatic;
         self.set_person_property(
             target_id,
             InfectionData,
             InfectionDataValue::Infectious {
                 infection_time,
-                infected_by: source_id,
-                infection_setting_type: setting_type,
-                infection_setting_id: setting_id,
+                infected_by,
+                infection_setting_type,
+                infection_setting_id,
+                symptomatic: self.sample_bool(ForecastRng, 1.0 - fraction_asymptomatic),
             },
         );
     }
@@ -284,6 +288,8 @@ mod test {
                         duration: 5.0,
                     },
                     symptom_progression_library: None,
+                    fraction_asymptomatic: 0.0,
+                    asymptomatic_rate_fn: None,
                     report_period: 1.0,
                     synth_population_file: PathBuf::from("."),
                     transmission_report_name: None,

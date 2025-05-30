@@ -334,6 +334,8 @@ mod test {
             symptom_progression_library: Some(ProgressionLibraryType::EmpiricalFromFile {
                 file: PathBuf::from("./input/library_symptom_parameters.csv"),
             }),
+            fraction_asymptomatic: 0.0,
+            asymptomatic_rate_fn: None,
             report_period: 1.0,
             synth_population_file: PathBuf::from("."),
             transmission_report_name: None,

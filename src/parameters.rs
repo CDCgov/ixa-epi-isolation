@@ -53,6 +53,10 @@ pub struct Params {
     pub infectiousness_rate_fn: RateFnType,
     /// A library of symptom progressions
     pub symptom_progression_library: Option<ProgressionLibraryType>,
+    /// The fraction of infected individuals that are asymptomatic.
+    pub fraction_asymptomatic: f64,
+    /// The rate functions for asymptomatic individuals, if different from those for symptomatics.
+    pub asymptomatic_rate_fn: Option<RateFnType>,
     /// The period at which to report tabulated values
     pub report_period: f64,
     /// Setting properties by setting type
@@ -74,27 +78,19 @@ fn validate_inputs(parameters: &Params) -> Result<(), IxaError> {
             "The report writing period must be non-negative.".to_string(),
         ));
     }
-    match parameters.infectiousness_rate_fn {
-        RateFnType::Constant { rate, duration } => {
-            if rate < 0.0 {
-                return Err(IxaError::IxaError(
-                    "The infectiousness rate must be non-negative.".to_string(),
-                ));
-            }
-            if duration < 0.0 {
-                return Err(IxaError::IxaError(
-                    "The infectiousness duration must be non-negative.".to_string(),
-                ));
-            }
-        }
-        RateFnType::EmpiricalFromFile { scale, .. } => {
-            if scale < 0.0 {
-                return Err(IxaError::IxaError(
-                    "The empirical rate function infectiousness scale must be non-negative."
-                        .to_string(),
-                ));
-            }
-        }
+
+    // Check the infectiousness rate functions
+    check_rate_fn(&parameters.infectiousness_rate_fn)?;
+
+    if let Some(asymptomatic_rate_fn) = &parameters.asymptomatic_rate_fn {
+        check_rate_fn(asymptomatic_rate_fn)?;
+    }
+
+    if !(0.0..=1.0).contains(&parameters.fraction_asymptomatic) {
+        return Err(IxaError::IxaError(
+            "The fraction of asymptomatic individuals must be between 0 and 1, inclusive."
+                .to_string(),
+        ));
     }
 
     // If all the itinerary ratios are None, we can't validate them.
@@ -144,6 +140,33 @@ fn validate_inputs(parameters: &Params) -> Result<(), IxaError> {
     Ok(())
 }
 
+fn check_rate_fn(rate_fn: &RateFnType) -> Result<(), IxaError> {
+    match rate_fn {
+        RateFnType::Constant { rate, duration } => {
+            if *rate < 0.0 {
+                return Err(IxaError::IxaError(
+                    "The infectiousness rate must be non-negative.".to_string(),
+                ));
+            }
+            if *duration < 0.0 {
+                return Err(IxaError::IxaError(
+                    "The infectiousness duration must be non-negative.".to_string(),
+                ));
+            }
+        }
+        RateFnType::EmpiricalFromFile { scale, .. } => {
+            if *scale < 0.0 {
+                return Err(IxaError::IxaError(
+                    "The empirical rate function infectiousness scale must be non-negative."
+                        .to_string(),
+                ));
+            }
+        }
+    };
+
+    Ok(())
+}
+
 define_global_property!(GlobalParams, Params, validate_inputs);
 
 pub trait ContextParametersExt {
@@ -190,6 +213,8 @@ mod test {
                 duration: 5.0,
             },
             symptom_progression_library: None,
+            fraction_asymptomatic: 0.5,
+            asymptomatic_rate_fn: None,
             report_period: 1.0,
             synth_population_file: PathBuf::from("."),
             transmission_report_name: None,
@@ -216,6 +241,8 @@ mod test {
                 duration: 5.0,
             },
             symptom_progression_library: None,
+            fraction_asymptomatic: 0.5,
+            asymptomatic_rate_fn: None,
             report_period: 1.0,
             synth_population_file: PathBuf::from("."),
             transmission_report_name: None,
@@ -245,6 +272,8 @@ mod test {
                 duration: 5.0,
             },
             symptom_progression_library: None,
+            fraction_asymptomatic: 0.5,
+            asymptomatic_rate_fn: None,
             report_period: 1.0,
             synth_population_file: PathBuf::from("."),
             transmission_report_name: None,
@@ -293,6 +322,8 @@ mod test {
                 duration: 5.0,
             },
             symptom_progression_library: None,
+            fraction_asymptomatic: 0.5,
+            asymptomatic_rate_fn: None,
             report_period: 1.0,
             synth_population_file: PathBuf::from("."),
             transmission_report_name: None,
@@ -344,6 +375,8 @@ mod test {
                 duration: 5.0,
             },
             symptom_progression_library: None,
+            fraction_asymptomatic: 0.5,
+            asymptomatic_rate_fn: None,
             report_period: 1.0,
             synth_population_file: PathBuf::from("."),
             transmission_report_name: None,
@@ -379,6 +412,8 @@ mod test {
                 duration: 5.0,
             },
             symptom_progression_library: None,
+            fraction_asymptomatic: 0.5,
+            asymptomatic_rate_fn: None,
             report_period: 1.0,
             synth_population_file: PathBuf::from("."),
             transmission_report_name: None,

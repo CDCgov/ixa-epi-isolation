@@ -8,6 +8,7 @@ use ixa::{
 use serde::{Deserialize, Serialize};
 use statrs::distribution::Weibull;
 
+use crate::infectiousness_manager::{InfectionData, InfectionDataValue};
 use crate::natural_history_parameter_manager::ContextNaturalHistoryParameterExt;
 use crate::parameters::ContextParametersExt;
 use crate::rate_fns::RateFn;
@@ -224,11 +225,20 @@ fn event_subscriptions(context: &mut Context) {
     context.subscribe_to_event(
         |context, event: PersonPropertyChangeEvent<InfectionStatus>| {
             if event.current == InfectionStatusValue::Infectious {
-                context.set_person_property(
-                    event.person_id,
-                    Symptoms,
-                    Some(SymptomValue::Presymptomatic),
-                );
+                // Have we assigned this person to be symptomatic when we assigned their infection
+                // data when infecting them?
+                let InfectionDataValue::Infectious { symptomatic, .. } =
+                    context.get_person_property(event.person_id, InfectionData)
+                else {
+                    panic!("Person {:?} is not infectious", event.person_id)
+                };
+                if symptomatic {
+                    context.set_person_property(
+                        event.person_id,
+                        Symptoms,
+                        Some(SymptomValue::Presymptomatic),
+                    );
+                }
             }
         },
     );
@@ -268,6 +278,8 @@ mod test {
                 duration: 5.0,
             },
             symptom_progression_library: None,
+            fraction_asymptomatic: 0.0,
+            asymptomatic_rate_fn: None,
             report_period: 1.0,
             synth_population_file: PathBuf::from("."),
             transmission_report_name: None,
