@@ -181,8 +181,11 @@ mod test {
                     },
                 ),
             ]),
-            post_isolation_intervention_duration: 5.0,
-            isolation_guidance_uptake_probability: 0.5,
+            post_isolation_duration: 0.0,
+            uptake_probability: 0.0,
+            maximum_uptake_delay: 0.0,
+            facemask_transmission_modifier: 0.0,
+            isolation_transmission_modifier: 0.0,
         };
         context.init_random(parameters.seed);
         context
@@ -506,7 +509,7 @@ mod test {
                 let num_infected_home_clone = Rc::clone(&num_infected_home);
                 let num_infected_cenustract_clone = Rc::clone(&num_infected_censustract);
                 let num_infected_workplace_clone = Rc::clone(&num_infected_workplace);
-                let mut context = setup_context(seed, rate, alpha, 5.0);
+                let mut context = setup_context(seed, rate, alpha, duration);
                 settings_init(&mut context);
 
                 // Add a a person who will get infected.
