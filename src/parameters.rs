@@ -65,9 +65,15 @@ pub struct Params {
     pub transmission_report_name: Option<String>,
     /// The duration that an individual will follow post-isolation precautions
     /// following the updated isolation guidance.
-    pub post_isolation_intervention_duration: f64,
+    pub post_isolation_duration: f64,
     /// The probability that an individual will follow the updated isolation guidance.
-    pub isolation_guidance_uptake_probability: f64,
+    pub uptake_probability: f64,
+    /// The maximum delay before an individual will follow the guidance
+    pub maximum_uptake_delay: f64,
+    /// Transmission modifier associated with the facemask intervention
+    pub facemask_transmission_modifier: f64,
+    /// Transmission modifier associated with the isolation intervention
+    pub isolation_transmission_modifier: f64,
 }
 
 fn validate_inputs(parameters: &Params) -> Result<(), IxaError> {
@@ -213,8 +219,11 @@ mod test {
             synth_population_file: PathBuf::from("."),
             transmission_report_name: None,
             settings_properties: HashMap::new(),
-            post_isolation_intervention_duration: 5.0,
-            isolation_guidance_uptake_probability: 0.5,
+            post_isolation_duration: 0.0,
+            uptake_probability: 0.0,
+            maximum_uptake_delay: 0.0,
+            facemask_transmission_modifier: 0.0,
+            isolation_transmission_modifier: 0.0,
         };
         context
             .set_global_property_value(GlobalParams, parameters)
@@ -242,8 +251,11 @@ mod test {
             synth_population_file: PathBuf::from("."),
             transmission_report_name: None,
             settings_properties: HashMap::new(),
-            post_isolation_intervention_duration: 5.0,
-            isolation_guidance_uptake_probability: 0.5,
+            post_isolation_duration: 0.0,
+            uptake_probability: 0.0,
+            maximum_uptake_delay: 0.0,
+            facemask_transmission_modifier: 0.0,
+            isolation_transmission_modifier: 0.0,
         };
         let e = validate_inputs(&parameters).err();
         match e {
@@ -293,8 +305,11 @@ mod test {
                     },
                 ),
             ]),
-            post_isolation_intervention_duration: 5.0,
-            isolation_guidance_uptake_probability: 0.5,
+            post_isolation_duration: 0.0,
+            uptake_probability: 0.0,
+            maximum_uptake_delay: 0.0,
+            facemask_transmission_modifier: 0.0,
+            isolation_transmission_modifier: 0.0,
         };
         let e = validate_inputs(&parameters).err();
         match e {
@@ -344,8 +359,11 @@ mod test {
                     },
                 ),
             ]),
-            post_isolation_intervention_duration: 5.0,
-            isolation_guidance_uptake_probability: 0.5,
+            post_isolation_duration: 0.0,
+            uptake_probability: 0.0,
+            maximum_uptake_delay: 0.0,
+            facemask_transmission_modifier: 0.0,
+            isolation_transmission_modifier: 0.0,
         };
         let e = validate_inputs(&parameters).err();
         match e {
@@ -394,8 +412,11 @@ mod test {
                     },
                 ),
             ]),
-            post_isolation_intervention_duration: 5.0,
-            isolation_guidance_uptake_probability: 0.5,
+            post_isolation_duration: 0.0,
+            uptake_probability: 0.0,
+            maximum_uptake_delay: 0.0,
+            facemask_transmission_modifier: 0.0,
+            isolation_transmission_modifier: 0.0,
         };
         let e = validate_inputs(&parameters).err();
         assert!(e.is_none(), "Expected no error, but got: {e:?}");
@@ -434,8 +455,11 @@ mod test {
                     },
                 ),
             ]),
-            post_isolation_intervention_duration: 5.0,
-            isolation_guidance_uptake_probability: 0.5,
+            post_isolation_duration: 0.0,
+            uptake_probability: 0.0,
+            maximum_uptake_delay: 0.0,
+            facemask_transmission_modifier: 0.0,
+            isolation_transmission_modifier: 0.0,
         };
         let e = validate_inputs(&parameters).err();
         assert!(e.is_none(), "Expected no error, but got: {e:?}");

@@ -212,8 +212,11 @@ mod tests {
             synth_population_file: PathBuf::from("."),
             transmission_report_name: None,
             settings_properties: HashMap::new(),
-            post_isolation_intervention_duration: 5.0,
-            isolation_guidance_uptake_probability: 0.5,
+            post_isolation_duration: 0.0,
+            uptake_probability: 0.0,
+            maximum_uptake_delay: 0.0,
+            facemask_transmission_modifier: 0.0,
+            isolation_transmission_modifier: 0.0,
         };
         context
             .set_global_property_value(GlobalParams, parameters)
@@ -245,8 +248,11 @@ mod tests {
             synth_population_file: PathBuf::from("."),
             transmission_report_name: None,
             settings_properties: HashMap::new(),
-            post_isolation_intervention_duration: 5.0,
-            isolation_guidance_uptake_probability: 0.5,
+            post_isolation_duration: 0.0,
+            uptake_probability: 0.0,
+            maximum_uptake_delay: 0.0,
+            facemask_transmission_modifier: 0.0,
+            isolation_transmission_modifier: 0.0,
         };
         context
             .set_global_property_value(GlobalParams, parameters)
@@ -287,8 +293,11 @@ mod tests {
             synth_population_file: PathBuf::from("."),
             transmission_report_name: None,
             settings_properties: HashMap::new(),
-            post_isolation_intervention_duration: 5.0,
-            isolation_guidance_uptake_probability: 0.5,
+            post_isolation_duration: 0.0,
+            uptake_probability: 0.0,
+            maximum_uptake_delay: 0.0,
+            facemask_transmission_modifier: 0.0,
+            isolation_transmission_modifier: 0.0,
         };
         context
             .set_global_property_value(GlobalParams, parameters)
@@ -325,8 +334,11 @@ mod tests {
             synth_population_file: PathBuf::from("."),
             transmission_report_name: None,
             settings_properties: HashMap::new(),
-            post_isolation_intervention_duration: 5.0,
-            isolation_guidance_uptake_probability: 0.5,
+            post_isolation_duration: 0.0,
+            uptake_probability: 0.0,
+            maximum_uptake_delay: 0.0,
+            facemask_transmission_modifier: 0.0,
+            isolation_transmission_modifier: 0.0,
         };
         context
             .set_global_property_value(GlobalParams, parameters)
