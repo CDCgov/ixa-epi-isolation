@@ -20,7 +20,10 @@
     "report_period": 1.0,
     "synth_population_file": "input/people_test.csv",
     "transmission_report_name": "transmission_report.csv",
-    "post_isolation_intervention_duration": 5.0,
-    "isolation_guidance_uptake_probability": 1.0
+    "post_isolation_duration": 5.0,
+    "uptake_probability": 1.0,
+    "maximum_uptake_delay": 3.0,
+    "facemask_transmission_modifier": 0.5,
+    "isolation_transmission_modifier": 0.5
   }
 }

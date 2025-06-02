@@ -49,9 +49,6 @@ pub trait ContextPropertyProgressionExt {
         property: P,
         tracer: impl Progression<P> + 'static,
     );
-    // fn get_property_progressions<T: PersonProperty + 'static>(
-    //     &self,
-    // ) -> Option<Vec<&Box<dyn Progression<T>>>>;
 }
 
 impl<P> NaturalHistoryParameterLibrary for P
@@ -96,19 +93,6 @@ impl ContextPropertyProgressionExt for Context {
             });
         }
     }
-
-    // fn get_property_progressions<T: PersonProperty + 'static>(
-    //     &self,
-    // ) -> Option<Vec<&Box<dyn Progression<T>>>> {
-    //     let container = self.get_data_container(PropertyProgressions).unwrap();
-    //     let progressions = container.progressions.get(&TypeId::of::<T>())?;
-    //     Some(
-    //         progressions
-    //             .iter()
-    //             .map(|p| p.downcast_ref::<Box<dyn Progression<T>>>().unwrap())
-    //             .collect(),
-    //     )
-    // }
 }
 
 pub fn load_progressions(
