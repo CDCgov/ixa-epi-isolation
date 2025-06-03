@@ -558,6 +558,7 @@ impl ContextSettingExt for Context {
                         ));
                     }
 
+                    //container.add_member_to_itinerary_setting(person_id, itinerary_entry);
                     container
                         .members
                         .entry(itinerary_entry.setting_type)
