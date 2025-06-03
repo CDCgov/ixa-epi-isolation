@@ -233,6 +233,7 @@ mod test {
             .set_global_property_value(
                 GlobalParams,
                 Params {
+                    // For those tests that need infectious people, we add them manually.
                     initial_infections: 0,
                     initial_recovered: 0,
                     max_time: 10.0,
