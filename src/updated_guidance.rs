@@ -8,7 +8,7 @@ use statrs::distribution::Uniform;
 use crate::{
     infectiousness_manager::InfectionStatusValue,
     interventions::ContextTransmissionModifierExt,
-    parameters::{ContextParametersExt, Params},
+    parameters::ContextParametersExt,
     symptom_progression::{SymptomValue, Symptoms},
 };
 
@@ -27,35 +27,38 @@ define_derived_property!(Symptomatic, Option<bool>, [Symptoms], |data| match dat
 define_rng!(PolicyRng);
 
 pub fn init(context: &mut Context) {
-    let &Params {
-        post_isolation_duration,
-        uptake_probability,
-        maximum_uptake_delay,
-        facemask_transmission_modifier,
-        isolation_transmission_modifier,
-        ..
-    } = context.get_params();
+    let isolation_policy = context.get_params().isolation_policy_parameters.clone();
 
     context
         .store_transmission_modifier_values(
             InfectionStatusValue::Infectious,
             MaskingStatus,
-            &[(true, facemask_transmission_modifier)],
+            &[(
+                true,
+                *isolation_policy
+                    .get("facemask_transmission_modifier")
+                    .unwrap(),
+            )],
         )
         .unwrap();
     context
         .store_transmission_modifier_values(
             InfectionStatusValue::Infectious,
             IsolatingStatus,
-            &[(true, isolation_transmission_modifier)],
+            &[(
+                true,
+                *isolation_policy
+                    .get("isolation_transmission_modifier")
+                    .unwrap(),
+            )],
         )
         .unwrap();
 
     setup_isolation_guidance_event_sequence(
         context,
-        post_isolation_duration,
-        uptake_probability,
-        maximum_uptake_delay,
+        *isolation_policy.get("post_isolation_duration").unwrap(),
+        *isolation_policy.get("uptake_probability").unwrap(),
+        *isolation_policy.get("maximum_uptake_delay").unwrap(),
     );
 }
 
@@ -146,11 +149,25 @@ mod test {
             synth_population_file: PathBuf::from("."),
             transmission_report_name: None,
             settings_properties: HashMap::new(),
-            post_isolation_duration,
-            uptake_probability,
-            maximum_uptake_delay,
-            facemask_transmission_modifier,
-            isolation_transmission_modifier,
+            isolation_policy_parameters: [
+                (
+                    "post_isolation_duration".to_string(),
+                    post_isolation_duration,
+                ),
+                ("uptake_probability".to_string(), uptake_probability),
+                ("maximum_uptake_delay".to_string(), maximum_uptake_delay),
+                (
+                    "facemask_transmission_modifier".to_string(),
+                    facemask_transmission_modifier,
+                ),
+                (
+                    "isolation_transmission_modifier".to_string(),
+                    isolation_transmission_modifier,
+                ),
+            ]
+            .iter()
+            .cloned()
+            .collect(),
         };
         context.init_random(parameters.seed);
         context
