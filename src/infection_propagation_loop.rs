@@ -241,11 +241,7 @@ mod test {
                     },
                 ),
             ]),
-            post_isolation_duration: 0.0,
-            uptake_probability: 0.0,
-            maximum_uptake_delay: 0.0,
-            facemask_transmission_modifier: 0.0,
-            isolation_transmission_modifier: 0.0,
+            isolation_policy_parameters: HashMap::new(),
         };
         context.init_random(parameters.seed);
         context
