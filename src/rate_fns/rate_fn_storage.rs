@@ -53,13 +53,13 @@ impl InfectiousnessRateExt for Context {
         let id = self.get_parameter_id(RateFn, person_id);
         // Get if the person is symptomatic or not and chose rates accordingly if we have separate
         // asymptomatic rates loaded
-        let separate_asymptomatic_rates = self.get_params().asymptomatic_rate_fn.is_some();
+        let asymptomatic_rates_specified = self.get_params().asymptomatic_rate_fn.is_some();
         let InfectionDataValue::Infectious { symptomatic, .. } =
             self.get_person_property(person_id, InfectionData)
         else {
             panic!("Person {person_id} is not infectious")
         };
-        if symptomatic || !separate_asymptomatic_rates {
+        if symptomatic || !asymptomatic_rates_specified {
             // If the person is symptomatic, use the symptomatic rate functions
             container.rates[id].as_ref()
         } else {
@@ -96,9 +96,9 @@ pub fn load_rate_fns(context: &mut Context) -> Result<(), IxaError> {
         else {
             panic!("Person {person_id} is not infectious")
         };
-        let separate_asymptomatic_rates = context.get_params().asymptomatic_rate_fn.is_some();
+        let asymptomatic_rates_specified = context.get_params().asymptomatic_rate_fn.is_some();
         let container = context.get_data_container(RateFnPlugin).unwrap();
-        if symptomatic || !separate_asymptomatic_rates {
+        if symptomatic || !asymptomatic_rates_specified {
             let len = container.rates.len();
             context.sample_range(InfectiousnessRng, 0..len)
         } else {

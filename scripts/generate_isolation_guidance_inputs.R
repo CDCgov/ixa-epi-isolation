@@ -139,9 +139,18 @@ write_csv(trajectories,
 
 # We need rate functions for asymptomatics. For now, we just use category 3 & 4
 # trajectories for these individuals. This needs more scientific consideration
-# because doing so implicitly assigns asymptomatics an incubation period because
-# we need that quantity to convert the rate functions to be in terms of time
-# since infection rather than time since symptom onset.
+# because doing so implicitly makes an assumption that asymptomatics have the
+# same latent period as the symptomatic individuals in categories 3 & 4.
+# This also has the side-effect consequence of implicitly assigning incubation
+# periods to asymptomatics -- a meaningless quantity -- because we use the
+# latent period to convert the rate functions to be in terms of time since
+# infection rather than time since symptom onset.
+
+# Nevertheless, the key point is that our isolation guidance work was not meant
+# to be used for asymptomatics, yet here we are doing just that. We should be
+# careful about how we interpret the results of modeling asymptomatics and
+# any efforts to revise these assumptions may be valuable.
+
 cat_34_ids <- sampled_params |>
   dplyr::filter(symp_type_cat %in% c(3, 4)) |>
   dplyr::pull(id)
