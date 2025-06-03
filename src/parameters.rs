@@ -49,10 +49,15 @@ pub struct Params {
     pub max_time: f64,
     /// The random seed for the simulation.
     pub seed: u64,
-    /// A library of infection rates to assign to infected people.
+    /// A library of infection rates to assign to infected people. Used for asymptomatics as well if
+    /// no separate asymptomatic rate function is provided.
     pub infectiousness_rate_fn: RateFnType,
-    /// A library of symptom progressions
+    /// A library of symptom progressions.
     pub symptom_progression_library: Option<ProgressionLibraryType>,
+    /// The fraction of infected individuals that are asymptomatic.
+    pub fraction_asymptomatic: f64,
+    /// The rate functions for asymptomatic individuals, if different from those for symptomatics.
+    pub asymptomatic_rate_fn: Option<RateFnType>,
     /// The period at which to report tabulated values
     pub report_period: f64,
     /// Setting properties by setting type
@@ -74,27 +79,19 @@ fn validate_inputs(parameters: &Params) -> Result<(), IxaError> {
             "The report writing period must be non-negative.".to_string(),
         ));
     }
-    match parameters.infectiousness_rate_fn {
-        RateFnType::Constant { rate, duration } => {
-            if rate < 0.0 {
-                return Err(IxaError::IxaError(
-                    "The infectiousness rate must be non-negative.".to_string(),
-                ));
-            }
-            if duration < 0.0 {
-                return Err(IxaError::IxaError(
-                    "The infectiousness duration must be non-negative.".to_string(),
-                ));
-            }
-        }
-        RateFnType::EmpiricalFromFile { scale, .. } => {
-            if scale < 0.0 {
-                return Err(IxaError::IxaError(
-                    "The empirical rate function infectiousness scale must be non-negative."
-                        .to_string(),
-                ));
-            }
-        }
+
+    // Check the infectiousness rate functions
+    check_rate_fn(&parameters.infectiousness_rate_fn)?;
+
+    if let Some(asymptomatic_rate_fn) = &parameters.asymptomatic_rate_fn {
+        check_rate_fn(asymptomatic_rate_fn)?;
+    }
+
+    if !(0.0..=1.0).contains(&parameters.fraction_asymptomatic) {
+        return Err(IxaError::IxaError(
+            "The fraction of asymptomatic individuals must be between 0 and 1, inclusive."
+                .to_string(),
+        ));
     }
 
     // If all the itinerary ratios are None, we can't validate them.
@@ -144,6 +141,33 @@ fn validate_inputs(parameters: &Params) -> Result<(), IxaError> {
     Ok(())
 }
 
+fn check_rate_fn(rate_fn: &RateFnType) -> Result<(), IxaError> {
+    match rate_fn {
+        RateFnType::Constant { rate, duration } => {
+            if *rate < 0.0 {
+                return Err(IxaError::IxaError(
+                    "The infectiousness rate must be non-negative.".to_string(),
+                ));
+            }
+            if *duration < 0.0 {
+                return Err(IxaError::IxaError(
+                    "The infectiousness duration must be non-negative.".to_string(),
+                ));
+            }
+        }
+        RateFnType::EmpiricalFromFile { scale, .. } => {
+            if *scale < 0.0 {
+                return Err(IxaError::IxaError(
+                    "The empirical rate function infectiousness scale must be non-negative."
+                        .to_string(),
+                ));
+            }
+        }
+    }
+
+    Ok(())
+}
+
 define_global_property!(GlobalParams, Params, validate_inputs);
 
 pub trait ContextParametersExt {
@@ -190,6 +214,8 @@ mod test {
                 duration: 5.0,
             },
             symptom_progression_library: None,
+            fraction_asymptomatic: 0.5,
+            asymptomatic_rate_fn: None,
             report_period: 1.0,
             synth_population_file: PathBuf::from("."),
             transmission_report_name: None,
@@ -216,6 +242,8 @@ mod test {
                 duration: 5.0,
             },
             symptom_progression_library: None,
+            fraction_asymptomatic: 0.5,
+            asymptomatic_rate_fn: None,
             report_period: 1.0,
             synth_population_file: PathBuf::from("."),
             transmission_report_name: None,
@@ -245,6 +273,8 @@ mod test {
                 duration: 5.0,
             },
             symptom_progression_library: None,
+            fraction_asymptomatic: 0.5,
+            asymptomatic_rate_fn: None,
             report_period: 1.0,
             synth_population_file: PathBuf::from("."),
             transmission_report_name: None,
@@ -293,6 +323,8 @@ mod test {
                 duration: 5.0,
             },
             symptom_progression_library: None,
+            fraction_asymptomatic: 0.5,
+            asymptomatic_rate_fn: None,
             report_period: 1.0,
             synth_population_file: PathBuf::from("."),
             transmission_report_name: None,
@@ -344,6 +376,8 @@ mod test {
                 duration: 5.0,
             },
             symptom_progression_library: None,
+            fraction_asymptomatic: 0.5,
+            asymptomatic_rate_fn: None,
             report_period: 1.0,
             synth_population_file: PathBuf::from("."),
             transmission_report_name: None,
@@ -379,6 +413,8 @@ mod test {
                 duration: 5.0,
             },
             symptom_progression_library: None,
+            fraction_asymptomatic: 0.5,
+            asymptomatic_rate_fn: None,
             report_period: 1.0,
             synth_population_file: PathBuf::from("."),
             transmission_report_name: None,
@@ -418,5 +454,63 @@ mod test {
                 duration: 5.0
             }
         );
+    }
+
+    #[test]
+    fn test_fraction_asymptomatic() {
+        let get_parameters = |fraction_asymptomatic| Params {
+            initial_infections: 1,
+            max_time: 100.0,
+            seed: 0,
+            infectiousness_rate_fn: RateFnType::Constant {
+                rate: 1.0,
+                duration: 5.0,
+            },
+            symptom_progression_library: None,
+            fraction_asymptomatic,
+            asymptomatic_rate_fn: None,
+            report_period: 1.0,
+            synth_population_file: PathBuf::from("."),
+            transmission_report_name: None,
+            settings_properties: HashMap::new(),
+        };
+        // Should pass
+        let parameters = get_parameters(1.0);
+        validate_inputs(&parameters)
+            .expect("Expected validation to pass for fraction_asymptomatic = 1.0");
+        // Should pass
+        let parameters = get_parameters(0.0);
+        validate_inputs(&parameters)
+            .expect("Expected validation to pass for fraction_asymptomatic = 0.0");
+        // Should pass
+        let parameters = get_parameters(0.5);
+        validate_inputs(&parameters)
+            .expect("Expected validation to pass for fraction_asymptomatic = 0.5");
+        // Should fail
+        let parameters = get_parameters(-1.0);
+        let e = validate_inputs(&parameters).err();
+        match e {
+            Some(IxaError::IxaError(msg)) => {
+                assert_eq!(msg, "The fraction of asymptomatic individuals must be between 0 and 1, inclusive.".to_string());
+            }
+            Some(ue) => panic!(
+                "Expected an error that the fraction of asymptomatic individuals validation should fail. Instead got {:?}",
+                ue.to_string()
+            ),
+            None => panic!("Expected an error. Instead, validation passed with no errors."),
+        }
+        // Should fail
+        let parameters = get_parameters(1.1);
+        let e = validate_inputs(&parameters).err();
+        match e {
+            Some(IxaError::IxaError(msg)) => {
+                assert_eq!(msg, "The fraction of asymptomatic individuals must be between 0 and 1, inclusive.".to_string());
+            }
+            Some(ue) => panic!(
+                "Expected an error that the fraction of asymptomatic individuals validation should fail. Instead got {:?}",
+                ue.to_string()
+            ),
+            None => panic!("Expected an error. Instead, validation passed with no errors."),
+        }
     }
 }

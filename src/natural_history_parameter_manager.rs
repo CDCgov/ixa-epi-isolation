@@ -334,6 +334,8 @@ mod test {
             symptom_progression_library: Some(ProgressionLibraryType::EmpiricalFromFile {
                 file: PathBuf::from("./input/library_symptom_parameters.csv"),
             }),
+            fraction_asymptomatic: 0.0,
+            asymptomatic_rate_fn: None,
             report_period: 1.0,
             synth_population_file: PathBuf::from("."),
             transmission_report_name: None,
@@ -350,10 +352,10 @@ mod test {
         // init because otherwise it panics that the people module has not been initialized?
         context.infect_person(person, None, None, None);
 
-        // Initialize symptoms -- reads in the symptom progression library
-        load_rate_fns(&mut context).unwrap();
-        crate::symptom_progression::init(&mut context).unwrap();
         // Read in the rate function library
+        load_rate_fns(&mut context).unwrap();
+        // Initialize symptoms -- reads in the symptom progression library
+        crate::symptom_progression::init(&mut context).unwrap();
 
         // See if the person's symptom id is the same as their rate function id
         assert_eq!(

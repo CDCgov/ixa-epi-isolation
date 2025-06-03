@@ -8,6 +8,7 @@ use ixa::{
 use serde::{Deserialize, Serialize};
 use statrs::distribution::Weibull;
 
+use crate::infectiousness_manager::{InfectionData, InfectionDataValue};
 use crate::natural_history_parameter_manager::ContextNaturalHistoryParameterExt;
 use crate::parameters::ContextParametersExt;
 use crate::rate_fns::RateFn;
@@ -224,11 +225,20 @@ fn event_subscriptions(context: &mut Context) {
     context.subscribe_to_event(
         |context, event: PersonPropertyChangeEvent<InfectionStatus>| {
             if event.current == InfectionStatusValue::Infectious {
-                context.set_person_property(
-                    event.person_id,
-                    Symptoms,
-                    Some(SymptomValue::Presymptomatic),
-                );
+                // Have we assigned this person to be symptomatic when we assigned their infection
+                // data when infecting them?
+                let InfectionDataValue::Infectious { symptomatic, .. } =
+                    context.get_person_property(event.person_id, InfectionData)
+                else {
+                    panic!("Person {:?} is not infectious", event.person_id)
+                };
+                if symptomatic {
+                    context.set_person_property(
+                        event.person_id,
+                        Symptoms,
+                        Some(SymptomValue::Presymptomatic),
+                    );
+                }
             }
         },
     );
@@ -242,6 +252,7 @@ mod test {
     use crate::{
         infectiousness_manager::InfectionContextExt,
         parameters::{GlobalParams, RateFnType},
+        population_loader::Alive,
         property_progression_manager::Progression,
         rate_fns::load_rate_fns,
         symptom_progression::{
@@ -257,7 +268,7 @@ mod test {
     };
     use statrs::assert_almost_eq;
 
-    fn setup() -> Context {
+    fn setup(fraction_asymptomatic: f64) -> Context {
         let mut context = Context::new();
         let parameters = Params {
             initial_infections: 3,
@@ -268,6 +279,8 @@ mod test {
                 duration: 5.0,
             },
             symptom_progression_library: None,
+            fraction_asymptomatic,
+            asymptomatic_rate_fn: None,
             report_period: 1.0,
             synth_population_file: PathBuf::from("."),
             transmission_report_name: None,
@@ -297,7 +310,7 @@ mod test {
 
     #[test]
     fn test_schedule_recovery() {
-        let context = setup();
+        let context = setup(0.0);
         let symptom_data = SymptomData {
             category: SymptomValue::Category1,
             incubation_period: 5.0,
@@ -317,7 +330,7 @@ mod test {
             incubation_period: 5.0,
             time_to_symptom_improvement: RightTruncatedWeibull::new(2.0, 3.0, 28.0).unwrap(),
         };
-        let mut context = setup();
+        let mut context = setup(0.0);
         let person = context.add_person(()).unwrap();
         let presymptomatic_next =
             symptom_data.next(&context, person, Some(SymptomValue::Presymptomatic));
@@ -335,7 +348,7 @@ mod test {
 
     #[test]
     fn test_event_subscriptions() {
-        let mut context = setup();
+        let mut context = setup(0.0);
         let person = context.add_person(()).unwrap();
         event_subscriptions(&mut context);
         context.infect_person(person, None, None, None);
@@ -349,7 +362,7 @@ mod test {
 
     #[test]
     fn test_init() {
-        let mut context = setup();
+        let mut context = setup(0.0);
         let person = context.add_person(()).unwrap();
         init(&mut context).unwrap();
         context.infect_person(person, None, None, None);
@@ -435,7 +448,7 @@ mod test {
 
     #[test]
     fn test_register_vecs_not_right_size() {
-        let mut context = setup();
+        let mut context = setup(0.0);
         let parameter_names = vec!["Category1".to_string(), "Category2".to_string()];
         let parameters = vec![1.0, 2.0];
         let e = SymptomData::register(&mut context, parameter_names, parameters).err();
@@ -456,7 +469,7 @@ mod test {
 
     #[test]
     fn test_register_error_symptom_category() {
-        let mut context = setup();
+        let mut context = setup(0.0);
         let parameter_names = vec![
             "Symptom category".to_string(),
             "a".to_string(),
@@ -480,7 +493,7 @@ mod test {
 
     #[test]
     fn test_register_incubation_period_not_positive() {
-        let mut context = setup();
+        let mut context = setup(0.0);
         let parameter_names = vec![
             "Symptom category".to_string(),
             "Incubation period".to_string(),
@@ -504,7 +517,7 @@ mod test {
 
     #[test]
     fn test_register_wrong_param_names() {
-        let mut context = setup();
+        let mut context = setup(0.0);
         let parameter_names = vec![
             "Symptom category".to_string(),
             "Outcubation rate".to_string(),
@@ -528,7 +541,7 @@ mod test {
 
     #[test]
     fn test_register_produces_right_symptom_data() {
-        let mut context = setup();
+        let mut context = setup(0.0);
         let parameter_names = vec![
             "Symptom category".to_string(),
             "Incubation period".to_string(),
@@ -555,5 +568,43 @@ mod test {
                 assert!(ctx.get_current_time() < 5.0 + 4.0);
             }
         });
+    }
+
+    #[test]
+    #[allow(clippy::cast_precision_loss)]
+    fn test_right_proportion_becomes_symptomatic() {
+        // If we infect 1000 people 100 times, we should see that the proportion of people
+        // who become symptomatic follows a binomial distribution with probability parameter
+        // equal to the fraction of people who are symptomatic.
+        let mut num_people_symptomatic_total = 0;
+        let num_people = 1000;
+        let num_sims = 100;
+        let symptomatic_rate = 0.4; // 40% of people should be symptomatic
+        for seed in 0..num_sims {
+            let mut context = setup(1.0 - symptomatic_rate);
+            context.init_random(seed);
+            // Add our people
+            for _ in 0..num_people {
+                // 1000 people
+                context.add_person(()).unwrap();
+            }
+            event_subscriptions(&mut context);
+            // Infect all of the people -- triggering the event subscriptions if they are symptomatic
+            for person in context.query_people((Alive, true)) {
+                context.infect_person(person, None, None, None);
+            }
+            context.execute();
+            // Get the number of people in the context who are symptomatic
+            let symptomatic_count =
+                context.query_people_count((Symptoms, Some(SymptomValue::Presymptomatic)));
+            num_people_symptomatic_total += symptomatic_count;
+        }
+        // Check that the proportion of people who are symptomatic is close to the expected
+        // proportion
+        assert_almost_eq!(
+            num_people_symptomatic_total as f64 / (num_people * num_sims) as f64,
+            symptomatic_rate,
+            0.01
+        );
     }
 }
