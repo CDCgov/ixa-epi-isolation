@@ -9,6 +9,7 @@ pub mod rate_fns;
 mod settings;
 mod symptom_progression;
 mod transmission_report;
+mod updated_guidance;
 pub mod utils;
 
 use infectiousness_manager::InfectionStatus;
@@ -59,6 +60,7 @@ fn main() {
         infection_propagation_loop::init(context)?;
         transmission_report::init(context)?;
         symptom_progression::init(context)?;
+        updated_guidance::init(context);
 
         Ok(())
     })

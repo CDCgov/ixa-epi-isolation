@@ -269,6 +269,9 @@ mod test {
                     transmission_report_name: None,
                     // We set the itineraries manually in `set_homogeneous_mixing_itinerary`.
                     settings_properties: HashMap::new(),
+                    post_isolation_duration: 0.0,
+                    uptake_probability: 0.0,
+                    maximum_uptake_delay: 0.0,
                 },
             )
             .unwrap();
