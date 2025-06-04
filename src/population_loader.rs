@@ -158,9 +158,7 @@ mod test {
                     },
                 ),
             ]),
-            post_isolation_duration: 0.0,
-            uptake_probability: 0.0,
-            maximum_uptake_delay: 0.0,
+            isolation_policy_parameters: HashMap::new(),
         };
         context
             .set_global_property_value(GlobalParams, parameters)
