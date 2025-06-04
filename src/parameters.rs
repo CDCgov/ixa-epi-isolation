@@ -40,6 +40,13 @@ pub enum ItinerarySpecificationType {
     Constant { ratio: f64 },
 }
 
+#[derive(Debug, Serialize, Deserialize, Clone, Copy)]
+pub struct IsolationParameters {
+    pub post_isolation_duration: f64,
+    pub uptake_probability: f64,
+    pub maximum_uptake_delay: f64,    
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Params {
     /// The number of infections we seed the population with.
@@ -61,7 +68,7 @@ pub struct Params {
     pub synth_population_file: PathBuf,
     /// The path to the transmission report file
     pub transmission_report_name: Option<String>,
-    pub isolation_policy_parameters: HashMap<String, f64>,
+    pub isolation_policy_parameters: IsolationParameters,
 }
 
 fn validate_inputs(parameters: &Params) -> Result<(), IxaError> {

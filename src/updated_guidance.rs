@@ -6,7 +6,7 @@ use ixa::{
 use statrs::distribution::Uniform;
 
 use crate::{
-    parameters::ContextParametersExt,
+    parameters::{ContextParametersExt, IsolationParameters, Params},
     settings::{
         CensusTract, ContextSettingExt, Home, ItineraryEntry, ItineraryModifiers, SettingId,
     },
@@ -28,42 +28,32 @@ define_derived_property!(Symptomatic, Option<bool>, [Symptoms], |data| match dat
 define_rng!(PolicyRng);
 
 pub fn init(context: &mut Context) {
-    let isolation_policy = context.get_params().isolation_policy_parameters.clone();
+    let &Params {
+        isolation_policy_parameters, ..
+    }  = context.get_params();
 
+    let IsolationParameters {
+        post_isolation_duration,
+        uptake_probability,
+        maximum_uptake_delay,..
+    } = isolation_policy_parameters;
+    
     setup_isolation_guidance_event_sequence(
         context,
-        *isolation_policy.get("post_isolation_duration").unwrap(),
-        *isolation_policy.get("uptake_probability").unwrap(),
-        *isolation_policy.get("maximum_uptake_delay").unwrap(),
+        post_isolation_duration,
+        uptake_probability,
+        maximum_uptake_delay,
     );
 }
 
-fn mask_person(context: &mut Context, person: PersonId, masking_status: bool) {
-    if masking_status {
-        // let home_id = context.get_setting_id(person, &Home);
-        let isolation_itinerary = vec![
-            ItineraryEntry::new(SettingId::new(&Home, 0), 0.5),
-            ItineraryEntry::new(SettingId::new(&CensusTract, 0), 0.5),
-        ];
-        let _ = context.modify_itinerary(
-            person,
-            ItineraryModifiers::ReplaceWith {
-                itinerary: isolation_itinerary,
-            },
-        );
-
-        context.set_person_property(person, MaskingStatus, true);
-    } else {
-        let _ = context.remove_modified_itinerary(person);
-        context.set_person_property(person, MaskingStatus, false);
-    }
-}
-
-fn isolate_person(context: &mut Context, person: PersonId, isolation_status: bool) {
+// TODO: should this be a trait extension? 
+fn modify_isolation_status(context: &mut Context, person: PersonId, isolation_status: bool) {
     if isolation_status {
         let _ = context.modify_itinerary(person, ItineraryModifiers::Include { setting: &Home });
         context.set_person_property(person, IsolatingStatus, true);
     } else {
+        // Todo: What would happen if the person had been removed from isolation from somewhere else?
+        // e.g., going to the hospital. 
         let _ = context.remove_modified_itinerary(person);
         context.set_person_property(person, IsolatingStatus, false);
     }
@@ -80,31 +70,33 @@ fn setup_isolation_guidance_event_sequence(
             Some(false) => (),
             Some(true) => {
                 if context.sample_bool(PolicyRng, uptake_probability) {
-                    let uniform = Uniform::new(0.0, maximum_uptake_delay).unwrap();
-                    let delay_period = context.sample_distr(PolicyRng, uniform);
-                    let t = context.get_current_time();
-                    context.add_plan(t + delay_period, move |context| {
+                    // Todo: replace with distribution if needed
+                    // TOdo: rename this parameter
+                    let delay_period = maximum_uptake_delay;
+                    context.add_plan(context.get_current_time() + delay_period,
+                        move |context| {
                         if context
                             .get_person_property(event.person_id, Symptoms)
                             .is_some()
                         {
-                            isolate_person(context, event.person_id, true);
+                            modify_isolation_status(context, event.person_id, true);
                             trace!("Person {} is now isolating", event.person_id);
                         }
                     });
                 }
             }
+            // Based on symptoms module, None means that a person had symptoms and they have improved already
             None => {
                 if context.get_person_property(event.person_id, IsolatingStatus) {
-                    isolate_person(context, event.person_id, false);
-                    mask_person(context, event.person_id, true);
+                    modify_isolation_status(context, event.person_id, false);
+                    context.set_person_property(event.person_id, MaskingStatus, true);                    
                     trace!(
                         "Person {} is now masking and no longer isolating",
                         event.person_id
                     );
                     let t = context.get_current_time();
                     context.add_plan(t + post_isolation_duration, move |context| {
-                        mask_person(context, event.person_id, false);
+                        context.set_person_property(event.person_id, MaskingStatus, false);
                         trace!("Person {} is now no longer masking", event.person_id);
                     });
                 }
