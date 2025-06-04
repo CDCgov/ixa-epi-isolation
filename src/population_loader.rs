@@ -158,6 +158,7 @@ mod test {
                     },
                 ),
             ]),
+            isolation_policy_parameters: HashMap::new(),
         };
         context
             .set_global_property_value(GlobalParams, parameters)

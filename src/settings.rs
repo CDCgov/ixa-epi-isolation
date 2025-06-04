@@ -1386,6 +1386,7 @@ mod test {
                     }),
                 },
             )]),
+            isolation_policy_parameters: HashMap::new(),
         };
 
         context

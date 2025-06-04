@@ -61,6 +61,18 @@ pub struct Params {
     pub synth_population_file: PathBuf,
     /// The path to the transmission report file
     pub transmission_report_name: Option<String>,
+    pub isolation_policy_parameters: HashMap<String, f64>,
+    // /// The duration that an individual will follow post-isolation precautions
+    // /// following the updated isolation guidance.
+    // pub post_isolation_duration: f64,
+    // /// The probability that an individual will follow the updated isolation guidance.
+    // pub uptake_probability: f64,
+    // /// The maximum delay before an individual will follow the guidance
+    // pub maximum_uptake_delay: f64,
+    // /// Transmission modifier associated with the facemask intervention
+    // pub facemask_transmission_modifier: f64,
+    // /// Transmission modifier associated with the isolation intervention
+    // pub isolation_transmission_modifier: f64,
 }
 
 fn validate_inputs(parameters: &Params) -> Result<(), IxaError> {
@@ -194,6 +206,7 @@ mod test {
             synth_population_file: PathBuf::from("."),
             transmission_report_name: None,
             settings_properties: HashMap::new(),
+            isolation_policy_parameters: HashMap::new(),
         };
         context
             .set_global_property_value(GlobalParams, parameters)
@@ -220,6 +233,7 @@ mod test {
             synth_population_file: PathBuf::from("."),
             transmission_report_name: None,
             settings_properties: HashMap::new(),
+            isolation_policy_parameters: HashMap::new(),
         };
         let e = validate_inputs(&parameters).err();
         match e {
@@ -268,6 +282,7 @@ mod test {
                     },
                 ),
             ]),
+            isolation_policy_parameters: HashMap::new(),
         };
         let e = validate_inputs(&parameters).err();
         match e {
@@ -316,6 +331,7 @@ mod test {
                     },
                 ),
             ]),
+            isolation_policy_parameters: HashMap::new(),
         };
         let e = validate_inputs(&parameters).err();
         match e {
@@ -363,6 +379,7 @@ mod test {
                     },
                 ),
             ]),
+            isolation_policy_parameters: HashMap::new(),
         };
         let e = validate_inputs(&parameters).err();
         assert!(e.is_none(), "Expected no error, but got: {e:?}");
@@ -400,6 +417,7 @@ mod test {
                     },
                 ),
             ]),
+            isolation_policy_parameters: HashMap::new(),
         };
         let e = validate_inputs(&parameters).err();
         assert!(e.is_none(), "Expected no error, but got: {e:?}");

@@ -181,6 +181,7 @@ mod test {
                     },
                 ),
             ]),
+            isolation_policy_parameters: HashMap::new(),
         };
         context.init_random(parameters.seed);
         context
@@ -475,6 +476,7 @@ mod test {
         let num_sims: u64 = 1000;
         let rate = 1.5;
         let alpha = 0.42;
+        let duration = 5.0;
 
         // ratios is a matrix of ratio values for the three settings. The first value in each row
         // corresponds to the home setting, the second to the census tract setting, and the third to
@@ -503,7 +505,7 @@ mod test {
                 let num_infected_home_clone = Rc::clone(&num_infected_home);
                 let num_infected_cenustract_clone = Rc::clone(&num_infected_censustract);
                 let num_infected_workplace_clone = Rc::clone(&num_infected_workplace);
-                let mut context = setup_context(seed, rate, alpha, 5.0);
+                let mut context = setup_context(seed, rate, alpha, duration);
                 settings_init(&mut context);
 
                 // Add a a person who will get infected.

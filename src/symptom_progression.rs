@@ -272,6 +272,7 @@ mod test {
             synth_population_file: PathBuf::from("."),
             transmission_report_name: None,
             settings_properties: HashMap::new(),
+            isolation_policy_parameters: HashMap::new(),
         };
         context.init_random(parameters.seed);
         context
