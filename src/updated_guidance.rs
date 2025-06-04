@@ -187,18 +187,15 @@ mod test {
 
         let start_time_symptoms = Rc::new(RefCell::new(0.0f64));
         let end_time_symptoms = Rc::new(RefCell::new(0.0f64));
-        let start_time_isolation = Rc::new(RefCell::new(0.0f64));
-        let end_time_isolation = Rc::new(RefCell::new(0.0f64));
-        let start_time_masking = Rc::new(RefCell::new(0.0f64));
-        let end_time_masking = Rc::new(RefCell::new(0.0f64));
 
-        let start_time_symptoms_clone = Rc::clone(&start_time_symptoms);
-        let end_time_symptoms_clone = Rc::clone(&end_time_symptoms);
-        let start_time_isolation_clone = Rc::clone(&start_time_isolation);
-        let end_time_isolation_clone = Rc::clone(&end_time_isolation);
-        let start_time_masking_clone = Rc::clone(&start_time_masking);
-        let end_time_masking_clone = Rc::clone(&end_time_masking);
+        let start_time_symptoms_clone1 = Rc::clone(&start_time_symptoms);
+        let end_time_symptoms_clone1 = Rc::clone(&end_time_symptoms);
         context.subscribe_to_event::<PersonPropertyChangeEvent<Symptoms>>(move |context, event| {
+            println!(
+                "symptom time: {}, event.current: {:?}",
+                context.get_current_time(),
+                event.current
+            );
             match event.current {
                 Some(SymptomValue::Presymptomatic) => (),
                 Some(
@@ -207,28 +204,56 @@ mod test {
                     | SymptomValue::Category3
                     | SymptomValue::Category4,
                 ) => {
-                    *start_time_symptoms_clone.borrow_mut() = context.get_current_time();
+                    *start_time_symptoms_clone1.borrow_mut() = context.get_current_time();
                 }
                 None => {
-                    *end_time_symptoms_clone.borrow_mut() = context.get_current_time();
+                    *end_time_symptoms_clone1.borrow_mut() = context.get_current_time();
                 }
             }
         });
+
+        let start_time_symptoms_clone2 = Rc::clone(&start_time_symptoms);
+        let end_time_symptoms_clone2 = Rc::clone(&end_time_symptoms);
         context.subscribe_to_event::<PersonPropertyChangeEvent<IsolatingStatus>>(
             move |context, event| {
+                println!(
+                    "isolation time: {}, event.current: {:?}",
+                    context.get_current_time(),
+                    event.current
+                );
                 if event.current {
-                    *start_time_isolation_clone.borrow_mut() = context.get_current_time();
+                    assert!(
+                        context.get_current_time() - *start_time_symptoms_clone2.borrow()
+                            <= maximum_uptake_delay
+                    );
                 } else {
-                    *end_time_isolation_clone.borrow_mut() = context.get_current_time();
+                    assert_eq!(
+                        context.get_current_time(),
+                        *end_time_symptoms_clone2.borrow()
+                    );
                 }
             },
         );
+
+        let end_time_symptoms_clone3 = Rc::clone(&end_time_symptoms);
         context.subscribe_to_event::<PersonPropertyChangeEvent<MaskingStatus>>(
             move |context, event| {
+                println!(
+                    "masking time: {}, event.current: {:?}",
+                    context.get_current_time(),
+                    event.current
+                );
                 if event.current {
-                    *start_time_masking_clone.borrow_mut() = context.get_current_time();
+                    //assert size of populatin masking equals the size of thep population masking
+                    assert_eq!(
+                        context.get_current_time(),
+                        *end_time_symptoms_clone3.borrow()
+                    );
                 } else {
-                    *end_time_masking_clone.borrow_mut() = context.get_current_time();
+                    assert_eq!(
+                        context.get_current_time(),
+                        *end_time_symptoms_clone3.borrow() + post_isolation_duration
+                    );
                 }
             },
         );
@@ -239,14 +264,14 @@ mod test {
         context.infect_person(p1, None, None, None);
         context.execute();
 
-        let delay = start_time_symptoms.take() - start_time_isolation.take();
+        // let delay = start_time_symptoms.take() - start_time_isolation.take();
 
-        assert!(delay <= maximum_uptake_delay,);
-        assert_eq!(*end_time_symptoms.borrow(), *end_time_isolation.borrow(),);
-        assert_eq!(*start_time_masking.borrow(), *end_time_symptoms.borrow(),);
-        assert_eq!(
-            *end_time_masking.borrow(),
-            *start_time_masking.borrow() + post_isolation_duration
-        );
+        // assert!(delay <= maximum_uptake_delay,);
+        // assert_eq!(*end_time_symptoms.borrow(), *end_time_isolation.borrow(),);
+        // assert_eq!(*start_time_masking.borrow(), *end_time_symptoms.borrow(),);
+        // assert_eq!(
+        //     *end_time_masking.borrow(),
+        //     *start_time_masking.borrow() + post_isolation_duration
+        // );
     }
 }
