@@ -167,6 +167,7 @@ mod test {
                 "synth_population_file": "input/people_test.csv",
                 "transmission_report_name": "output.csv",
                 "isolation_policy_parameters": {}
+                }
             }
         "#;
         let mut context = setup_context_from_str(params_json);
