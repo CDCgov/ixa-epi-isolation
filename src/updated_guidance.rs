@@ -6,14 +6,14 @@ use ixa::{
 use statrs::distribution::Uniform;
 
 use crate::{
-    parameters::{ContextParametersExt, Params},
+    parameters::ContextParametersExt,
     settings::{
         CensusTract, ContextSettingExt, Home, ItineraryEntry, ItineraryModifiers, SettingId,
     },
     symptom_progression::{SymptomValue, Symptoms},
 };
 
-define_person_property_with_default!(SocialDistanceStatus, bool, false);
+define_person_property_with_default!(MaskingStatus, bool, false);
 define_person_property_with_default!(IsolatingStatus, bool, false);
 define_derived_property!(Symptomatic, Option<bool>, [Symptoms], |data| match data {
     Some(SymptomValue::Presymptomatic) => Some(false),
@@ -28,31 +28,18 @@ define_derived_property!(Symptomatic, Option<bool>, [Symptoms], |data| match dat
 define_rng!(PolicyRng);
 
 pub fn init(context: &mut Context) {
-    let &Params {
-        post_isolation_duration,
-        uptake_probability,
-        maximum_uptake_delay,
-        ..
-    } = context.get_params();
+    let isolation_policy = context.get_params().isolation_policy_parameters.clone();
 
-    // println!(
-    //     "Isolation guidance parameters: post_isolation_duration: {}, uptake_probability: {}, maximum_uptake_delay: {}, facemask_transmission_modifier: {}, isolation_transmission_modifier: {}",
-    //     post_isolation_duration,
-    //     uptake_probability,
-    //     maximum_uptake_delay,
-    //     facemask_transmission_modifier,
-    //     isolation_transmission_modifier,
-    // );
     setup_isolation_guidance_event_sequence(
         context,
-        post_isolation_duration,
-        uptake_probability,
-        maximum_uptake_delay,
+        *isolation_policy.get("post_isolation_duration").unwrap(),
+        *isolation_policy.get("uptake_probability").unwrap(),
+        *isolation_policy.get("maximum_uptake_delay").unwrap(),
     );
 }
 
-fn social_distance_person(context: &mut Context, person: PersonId, isolation_status: bool) {
-    if isolation_status {
+fn mask_person(context: &mut Context, person: PersonId, masking_status: bool) {
+    if masking_status {
         // let home_id = context.get_setting_id(person, &Home);
         let isolation_itinerary = vec![
             ItineraryEntry::new(SettingId::new(&Home, 0), 0.5),
@@ -60,21 +47,21 @@ fn social_distance_person(context: &mut Context, person: PersonId, isolation_sta
         ];
         let _ = context.modify_itinerary(
             person,
-            ItineraryModifiers::Replace {
+            ItineraryModifiers::ReplaceWith {
                 itinerary: isolation_itinerary,
             },
         );
 
-        context.set_person_property(person, SocialDistanceStatus, true);
+        context.set_person_property(person, MaskingStatus, true);
     } else {
         let _ = context.remove_modified_itinerary(person);
-        context.set_person_property(person, SocialDistanceStatus, false);
+        context.set_person_property(person, MaskingStatus, false);
     }
 }
 
-fn isolate_person(context: &mut Context, person: PersonId, social_distance_status: bool) {
-    if social_distance_status {
-        let _ = context.modify_itinerary(person, ItineraryModifiers::Isolate { setting: &Home });
+fn isolate_person(context: &mut Context, person: PersonId, isolation_status: bool) {
+    if isolation_status {
+        let _ = context.modify_itinerary(person, ItineraryModifiers::Include { setting: &Home });
         context.set_person_property(person, IsolatingStatus, true);
     } else {
         let _ = context.remove_modified_itinerary(person);
@@ -110,15 +97,15 @@ fn setup_isolation_guidance_event_sequence(
             None => {
                 if context.get_person_property(event.person_id, IsolatingStatus) {
                     isolate_person(context, event.person_id, false);
-                    social_distance_person(context, event.person_id, true);
+                    mask_person(context, event.person_id, true);
                     trace!(
-                        "Person {} is now social distancing and no longer isolating",
+                        "Person {} is now masking and no longer isolating",
                         event.person_id
                     );
                     let t = context.get_current_time();
                     context.add_plan(t + post_isolation_duration, move |context| {
-                        social_distance_person(context, event.person_id, false);
-                        trace!("Person {} is now not social distancing", event.person_id);
+                        mask_person(context, event.person_id, false);
+                        trace!("Person {} is now no longer masking", event.person_id);
                     });
                 }
             }
@@ -144,7 +131,7 @@ mod test {
         PersonPropertyChangeEvent,
     };
 
-    use super::{IsolatingStatus, SocialDistanceStatus};
+    use super::{IsolatingStatus, MaskingStatus};
 
     fn setup_context(
         post_isolation_duration: f64,
@@ -167,9 +154,17 @@ mod test {
             synth_population_file: PathBuf::from("."),
             transmission_report_name: None,
             settings_properties: HashMap::new(),
-            post_isolation_duration,
-            uptake_probability,
-            maximum_uptake_delay,
+            isolation_policy_parameters: [
+                (
+                    "post_isolation_duration".to_string(),
+                    post_isolation_duration,
+                ),
+                ("uptake_probability".to_string(), uptake_probability),
+                ("maximum_uptake_delay".to_string(), maximum_uptake_delay),
+            ]
+            .iter()
+            .cloned()
+            .collect(),
         };
         context.init_random(parameters.seed);
         context
@@ -228,7 +223,7 @@ mod test {
                 }
             },
         );
-        context.subscribe_to_event::<PersonPropertyChangeEvent<SocialDistanceStatus>>(
+        context.subscribe_to_event::<PersonPropertyChangeEvent<MaskingStatus>>(
             move |context, event| {
                 if event.current {
                     *start_time_masking_clone.borrow_mut() = context.get_current_time();
