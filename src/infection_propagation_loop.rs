@@ -1,6 +1,8 @@
+use core::f64;
+
 use crate::infectiousness_manager::{
     evaluate_forecast, get_forecast, infection_attempt, Forecast, InfectionContextExt,
-    InfectionStatus, InfectionStatusValue,
+    InfectionData, InfectionDataValue, InfectionStatus, InfectionStatusValue,
 };
 use crate::parameters::{ContextParametersExt, Params};
 use crate::rate_fns::{load_rate_fns, InfectiousnessRateExt};
@@ -86,11 +88,18 @@ fn seed_initial_infections(
 fn seed_initial_recovered(context: &mut Context, initial_recovered: usize) -> Result<(), IxaError> {
     trace!("Seeding initial recovered.");
     query_susceptibles_and_seed(context, initial_recovered, |context, person_id| {
-        // First immediately infect the person so that the infection data is properly set up
-        context.infect_person(person_id, None, None, None);
-        // Then recover them
         trace!("Recovering person {person_id} as an initial recovered.");
-        context.recover_person(person_id);
+        context.set_person_property(
+            person_id,
+            InfectionData,
+            InfectionDataValue::Recovered {
+                // If we choose to seed the population with people who are in various levels of "recovered"
+                // and include waning immunity based on that, we could changes these values to reflect
+                // when prior to simulation start an individual was actually infected/recovered.
+                infection_time: f64::NAN,
+                recovery_time: f64::NAN,
+            },
+        );
     })
 }
 
@@ -103,29 +112,23 @@ pub fn init(context: &mut Context) -> Result<(), IxaError> {
 
     load_rate_fns(context)?;
 
-    // First we seed recovered people. Since recovering people requires setting them as infectious
-    // first to set the infection data, this will trigger the `PersonPropertyChangeEvent` for people
-    // becoming infectious if we do this after setting up the event subscription. Instead, we do this
-    // first, so it happens silently.
+    // Seed initial infections and recovered
     context.add_plan(0.0, move |context| {
+        seed_initial_infections(context, initial_infections).unwrap();
         seed_initial_recovered(context, initial_recovered).unwrap();
     });
 
-    context.add_plan(0.0, |context| {
-        context.subscribe_to_event::<PersonPropertyChangeEvent<InfectionStatus>>(
-            |context, event| {
-                if event.current != InfectionStatusValue::Infectious {
-                    return;
-                }
-                schedule_next_forecasted_infection(context, event.person_id);
-                schedule_recovery(context, event.person_id);
-            },
-        );
-    });
+    // Subscribe to the person becoming infectious to trigger the infection propagation loop
+    context.subscribe_to_event(
+        |context, event: PersonPropertyChangeEvent<InfectionStatus>| {
+            if event.current != InfectionStatusValue::Infectious {
+                return;
+            }
+            schedule_next_forecasted_infection(context, event.person_id);
+            schedule_recovery(context, event.person_id);
+        },
+    );
 
-    context.add_plan(0.0, move |context| {
-        seed_initial_infections(context, initial_infections).unwrap();
-    });
     Ok(())
 }
 
@@ -341,16 +344,27 @@ mod test {
     #[test]
     fn test_zero_rate_no_infections() {
         let mut context = setup_context(0, 0.0, 1.0, 5.0, 1);
-        for _ in 0..=context.get_params().initial_infections {
+        let &Params {
+            initial_infections,
+            initial_recovered,
+            ..
+        } = context.get_params();
+
+        // This is just the number of people we need to have everybody as an initial infected or
+        // recovered
+        let initial_num_people = initial_infections + initial_recovered;
+
+        // Many more than the number of people we need to show that there are no infections
+        for _ in 0..(100 * initial_num_people) {
             context.add_person(()).unwrap();
         }
 
         init(&mut context).unwrap();
 
-        let num_new_infections = Rc::new(RefCell::new(0usize));
+        let num_new_infections = Rc::new(RefCell::new(0));
         let num_new_infections_clone = Rc::clone(&num_new_infections);
-        context.subscribe_to_event::<PersonPropertyChangeEvent<InfectionStatus>>(
-            move |_context, event| {
+        context.subscribe_to_event(
+            move |_context, event: PersonPropertyChangeEvent<InfectionStatus>| {
                 if event.current == InfectionStatusValue::Infectious {
                     *num_new_infections_clone.borrow_mut() += 1;
                 }
@@ -359,14 +373,13 @@ mod test {
 
         context.execute();
 
-        let &Params {
-            initial_infections,
-            initial_recovered,
-            ..
-        } = context.get_params();
+        // Make sure that the only people who pass through infectious are those that we seeded
+        // as the initial infectious
+        assert_eq!(*num_new_infections.borrow(), initial_infections,);
 
+        // And that recovereds is equal to the initial infectious (who have recovered) + recovered
         assert_eq!(
-            *num_new_infections.borrow(),
+            context.query_people_count((InfectionStatus, InfectionStatusValue::Recovered)),
             initial_infections + initial_recovered,
         );
     }
