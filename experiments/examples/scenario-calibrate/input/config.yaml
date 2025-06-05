@@ -1,0 +1,17 @@
+azb:
+  azure_batch: false
+experiment_conditions:
+  tolerance:
+    "0": 900
+    "1": 850
+  seed: 12345
+  scenario_key: epi_isolation.GlobalParams
+  samples_per_step: 3
+  replicates_per_particle: 5
+local_path:
+  default_params_file: experiments/examples/scenario-calibrate/input/base.json
+  griddle_file: experiments/examples/scenario-calibrate/input/griddle.json
+  exe_file: target/release/epi-isolation
+  sub_experiment_name: scenario-calibrate
+  super_experiment_name: examples
+  target_data_file: experiments/examples/scenario-calibrate/input/target_data.csv

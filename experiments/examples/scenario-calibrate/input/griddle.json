@@ -1,0 +1,7 @@
+{
+    "version": "v0.3",
+    "parameters": {
+        "settings_properties>>>Home>>>alpha" : {"vary": [0.5, 1.0]},
+        "settings_properties>>>Home>>>itinerary_specification>>>Constant>>>ratio": {"fix": 0.25}
+    }
+}
