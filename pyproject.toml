@@ -1,5 +1,5 @@
 [tool.poetry]
-name = "cfa-ixa-ebola-response-2025"
+name = "ixa-epi-isolation"
 package-mode = false
 
 [tool.poetry.dependencies]

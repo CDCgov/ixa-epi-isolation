@@ -16,6 +16,34 @@ def main(config_file: str):
         "settings_properties>>>Home>>>alpha": norm(0, 0.015),
     }
 
+    experiment = Experiment(
+        experiments_directory="experiments", config_file=config_file
+    )
+    wrappers.split_scenarios_into_subexperiments(experiment, scenario_key="epi_isolation.GlobalParams")
+
+    scenarios_dir = os.path.join(experiment.directory, "scenarios")
+    for scenario in os.listdir(scenarios_dir):
+        config_path = os.path.join(
+            scenarios_dir, scenario, "input", "config.yaml"
+        )
+        subexperiment = Experiment(
+            experiments_directory=experiment.directory,
+            config_file=config_path,
+        )
+        subexperiment.initialize_simbundle()
+
+        _simulation_data_frame = wrappers.create_simulation_data(
+            experiment = subexperiment, 
+            data_processing_fn = data_processing_fn
+        )
+        experiment.simulation_bundles.update({scenario: subexperiment.simulation_bundles[0]})
+
+        wrappers.write_scenario_products_to_data(        
+            scenario=scenario,
+            scenario_experiment=subexperiment,
+            experiment_data_path=experiment.data_path,
+            clean=True,
+        )
 
 # ----
 # Distance function section
@@ -74,11 +102,11 @@ def data_processing_fn(directory: str):
 
 parser = argparse.ArgumentParser()
 parser.add_argument(
-    "-f",
-    "--config-file",
+    "-i",
+    "--input-file",
     type=str,
     required=True,
-    help="Path to the configuration file.",
+    help="Path to the input configuration file.",
 )
 args = parser.parse_args()
-main(config_file=args.config_file)
+main(config_file=args.input_file)

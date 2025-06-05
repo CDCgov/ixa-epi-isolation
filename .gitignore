@@ -1,6 +1,7 @@
 #####
 # Exclude many data and output file types by default
 experiments/**/data
+experimetns/**/scenarios/
 
 # Data
 *.csv

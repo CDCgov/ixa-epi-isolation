@@ -14,4 +14,4 @@ local_path:
   exe_file: target/release/epi-isolation
   sub_experiment_name: scenario-calibrate
   super_experiment_name: examples
-  target_data_file: experiments/examples/scenario-calibrate/input/target_data.csv
+  target_data_file: output/person_property_count.csv
