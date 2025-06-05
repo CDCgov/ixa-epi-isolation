@@ -1,14 +1,15 @@
 import argparse
 import os
-import polars as pl
 
-from abmwrappers.experiment_class import Experiment
+import polars as pl
 from abmwrappers import wrappers
+from abmwrappers.experiment_class import Experiment
+
 
 def main(config_file):
     experiment = Experiment(
-        experiments_directory = "experiments",
-        config_file = config_file,
+        experiments_directory="experiments",
+        config_file=config_file,
     )
 
     # Initialize the simulation bundle for input storage
@@ -18,16 +19,19 @@ def main(config_file):
     for index in simulation_bundle.inputs["simulation"]:
         wrappers.products_from_inputs_index(
             index,
-            experiment = experiment,
-            data_processing_fn = return_count_only,
-            products=["simulations"]
+            experiment=experiment,
+            data_processing_fn=return_count_only,
+            products=["simulations"],
         )
 
     parquet_path = os.path.join(experiment.data_path, "simulations")
     simulation_df = pl.read_parquet(parquet_path)
     print(simulation_df)
 
-    simulation_df.filter((pl.col("t") > 5) & (pl.col("t") < 10)).write_csv(os.path.join(experiment.data_path, "filtered_results.csv"))
+    simulation_df.filter((pl.col("t") > 5) & (pl.col("t") < 10)).write_csv(
+        os.path.join(experiment.data_path, "filtered_results.csv")
+    )
+
 
 def return_count_only(directory: str):
     file_path = os.path.join(directory, "person_property_count.csv")
@@ -38,7 +42,14 @@ def return_count_only(directory: str):
 
     return df
 
+
 parser = argparse.ArgumentParser()
-parser.add_argument("-f", "--config-file", type=str, required=True, help="Path to the configuration file.")
+parser.add_argument(
+    "-f",
+    "--config-file",
+    type=str,
+    required=True,
+    help="Path to the configuration file.",
+)
 args = parser.parse_args()
-main(config_file = args.config_file)
+main(config_file=args.config_file)

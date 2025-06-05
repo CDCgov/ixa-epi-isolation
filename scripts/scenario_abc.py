@@ -1,18 +1,16 @@
 import argparse
 import os
-import polars as pl
-from scipy.stats import poisson, uniform, norm
 from math import log
 
-from abmwrappers.experiment_class import Experiment
+import polars as pl
 from abmwrappers import wrappers
+from abmwrappers.experiment_class import Experiment
+from scipy.stats import norm, poisson, uniform
+
 
 def main(config_file: str):
-
     experiment_params_prior_dist = {
-        "settings_properties>>>Home>>>alpha": uniform(
-            0.0, 1.0
-        ),
+        "settings_properties>>>Home>>>alpha": uniform(0.0, 1.0),
     }
     perturbation_kernels = {
         "settings_properties>>>Home>>>alpha": norm(0, 0.015),
@@ -22,6 +20,7 @@ def main(config_file: str):
 # ----
 # Distance function section
 # ----
+
 
 def poisson_lhood(model, data):
     return -log(poisson.pmf(data, model + 0.001))
@@ -57,9 +56,11 @@ def distance_pois_lhood(results_data: pl.DataFrame, target_data: pl.DataFrame):
 
         return joint_set.select(pl.col("negloglikelihood").sum()).item()
 
+
 # ----
 # Clean up data
 # ----
+
 
 def data_processing_fn(directory: str):
     file_path = os.path.join(directory, "person_property_count.csv")
@@ -70,7 +71,14 @@ def data_processing_fn(directory: str):
 
     return df
 
+
 parser = argparse.ArgumentParser()
-parser.add_argument("-f", "--config-file", type=str, required=True, help="Path to the configuration file.")
+parser.add_argument(
+    "-f",
+    "--config-file",
+    type=str,
+    required=True,
+    help="Path to the configuration file.",
+)
 args = parser.parse_args()
-main(config_file = args.config_file)
+main(config_file=args.config_file)

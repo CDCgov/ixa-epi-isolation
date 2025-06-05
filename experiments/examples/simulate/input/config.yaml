@@ -15,4 +15,3 @@ experiment_conditions:
   changed_baseline_params:
     initial_infections: 2
     transmission_report_name: "some_transmission_chain.csv"
-
