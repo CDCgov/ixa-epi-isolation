@@ -181,7 +181,7 @@ mod test {
                     },
                 ),
             ]),
-            isolation_policy_parameters: HashMap::new(),
+            isolation_policy_parameters: None,
         };
         context.init_random(parameters.seed);
         context
