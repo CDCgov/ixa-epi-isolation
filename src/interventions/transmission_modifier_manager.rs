@@ -234,8 +234,8 @@ mod test {
                 GlobalParams,
                 Params {
                     // For those tests that need infectious people, we add them manually.
-                    initial_infections: 0,
-                    initial_recovered: 0,
+                    initial_incidence: 0.0,
+                    initial_recovered: 0.0,
                     max_time: 10.0,
                     seed,
                     infectiousness_rate_fn: RateFnType::Constant {
