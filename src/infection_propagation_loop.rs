@@ -170,8 +170,10 @@ mod test {
             InfectionDataValue,
         },
         interventions::ContextTransmissionModifierExt,
-        parameters::CoreSettingsTypes,
-        parameters::{GlobalParams, ItinerarySpecificationType, Params, RateFnType},
+        parameters::{
+            ContextParametersExt, CoreSettingsTypes, GlobalParams, ItinerarySpecificationType,
+            Params, RateFnType,
+        },
         rate_fns::{load_rate_fns, InfectiousnessRateExt},
         settings::{
             init as settings_init, CensusTract, ContextSettingExt, Home, ItineraryEntry, SettingId,
@@ -201,7 +203,7 @@ mod test {
     ) -> Context {
         let mut context = Context::new();
         let parameters = Params {
-            initial_incidence: 0.5, // 50% of the population
+            initial_incidence: 0.1, // 10% of the population
             initial_recovered,
             max_time: 100.0,
             seed,
@@ -873,5 +875,50 @@ mod test {
         // And we compare the overall case count average across experiments
         let average_case_count = cases_count_sizes.iter().sum::<usize>() as f64 / n_reps as f64;
         assert_almost_eq!(expected_cases, average_case_count, expected_cases / 100.0);
+    }
+
+    #[test]
+    #[allow(clippy::cast_precision_loss)]
+    fn test_proportion_infected_recovered() {
+        // If we start with 1000 people 100 times, we should see that the proportion of people
+        // who are initialized as infectious and recovered follow the expected proportions.
+        let mut num_initial_infections = 0;
+        let mut num_initial_recovered = 0;
+        let num_people = 1000;
+        let num_sims = 10;
+        let mut initial_incidence = None;
+        let initial_recovered = 0.1; // 10% of people should be recovered
+        for seed in 0..num_sims {
+            let mut context = setup_context(seed, 0.0, 0.0, 1.0, initial_recovered);
+            if initial_incidence.is_none() {
+                // If we don't have an initial incidence, get it
+                initial_incidence = Some(context.get_params().initial_incidence);
+            }
+            context.init_random(seed);
+            // Add our people
+            for _ in 0..num_people {
+                context.add_person(()).unwrap();
+            }
+            init(&mut context).unwrap();
+            // Add a plan to shutdown after the seeding so we can count infected and recovereds
+            context.add_plan(0.0, ixa::Context::shutdown);
+            context.execute();
+            // Count number of initial infections and recovereds
+            num_initial_infections +=
+                context.query_people_count((InfectionStatus, InfectionStatusValue::Infectious));
+            num_initial_recovered +=
+                context.query_people_count((InfectionStatus, InfectionStatusValue::Recovered));
+        }
+        // Check that the proportion of people is close to the expected proportion
+        assert_almost_eq!(
+            num_initial_infections as f64 / (num_people * num_sims) as f64,
+            initial_incidence.unwrap(),
+            0.01
+        );
+        assert_almost_eq!(
+            num_initial_recovered as f64 / (num_people * num_sims) as f64,
+            initial_recovered,
+            0.01
+        );
     }
 }
