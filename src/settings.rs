@@ -22,7 +22,7 @@ pub struct SettingProperties {
     pub itinerary_specification: Option<ItinerarySpecificationType>,
 }
 
-pub trait SettingType {
+pub trait SettingType: 'static {
     fn calculate_multiplier(
         &self,
         members: &[PersonId],
@@ -32,17 +32,27 @@ pub trait SettingType {
     fn get_name(&self) -> &'static str;
 }
 
+// Use this when you KNOW the type
 #[derive(Debug, PartialEq)]
-pub struct SettingId<'a, T: SettingType + ?Sized> {
+pub struct SettingId<T: SettingType> {
     pub id: usize,
-    // Marker to say this group id is associated with T (but does not own it)
-    pub setting_type: &'a T,
+    _setting_type: std::marker::PhantomData<T>,
 }
 
-impl<'a, T: SettingType + ?Sized> SettingId<'a, T> {
-    pub fn new(setting_type: &'a T, id: usize) -> SettingId<'a, T> {
-        SettingId { id, setting_type }
+impl<T: SettingType> SettingId<T> {
+    fn id(&self) -> usize {
+        self.id
     }
+    fn type_id(&self) -> TypeId {
+        TypeId::of::<T>()
+    }
+}
+
+// Use this when you DON'T know the type, or you need a bunch of settings
+// of different types
+pub trait GenericSettingId {
+    fn id(&self) -> usize;
+    fn type_id(&self) -> TypeId;
 }
 
 #[derive(Copy, Clone, PartialEq, Debug)]
