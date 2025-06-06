@@ -260,7 +260,9 @@ mod test {
     fn setup() -> Context {
         let mut context = Context::new();
         let parameters = Params {
-            initial_infections: 3,
+            // We add infections manually in the tests that require infections.
+            initial_incidence: 0.0,
+            initial_recovered: 0.0,
             max_time: 100.0,
             seed: 0,
             infectiousness_rate_fn: RateFnType::Constant {

@@ -42,8 +42,10 @@ pub enum ItinerarySpecificationType {
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Params {
-    /// The number of infections we seed the population with.
-    pub initial_infections: usize,
+    /// The proportion of initial people who are infectious when we seed the population.
+    pub initial_incidence: f64,
+    /// The proportion of people that are initially recovered (fully immune to disease).
+    pub initial_recovered: f64,
     /// The maximum run time of the simulation; even if there are still infections
     /// scheduled to occur, the simulation will stop at this time.
     pub max_time: f64,
@@ -67,6 +69,16 @@ fn validate_inputs(parameters: &Params) -> Result<(), IxaError> {
     if parameters.max_time < 0.0 {
         return Err(IxaError::IxaError(
             "The max simulation running time must be non-negative.".to_string(),
+        ));
+    }
+    if !(0.0..=1.0).contains(&parameters.initial_incidence) {
+        return Err(IxaError::IxaError(
+            "The initial incidence must be between 0 and 1, inclusive.".to_string(),
+        ));
+    }
+    if !(0.0..=1.0).contains(&parameters.initial_recovered) {
+        return Err(IxaError::IxaError(
+            "The initial recovered proportion must be between 0 and 1, inclusive.".to_string(),
         ));
     }
     if parameters.report_period < 0.0 {
@@ -160,6 +172,7 @@ impl ContextParametersExt for ixa::Context {
 #[cfg(test)]
 mod test {
     use ixa::{Context, ContextGlobalPropertiesExt, IxaError};
+    use statrs::assert_almost_eq;
 
     use super::{validate_inputs, CoreSettingsTypes, ItinerarySpecificationType};
     use crate::{
@@ -182,7 +195,8 @@ mod test {
     fn test_get_params() {
         let mut context = Context::new();
         let parameters = Params {
-            initial_infections: 1,
+            initial_incidence: 0.1,
+            initial_recovered: 0.0,
             max_time: 100.0,
             seed: 0,
             infectiousness_rate_fn: RateFnType::Constant {
@@ -200,15 +214,16 @@ mod test {
             .unwrap();
 
         let &Params {
-            initial_infections, ..
+            initial_incidence, ..
         } = context.get_params();
-        assert_eq!(initial_infections, 1);
+        assert_almost_eq!(initial_incidence, 0.1, 0.0);
     }
 
     #[test]
     fn test_validate_max_time() {
         let parameters = Params {
-            initial_infections: 1,
+            initial_incidence: 0.0,
+            initial_recovered: 0.0,
             max_time: -100.0,
             seed: 0,
             infectiousness_rate_fn: RateFnType::Constant {
@@ -237,7 +252,8 @@ mod test {
     #[test]
     fn test_validate_split_zeros() {
         let parameters = Params {
-            initial_infections: 1,
+            initial_incidence: 0.0,
+            initial_recovered: 0.0,
             max_time: 100.0,
             seed: 0,
             infectiousness_rate_fn: RateFnType::Constant {
@@ -285,7 +301,8 @@ mod test {
     #[test]
     fn test_validate_split_negative() {
         let parameters = Params {
-            initial_infections: 1,
+            initial_incidence: 0.0,
+            initial_recovered: 0.0,
             max_time: 100.0,
             seed: 0,
             infectiousness_rate_fn: RateFnType::Constant {
@@ -336,7 +353,8 @@ mod test {
     #[test]
     fn test_validation_itinerary_all_none() {
         let parameters = Params {
-            initial_infections: 1,
+            initial_incidence: 0.0,
+            initial_recovered: 0.0,
             max_time: 100.0,
             seed: 0,
             infectiousness_rate_fn: RateFnType::Constant {
@@ -371,7 +389,8 @@ mod test {
     #[test]
     fn test_validation_itinerary_one_some_zero_rest_none() {
         let parameters = Params {
-            initial_infections: 1,
+            initial_incidence: 0.0,
+            initial_recovered: 0.0,
             max_time: 100.0,
             seed: 0,
             infectiousness_rate_fn: RateFnType::Constant {
