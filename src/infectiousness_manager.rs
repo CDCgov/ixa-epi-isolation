@@ -292,7 +292,9 @@ mod test {
                     transmission_report_name: None,
                     // We set the itineraries manually in `set_homogeneous_mixing_itinerary`.
                     settings_properties: HashMap::new(),
-                    isolation_policy_parameters: HashMap::new(),
+                    intervention_policy_parameters: None,
+                    facemask_parameters: None,
+                    isolation_parameters: None,
                 },
             )
             .unwrap();

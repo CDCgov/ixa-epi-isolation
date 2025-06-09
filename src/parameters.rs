@@ -40,6 +40,23 @@ pub enum ItinerarySpecificationType {
     Constant { ratio: f64 },
 }
 
+#[derive(Debug, Serialize, Deserialize, Clone, Copy)]
+pub struct InterventionPolicyParameters {
+    pub post_isolation_duration: f64,
+    pub uptake_probability: f64,
+    pub uptake_delay_period: f64,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, Copy)]
+pub struct FacemaskParameters {
+    pub facemask_efficacy: f64,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, Copy)]
+pub struct IsolationParameters {
+    pub isolation_efficacy: f64,
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Params {
     /// The proportion of initial people who are infectious when we seed the population.
@@ -67,18 +84,15 @@ pub struct Params {
     pub synth_population_file: PathBuf,
     /// The path to the transmission report file
     pub transmission_report_name: Option<String>,
-    pub isolation_policy_parameters: HashMap<String, f64>,
-    // /// The duration that an individual will follow post-isolation precautions
-    // /// following the updated isolation guidance.
-    // pub post_isolation_duration: f64,
-    // /// The probability that an individual will follow the updated isolation guidance.
-    // pub uptake_probability: f64,
-    // /// The maximum delay before an individual will follow the guidance
-    // pub maximum_uptake_delay: f64,
-    // /// Transmission modifier associated with the facemask intervention
-    // pub facemask_transmission_modifier: f64,
-    // /// Transmission modifier associated with the isolation intervention
-    // pub isolation_transmission_modifier: f64,
+    // Struct contain policy parameters for isolation guidance
+    // Post-isolation duration, uptake probability, and maximum uptake delay.
+    pub intervention_policy_parameters: Option<InterventionPolicyParameters>,
+    // Facemask parameters
+    // facemask_efficacy the reduction in tranmission associated with wearing a facemask.
+    pub facemask_parameters: Option<FacemaskParameters>,
+    // isolation parameters
+    // isolation_efficacy the reduction in tranmission associated with isolating.
+    pub isolation_parameters: Option<IsolationParameters>,
 }
 
 fn validate_inputs(parameters: &Params) -> Result<(), IxaError> {
@@ -187,6 +201,42 @@ fn validate_inputs(parameters: &Params) -> Result<(), IxaError> {
     if !(0.0..=1.0).contains(&parameters.relative_infectiousness_asymptomatics) {
         return Err(IxaError::IxaError("The relative infectiousness of asymptomatic individuals must be between 0 and 1, inclusive.".to_string()));
     }
+    if let Some(intervention_policy_parameters) = parameters.intervention_policy_parameters {
+        if intervention_policy_parameters.post_isolation_duration < 0.0 {
+            return Err(IxaError::IxaError(
+                "The post-isolation duration must be non-negative.".to_string(),
+            ));
+        }
+        if intervention_policy_parameters.uptake_probability < 0.0
+            || intervention_policy_parameters.uptake_probability > 1.0
+        {
+            return Err(IxaError::IxaError(
+                "The uptake probability must be between 0 and 1, inclusive.".to_string(),
+            ));
+        }
+        if intervention_policy_parameters.uptake_delay_period < 0.0 {
+            return Err(IxaError::IxaError(
+                "The uptake delay period must be non-negative.".to_string(),
+            ));
+        }
+    }
+
+    if let Some(facemask_parameters) = parameters.facemask_parameters {
+        if facemask_parameters.facemask_efficacy < 0.0 {
+            return Err(IxaError::IxaError(
+                "The facemask transmission modifier must be non-negative.".to_string(),
+            ));
+        }
+    }
+
+    if let Some(isolation_parameters) = parameters.isolation_parameters {
+        if isolation_parameters.isolation_efficacy < 0.0 {
+            return Err(IxaError::IxaError(
+                "The isolation transmission modifier must be non-negative.".to_string(),
+            ));
+        }
+    }
+
     Ok(())
 }
 
@@ -244,7 +294,9 @@ mod test {
             synth_population_file: PathBuf::from("."),
             transmission_report_name: None,
             settings_properties: HashMap::new(),
-            isolation_policy_parameters: HashMap::new(),
+            intervention_policy_parameters: None,
+            facemask_parameters: None,
+            isolation_parameters: None,
         };
         context
             .set_global_property_value(GlobalParams, parameters)
@@ -274,7 +326,9 @@ mod test {
             synth_population_file: PathBuf::from("."),
             transmission_report_name: None,
             settings_properties: HashMap::new(),
-            isolation_policy_parameters: HashMap::new(),
+            intervention_policy_parameters: None,
+            facemask_parameters: None,
+            isolation_parameters: None,
         };
         let e = validate_inputs(&parameters).err();
         match e {
@@ -326,7 +380,9 @@ mod test {
                     },
                 ),
             ]),
-            isolation_policy_parameters: HashMap::new(),
+            intervention_policy_parameters: None,
+            facemask_parameters: None,
+            isolation_parameters: None,
         };
         let e = validate_inputs(&parameters).err();
         match e {
@@ -378,7 +434,9 @@ mod test {
                     },
                 ),
             ]),
-            isolation_policy_parameters: HashMap::new(),
+            intervention_policy_parameters: None,
+            facemask_parameters: None,
+            isolation_parameters: None,
         };
         let e = validate_inputs(&parameters).err();
         match e {
@@ -429,7 +487,9 @@ mod test {
                     },
                 ),
             ]),
-            isolation_policy_parameters: HashMap::new(),
+            intervention_policy_parameters: None,
+            facemask_parameters: None,
+            isolation_parameters: None,
         };
         let e = validate_inputs(&parameters).err();
         assert!(e.is_none(), "Expected no error, but got: {e:?}");
@@ -470,7 +530,9 @@ mod test {
                     },
                 ),
             ]),
-            isolation_policy_parameters: HashMap::new(),
+            intervention_policy_parameters: None,
+            facemask_parameters: None,
+            isolation_parameters: None,
         };
         let e = validate_inputs(&parameters).err();
         assert!(e.is_none(), "Expected no error, but got: {e:?}");
