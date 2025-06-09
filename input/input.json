@@ -13,12 +13,16 @@
     "report_period": 1.0,
     "synth_population_file": "input/people_test.csv",
     "transmission_report_name": "transmission_report.csv",
-    "isolation_policy_parameters": {
+    "intervention_policy_parameters": {
       "post_isolation_duration": 5.0,
       "uptake_probability": 1.0,
-      "maximum_uptake_delay": 3.0,
-      "facemask_transmission_modifier": 0.5,
-      "isolation_transmission_modifier": 0.5
+      "uptake_delay_period": 3.0
+    },
+    "facemask_parameters": {
+      "facemask_efficacy": 0.5
+    },
+    "isolation_parameters": {
+      "isolation_efficacy": 0.5
     }
   }
 }

@@ -159,7 +159,9 @@ mod test {
                     },
                 ),
             ]),
-            isolation_policy_parameters: HashMap::new(),
+            intervention_policy_parameters: None,
+            facemask_parameters: None,
+            isolation_parameters: None,
         };
         context
             .set_global_property_value(GlobalParams, parameters)

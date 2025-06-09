@@ -212,7 +212,9 @@ mod tests {
             synth_population_file: PathBuf::from("."),
             transmission_report_name: None,
             settings_properties: HashMap::new(),
-            isolation_policy_parameters: HashMap::new(),
+            intervention_policy_parameters: None,
+            facemask_parameters: None,
+            isolation_parameters: None,
         };
         context
             .set_global_property_value(GlobalParams, parameters)
@@ -244,7 +246,9 @@ mod tests {
             synth_population_file: PathBuf::from("."),
             transmission_report_name: None,
             settings_properties: HashMap::new(),
-            isolation_policy_parameters: HashMap::new(),
+            intervention_policy_parameters: None,
+            facemask_parameters: None,
+            isolation_parameters: None,
         };
         context
             .set_global_property_value(GlobalParams, parameters)
@@ -285,7 +289,9 @@ mod tests {
             synth_population_file: PathBuf::from("."),
             transmission_report_name: None,
             settings_properties: HashMap::new(),
-            isolation_policy_parameters: HashMap::new(),
+            intervention_policy_parameters: None,
+            facemask_parameters: None,
+            isolation_parameters: None,
         };
         context
             .set_global_property_value(GlobalParams, parameters)
@@ -322,7 +328,9 @@ mod tests {
             synth_population_file: PathBuf::from("."),
             transmission_report_name: None,
             settings_properties: HashMap::new(),
-            isolation_policy_parameters: HashMap::new(),
+            intervention_policy_parameters: None,
+            facemask_parameters: None,
+            isolation_parameters: None,
         };
         context
             .set_global_property_value(GlobalParams, parameters)
