@@ -2,8 +2,8 @@ use crate::parameters::{
     ContextParametersExt, CoreSettingsTypes, ItinerarySpecificationType, Params,
 };
 use ixa::{
-    define_data_plugin, define_rng, people::Query, Context, ContextPeopleExt, ContextRandomExt,
-    IxaError, PersonId,
+    define_data_plugin, define_rng, people::Query, trace, Context, ContextPeopleExt,
+    ContextRandomExt, IxaError, PersonId,
 };
 use serde::{Deserialize, Serialize};
 
@@ -54,13 +54,23 @@ pub struct ItineraryEntry {
 
 impl ItineraryEntry {
     #[allow(clippy::needless_pass_by_value)]
-    pub fn new<T: SettingType>(setting_id: SettingId<T>, ratio: f64) -> ItineraryEntry {
+    pub fn new<T: SettingType + ?Sized>(setting_id: SettingId<T>, ratio: f64) -> ItineraryEntry {
         ItineraryEntry {
             setting_type: setting_id.setting_type.get_type_id(),
             setting_id: setting_id.id,
             ratio,
         }
     }
+}
+
+#[allow(dead_code)]
+pub enum ItineraryModifiers<'a> {
+    // Replace itinerary with a new vector of itinerary entries
+    ReplaceWith { itinerary: Vec<ItineraryEntry> },
+    // Reduce the current itinerary to a setting type (e.g., Home)
+    RestrictTo { setting: &'a dyn SettingType },
+    // Exclude setting types from current itinerary (e.g., Workplace)
+    Exclude { setting: &'a dyn SettingType },
 }
 
 pub fn append_itinerary_entry<T: SettingType + Copy + 'static>(
@@ -115,24 +125,18 @@ fn get_itinerary_ratio<T: SettingType + 'static>(
     }
 }
 
-pub struct SettingDataContainer {
+#[derive(Default)]
+struct SettingDataContainer {
     setting_types: HashMap<TypeId, Box<dyn SettingType>>,
     // For each setting type (e.g., Home) store the properties (e.g., alpha)
     setting_properties: HashMap<TypeId, SettingProperties>,
     // For each setting type, have a map of each setting id and a list of members
     members: HashMap<TypeId, HashMap<usize, Vec<PersonId>>>,
     itineraries: HashMap<PersonId, Vec<ItineraryEntry>>,
+    modified_itineraries: HashMap<PersonId, Vec<ItineraryEntry>>,
 }
 
 impl SettingDataContainer {
-    fn new() -> Self {
-        SettingDataContainer {
-            setting_types: HashMap::new(),
-            setting_properties: HashMap::new(),
-            members: HashMap::new(),
-            itineraries: HashMap::new(),
-        }
-    }
     fn get_setting_members(
         &self,
         setting_type: &TypeId,
@@ -140,11 +144,21 @@ impl SettingDataContainer {
     ) -> Option<&Vec<PersonId>> {
         self.members.get(setting_type)?.get(&setting_id)
     }
+    fn get_itinerary(&self, person_id: PersonId) -> Option<&Vec<ItineraryEntry>> {
+        if let Some(modified_itinerary) = self.modified_itineraries.get(&person_id) {
+            return Some(modified_itinerary);
+        }
+
+        if let Some(itinerary) = self.itineraries.get(&person_id) {
+            return Some(itinerary);
+        }
+        None
+    }
     fn with_itinerary<F>(&self, person_id: PersonId, mut callback: F)
     where
         F: FnMut(&dyn SettingType, &SettingProperties, &Vec<PersonId>, f64),
     {
-        if let Some(itinerary) = self.itineraries.get(&person_id) {
+        if let Some(itinerary) = self.get_itinerary(person_id) {
             for entry in itinerary {
                 let setting_type = self.setting_types.get(&entry.setting_type).unwrap();
                 let setting_props = self.setting_properties.get(&entry.setting_type).unwrap();
@@ -153,6 +167,45 @@ impl SettingDataContainer {
                     .unwrap();
                 callback(setting_type.as_ref(), setting_props, members, entry.ratio);
             }
+        }
+    }
+    fn add_member_to_itinerary_setting(
+        &mut self,
+        person_id: PersonId,
+        itinerary: &Vec<ItineraryEntry>,
+    ) -> Result<(), IxaError> {
+        for itinerary_entry in itinerary {
+            // TODO: If we are changing a person's itinerary, the person_id should be removed from vector
+            // This isn't the same as the concept of being present or not.
+            if !self
+                .setting_types
+                .contains_key(&itinerary_entry.setting_type)
+            {
+                return Err(IxaError::from(
+                    "Itinerary entry setting type not registered",
+                ));
+            }
+            self.members
+                .entry(itinerary_entry.setting_type)
+                .or_default()
+                .entry(itinerary_entry.setting_id)
+                .or_default()
+                .push(person_id);
+        }
+        Ok(())
+    }
+    fn remove_member_from_itinerary_settings(
+        &mut self,
+        person_id: PersonId,
+        itinerary: Vec<ItineraryEntry>,
+    ) {
+        for itinerary_entry in itinerary {
+            self.members
+                .entry(itinerary_entry.setting_type)
+                .or_default()
+                .entry(itinerary_entry.setting_id)
+                .or_default()
+                .retain(|&x| x != person_id);
         }
     }
 }
@@ -192,7 +245,7 @@ define_setting_type!(Workplace);
 define_data_plugin!(
     SettingDataPlugin,
     SettingDataContainer,
-    SettingDataContainer::new()
+    SettingDataContainer::default()
 );
 
 #[allow(dead_code)]
@@ -211,7 +264,20 @@ pub trait ContextSettingExt {
         person_id: PersonId,
         itinerary: Vec<ItineraryEntry>,
     ) -> Result<(), IxaError>;
+    fn modify_itinerary(
+        &mut self,
+        person_id: PersonId,
+        itinerary_modifier: ItineraryModifiers,
+    ) -> Result<(), IxaError>;
+    fn remove_modified_itinerary(&mut self, person_id: PersonId) -> Result<(), IxaError>;
     fn validate_itinerary(&self, itinerary: &[ItineraryEntry]) -> Result<(), IxaError>;
+
+    /// `get_setting_ids` returns a vector of the numerical values of the ID for a setting type
+    fn get_setting_ids<T: SettingType>(
+        &mut self,
+        person_id: PersonId,
+        setting_type: T,
+    ) -> Vec<usize>;
     fn get_setting_members<T: SettingType + 'static>(
         &self,
         setting_id: SettingId<T>,
@@ -250,6 +316,26 @@ trait ContextSettingInternalExt {
         setting_type: TypeId,
         setting_id: usize,
     ) -> Option<&Vec<PersonId>>;
+    /// Takes an itinerary and adds makes it the modified itinerary of `person id`
+    /// This modified itinerary is used as the person's itinerary instead of default itinerary
+    /// for as long as modified itinerary exists in the container.
+    fn add_modified_itinerary(
+        &mut self,
+        person_id: PersonId,
+        itinerary: Vec<ItineraryEntry>,
+    ) -> Result<(), IxaError>;
+    /// Limit the current itinerary to a specified setting type (e.g., Home)
+    /// The proportion of the rest of the settings remains unchanged
+    fn limit_itinerary_by_setting_type(
+        &mut self,
+        person_id: PersonId,
+        setting_type: &dyn SettingType,
+    ) -> Result<(), IxaError>;
+    fn exclude_setting_from_itinerary(
+        &mut self,
+        person_id: PersonId,
+        setting_type: &dyn SettingType,
+    ) -> Result<(), IxaError>;
 }
 
 impl ContextSettingInternalExt for Context {
@@ -307,6 +393,101 @@ impl ContextSettingInternalExt for Context {
         self.get_data_container(SettingDataPlugin)?
             .get_setting_members(&setting_type, setting_id)
     }
+
+    fn add_modified_itinerary(
+        &mut self,
+        person_id: PersonId,
+        mut itinerary: Vec<ItineraryEntry>,
+    ) -> Result<(), IxaError> {
+        // Normalize itinerary ratios
+        self.validate_itinerary(&itinerary)?;
+
+        let total_ratio: f64 = itinerary.iter().map(|entry| entry.ratio).sum();
+        // If we passed validation, we know setting entries aren't all zero, so we can divide by
+        // total_ratio without worrying about dividing by zero.
+        for entry in &mut itinerary {
+            entry.ratio /= total_ratio;
+        }
+        let container = self.get_data_container_mut(SettingDataPlugin);
+
+        // If there's a modified itinerary present, replace with this
+        if container.modified_itineraries.contains_key(&person_id) {
+            return Err(IxaError::from(
+                 "Can't modify itinerary because a modified itinerary is already present. Remove and add new modified itinerary."
+             ));
+        }
+
+        // Remove people from default itinerary, if there's one
+        match container.itineraries.get(&person_id) {
+            None => {
+                return Err(IxaError::from(
+                    "Can't modify itinerary if there isn't one present",
+                ))
+            }
+            Some(previous_itinerary) => {
+                container
+                    .remove_member_from_itinerary_settings(person_id, previous_itinerary.clone());
+            }
+        }
+
+        container.add_member_to_itinerary_setting(person_id, &itinerary)?;
+        container.modified_itineraries.insert(person_id, itinerary);
+
+        Ok(())
+    }
+
+    fn exclude_setting_from_itinerary(
+        &mut self,
+        person_id: PersonId,
+        setting_type: &dyn SettingType,
+    ) -> Result<(), IxaError> {
+        let container = self.get_data_container_mut(SettingDataPlugin);
+        match container.itineraries.get(&person_id) {
+            None => Err(IxaError::from("Can't find itinerary for person")),
+            Some(itinerary_vector) => {
+                let mut modified_itinerary = Vec::<ItineraryEntry>::new();
+                for entry in itinerary_vector {
+                    if entry.setting_type != setting_type.get_type_id() {
+                        modified_itinerary.push(*entry);
+                    }
+                }
+                if modified_itinerary.is_empty() {
+                    return Err(IxaError::from(
+                        "Exclude itinerary resulted in empty modified itinerary",
+                    ));
+                }
+
+                self.add_modified_itinerary(person_id, modified_itinerary)?;
+                Ok(())
+            }
+        }
+    }
+    fn limit_itinerary_by_setting_type(
+        &mut self,
+        person_id: PersonId,
+        setting_type: &dyn SettingType,
+    ) -> Result<(), IxaError> {
+        let container = self.get_data_container_mut(SettingDataPlugin);
+        match container.itineraries.get(&person_id) {
+            None => Err(IxaError::from("Can't find itinerary for person")),
+            Some(itineraries) => {
+                let mut modified_itinerary = Vec::<ItineraryEntry>::new();
+                for entry in itineraries {
+                    if entry.setting_type == setting_type.get_type_id() {
+                        modified_itinerary.push(*entry);
+                    }
+                }
+                if modified_itinerary.is_empty() {
+                    return Err(IxaError::from(
+                        "limit itinerary resulted in empty modified itinerary",
+                    ));
+                }
+
+                self.add_modified_itinerary(person_id, modified_itinerary)?;
+                Ok(())
+            }
+        }
+    }
 }
 
 impl ContextSettingExt for Context {
@@ -348,6 +529,95 @@ impl ContextSettingExt for Context {
         Ok(())
     }
 
+    fn remove_modified_itinerary(&mut self, person_id: PersonId) -> Result<(), IxaError> {
+        let container = self.get_data_container_mut(SettingDataPlugin);
+
+        // If there's a modified itinerary present, remove
+        if let Some(previous_mod_itinerary) = container.modified_itineraries.get(&person_id) {
+            container
+                .remove_member_from_itinerary_settings(person_id, previous_mod_itinerary.clone());
+        }
+
+        container.modified_itineraries.remove(&person_id);
+
+        // Get people back to default itinerary, if there's one
+        match container.itineraries.get(&person_id) {
+            None => {
+                return Err(IxaError::from(
+                    "Can't modify itinerary if there isn't one present",
+                ))
+            }
+            Some(default_itinerary) => {
+                for itinerary_entry in default_itinerary {
+                    if !container
+                        .setting_types
+                        .contains_key(&itinerary_entry.setting_type)
+                    {
+                        return Err(IxaError::from(
+                            "Itinerary entry setting type not registered",
+                        ));
+                    }
+
+                    container
+                        .members
+                        .entry(itinerary_entry.setting_type)
+                        .or_default()
+                        .entry(itinerary_entry.setting_id)
+                        .or_default()
+                        .push(person_id);
+                }
+            }
+        }
+        Ok(())
+    }
+
+    fn modify_itinerary(
+        &mut self,
+        person_id: PersonId,
+        itinerary_modifier: ItineraryModifiers,
+    ) -> Result<(), IxaError> {
+        match itinerary_modifier {
+            ItineraryModifiers::ReplaceWith { itinerary } => {
+                trace!("ItineraryModifier::Replace person {person_id} --  {itinerary:?}");
+                self.add_modified_itinerary(person_id, itinerary)
+            }
+            ItineraryModifiers::RestrictTo { setting } => {
+                trace!(
+                    "ItineraryModifier::RestrictTo person {person_id} -- {:?}",
+                    setting.get_type_id()
+                );
+                self.limit_itinerary_by_setting_type(person_id, setting)
+            }
+            ItineraryModifiers::Exclude { setting } => {
+                trace!(
+                    "ItineraryModifier::Exclude person {person_id}-- {:?}",
+                    setting.get_type_id()
+                );
+                self.exclude_setting_from_itinerary(person_id, setting)
+            }
+        }
+    }
+
+    fn get_setting_ids<T: SettingType>(
+        &mut self,
+        person_id: PersonId,
+        setting_type: T,
+    ) -> Vec<usize> {
+        let container = self.get_data_container_mut(SettingDataPlugin);
+        match container.itineraries.get(&person_id) {
+            None => Vec::new(),
+            Some(itineraries) => {
+                let mut setting_id_vec = Vec::new();
+                for entry in itineraries {
+                    if entry.setting_type == setting_type.get_type_id() {
+                        setting_id_vec.push(entry.setting_id);
+                    }
+                }
+                setting_id_vec
+            }
+        }
+    }
+
     fn add_itinerary(
         &mut self,
         person_id: PersonId,
@@ -363,48 +633,16 @@ impl ContextSettingExt for Context {
             entry.ratio /= total_ratio;
         }
         let container = self.get_data_container_mut(SettingDataPlugin);
-        let mut current_setting_ids = vec![];
 
-        for itinerary_entry in &itinerary {
-            // TODO: If we are changing a person's itinerary, the person_id should be removed from vector
-            // This isn't the same as the concept of being present or not.
-            if !container
-                .setting_types
-                .contains_key(&itinerary_entry.setting_type)
-            {
-                return Err(IxaError::from(
-                    "Itinerary entry setting type not registered",
-                ));
-            }
-            container
-                .members
-                .entry(itinerary_entry.setting_type)
-                .or_default()
-                .entry(itinerary_entry.setting_id)
-                .or_default()
-                .push(person_id);
-            current_setting_ids.push((itinerary_entry.setting_type, itinerary_entry.setting_id));
+        // Clean up settings that from previous itinerary, if there is one
+
+        if let Some(previous_itinerary) = container.itineraries.get(&person_id) {
+            container.remove_member_from_itinerary_settings(person_id, previous_itinerary.clone());
         }
 
-        // Clean up settings that the person is no longer a member of
-        if let Some(previous_itinerary) = container.itineraries.insert(person_id, itinerary) {
-            // Remove the person from the previous itinerary entries not modified already
-            for itinerary_entry in previous_itinerary {
-                //Check if the entry of setting ID and type is not in the current itinerary
-                if !current_setting_ids
-                    .contains(&(itinerary_entry.setting_type, itinerary_entry.setting_id))
-                {
-                    // Remove the person from the previous itinerary
-                    container
-                        .members
-                        .entry(itinerary_entry.setting_type)
-                        .or_default()
-                        .entry(itinerary_entry.setting_id)
-                        .or_default()
-                        .retain(|&x| x != person_id);
-                }
-            }
-        }
+        container.add_member_to_itinerary_setting(person_id, &itinerary)?;
+        container.itineraries.insert(person_id, itinerary);
+
         Ok(())
     }
 
@@ -455,8 +693,7 @@ impl ContextSettingExt for Context {
     fn get_itinerary(&self, person_id: PersonId) -> Option<&Vec<ItineraryEntry>> {
         self.get_data_container(SettingDataPlugin)
             .expect("Person should be added to settings")
-            .itineraries
-            .get(&person_id)
+            .get_itinerary(person_id)
     }
 
     fn get_contact<T: SettingType + ?Sized, Q: Query + 'static>(
@@ -567,6 +804,48 @@ mod test {
     };
     use ixa::{define_person_property, ContextGlobalPropertiesExt, ContextPeopleExt};
     use statrs::assert_almost_eq;
+
+    define_setting_type!(Community);
+
+    fn register_default_settings(context: &mut Context) {
+        context
+            .register_setting_type(
+                Home,
+                SettingProperties {
+                    alpha: 0.1,
+                    itinerary_specification: None,
+                },
+            )
+            .unwrap();
+        context
+            .register_setting_type(
+                Workplace,
+                SettingProperties {
+                    alpha: 0.3,
+                    itinerary_specification: None,
+                },
+            )
+            .unwrap();
+        context
+            .register_setting_type(
+                CensusTract,
+                SettingProperties {
+                    alpha: 0.01,
+                    itinerary_specification: None,
+                },
+            )
+            .unwrap();
+
+        context
+            .register_setting_type(
+                School,
+                SettingProperties {
+                    alpha: 0.01,
+                    itinerary_specification: None,
+                },
+            )
+            .unwrap();
+    }
 
     #[test]
     fn test_setting_type_creation() {
@@ -682,15 +961,7 @@ mod test {
     #[test]
     fn test_duplicated_itinerary() {
         let mut context = Context::new();
-        context
-            .register_setting_type(
-                Home,
-                SettingProperties {
-                    alpha: 1.0,
-                    itinerary_specification: None,
-                },
-            )
-            .unwrap();
+        register_default_settings(&mut context);
 
         let person = context.add_person(()).unwrap();
         let itinerary = vec![
@@ -713,16 +984,7 @@ mod test {
     #[test]
     fn test_feasible_itinerary_ratio() {
         let mut context = Context::new();
-        context
-            .register_setting_type(
-                Home,
-                SettingProperties {
-                    alpha: 1.0,
-                    itinerary_specification: None,
-                },
-            )
-            .unwrap();
-
+        register_default_settings(&mut context);
         let person = context.add_person(()).unwrap();
         let itinerary = vec![ItineraryEntry::new(SettingId::new(&Home, 1), -0.5)];
 
@@ -739,18 +1001,11 @@ mod test {
     #[test]
     fn test_feasible_itinerary_setting() {
         let mut context = Context::new();
-        context
-            .register_setting_type(
-                Home {},
-                SettingProperties {
-                    alpha: 1.0,
-                    itinerary_specification: None,
-                },
-            )
-            .unwrap();
-
+        register_default_settings(&mut context);
         let person = context.add_person(()).unwrap();
-        let itinerary = vec![ItineraryEntry::new(SettingId::new(&CensusTract, 1), 0.5)];
+
+        // Community is a defined setting but not registered
+        let itinerary = vec![ItineraryEntry::new(SettingId::new(&Community, 1), 0.5)];
 
         let e = context.add_itinerary(person, itinerary).err();
         match e {
@@ -768,16 +1023,7 @@ mod test {
     #[test]
     fn test_add_itinerary() {
         let mut context = Context::new();
-        context
-            .register_setting_type(
-                Home,
-                SettingProperties {
-                    alpha: 1.0,
-                    itinerary_specification: None,
-                },
-            )
-            .unwrap();
-
+        register_default_settings(&mut context);
         let person = context.add_person(()).unwrap();
         let itinerary = vec![
             ItineraryEntry::new(SettingId::new(&Home, 1), 0.5),
@@ -820,6 +1066,324 @@ mod test {
     }
 
     #[test]
+    fn test_get_setting_ids() {
+        let mut context = Context::new();
+        register_default_settings(&mut context);
+        let person = context.add_person(()).unwrap();
+        let person_two = context.add_person(()).unwrap();
+        let itinerary = vec![
+            ItineraryEntry::new(SettingId::new(&Home, 0), 0.5),
+            ItineraryEntry::new(SettingId::new(&Workplace, 0), 0.5),
+        ];
+
+        let itinerary_two = vec![ItineraryEntry::new(SettingId::new(&Workplace, 0), 1.0)];
+
+        context.add_itinerary(person, itinerary).unwrap();
+        context.add_itinerary(person_two, itinerary_two).unwrap();
+
+        let h_id = context.get_setting_ids(person, Home);
+        let w_id = context.get_setting_ids(person_two, Workplace);
+
+        let h_members = context
+            .get_setting_members(SettingId::new(&Home, h_id[0]))
+            .unwrap();
+        let w_members = context
+            .get_setting_members(SettingId::new(&Workplace, w_id[0]))
+            .unwrap();
+
+        assert_eq!(h_members.len(), 1);
+        assert_eq!(w_members.len(), 2);
+    }
+
+    #[test]
+    fn test_itinerary_modifier_enum() {
+        let mut context = Context::new();
+        register_default_settings(&mut context);
+
+        let person = context.add_person(()).unwrap();
+        let itinerary = vec![
+            ItineraryEntry::new(SettingId::new(&Home, 0), 1.0),
+            ItineraryEntry::new(SettingId::new(&Workplace, 0), 1.0),
+        ];
+        let isolation_itinerary = vec![ItineraryEntry::new(SettingId::new(&Home, 0), 1.0)];
+
+        let _ = context.add_itinerary(person, itinerary);
+
+        let members = context
+            .get_setting_members::<Home>(SettingId::new(&Home, 0))
+            .unwrap();
+        let w_members = context
+            .get_setting_members::<Workplace>(SettingId::new(&Workplace, 0))
+            .unwrap();
+        assert_eq!(members.len(), 1);
+        assert_eq!(w_members.len(), 1);
+
+        let _ = context.modify_itinerary(
+            person,
+            ItineraryModifiers::ReplaceWith {
+                itinerary: isolation_itinerary,
+            },
+        );
+
+        let members = context
+            .get_setting_members::<Home>(SettingId::new(&Home, 0))
+            .unwrap();
+        let w_members = context
+            .get_setting_members::<Workplace>(SettingId::new(&Workplace, 0))
+            .unwrap();
+        assert_eq!(members.len(), 1);
+        assert_eq!(w_members.len(), 0);
+    }
+
+    #[test]
+    fn test_itinerary_modifiers_replace() {
+        let mut context = Context::new();
+        register_default_settings(&mut context);
+        let itinerary_vec: Vec<Vec<(&dyn SettingType, usize)>> = vec![
+            vec![(&Home, 0), (&Workplace, 0), (&School, 0)],
+            vec![(&Home, 0), (&Workplace, 0)],
+            vec![(&Home, 0), (&Workplace, 0)],
+            vec![(&Home, 1), (&School, 0)],
+            vec![(&Home, 1), (&Workplace, 0)],
+            vec![(&Home, 1), (&Workplace, 0)],
+        ];
+
+        let mut person_0: Option<PersonId> = None;
+        for (p_id, p_it) in itinerary_vec.iter().enumerate() {
+            let mut p_itinerary = Vec::<ItineraryEntry>::new();
+            for (s_type, s_id) in p_it.clone() {
+                p_itinerary.push(ItineraryEntry::new(SettingId::new(s_type, s_id), 1.0));
+            }
+            let person = context.add_person(()).unwrap();
+            let _e = context.add_itinerary(person, p_itinerary);
+            if p_id == 0 {
+                person_0 = Some(person);
+            }
+        }
+        let alpha_h = context.get_setting_properties(Home).unwrap().alpha;
+        let alpha_w = context.get_setting_properties(Workplace).unwrap().alpha;
+        let alpha_s = context.get_setting_properties(School).unwrap().alpha;
+
+        let inf_multiplier =
+            context.calculate_total_infectiousness_multiplier_for_person(person_0.unwrap());
+        let expected_multiplier = (1.0 / 3.0) * (2_f64).powf(alpha_h)
+            + (1.0 / 3.0) * (4_f64).powf(alpha_w)
+            + (1.0 / 3.0) * (1_f64).powf(alpha_s);
+
+        assert_almost_eq!(inf_multiplier, expected_multiplier, 0.0);
+
+        // 2. Isolate person with itinerary [(Home 0 , 0.95), (Workplace 0, 0.05)]
+        let isolation_itinerary = vec![
+            ItineraryEntry::new(SettingId::new(&Home, 0), 0.95),
+            ItineraryEntry::new(SettingId::new(&Workplace, 0), 0.05),
+        ];
+
+        let _ = context.modify_itinerary(
+            person_0.unwrap(),
+            ItineraryModifiers::ReplaceWith {
+                itinerary: isolation_itinerary,
+            },
+        );
+
+        let h_members = context
+            .get_setting_members::<Home>(SettingId::new(&Home, 0))
+            .unwrap();
+        let h_one_members = context
+            .get_setting_members::<Home>(SettingId::new(&Home, 1))
+            .unwrap();
+        let w_members = context
+            .get_setting_members::<Workplace>(SettingId::new(&Workplace, 0))
+            .unwrap();
+        let s_members = context
+            .get_setting_members::<School>(SettingId::new(&School, 0))
+            .unwrap();
+        assert_eq!(h_members.len(), 3);
+        assert_eq!(h_one_members.len(), 3);
+        assert_eq!(w_members.len(), 5);
+        assert_eq!(s_members.len(), 1);
+
+        let inf_multiplier =
+            context.calculate_total_infectiousness_multiplier_for_person(person_0.unwrap());
+        let expected_multiplier = (0.95) * (2_f64).powf(alpha_h) + (0.05) * (4_f64).powf(alpha_w);
+        assert_almost_eq!(inf_multiplier, expected_multiplier, 0.001);
+
+        // 3. Remove modified itinerary; get back to normal
+        let _ = context.remove_modified_itinerary(person_0.unwrap());
+        let h_members = context
+            .get_setting_members::<Home>(SettingId::new(&Home, 0))
+            .unwrap();
+        let h_one_members = context
+            .get_setting_members::<Home>(SettingId::new(&Home, 1))
+            .unwrap();
+        let w_members = context
+            .get_setting_members::<Workplace>(SettingId::new(&Workplace, 0))
+            .unwrap();
+        let s_members = context
+            .get_setting_members::<School>(SettingId::new(&School, 0))
+            .unwrap();
+
+        assert_eq!(h_members.len(), 3);
+        assert_eq!(h_one_members.len(), 3);
+        assert_eq!(w_members.len(), 5);
+        assert_eq!(s_members.len(), 2);
+
+        let inf_multiplier =
+            context.calculate_total_infectiousness_multiplier_for_person(person_0.unwrap());
+        let expected_multiplier = (1.0 / 3.0) * (2_f64).powf(alpha_h)
+            + (1.0 / 3.0) * (4_f64).powf(alpha_w)
+            + (1.0 / 3.0) * (1_f64).powf(alpha_s);
+
+        assert_almost_eq!(inf_multiplier, expected_multiplier, 0.001);
+    }
+
+    #[test]
+    fn test_limited_itinerary_modifier() {
+        /* H(0) = [0, 1, 2]
+          W(0) = [0,3,4] -
+         Person 0 isolates using limited itinerary by setting type.
+        */
+        let mut context = Context::new();
+        context.init_random(42);
+        register_default_settings(&mut context);
+
+        let person = context.add_person(()).unwrap();
+        let itinerary = vec![
+            ItineraryEntry::new(SettingId::new(&Home, 0), 1.0),
+            ItineraryEntry::new(SettingId::new(&Workplace, 0), 1.0),
+        ];
+
+        let _ = context.add_itinerary(person, itinerary.clone());
+
+        for _ in 0..2 {
+            let itinerary_home = vec![ItineraryEntry::new(SettingId::new(&Home, 0), 1.0)];
+
+            let p_id = context.add_person(()).unwrap();
+            let _ = context.add_itinerary(p_id, itinerary_home);
+        }
+        for _ in 0..2 {
+            let itinerary_work = vec![ItineraryEntry::new(SettingId::new(&Workplace, 0), 1.0)];
+
+            let p_id = context.add_person(()).unwrap();
+            let _ = context.add_itinerary(p_id, itinerary_work);
+        }
+        // Check membership
+        let h_members = context
+            .get_setting_members::<Home>(SettingId::new(&Home, 0))
+            .unwrap();
+        let w_members = context
+            .get_setting_members::<Workplace>(SettingId::new(&Workplace, 0))
+            .unwrap();
+        assert_eq!(h_members.len(), 3);
+        assert_eq!(w_members.len(), 3);
+        println!("HOME MEMBERS (limit default): {h_members:?}");
+        println!("WORK MEMBERS (limit default): {w_members:?}");
+
+        // Reduce itinerary to only Home
+        let _ = context.modify_itinerary(person, ItineraryModifiers::RestrictTo { setting: &Home });
+
+        // Check membership
+        let h_members = context
+            .get_setting_members::<Home>(SettingId::new(&Home, 0))
+            .unwrap();
+        let w_members = context
+            .get_setting_members::<Workplace>(SettingId::new(&Workplace, 0))
+            .unwrap();
+        assert_eq!(h_members.len(), 3);
+        assert_eq!(w_members.len(), 2);
+        println!("HOME MEMBERS (limit isolation): {h_members:?}");
+        println!("WORK MEMBERS (limit isolation): {w_members:?}");
+
+        let _ = context.remove_modified_itinerary(person);
+        let h_members = context
+            .get_setting_members::<Home>(SettingId::new(&Home, 0))
+            .unwrap();
+        let w_members = context
+            .get_setting_members::<Workplace>(SettingId::new(&Workplace, 0))
+            .unwrap();
+        assert_eq!(h_members.len(), 3);
+        assert_eq!(w_members.len(), 3);
+
+        println!("HOME MEMBERS (limit isolation): {h_members:?}");
+        println!("WORK MEMBERS (limit isolation): {w_members:?}");
+    }
+
+    #[test]
+    fn test_exclude_setting_from_itinerary() {
+        /* H(0) = [0, 1, 2]
+          W(0) = [0,3,4] -
+         Person 0 isolates by excluding workplace from itinerary by setting type.
+        */
+        let mut context = Context::new();
+        context.init_random(42);
+        register_default_settings(&mut context);
+
+        let person = context.add_person(()).unwrap();
+        let itinerary = vec![
+            ItineraryEntry::new(SettingId::new(&Home, 0), 1.0),
+            ItineraryEntry::new(SettingId::new(&Workplace, 0), 1.0),
+        ];
+
+        let _ = context.add_itinerary(person, itinerary.clone());
+
+        for _ in 0..2 {
+            let itinerary_home = vec![ItineraryEntry::new(SettingId::new(&Home, 0), 1.0)];
+
+            let p_id = context.add_person(()).unwrap();
+            let _ = context.add_itinerary(p_id, itinerary_home);
+        }
+        for _ in 0..2 {
+            let itinerary_work = vec![ItineraryEntry::new(SettingId::new(&Workplace, 0), 1.0)];
+
+            let p_id = context.add_person(()).unwrap();
+            let _ = context.add_itinerary(p_id, itinerary_work);
+        }
+        // Check membership
+        let h_members = context
+            .get_setting_members::<Home>(SettingId::new(&Home, 0))
+            .unwrap();
+        let w_members = context
+            .get_setting_members::<Workplace>(SettingId::new(&Workplace, 0))
+            .unwrap();
+        assert_eq!(h_members.len(), 3);
+        assert_eq!(w_members.len(), 3);
+        println!("HOME MEMBERS (exclude default): {h_members:?}");
+        println!("WORK MEMBERS (exclude default): {w_members:?}");
+
+        // Reduce itinerary to only Home
+        let _ = context.modify_itinerary(
+            person,
+            ItineraryModifiers::Exclude {
+                setting: &Workplace,
+            },
+        );
+
+        // Check membership
+        let h_members = context
+            .get_setting_members::<Home>(SettingId::new(&Home, 0))
+            .unwrap();
+        let w_members = context
+            .get_setting_members::<Workplace>(SettingId::new(&Workplace, 0))
+            .unwrap();
+        assert_eq!(h_members.len(), 3);
+        assert_eq!(w_members.len(), 2);
+        println!("HOME MEMBERS (exclude isolation): {h_members:?}");
+        println!("WORK MEMBERS (exclude isolation): {w_members:?}");
+
+        let _ = context.remove_modified_itinerary(person);
+        let h_members = context
+            .get_setting_members::<Home>(SettingId::new(&Home, 0))
+            .unwrap();
+        let w_members = context
+            .get_setting_members::<Workplace>(SettingId::new(&Workplace, 0))
+            .unwrap();
+        assert_eq!(h_members.len(), 3);
+        assert_eq!(w_members.len(), 3);
+
+        println!("HOME MEMBERS (exclude post-isolation): {h_members:?}");
+        println!("WORK MEMBERS (exclude post-isolation): {w_members:?}");
+    }
+
+    #[test]
     fn test_setting_registration() {
         let mut context = Context::new();
         context
@@ -841,7 +1405,6 @@ mod test {
             )
             .unwrap();
         for s in 0..5 {
-            // Create 5 people
             for _ in 0..5 {
                 let person = context.add_person(()).unwrap();
                 let itinerary = vec![
@@ -856,7 +1419,7 @@ mod test {
             let tract_members = context
                 .get_setting_members(SettingId::new(&CensusTract, s))
                 .unwrap();
-            // Get the number of people for these settings and should be 5
+
             assert_eq!(members.len(), 5);
             assert_eq!(tract_members.len(), 5);
         }
@@ -909,24 +1472,7 @@ mod test {
     fn test_total_infectiousness_multiplier() {
         // Go through all the settings and compute infectiousness multiplier
         let mut context = Context::new();
-        context
-            .register_setting_type(
-                Home,
-                SettingProperties {
-                    alpha: 0.1,
-                    itinerary_specification: None,
-                },
-            )
-            .unwrap();
-        context
-            .register_setting_type(
-                CensusTract,
-                SettingProperties {
-                    alpha: 0.01,
-                    itinerary_specification: None,
-                },
-            )
-            .unwrap();
+        register_default_settings(&mut context);
 
         for s in 0..5 {
             for _ in 0..5 {
@@ -968,9 +1514,12 @@ mod test {
         let inf_multiplier_two_settings =
             context.calculate_total_infectiousness_multiplier_for_person(person);
 
+        let alpha_h = context.get_setting_properties(Home).unwrap().alpha;
+        let alpha_ct = context.get_setting_properties(CensusTract).unwrap().alpha;
+
         assert_almost_eq!(
             inf_multiplier_two_settings,
-            (f64::from(7 - 1).powf(0.1)) * 0.5 + (f64::from(6 - 1).powf(0.01)) * 0.5,
+            (f64::from(7 - 1).powf(alpha_h)) * 0.5 + (f64::from(6 - 1).powf(alpha_ct)) * 0.5,
             0.0
         );
     }
@@ -1453,9 +2002,4 @@ mod test {
         let total_ratio: Vec<f64> = itinerary.iter().map(|entry| entry.ratio).collect();
         assert_eq!(total_ratio, vec![0.5, 0.25, 0.25]);
     }
-    /*TODO:
-    Test failure of getting properties if not initialized
-    Test failure if a setting is registered more than once?
-    Test that proportions either add to 1 or that they are weighted based on proportion
-    */
 }

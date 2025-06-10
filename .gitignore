@@ -398,7 +398,10 @@ Icon[]
 
 # Emacs
 *~
+\#*\#
+.\#*
 
 # Other IDEs
 .vscode
 .idea
+*.org
