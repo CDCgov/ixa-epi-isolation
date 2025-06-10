@@ -198,15 +198,6 @@ fn validate_inputs(parameters: &Params) -> Result<(), IxaError> {
             ));
         }
     }
-
-    if let Some(isolation_parameters) = parameters.isolation_parameters {
-        if isolation_parameters.isolation_efficacy < 0.0 {
-            return Err(IxaError::IxaError(
-                "The isolation transmission modifier must be non-negative.".to_string(),
-            ));
-        }
-    }
-
     Ok(())
 }
 
