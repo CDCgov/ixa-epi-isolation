@@ -2,8 +2,8 @@ use crate::parameters::{
     ContextParametersExt, CoreSettingsTypes, ItinerarySpecificationType, Params,
 };
 use ixa::{
-    define_data_plugin, define_rng, people::Query, Context, ContextPeopleExt, ContextRandomExt,
-    IxaError, PersonId, trace,
+    define_data_plugin, define_rng, people::Query, trace, Context, ContextPeopleExt,
+    ContextRandomExt, IxaError, PersonId,
 };
 use serde::{Deserialize, Serialize};
 
@@ -173,7 +173,7 @@ impl SettingDataContainer {
         &mut self,
         person_id: PersonId,
         itinerary: &Vec<ItineraryEntry>,
-    ) -> Result<(), IxaError>{
+    ) -> Result<(), IxaError> {
         for itinerary_entry in itinerary {
             // TODO: If we are changing a person's itinerary, the person_id should be removed from vector
             // This isn't the same as the concept of being present or not.
@@ -316,9 +316,9 @@ trait ContextSettingInternalExt {
         setting_type: TypeId,
         setting_id: usize,
     ) -> Option<&Vec<PersonId>>;
-    /// Takes an itinerary and adds makes it the modified_itinerary of `person_id`
+    /// Takes an itinerary and adds makes it the modified itinerary of `person id`
     /// This modified itinerary is used as the person's itinerary instead of default itinerary
-    /// for as long as modified itinerary exists in the container. 
+    /// for as long as modified itinerary exists in the container.
     fn add_modified_itinerary(
         &mut self,
         person_id: PersonId,
@@ -582,11 +582,17 @@ impl ContextSettingExt for Context {
                 self.add_modified_itinerary(person_id, itinerary)
             }
             ItineraryModifiers::RestrictTo { setting } => {
-                trace!("ItineraryModifier::RestrictTo person {person_id} -- {:?}", setting.get_type_id());
+                trace!(
+                    "ItineraryModifier::RestrictTo person {person_id} -- {:?}",
+                    setting.get_type_id()
+                );
                 self.limit_itinerary_by_setting_type(person_id, setting)
             }
             ItineraryModifiers::Exclude { setting } => {
-                trace!("ItineraryModifier::Exclude person {person_id}-- {:?}", setting.get_type_id());
+                trace!(
+                    "ItineraryModifier::Exclude person {person_id}-- {:?}",
+                    setting.get_type_id()
+                );
                 self.exclude_setting_from_itinerary(person_id, setting)
             }
         }
@@ -800,7 +806,7 @@ mod test {
     use statrs::assert_almost_eq;
 
     define_setting_type!(Community);
-    
+
     fn register_default_settings(context: &mut Context) {
         context
             .register_setting_type(
@@ -840,8 +846,6 @@ mod test {
             )
             .unwrap();
     }
-
-
 
     #[test]
     fn test_setting_type_creation() {
@@ -883,7 +887,6 @@ mod test {
         );
     }
 
-    
     #[test]
     fn test_get_properties_after_registration() {
         let mut context = Context::new();
@@ -977,7 +980,7 @@ mod test {
             None => panic!("Expected an error. Instead, validation passed with no errors."),
         }
     }
-    
+
     #[test]
     fn test_feasible_itinerary_ratio() {
         let mut context = Context::new();
@@ -1510,11 +1513,10 @@ mod test {
 
         let inf_multiplier_two_settings =
             context.calculate_total_infectiousness_multiplier_for_person(person);
-                
+
         let alpha_h = context.get_setting_properties(Home).unwrap().alpha;
         let alpha_ct = context.get_setting_properties(CensusTract).unwrap().alpha;
 
-        
         assert_almost_eq!(
             inf_multiplier_two_settings,
             (f64::from(7 - 1).powf(alpha_h)) * 0.5 + (f64::from(6 - 1).powf(alpha_ct)) * 0.5,
