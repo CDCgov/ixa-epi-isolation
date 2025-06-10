@@ -49,7 +49,7 @@ pub struct InterventionPolicyParameters {
 
 #[derive(Debug, Serialize, Deserialize, Clone, Copy)]
 pub struct FacemaskParameters {
-    pub facemask_transmission_modifier: f64,
+    pub facemask_efficacy: f64,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -75,14 +75,14 @@ pub struct Params {
     pub synth_population_file: PathBuf,
     /// The path to the transmission report file
     pub transmission_report_name: Option<String>,
-    // Set of parameters that describe the isolation policy.
+    // Struct contain policy parameters for isolation guidance
     // Post-isolation duration, uptake probability, and maximum uptake delay.
     pub intervention_policy_parameters: Option<InterventionPolicyParameters>,
     // Facemask parameters
-    // facemask_transmission_modifier the reduction in tranmission associated with wearing a facemask.
+    // facemask_efficacy the reduction in tranmission associated with wearing a facemask.
     pub facemask_parameters: Option<FacemaskParameters>,
 }
-
+#[allow(clippy::too_many_lines)]
 fn validate_inputs(parameters: &Params) -> Result<(), IxaError> {
     if parameters.max_time < 0.0 {
         return Err(IxaError::IxaError(
@@ -171,6 +171,42 @@ fn validate_inputs(parameters: &Params) -> Result<(), IxaError> {
             ));
         }
     }
+    if let Some(intervention_policy_parameters) = parameters.intervention_policy_parameters {
+        if intervention_policy_parameters.post_isolation_duration < 0.0 {
+            return Err(IxaError::IxaError(
+                "The post-isolation duration must be non-negative.".to_string(),
+            ));
+        }
+        if intervention_policy_parameters.uptake_probability < 0.0
+            || intervention_policy_parameters.uptake_probability > 1.0
+        {
+            return Err(IxaError::IxaError(
+                "The uptake probability must be between 0 and 1, inclusive.".to_string(),
+            ));
+        }
+        if intervention_policy_parameters.uptake_delay_period < 0.0 {
+            return Err(IxaError::IxaError(
+                "The uptake delay period must be non-negative.".to_string(),
+            ));
+        }
+    }
+
+    if let Some(facemask_parameters) = parameters.facemask_parameters {
+        if facemask_parameters.facemask_efficacy < 0.0 {
+            return Err(IxaError::IxaError(
+                "The facemask transmission modifier must be non-negative.".to_string(),
+            ));
+        }
+    }
+
+    if let Some(isolation_parameters) = parameters.isolation_parameters {
+        if isolation_parameters.isolation_efficacy < 0.0 {
+            return Err(IxaError::IxaError(
+                "The isolation transmission modifier must be non-negative.".to_string(),
+            ));
+        }
+    }
+
     Ok(())
 }
 

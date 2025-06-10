@@ -19,7 +19,7 @@
       "uptake_delay_period": 3.0
     },
     "facemask_parameters": {
-      "facemask_transmission_modifier": 0.5
+      "facemask_efficacy": 0.5
     }
   }
 }

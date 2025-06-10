@@ -10,21 +10,27 @@ use crate::{
     settings::{
         CensusTract, ContextSettingExt, Home, ItineraryEntry, ItineraryModifiers, SettingId,
     },
+
     symptom_progression::{SymptomValue, Symptoms},
 };
 
 define_person_property_with_default!(MaskingStatus, bool, false);
 define_person_property_with_default!(IsolatingStatus, bool, false);
-define_derived_property!(Symptomatic, Option<bool>, [Symptoms], |data| match data {
-    Some(SymptomValue::Presymptomatic) => Some(false),
-    Some(
-        SymptomValue::Category1
-        | SymptomValue::Category2
-        | SymptomValue::Category3
-        | SymptomValue::Category4,
-    ) => Some(true),
-    None => None,
-});
+define_derived_property!(
+    PresentingWithSymptoms,
+    Option<bool>,
+    [Symptoms],
+    |data| match data {
+        Some(SymptomValue::Presymptomatic) => Some(false),
+        Some(
+            SymptomValue::Category1
+            | SymptomValue::Category2
+            | SymptomValue::Category3
+            | SymptomValue::Category4,
+        ) => Some(true),
+        None => None,
+    }
+);
 define_rng!(PolicyRng);
 
 trait ContextIsolationGuidanceInternalExt {
@@ -74,9 +80,11 @@ impl ContextIsolationGuidanceInternalExt for Context {
         uptake_probability: f64,
         uptake_delay_period: f64,
     ) {
-        self.subscribe_to_event::<PersonPropertyChangeEvent<Symptomatic>>(move |context, event| {
+        self.subscribe_to_event::<PersonPropertyChangeEvent<PresentingWithSymptoms>>(move |context, event| {
             match event.current {
+                // individuals are not presenting with symptoms but are infected
                 Some(false) => (),
+                // individuals are presenting with symptoms
                 Some(true) => {
                     if context.sample_bool(PolicyRng, uptake_probability) {
                         let t = context.get_current_time();
@@ -91,6 +99,7 @@ impl ContextIsolationGuidanceInternalExt for Context {
                         });
                     }
                 }
+                // individuals have recovered from symptoms
                 None => {
                     if context.get_person_property(event.person_id, IsolatingStatus) {
                         context.modify_isolation_status(event.person_id, false);
@@ -123,7 +132,8 @@ pub fn init(context: &mut Context) {
             .store_transmission_modifier_values(
                 InfectionStatusValue::Infectious,
                 MaskingStatus,
-                &[(true, facemask_parameters.facemask_transmission_modifier)],
+                &[(true, 1.0 - facemask_parameters.facemask_efficacy)],
+
             )
             .unwrap();
     }
@@ -142,7 +152,7 @@ pub fn init(context: &mut Context) {
 #[cfg(test)]
 #[allow(clippy::float_cmp)]
 mod test {
-    use super::init as policy_init;
+    use super::{init as policy_init, PresentingWithSymptoms};
     use crate::{
         infectiousness_manager::InfectionContextExt,
         parameters::{
@@ -151,7 +161,8 @@ mod test {
         },
         population_loader::Alive,
         rate_fns::load_rate_fns,
-        symptom_progression::{init as symptom_init, SymptomValue, Symptoms},
+        symptom_progression::init as symptom_init,
+
         Params,
     };
     use std::{cell::RefCell, collections::HashMap, path::PathBuf, rc::Rc};
@@ -169,7 +180,8 @@ mod test {
         post_isolation_duration: f64,
         uptake_probability: f64,
         uptake_delay_period: f64,
-        facemask_transmission_modifier: f64,
+        facemask_efficacy: f64,
+
     ) -> Context {
         let mut context = Context::new();
         let parameters = Params {
@@ -193,9 +205,7 @@ mod test {
                 uptake_probability,
                 uptake_delay_period,
             }),
-            facemask_parameters: Some(FacemaskParameters {
-                facemask_transmission_modifier,
-            }),
+            facemask_parameters: Some(FacemaskParameters { facemask_efficacy }),
         };
         context.init_random(parameters.seed);
         context
@@ -216,40 +226,41 @@ mod test {
         let post_isolation_duration = 5.0;
         let uptake_probability = 1.0;
         let uptake_delay_period = 1.0;
-        let facemask_transmission_modifier = 0.5;
+        let facemask_efficacy = 0.5;
+
         let mut context = setup_context(
             post_isolation_duration,
             uptake_probability,
             uptake_delay_period,
-            facemask_transmission_modifier,
-        );
-
+            facemask_efficacy,
+        let p1 = context.add_person(()).unwrap();
+        symptom_init(&mut context).unwrap();
+        policy_init(&mut context);
+          
         let start_time_symptoms = Rc::new(RefCell::new(0.0f64));
         let end_time_symptoms = Rc::new(RefCell::new(0.0f64));
 
         let start_time_symptoms_clone1 = Rc::clone(&start_time_symptoms);
         let end_time_symptoms_clone1 = Rc::clone(&end_time_symptoms);
-        context.subscribe_to_event::<PersonPropertyChangeEvent<Symptoms>>(move |context, event| {
-            println!(
-                "symptom time: {}, event.current: {:?}",
-                context.get_current_time(),
-                event.current
-            );
-            match event.current {
-                Some(SymptomValue::Presymptomatic) => (),
-                Some(
-                    SymptomValue::Category1
-                    | SymptomValue::Category2
-                    | SymptomValue::Category3
-                    | SymptomValue::Category4,
-                ) => {
-                    *start_time_symptoms_clone1.borrow_mut() = context.get_current_time();
+
+        context.subscribe_to_event::<PersonPropertyChangeEvent<PresentingWithSymptoms>>(
+            move |context, event| {
+                println!(
+                    "symptom time: {}, event.current: {:?}",
+                    context.get_current_time(),
+                    event.current
+                );
+                match event.current {
+                    Some(false) => (),
+                    Some(true) => {
+                        *start_time_symptoms_clone1.borrow_mut() = context.get_current_time();
+                    }
+                    None => {
+                        *end_time_symptoms_clone1.borrow_mut() = context.get_current_time();
+                    }
                 }
-                None => {
-                    *end_time_symptoms_clone1.borrow_mut() = context.get_current_time();
-                }
-            }
-        });
+            },
+        );
 
         let start_time_symptoms_clone2 = Rc::clone(&start_time_symptoms);
         let end_time_symptoms_clone2 = Rc::clone(&end_time_symptoms);
@@ -297,23 +308,20 @@ mod test {
                 }
             },
         );
-
-        let p1 = context.add_person(()).unwrap();
-        symptom_init(&mut context).unwrap();
-        policy_init(&mut context);
         context.infect_person(p1, None, None, None);
         context.execute();
     }
-
     #[test]
     fn test_isolation_guidance_uptake_probability() {
         // this test checks that the proportion of individuals that isolation is what we
         // expect. This proportion is determined by the uptake_probability parameter.
         // Note this requires an uptake delay period of 0.
+
         let post_isolation_duration = 5.0;
         let uptake_probability = 1.0;
         let uptake_delay_period = 0.0;
         let facemask_efficacy = 0.5;
+
         let num_people_isolating = Rc::new(RefCell::new(0usize));
 
         let num_people = 1000;
