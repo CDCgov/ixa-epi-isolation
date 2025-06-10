@@ -40,6 +40,18 @@ pub enum ItinerarySpecificationType {
     Constant { ratio: f64 },
 }
 
+#[derive(Debug, Serialize, Deserialize, Clone, Copy)]
+pub struct InterventionPolicyParameters {
+    pub post_isolation_duration: f64,
+    pub uptake_probability: f64,
+    pub uptake_delay_period: f64,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, Copy)]
+pub struct FacemaskParameters {
+    pub facemask_transmission_modifier: f64,
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Params {
     /// The proportion of initial people who are infectious when we seed the population.
@@ -63,6 +75,12 @@ pub struct Params {
     pub synth_population_file: PathBuf,
     /// The path to the transmission report file
     pub transmission_report_name: Option<String>,
+    // Set of parameters that describe the isolation policy.
+    // Post-isolation duration, uptake probability, and maximum uptake delay.
+    pub intervention_policy_parameters: Option<InterventionPolicyParameters>,
+    // Facemask parameters
+    // facemask_transmission_modifier the reduction in tranmission associated with wearing a facemask.
+    pub facemask_parameters: Option<FacemaskParameters>,
 }
 
 fn validate_inputs(parameters: &Params) -> Result<(), IxaError> {
@@ -208,6 +226,8 @@ mod test {
             synth_population_file: PathBuf::from("."),
             transmission_report_name: None,
             settings_properties: HashMap::new(),
+            intervention_policy_parameters: None,
+            facemask_parameters: None,
         };
         context
             .set_global_property_value(GlobalParams, parameters)
@@ -235,6 +255,8 @@ mod test {
             synth_population_file: PathBuf::from("."),
             transmission_report_name: None,
             settings_properties: HashMap::new(),
+            intervention_policy_parameters: None,
+            facemask_parameters: None,
         };
         let e = validate_inputs(&parameters).err();
         match e {
@@ -284,6 +306,8 @@ mod test {
                     },
                 ),
             ]),
+            intervention_policy_parameters: None,
+            facemask_parameters: None,
         };
         let e = validate_inputs(&parameters).err();
         match e {
@@ -333,6 +357,8 @@ mod test {
                     },
                 ),
             ]),
+            intervention_policy_parameters: None,
+            facemask_parameters: None,
         };
         let e = validate_inputs(&parameters).err();
         match e {
@@ -381,6 +407,8 @@ mod test {
                     },
                 ),
             ]),
+            intervention_policy_parameters: None,
+            facemask_parameters: None,
         };
         let e = validate_inputs(&parameters).err();
         assert!(e.is_none(), "Expected no error, but got: {e:?}");
@@ -419,6 +447,8 @@ mod test {
                     },
                 ),
             ]),
+            intervention_policy_parameters: None,
+            facemask_parameters: None,
         };
         let e = validate_inputs(&parameters).err();
         assert!(e.is_none(), "Expected no error, but got: {e:?}");

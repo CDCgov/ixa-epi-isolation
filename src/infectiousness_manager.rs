@@ -291,6 +291,8 @@ mod test {
                     transmission_report_name: None,
                     // We set the itineraries manually in `set_homogeneous_mixing_itinerary`.
                     settings_properties: HashMap::new(),
+                    intervention_policy_parameters: None,
+                    facemask_parameters: None,
                 },
             )
             .unwrap();

@@ -1,6 +1,6 @@
 {
   "epi_isolation.GlobalParams": {
-    "max_time": 200.0,
+    "max_time": 50.0,
     "seed": 123,
     "infectiousness_rate_fn": {"EmpiricalFromFile": {"file": "input/library_empirical_rate_fns.csv", "scale": 1.0}},
     "initial_incidence": 0.1,
@@ -12,6 +12,14 @@
     "symptom_progression_library" : {"EmpiricalFromFile": {"file": "input/library_symptom_parameters.csv"}},
     "report_period": 1.0,
     "synth_population_file": "input/people_test.csv",
-    "transmission_report_name": "transmission_report.csv"
+    "transmission_report_name": "transmission_report.csv",
+    "intervention_policy_parameters": {
+      "post_isolation_duration": 5.0,
+      "uptake_probability": 1.0,
+      "uptake_delay_period": 3.0
+    },
+    "facemask_parameters": {
+      "facemask_transmission_modifier": 0.5
+    }
   }
 }

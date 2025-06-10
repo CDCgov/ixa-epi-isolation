@@ -1937,6 +1937,8 @@ mod test {
                     }),
                 },
             )]),
+            intervention_policy_parameters: None,
+            facemask_parameters: None,
         };
 
         context
