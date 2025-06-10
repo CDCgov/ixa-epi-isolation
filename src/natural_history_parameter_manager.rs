@@ -341,7 +341,6 @@ mod test {
             settings_properties: HashMap::new(),
             intervention_policy_parameters: None,
             facemask_parameters: None,
-            isolation_parameters: None,
         };
 
         context

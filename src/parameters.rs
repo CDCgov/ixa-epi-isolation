@@ -52,11 +52,6 @@ pub struct FacemaskParameters {
     pub facemask_efficacy: f64,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, Copy)]
-pub struct IsolationParameters {
-    pub isolation_efficacy: f64,
-}
-
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Params {
     /// The proportion of initial people who are infectious when we seed the population.
@@ -86,9 +81,6 @@ pub struct Params {
     // Facemask parameters
     // facemask_efficacy the reduction in tranmission associated with wearing a facemask.
     pub facemask_parameters: Option<FacemaskParameters>,
-    // isolation parameters
-    // isolation_efficacy the reduction in tranmission associated with isolating.
-    pub isolation_parameters: Option<IsolationParameters>,
 }
 #[allow(clippy::too_many_lines)]
 fn validate_inputs(parameters: &Params) -> Result<(), IxaError> {
@@ -206,15 +198,6 @@ fn validate_inputs(parameters: &Params) -> Result<(), IxaError> {
             ));
         }
     }
-
-    if let Some(isolation_parameters) = parameters.isolation_parameters {
-        if isolation_parameters.isolation_efficacy < 0.0 {
-            return Err(IxaError::IxaError(
-                "The isolation transmission modifier must be non-negative.".to_string(),
-            ));
-        }
-    }
-
     Ok(())
 }
 
@@ -272,7 +255,6 @@ mod test {
             settings_properties: HashMap::new(),
             intervention_policy_parameters: None,
             facemask_parameters: None,
-            isolation_parameters: None,
         };
         context
             .set_global_property_value(GlobalParams, parameters)
@@ -302,7 +284,6 @@ mod test {
             settings_properties: HashMap::new(),
             intervention_policy_parameters: None,
             facemask_parameters: None,
-            isolation_parameters: None,
         };
         let e = validate_inputs(&parameters).err();
         match e {
@@ -354,7 +335,6 @@ mod test {
             ]),
             intervention_policy_parameters: None,
             facemask_parameters: None,
-            isolation_parameters: None,
         };
         let e = validate_inputs(&parameters).err();
         match e {
@@ -406,7 +386,6 @@ mod test {
             ]),
             intervention_policy_parameters: None,
             facemask_parameters: None,
-            isolation_parameters: None,
         };
         let e = validate_inputs(&parameters).err();
         match e {
@@ -457,7 +436,6 @@ mod test {
             ]),
             intervention_policy_parameters: None,
             facemask_parameters: None,
-            isolation_parameters: None,
         };
         let e = validate_inputs(&parameters).err();
         assert!(e.is_none(), "Expected no error, but got: {e:?}");
@@ -498,7 +476,6 @@ mod test {
             ]),
             intervention_policy_parameters: None,
             facemask_parameters: None,
-            isolation_parameters: None,
         };
         let e = validate_inputs(&parameters).err();
         assert!(e.is_none(), "Expected no error, but got: {e:?}");

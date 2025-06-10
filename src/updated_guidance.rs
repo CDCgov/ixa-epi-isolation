@@ -1,12 +1,15 @@
 use ixa::{
     define_derived_property, define_person_property_with_default, define_rng, trace, Context,
-    ContextPeopleExt, ContextRandomExt, PersonPropertyChangeEvent,
+    ContextPeopleExt, ContextRandomExt, PersonId, PersonPropertyChangeEvent,
 };
 
 use crate::{
     infectiousness_manager::InfectionStatusValue,
     interventions::ContextTransmissionModifierExt,
     parameters::{ContextParametersExt, Params},
+    settings::{
+        CensusTract, ContextSettingExt, Home, ItineraryEntry, ItineraryModifiers, SettingId,
+    },
     symptom_progression::{SymptomValue, Symptoms},
 };
 
@@ -30,6 +33,8 @@ define_derived_property!(
 define_rng!(PolicyRng);
 
 trait ContextIsolationGuidanceInternalExt {
+    fn modify_isolation_status(&mut self, person: PersonId, isolation_status: bool);
+    fn modify_masking_status(&mut self, person: PersonId, masking_status: bool);
     fn setup_isolation_guidance_event_sequence(
         &mut self,
         post_isolation_duration: f64,
@@ -39,6 +44,35 @@ trait ContextIsolationGuidanceInternalExt {
 }
 
 impl ContextIsolationGuidanceInternalExt for Context {
+    fn modify_isolation_status(&mut self, person: PersonId, isolation_status: bool) {
+        if isolation_status {
+            let _ =
+                self.modify_itinerary(person, ItineraryModifiers::RestrictTo { setting: &Home });
+        } else {
+            let _ = self.remove_modified_itinerary(person);
+        }
+        self.set_person_property(person, IsolatingStatus, isolation_status);
+    }
+
+    fn modify_masking_status(&mut self, person: PersonId, masking_status: bool) {
+        if masking_status {
+            // let home_id = context.get_setting_id(person, &Home);
+            let isolation_itinerary = vec![
+                ItineraryEntry::new(SettingId::new(&Home, 0), 0.5),
+                ItineraryEntry::new(SettingId::new(&CensusTract, 0), 0.5),
+            ];
+            let _ = self.modify_itinerary(
+                person,
+                ItineraryModifiers::ReplaceWith {
+                    itinerary: isolation_itinerary,
+                },
+            );
+        } else {
+            let _ = self.remove_modified_itinerary(person);
+        }
+        self.set_person_property(person, MaskingStatus, masking_status);
+    }
+
     fn setup_isolation_guidance_event_sequence(
         &mut self,
         post_isolation_duration: f64,
@@ -59,11 +93,7 @@ impl ContextIsolationGuidanceInternalExt for Context {
                                     .get_person_property(event.person_id, Symptoms)
                                     .is_some()
                                 {
-                                    context.set_person_property(
-                                        event.person_id,
-                                        IsolatingStatus,
-                                        true,
-                                    );
+                                    context.modify_isolation_status(event.person_id, true);
                                     trace!("Person {} is now isolating", event.person_id);
                                 }
                             });
@@ -72,16 +102,16 @@ impl ContextIsolationGuidanceInternalExt for Context {
                     // individuals have recovered from symptoms
                     None => {
                         if context.get_person_property(event.person_id, IsolatingStatus) {
-                            context.set_person_property(event.person_id, IsolatingStatus, false);
-                            context.set_person_property(event.person_id, MaskingStatus, true);
+                            context.modify_isolation_status(event.person_id, false);
+                            context.modify_masking_status(event.person_id, true);
                             trace!(
-                                "Person {} is now wearing a mask and no longer isolating",
+                                "Person {} is now masking and no longer isolating",
                                 event.person_id
                             );
                             let t = context.get_current_time();
                             context.add_plan(t + post_isolation_duration, move |context| {
-                                context.set_person_property(event.person_id, MaskingStatus, false);
-                                trace!("Person {} is now not wearing a mask", event.person_id);
+                                context.modify_masking_status(event.person_id, false);
+                                trace!("Person {} is now no longer masking", event.person_id);
                             });
                         }
                     }
@@ -95,7 +125,6 @@ pub fn init(context: &mut Context) {
     let &Params {
         intervention_policy_parameters,
         facemask_parameters,
-        isolation_parameters, // Not used in this function, but could be used for other purposes
         ..
     } = context.get_params();
 
@@ -105,16 +134,6 @@ pub fn init(context: &mut Context) {
                 InfectionStatusValue::Infectious,
                 MaskingStatus,
                 &[(true, 1.0 - facemask_parameters.facemask_efficacy)],
-            )
-            .unwrap();
-    }
-
-    if let Some(isolation_parameters) = isolation_parameters {
-        context
-            .store_transmission_modifier_values(
-                InfectionStatusValue::Infectious,
-                IsolatingStatus,
-                &[(true, 1.0 - isolation_parameters.isolation_efficacy)],
             )
             .unwrap();
     }
@@ -137,8 +156,8 @@ mod test {
     use crate::{
         infectiousness_manager::InfectionContextExt,
         parameters::{
-            FacemaskParameters, GlobalParams, InterventionPolicyParameters, IsolationParameters,
-            ProgressionLibraryType, RateFnType,
+            FacemaskParameters, GlobalParams, InterventionPolicyParameters, ProgressionLibraryType,
+            RateFnType,
         },
         population_loader::Alive,
         rate_fns::load_rate_fns,
@@ -152,16 +171,15 @@ mod test {
         PersonPropertyChangeEvent,
     };
 
-    use statrs::assert_almost_eq;
-
     use super::{IsolatingStatus, MaskingStatus};
+
+    use statrs::assert_almost_eq;
 
     fn setup_context(
         post_isolation_duration: f64,
         uptake_probability: f64,
         uptake_delay_period: f64,
         facemask_efficacy: f64,
-        isolation_efficacy: f64,
     ) -> Context {
         let mut context = Context::new();
         let parameters = Params {
@@ -186,7 +204,6 @@ mod test {
                 uptake_delay_period,
             }),
             facemask_parameters: Some(FacemaskParameters { facemask_efficacy }),
-            isolation_parameters: Some(IsolationParameters { isolation_efficacy }),
         };
         context.init_random(parameters.seed);
         context
@@ -208,13 +225,12 @@ mod test {
         let uptake_probability = 1.0;
         let uptake_delay_period = 1.0;
         let facemask_efficacy = 0.5;
-        let isolation_efficacy = 0.5;
+
         let mut context = setup_context(
             post_isolation_duration,
             uptake_probability,
             uptake_delay_period,
             facemask_efficacy,
-            isolation_efficacy,
         );
         let p1 = context.add_person(()).unwrap();
         symptom_init(&mut context).unwrap();
@@ -225,6 +241,7 @@ mod test {
 
         let start_time_symptoms_clone1 = Rc::clone(&start_time_symptoms);
         let end_time_symptoms_clone1 = Rc::clone(&end_time_symptoms);
+
         context.subscribe_to_event::<PersonPropertyChangeEvent<PresentingWithSymptoms>>(
             move |context, event| {
                 println!(
@@ -297,11 +314,13 @@ mod test {
     fn test_isolation_guidance_uptake_probability() {
         // this test checks that the proportion of individuals that isolation is what we
         // expect. This proportion is determined by the uptake_probability parameter.
+        // Note this requires an uptake delay period of 0.
+
         let post_isolation_duration = 5.0;
         let uptake_probability = 1.0;
         let uptake_delay_period = 0.0;
         let facemask_efficacy = 0.5;
-        let isolation_efficacy = 0.5;
+
         let num_people_isolating = Rc::new(RefCell::new(0usize));
 
         let num_people = 1000;
@@ -313,7 +332,6 @@ mod test {
                 uptake_probability,
                 uptake_delay_period,
                 facemask_efficacy,
-                isolation_efficacy,
             );
             context.init_random(seed);
             let _first_person: ixa::PersonId = context.add_person(()).unwrap();
@@ -339,7 +357,7 @@ mod test {
 
             context.execute();
         }
-        // Check that the proportion of people who are symptomatic is close to the expected
+        // Check that the proportion of people who are isolating is close to the expected
         // proportion
         #[allow(clippy::cast_precision_loss)]
         let proportion_isolating =
