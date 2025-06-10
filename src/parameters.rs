@@ -90,7 +90,7 @@ pub struct Params {
     // isolation_efficacy the reduction in tranmission associated with isolating.
     pub isolation_parameters: Option<IsolationParameters>,
 }
-
+#[allow(clippy::too_many_lines)]
 fn validate_inputs(parameters: &Params) -> Result<(), IxaError> {
     if parameters.max_time < 0.0 {
         return Err(IxaError::IxaError(
