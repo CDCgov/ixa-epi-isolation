@@ -41,7 +41,8 @@ trait ContextIsolationGuidanceInternalExt {
 impl ContextIsolationGuidanceInternalExt for Context {
     fn modify_isolation_status(&mut self, person: PersonId, isolation_status: bool) {
         if isolation_status {
-            let _ = self.modify_itinerary(person, ItineraryModifiers::Include { setting: &Home });
+            let _ =
+                self.modify_itinerary(person, ItineraryModifiers::RestrictTo { setting: &Home });
         } else {
             let _ = self.remove_modified_itinerary(person);
         }
@@ -172,7 +173,8 @@ mod test {
     ) -> Context {
         let mut context = Context::new();
         let parameters = Params {
-            initial_infections: 3,
+            initial_incidence: 0.1,
+            initial_recovered: 0.35,
             max_time: 100.0,
             seed: 0,
             infectiousness_rate_fn: RateFnType::Constant {
