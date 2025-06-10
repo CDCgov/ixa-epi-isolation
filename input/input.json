@@ -27,9 +27,6 @@
     },
     "facemask_parameters": {
       "facemask_efficacy": 0.5
-    },
-    "isolation_parameters": {
-      "isolation_efficacy": 0.5
     }
   }
 }
