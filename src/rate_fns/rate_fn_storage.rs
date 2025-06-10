@@ -199,7 +199,8 @@ mod tests {
     fn test_load_rate_functions_constant() {
         let mut context = Context::new();
         let parameters = Params {
-            initial_infections: 3,
+            initial_incidence: 0.0,
+            initial_recovered: 0.0,
             max_time: 100.0,
             seed: 0,
             infectiousness_rate_fn: RateFnType::Constant {
@@ -229,7 +230,8 @@ mod tests {
         let scale = 2.0;
         let mut context = Context::new();
         let parameters = Params {
-            initial_infections: 3,
+            initial_incidence: 0.0,
+            initial_recovered: 0.0,
             max_time: 100.0,
             seed: 0,
             infectiousness_rate_fn: RateFnType::EmpiricalFromFile {
@@ -268,7 +270,8 @@ mod tests {
     fn test_read_rate_function_discontiguous_ids() {
         let mut context = Context::new();
         let parameters = Params {
-            initial_infections: 3,
+            initial_incidence: 0.0,
+            initial_recovered: 0.0,
             max_time: 100.0,
             seed: 0,
             infectiousness_rate_fn: RateFnType::EmpiricalFromFile {
@@ -303,7 +306,8 @@ mod tests {
     fn test_read_rate_function_id_starts_at_two() {
         let mut context = Context::new();
         let parameters = Params {
-            initial_infections: 3,
+            initial_incidence: 0.0,
+            initial_recovered: 0.0,
             max_time: 100.0,
             seed: 0,
             infectiousness_rate_fn: RateFnType::EmpiricalFromFile {
