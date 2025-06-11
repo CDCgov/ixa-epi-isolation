@@ -209,6 +209,7 @@ mod test {
             seed,
             infectiousness_rate_fn: RateFnType::Constant { rate, duration },
             symptom_progression_library: None,
+            proportion_asymptomatic: 0.0,
             report_period: 1.0,
             synth_population_file: PathBuf::from("."),
             transmission_report_name: None,

@@ -55,6 +55,8 @@ pub struct Params {
     pub infectiousness_rate_fn: RateFnType,
     /// A library of symptom progressions
     pub symptom_progression_library: Option<ProgressionLibraryType>,
+    /// Proportion of infected individuals who do not develop symptoms
+    pub proportion_asymptomatic: f64,
     /// The period at which to report tabulated values
     pub report_period: f64,
     /// Setting properties by setting type
@@ -153,6 +155,11 @@ fn validate_inputs(parameters: &Params) -> Result<(), IxaError> {
             ));
         }
     }
+
+    // Check asymptomatic parameters
+    if !(0.0..=1.0).contains(&parameters.proportion_asymptomatic) {
+        return Err(IxaError::IxaError("The proportion of infected individuals who are asymptomatic must be between 0 and 1, inclusive.".to_string()));
+    }
     Ok(())
 }
 
@@ -204,6 +211,7 @@ mod test {
                 duration: 5.0,
             },
             symptom_progression_library: None,
+            proportion_asymptomatic: 0.0,
             report_period: 1.0,
             synth_population_file: PathBuf::from("."),
             transmission_report_name: None,
@@ -231,6 +239,7 @@ mod test {
                 duration: 5.0,
             },
             symptom_progression_library: None,
+            proportion_asymptomatic: 0.0,
             report_period: 1.0,
             synth_population_file: PathBuf::from("."),
             transmission_report_name: None,
@@ -261,6 +270,7 @@ mod test {
                 duration: 5.0,
             },
             symptom_progression_library: None,
+            proportion_asymptomatic: 0.0,
             report_period: 1.0,
             synth_population_file: PathBuf::from("."),
             transmission_report_name: None,
@@ -310,6 +320,7 @@ mod test {
                 duration: 5.0,
             },
             symptom_progression_library: None,
+            proportion_asymptomatic: 0.0,
             report_period: 1.0,
             synth_population_file: PathBuf::from("."),
             transmission_report_name: None,
@@ -362,6 +373,7 @@ mod test {
                 duration: 5.0,
             },
             symptom_progression_library: None,
+            proportion_asymptomatic: 0.0,
             report_period: 1.0,
             synth_population_file: PathBuf::from("."),
             transmission_report_name: None,
@@ -398,6 +410,7 @@ mod test {
                 duration: 5.0,
             },
             symptom_progression_library: None,
+            proportion_asymptomatic: 0.0,
             report_period: 1.0,
             synth_population_file: PathBuf::from("."),
             transmission_report_name: None,
@@ -437,5 +450,63 @@ mod test {
                 duration: 5.0
             }
         );
+    }
+
+    #[test]
+    fn test_proportion_asymptomatic() {
+        let get_parameters = |proportion_asymptomatic| Params {
+            initial_incidence: 0.0,
+            initial_recovered: 0.0,
+            max_time: 100.0,
+            seed: 0,
+            infectiousness_rate_fn: RateFnType::Constant {
+                rate: 1.0,
+                duration: 5.0,
+            },
+            symptom_progression_library: None,
+            proportion_asymptomatic,
+            report_period: 1.0,
+            synth_population_file: PathBuf::from("."),
+            transmission_report_name: None,
+            settings_properties: HashMap::new(),
+        };
+        // Should pass
+        let parameters = get_parameters(1.0);
+        validate_inputs(&parameters)
+            .expect("Expected validation to pass for proportion_asymptomatic = 1.0");
+        // Should pass
+        let parameters = get_parameters(0.0);
+        validate_inputs(&parameters)
+            .expect("Expected validation to pass for proportion_asymptomatic = 0.0");
+        // Should pass
+        let parameters = get_parameters(0.5);
+        validate_inputs(&parameters)
+            .expect("Expected validation to pass for proportion_asymptomatic = 0.5");
+        // Should fail
+        let parameters = get_parameters(-1.0);
+        let e = validate_inputs(&parameters).err();
+        match e {
+            Some(IxaError::IxaError(msg)) => {
+                assert_eq!(msg, "The proportion of infected individuals who are asymptomatic must be between 0 and 1, inclusive.".to_string());
+            }
+            Some(ue) => panic!(
+                "Expected an error that the proportion of asymptomatic individuals validation should fail. Instead got {:?}",
+                ue.to_string()
+            ),
+            None => panic!("Expected an error. Instead, validation passed with no errors."),
+        }
+        // Should fail
+        let parameters = get_parameters(1.1);
+        let e = validate_inputs(&parameters).err();
+        match e {
+            Some(IxaError::IxaError(msg)) => {
+                assert_eq!(msg, "The proportion of infected individuals who are asymptomatic must be between 0 and 1, inclusive.".to_string());
+            }
+            Some(ue) => panic!(
+                "Expected an error that the fraction of asymptomatic individuals validation should fail. Instead got {:?}",
+                ue.to_string()
+            ),
+            None => panic!("Expected an error. Instead, validation passed with no errors."),
+        }
     }
 }

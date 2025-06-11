@@ -5,6 +5,7 @@
     "infectiousness_rate_fn": {"EmpiricalFromFile": {"file": "input/library_empirical_rate_fns.csv", "scale": 1.0}},
     "initial_incidence": 0.1,
     "initial_recovered": 0.35,
+    "proportion_asymptomatic": 0.3,
     "settings_properties": {"Home": {"alpha": 0.0, "itinerary_specification": {"Constant": {"ratio": 0.25}}},
                             "Workplace": {"alpha": 0.0, "itinerary_specification": {"Constant": {"ratio": 0.25}}},
                             "School": {"alpha": 0.0, "itinerary_specification": {"Constant": {"ratio": 0.25}}},

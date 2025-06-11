@@ -243,6 +243,7 @@ mod test {
                         duration: 10.0,
                     },
                     symptom_progression_library: None,
+                    proportion_asymptomatic: 0.0,
                     report_period: 1.0,
                     synth_population_file: PathBuf::from("."),
                     transmission_report_name: None,
