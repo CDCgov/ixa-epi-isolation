@@ -22,20 +22,20 @@ pub trait TransmissionModifier: std::fmt::Debug + 'static {
 }
 
 // A type alias for the type of the transmission modifiers specified via a hashmap of person
-// property values and floats -- i.e., `modifier_key: &[(T::Value, f64)]`
-type PersonPropertyModifier<T> = (
-    T,
+// property values and floats -- i.e., `modifier_key: &[(P::Value, f64)]`
+type PersonPropertyModifier<P> = (
+    P,
     // Use fully qualified syntax for the associated type because type aliases do not have type checking
-    HashMap<<T as PersonProperty>::Value, f64>,
+    HashMap<<P as PersonProperty>::Value, f64>,
 );
 
-impl<T> TransmissionModifier for PersonPropertyModifier<T>
+impl<P> TransmissionModifier for PersonPropertyModifier<P>
 where
     // All person properties implement `Debug` and are static
-    T: PersonProperty + std::fmt::Debug + 'static,
+    P: PersonProperty + std::fmt::Debug + 'static,
     // For now, this limits us to person property values that are not floats for use in the
     // transmisison modifier map convienience method.
-    T::Value: std::hash::Hash + Eq,
+    P::Value: std::hash::Hash + Eq,
 {
     fn get_relative_transmission(&self, context: &Context, person_id: PersonId) -> f64 {
         let (person_property, modifier_map) = self;
@@ -82,14 +82,14 @@ pub trait ContextTransmissionModifierExt {
     /// value associated the person's property value in the
     /// `relative_transmission_potential_multipliers` key.
     #[allow(dead_code)]
-    fn store_transmission_modifier_values<T: PersonProperty + std::fmt::Debug + 'static>(
+    fn store_transmission_modifier_values<P: PersonProperty + std::fmt::Debug + 'static>(
         &mut self,
         infection_status: InfectionStatusValue,
-        person_property: T,
-        relative_transmission_potential_multipliers: &[(T::Value, f64)],
+        person_property: P,
+        relative_transmission_potential_multipliers: &[(P::Value, f64)],
     ) -> Result<(), IxaError>
     where
-        T::Value: std::hash::Hash + Eq;
+        P::Value: std::hash::Hash + Eq;
 
     /// Get the relative potential for infection (infectiousness or susceptibility) for a person
     /// based on their infection status based on all registered modifiers. Queries all registered
@@ -122,14 +122,14 @@ impl ContextTransmissionModifierExt for Context {
         }
     }
 
-    fn store_transmission_modifier_values<T: PersonProperty + std::fmt::Debug + 'static>(
+    fn store_transmission_modifier_values<P: PersonProperty + std::fmt::Debug + 'static>(
         &mut self,
         infection_status: InfectionStatusValue,
-        person_property: T,
-        relative_transmission_potential_multipliers: &[(T::Value, f64)],
+        person_property: P,
+        relative_transmission_potential_multipliers: &[(P::Value, f64)],
     ) -> Result<(), IxaError>
     where
-        T::Value: std::hash::Hash + Eq,
+        P::Value: std::hash::Hash + Eq,
     {
         // Convert modifiers to HashMap
         let mut modifier_map = HashMap::new();
