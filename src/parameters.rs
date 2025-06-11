@@ -57,6 +57,8 @@ pub struct Params {
     pub symptom_progression_library: Option<ProgressionLibraryType>,
     /// Proportion of infected individuals who do not develop symptoms
     pub proportion_asymptomatic: f64,
+    /// Asymptomatic individuals are less infectious than symptomatic individuals
+    pub relative_infectiousness_asymptomatics: f64,
     /// The period at which to report tabulated values
     pub report_period: f64,
     /// Setting properties by setting type
@@ -160,6 +162,9 @@ fn validate_inputs(parameters: &Params) -> Result<(), IxaError> {
     if !(0.0..=1.0).contains(&parameters.proportion_asymptomatic) {
         return Err(IxaError::IxaError("The proportion of infected individuals who are asymptomatic must be between 0 and 1, inclusive.".to_string()));
     }
+    if !(0.0..=1.0).contains(&parameters.relative_infectiousness_asymptomatics) {
+        return Err(IxaError::IxaError("The relative infectiousness of asymptomatic individuals must be between 0 and 1, inclusive.".to_string()));
+    }
     Ok(())
 }
 
@@ -212,6 +217,7 @@ mod test {
             },
             symptom_progression_library: None,
             proportion_asymptomatic: 0.0,
+            relative_infectiousness_asymptomatics: 0.0,
             report_period: 1.0,
             synth_population_file: PathBuf::from("."),
             transmission_report_name: None,
@@ -240,6 +246,7 @@ mod test {
             },
             symptom_progression_library: None,
             proportion_asymptomatic: 0.0,
+            relative_infectiousness_asymptomatics: 0.0,
             report_period: 1.0,
             synth_population_file: PathBuf::from("."),
             transmission_report_name: None,
@@ -271,6 +278,7 @@ mod test {
             },
             symptom_progression_library: None,
             proportion_asymptomatic: 0.0,
+            relative_infectiousness_asymptomatics: 0.0,
             report_period: 1.0,
             synth_population_file: PathBuf::from("."),
             transmission_report_name: None,
@@ -321,6 +329,7 @@ mod test {
             },
             symptom_progression_library: None,
             proportion_asymptomatic: 0.0,
+            relative_infectiousness_asymptomatics: 0.0,
             report_period: 1.0,
             synth_population_file: PathBuf::from("."),
             transmission_report_name: None,
@@ -374,6 +383,7 @@ mod test {
             },
             symptom_progression_library: None,
             proportion_asymptomatic: 0.0,
+            relative_infectiousness_asymptomatics: 0.0,
             report_period: 1.0,
             synth_population_file: PathBuf::from("."),
             transmission_report_name: None,
@@ -411,6 +421,7 @@ mod test {
             },
             symptom_progression_library: None,
             proportion_asymptomatic: 0.0,
+            relative_infectiousness_asymptomatics: 0.0,
             report_period: 1.0,
             synth_population_file: PathBuf::from("."),
             transmission_report_name: None,
@@ -465,6 +476,7 @@ mod test {
             },
             symptom_progression_library: None,
             proportion_asymptomatic,
+            relative_infectiousness_asymptomatics: 0.0,
             report_period: 1.0,
             synth_population_file: PathBuf::from("."),
             transmission_report_name: None,

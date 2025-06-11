@@ -8,6 +8,7 @@ use ixa::{
 use serde::{Deserialize, Serialize};
 use statrs::distribution::Weibull;
 
+use crate::interventions::{ContextTransmissionModifierExt, TransmissionModifier};
 use crate::natural_history_parameter_manager::ContextNaturalHistoryParameterExt;
 use crate::parameters::ContextParametersExt;
 use crate::rate_fns::RateFn;
@@ -205,17 +206,38 @@ fn schedule_recovery(data: &SymptomData, context: &Context) -> (Option<SymptomVa
     (None, time)
 }
 
+#[derive(Debug)]
+struct AsymptomaticInfectiousnessModifier;
+impl TransmissionModifier for AsymptomaticInfectiousnessModifier {
+    fn get_relative_transmission(&self, context: &Context, person_id: ixa::PersonId) -> f64 {
+        let relative_infectiousness = context.get_params().relative_infectiousness_asymptomatics;
+        let symptoms = context.get_person_property(person_id, Symptoms);
+        match symptoms {
+            Some(_) => 1.0,
+            None => relative_infectiousness,
+        }
+    }
+}
+
 pub fn init(context: &mut Context) -> Result<(), IxaError> {
+    // Load the progressions
+    let params = context.get_params();
+    load_progressions(context, params.symptom_progression_library.clone())?;
+
+    // Subscribe to infection status change events to assign people symptoms
+    event_subscriptions(context);
+
+    // Register that asymptomatics have an infectiousness modifier
+    context.register_transmission_modifier_fn(
+        InfectionStatusValue::Infectious,
+        AsymptomaticInfectiousnessModifier,
+    );
+
     // For isolation guidance, each rate function has a corresponding symptom improvement time
     // distribution, so we enforce a 1:1 relationship between the two.
     context.register_parameter_id_assigner(Symptoms, |context, person_id| {
         context.get_parameter_id(RateFn, person_id)
     })?;
-
-    let params = context.get_params();
-    load_progressions(context, params.symptom_progression_library.clone())?;
-
-    event_subscriptions(context);
     Ok(())
 }
 
@@ -243,7 +265,8 @@ mod test {
     use super::{init, SymptomData, SymptomValue};
     use crate::{
         infectiousness_manager::InfectionContextExt,
-        parameters::{GlobalParams, RateFnType},
+        interventions::ContextTransmissionModifierExt,
+        parameters::{ContextParametersExt, GlobalParams, RateFnType},
         population_loader::Alive,
         property_progression_manager::Progression,
         rate_fns::load_rate_fns,
@@ -274,6 +297,7 @@ mod test {
             },
             symptom_progression_library: None,
             proportion_asymptomatic,
+            relative_infectiousness_asymptomatics: 0.0,
             report_period: 1.0,
             synth_population_file: PathBuf::from("."),
             transmission_report_name: None,
@@ -613,5 +637,40 @@ mod test {
             symptomatic_rate,
             0.01
         );
+    }
+
+    #[test]
+    fn test_asymptomatic_infectiousness_modifier() {
+        // Make a simulation where all people are asymptomatic
+        let mut context = setup(1.0);
+        // Add a person
+        let person_id = context.add_person(()).unwrap();
+        // Set up the simulation in line with the properties of symptoms
+        init(&mut context).unwrap();
+        // Infect the person because infectiousness modifiers on symptoms only impact the infectious state
+        context.infect_person(person_id, None, None, None);
+        // Check that the person's infectiousness is augmented by the relative infectiousness modifier
+        let relative_infectiousness_asymptomatics =
+            context.get_params().relative_infectiousness_asymptomatics;
+        assert_almost_eq!(
+            context.get_relative_total_transmission(person_id),
+            relative_infectiousness_asymptomatics,
+            0.0
+        );
+
+        // Do the same for a symptomatic person
+
+        // Make a simulation where all people are symptomatic
+        let mut context = setup(0.0);
+        // Add a person
+        let person_id = context.add_person(()).unwrap();
+        // Set up the simulation in line with the properties of symptoms
+        init(&mut context).unwrap();
+        // Infect the person because infectiousness modifiers on symptoms only impact the infectious state
+        context.infect_person(person_id, None, None, None);
+        // Make sure the person has symptoms
+        context.set_person_property(person_id, Symptoms, Some(SymptomValue::Presymptomatic));
+        // Check that the person's infectiousness is augmented by the relative infectiousness modifier
+        assert_almost_eq!(context.get_relative_total_transmission(person_id), 1.0, 0.0);
     }
 }
