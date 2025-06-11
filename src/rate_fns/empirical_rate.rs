@@ -116,6 +116,7 @@ impl InfectiousnessRateFn for EmpiricalRate {
         }
         self.lower_index_and_rate(t).2
     }
+
     fn cum_rate(&self, t: f64) -> f64 {
         if t < self.times[0] {
             return 0.0;
