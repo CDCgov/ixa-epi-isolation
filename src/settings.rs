@@ -32,6 +32,8 @@ pub trait SettingType {
     fn get_name(&self) -> &'static str;
 }
 
+//going to implement anysettings
+
 #[derive(Debug, PartialEq)]
 pub struct SettingId<'a, T: SettingType + ?Sized> {
     pub id: usize,
