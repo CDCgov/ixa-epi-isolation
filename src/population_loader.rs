@@ -87,9 +87,7 @@ mod test {
     use crate::parameters::{
         CoreSettingsTypes, GlobalParams, ItinerarySpecificationType, RateFnType,
     };
-    use crate::settings::{
-        init as settings_init, CensusTract, Home, School, SettingId, SettingProperties, Workplace,
-    };
+    use crate::settings::{CensusTract, Home, School, SettingId, SettingProperties, Workplace};
     use ixa::{ContextGlobalPropertiesExt, ContextPeopleExt};
     use std::collections::HashMap;
     use std::io::Write;
@@ -165,7 +163,7 @@ mod test {
         context
             .set_global_property_value(GlobalParams, parameters)
             .unwrap();
-        settings_init(&mut context);
+        crate::settings::init(&mut context);
         context
     }
 

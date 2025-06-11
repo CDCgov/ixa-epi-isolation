@@ -176,8 +176,8 @@ mod test {
         },
         rate_fns::{load_rate_fns, InfectiousnessRateExt},
         settings::{
-            init as settings_init, CensusTract, ContextSettingExt, Home, ItineraryEntry, SettingId,
-            SettingProperties, Workplace,
+            CensusTract, ContextSettingExt, Home, ItineraryEntry, SettingId, SettingProperties,
+            Workplace,
         },
     };
 
@@ -597,7 +597,7 @@ mod test {
                 let num_infected_cenustract_clone = Rc::clone(&num_infected_censustract);
                 let num_infected_workplace_clone = Rc::clone(&num_infected_workplace);
                 let mut context = setup_context(seed, rate, alpha, 5.0, 0.0);
-                settings_init(&mut context);
+                crate::settings::init(&mut context);
 
                 // Add a a person who will get infected.
                 let infectious_person = context.add_person(()).unwrap();
