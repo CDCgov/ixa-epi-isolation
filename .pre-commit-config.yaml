@@ -2,7 +2,7 @@ repos:
 #####
 # Basic file cleanliness
 -   repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v4.5.0
+    rev: v5.0.0
     hooks:
     -   id: check-added-large-files
     -   id: check-yaml
@@ -13,7 +13,7 @@ repos:
 #####
 # Python
 - repo: https://github.com/astral-sh/ruff-pre-commit
-  rev: v0.6.8
+  rev: v0.11.13
   hooks:
     # Sort imports
     - id: ruff
@@ -27,14 +27,14 @@ repos:
 #####
 # R
 -   repo: https://github.com/lorenzwalthert/precommit
-    rev: v0.4.3
+    rev: v0.4.3.9009
     hooks:
     -   id: style-files
     -   id: lintr
 #####
 # Java
 - repo: https://github.com/macisamuele/language-formatters-pre-commit-hooks
-  rev: v2.11.0
+  rev: v2.14.0
   hooks:
   - id: pretty-format-java
     args: [--aosp,--autofix]
@@ -49,7 +49,7 @@ repos:
 #####
 # Secrets
 -   repo: https://github.com/Yelp/detect-secrets
-    rev: v1.4.0
+    rev: v1.5.0
     hooks:
     -   id: detect-secrets
         args: ['--baseline', '.secrets.baseline']
