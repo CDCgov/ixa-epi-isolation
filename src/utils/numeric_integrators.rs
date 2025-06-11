@@ -46,7 +46,7 @@ pub fn cumulative_trapezoid_integral(x: &[f64], y: &[f64]) -> Result<Vec<f64>, I
 }
 
 #[cfg(test)]
-mod tests {
+mod test {
     use ixa::IxaError;
     use statrs::assert_almost_eq;
 

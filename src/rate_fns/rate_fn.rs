@@ -82,7 +82,7 @@ impl<T: ?Sized + InfectiousnessRateFn> InfectiousnessRateFn for ScaledRateFn<'_,
 
 #[cfg(test)]
 #[allow(clippy::float_cmp)]
-mod tests {
+mod test {
     use statrs::assert_almost_eq;
 
     use crate::rate_fns::{

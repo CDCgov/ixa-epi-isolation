@@ -143,7 +143,7 @@ fn add_rate_fns_from_file(context: &mut Context, file: PathBuf) -> Result<(), Ix
 }
 
 #[cfg(test)]
-mod tests {
+mod test {
     use std::collections::HashMap;
 
     use crate::parameters::{GlobalParams, Params};
