@@ -1,12 +1,12 @@
 use ixa::{
     define_derived_property, define_person_property_with_default, define_rng, trace, Context,
-    ContextPeopleExt, ContextRandomExt, PersonId, PersonPropertyChangeEvent,
+    ContextPeopleExt, ContextRandomExt, IxaError, PersonId, PersonPropertyChangeEvent,
 };
 
 use crate::{
     infectiousness_manager::InfectionStatusValue,
     interventions::ContextTransmissionModifierExt,
-    parameters::{ContextParametersExt, Params},
+    parameters::{ContextParametersExt, InterventionPolicyParameters, Params},
     settings::{
         CensusTract, ContextSettingExt, Home, ItineraryEntry, ItineraryModifiers, SettingId,
     },
@@ -15,106 +15,134 @@ use crate::{
 
 define_person_property_with_default!(MaskingStatus, bool, false);
 define_person_property_with_default!(IsolatingStatus, bool, false);
-define_derived_property!(
-    PresentingWithSymptoms,
-    Option<bool>,
-    [Symptoms],
-    |data| match data {
-        Some(SymptomValue::Presymptomatic) => Some(false),
-        Some(
-            SymptomValue::Category1
-            | SymptomValue::Category2
-            | SymptomValue::Category3
-            | SymptomValue::Category4,
-        ) => Some(true),
-        None => None,
+define_derived_property!(PresentingWithSymptoms, bool, [Symptoms], |symptom_value| {
+    match symptom_value {
+        Some(SymptomValue::Presymptomatic) | None => false,
+        Some(_) => true,
     }
-);
+});
 define_rng!(PolicyRng);
 
 trait ContextIsolationGuidanceInternalExt {
-    fn modify_isolation_status(&mut self, person: PersonId, isolation_status: bool);
-    fn modify_masking_status(&mut self, person: PersonId, masking_status: bool);
+    fn modify_isolation_status(
+        &mut self,
+        person: PersonId,
+        isolation_status: bool,
+    ) -> Result<(), IxaError>;
+    fn modify_masking_status(
+        &mut self,
+        person: PersonId,
+        masking_status: bool,
+    ) -> Result<(), IxaError>;
+    fn isolation(
+        &mut self,
+        person_id: PersonId,
+        intervention_policy_parameters: InterventionPolicyParameters,
+    );
+    fn post_isolation(
+        &mut self,
+        person_id: PersonId,
+        intervention_policy_parameters: InterventionPolicyParameters,
+    );
     fn setup_isolation_guidance_event_sequence(
         &mut self,
-        post_isolation_duration: f64,
-        uptake_probability: f64,
-        uptake_delay_period: f64,
+        intervention_policy_parameters: InterventionPolicyParameters,
     );
 }
 
 impl ContextIsolationGuidanceInternalExt for Context {
-    fn modify_isolation_status(&mut self, person: PersonId, isolation_status: bool) {
-        if isolation_status {
-            let _ =
-                self.modify_itinerary(person, ItineraryModifiers::RestrictTo { setting: &Home });
-        } else {
-            let _ = self.remove_modified_itinerary(person);
-        }
+    fn modify_isolation_status(
+        &mut self,
+        person: PersonId,
+        isolation_status: bool,
+    ) -> Result<(), IxaError> {
         self.set_person_property(person, IsolatingStatus, isolation_status);
+        if isolation_status {
+            self.modify_itinerary(person, ItineraryModifiers::RestrictTo { setting: &Home })?;
+        } else {
+            self.remove_modified_itinerary(person)?;
+        }
+        Ok(())
     }
 
-    fn modify_masking_status(&mut self, person: PersonId, masking_status: bool) {
+    fn modify_masking_status(
+        &mut self,
+        person: PersonId,
+        masking_status: bool,
+    ) -> Result<(), IxaError> {
+        self.set_person_property(person, MaskingStatus, masking_status);
         if masking_status {
-            // let home_id = context.get_setting_id(person, &Home);
             let isolation_itinerary = vec![
                 ItineraryEntry::new(SettingId::new(&Home, 0), 0.5),
                 ItineraryEntry::new(SettingId::new(&CensusTract, 0), 0.5),
             ];
-            let _ = self.modify_itinerary(
+            self.modify_itinerary(
                 person,
                 ItineraryModifiers::ReplaceWith {
                     itinerary: isolation_itinerary,
                 },
-            );
+            )?;
         } else {
-            let _ = self.remove_modified_itinerary(person);
+            self.remove_modified_itinerary(person)?;
         }
-        self.set_person_property(person, MaskingStatus, masking_status);
+        Ok(())
+    }
+
+    fn isolation(
+        &mut self,
+        person_id: PersonId,
+        intervention_policy_parameters: InterventionPolicyParameters,
+    ) {
+        if self.sample_bool(PolicyRng, intervention_policy_parameters.uptake_probability) {
+            let t = self.get_current_time();
+            self.add_plan(
+                t + intervention_policy_parameters.uptake_delay_period,
+                move |context| {
+                    if context.get_person_property(person_id, PresentingWithSymptoms) {
+                        context.modify_isolation_status(person_id, true).unwrap();
+                        trace!("Person {person_id} is now isolating");
+                    }
+                },
+            );
+        }
+    }
+
+    fn post_isolation(
+        &mut self,
+        person_id: PersonId,
+        intervention_policy_parameters: InterventionPolicyParameters,
+    ) {
+        if self.get_person_property(person_id, IsolatingStatus) {
+            self.modify_isolation_status(person_id, false).unwrap();
+            self.modify_masking_status(person_id, true).unwrap();
+            trace!("Person {person_id} is now masking and no longer isolating");
+            let t = self.get_current_time();
+            self.add_plan(
+                t + intervention_policy_parameters.post_isolation_duration,
+                move |context| {
+                    context.modify_masking_status(person_id, false).unwrap();
+                    trace!("Person {person_id} is now no longer masking");
+                },
+            );
+        }
     }
 
     fn setup_isolation_guidance_event_sequence(
         &mut self,
-        post_isolation_duration: f64,
-        uptake_probability: f64,
-        uptake_delay_period: f64,
+        intervention_policy_parameters: InterventionPolicyParameters,
     ) {
-        self.subscribe_to_event::<PersonPropertyChangeEvent<PresentingWithSymptoms>>(
-            move |context, event| {
-                match event.current {
-                    // individuals are not presenting with symptoms but are infected
-                    Some(false) => (),
-                    // individuals are presenting with symptoms
-                    Some(true) => {
-                        if context.sample_bool(PolicyRng, uptake_probability) {
-                            let t = context.get_current_time();
-                            context.add_plan(t + uptake_delay_period, move |context| {
-                                if context
-                                    .get_person_property(event.person_id, Symptoms)
-                                    .is_some()
-                                {
-                                    context.modify_isolation_status(event.person_id, true);
-                                    trace!("Person {} is now isolating", event.person_id);
-                                }
-                            });
-                        }
+        self.subscribe_to_event(
+            move |context, event: PersonPropertyChangeEvent<PresentingWithSymptoms>| {
+                match (event.current, event.previous) {
+                    // individuals transition from not presenting with symptoms to presenting with symptoms
+                    (true, false) => {
+                        context.isolation(event.person_id, intervention_policy_parameters);
                     }
-                    // individuals have recovered from symptoms
-                    None => {
-                        if context.get_person_property(event.person_id, IsolatingStatus) {
-                            context.modify_isolation_status(event.person_id, false);
-                            context.modify_masking_status(event.person_id, true);
-                            trace!(
-                                "Person {} is now masking and no longer isolating",
-                                event.person_id
-                            );
-                            let t = context.get_current_time();
-                            context.add_plan(t + post_isolation_duration, move |context| {
-                                context.modify_masking_status(event.person_id, false);
-                                trace!("Person {} is now no longer masking", event.person_id);
-                            });
-                        }
+                    //individuals transition from presenting with symptoms to not presenting with symptoms
+                    (false, true) => {
+                        context.post_isolation(event.person_id, intervention_policy_parameters);
                     }
+                    _ => (),
                 }
             },
         );
@@ -136,39 +164,39 @@ pub fn init(context: &mut Context) {
                 &[(true, 1.0 - facemask_parameters.facemask_efficacy)],
             )
             .unwrap();
+    } else {
+        trace!("No facemask parameters provided. Facemasks will have no impact.");
     }
 
     if let Some(intervention_policy_parameters) = intervention_policy_parameters {
-        context.setup_isolation_guidance_event_sequence(
-            intervention_policy_parameters.post_isolation_duration,
-            intervention_policy_parameters.uptake_probability,
-            intervention_policy_parameters.uptake_delay_period,
-        );
+        context.setup_isolation_guidance_event_sequence(intervention_policy_parameters);
     } else {
         trace!("No isolation policy parameters provided. Skipping isolation guidance setup.");
     }
 }
 
 #[cfg(test)]
-#[allow(clippy::float_cmp)]
 mod test {
-    use super::{init as policy_init, PresentingWithSymptoms};
+    use super::PresentingWithSymptoms;
     use crate::{
         infectiousness_manager::InfectionContextExt,
         parameters::{
-            FacemaskParameters, GlobalParams, InterventionPolicyParameters, ProgressionLibraryType,
-            RateFnType,
+            CoreSettingsTypes, FacemaskParameters, GlobalParams, InterventionPolicyParameters,
+            ItinerarySpecificationType, ProgressionLibraryType, RateFnType,
         },
         population_loader::Alive,
         rate_fns::load_rate_fns,
-        symptom_progression::init as symptom_init,
+        settings::{
+            CensusTract, ContextSettingExt, Home, ItineraryEntry, SettingId, SettingProperties,
+            Workplace,
+        },
         Params,
     };
     use std::{cell::RefCell, collections::HashMap, path::PathBuf, rc::Rc};
 
     use ixa::{
-        Context, ContextGlobalPropertiesExt, ContextPeopleExt, ContextRandomExt,
-        PersonPropertyChangeEvent,
+        define_person_property_with_default, Context, ContextGlobalPropertiesExt, ContextPeopleExt,
+        ContextRandomExt, PersonPropertyChangeEvent,
     };
 
     use super::{IsolatingStatus, MaskingStatus};
@@ -197,7 +225,35 @@ mod test {
             report_period: 1.0,
             synth_population_file: PathBuf::from("."),
             transmission_report_name: None,
-            settings_properties: HashMap::new(),
+            settings_properties: HashMap::from([
+                (
+                    CoreSettingsTypes::Home,
+                    SettingProperties {
+                        alpha: 0.5,
+                        itinerary_specification: Some(ItinerarySpecificationType::Constant {
+                            ratio: 1.0,
+                        }),
+                    },
+                ),
+                (
+                    CoreSettingsTypes::Workplace,
+                    SettingProperties {
+                        alpha: 0.5,
+                        itinerary_specification: Some(ItinerarySpecificationType::Constant {
+                            ratio: 1.0,
+                        }),
+                    },
+                ),
+                (
+                    CoreSettingsTypes::CensusTract,
+                    SettingProperties {
+                        alpha: 0.5,
+                        itinerary_specification: Some(ItinerarySpecificationType::Constant {
+                            ratio: 1.0,
+                        }),
+                    },
+                ),
+            ]),
             intervention_policy_parameters: Some(InterventionPolicyParameters {
                 post_isolation_duration,
                 uptake_probability,
@@ -210,6 +266,7 @@ mod test {
             .set_global_property_value(GlobalParams, parameters)
             .unwrap();
         load_rate_fns(&mut context).unwrap();
+        crate::settings::init(&mut context);
         context
     }
 
@@ -233,76 +290,72 @@ mod test {
             facemask_efficacy,
         );
         let p1 = context.add_person(()).unwrap();
-        symptom_init(&mut context).unwrap();
-        policy_init(&mut context);
+        let itinerary = vec![
+            ItineraryEntry::new(SettingId::new(&Home, 0), 1.0),
+            ItineraryEntry::new(SettingId::new(&CensusTract, 0), 1.0),
+            ItineraryEntry::new(SettingId::new(&Workplace, 0), 1.0),
+        ];
+        context.add_itinerary(p1, itinerary).unwrap();
+        crate::symptom_progression::init(&mut context).unwrap();
+        super::init(&mut context);
 
-        let start_time_symptoms = Rc::new(RefCell::new(0.0f64));
-        let end_time_symptoms = Rc::new(RefCell::new(0.0f64));
-
-        let start_time_symptoms_clone1 = Rc::clone(&start_time_symptoms);
-        let end_time_symptoms_clone1 = Rc::clone(&end_time_symptoms);
+        define_person_property_with_default!(SymptomStartTime, f64, 0.0);
+        define_person_property_with_default!(SymptomEndTime, f64, 0.0);
 
         context.subscribe_to_event::<PersonPropertyChangeEvent<PresentingWithSymptoms>>(
-            move |context, event| {
-                println!(
-                    "symptom time: {}, event.current: {:?}",
-                    context.get_current_time(),
-                    event.current
-                );
-                match event.current {
-                    Some(false) => (),
-                    Some(true) => {
-                        *start_time_symptoms_clone1.borrow_mut() = context.get_current_time();
-                    }
-                    None => {
-                        *end_time_symptoms_clone1.borrow_mut() = context.get_current_time();
-                    }
+            move |context, event| match (event.current, event.previous) {
+                (true, false) => {
+                    context.set_person_property(
+                        event.person_id,
+                        SymptomStartTime,
+                        context.get_current_time(),
+                    );
                 }
+                (false, true) => {
+                    context.set_person_property(
+                        event.person_id,
+                        SymptomEndTime,
+                        context.get_current_time(),
+                    );
+                }
+                _ => (),
             },
         );
 
-        let start_time_symptoms_clone2 = Rc::clone(&start_time_symptoms);
-        let end_time_symptoms_clone2 = Rc::clone(&end_time_symptoms);
         context.subscribe_to_event::<PersonPropertyChangeEvent<IsolatingStatus>>(
             move |context, event| {
-                println!(
-                    "isolation time: {}, event.current: {:?}",
-                    context.get_current_time(),
-                    event.current
-                );
                 if event.current {
                     assert_almost_eq!(
-                        *start_time_symptoms_clone2.borrow() + uptake_delay_period,
+                        context.get_person_property(event.person_id, SymptomStartTime)
+                            + uptake_delay_period,
                         context.get_current_time(),
                         0.0
                     );
                 } else {
-                    assert_eq!(
+                    assert_almost_eq!(
+                        context.get_person_property(event.person_id, SymptomEndTime),
                         context.get_current_time(),
-                        *end_time_symptoms_clone2.borrow()
+                        0.0
                     );
                 }
             },
         );
 
-        let end_time_symptoms_clone3 = Rc::clone(&end_time_symptoms);
         context.subscribe_to_event::<PersonPropertyChangeEvent<MaskingStatus>>(
             move |context, event| {
-                println!(
-                    "masking time: {}, event.current: {:?}",
-                    context.get_current_time(),
-                    event.current
-                );
                 if event.current {
                     //assert size of populatin masking equals the size of thep population masking
-                    assert_eq!(
+                    assert_almost_eq!(
+                        context.get_person_property(event.person_id, SymptomEndTime),
                         context.get_current_time(),
-                        *end_time_symptoms_clone3.borrow()
+                        0.0
                     );
                 } else {
-                    assert_eq!(
+                    assert_almost_eq!(
+                        context.get_person_property(event.person_id, SymptomEndTime)
+                            + post_isolation_duration,
                         context.get_current_time(),
-                        *end_time_symptoms_clone3.borrow() + post_isolation_duration
+                        0.0
                     );
                 }
             },
@@ -310,6 +363,7 @@ mod test {
         context.infect_person(p1, None, None, None);
         context.execute();
     }
+
     #[test]
     fn test_isolation_guidance_uptake_probability() {
         // this test checks that the proportion of individuals that isolation is what we
@@ -334,13 +388,22 @@ mod test {
                 facemask_efficacy,
             );
             context.init_random(seed);
-            let _first_person: ixa::PersonId = context.add_person(()).unwrap();
-            symptom_init(&mut context).unwrap();
-            policy_init(&mut context);
+            let first_person = context.add_person(()).unwrap();
+            let itinerary = vec![
+                ItineraryEntry::new(SettingId::new(&Home, 0), 1.0),
+                ItineraryEntry::new(SettingId::new(&CensusTract, 0), 1.0),
+                ItineraryEntry::new(SettingId::new(&Workplace, 0), 1.0),
+            ];
+            context
+                .add_itinerary(first_person, itinerary.clone())
+                .unwrap();
+            crate::symptom_progression::init(&mut context).unwrap();
+            super::init(&mut context);
 
             // Add our people
             for _ in 1..num_people {
-                context.add_person(()).unwrap();
+                let person_id = context.add_person(()).unwrap();
+                context.add_itinerary(person_id, itinerary.clone()).unwrap();
             }
             // Infect all of the people -- triggering the event subscriptions if they are symptomatic
             for person in context.query_people((Alive, true)) {
@@ -361,7 +424,7 @@ mod test {
         // proportion
         #[allow(clippy::cast_precision_loss)]
         let proportion_isolating =
-            num_people_isolating.take() as f64 / (num_people * num_sims) as f64;
+            *num_people_isolating.borrow() as f64 / (num_people * num_sims) as f64;
         assert_almost_eq!(proportion_isolating, uptake_probability, 0.01);
     }
 }
