@@ -43,8 +43,8 @@ pub enum ItinerarySpecificationType {
 #[derive(Debug, Serialize, Deserialize, Clone, Copy)]
 pub struct InterventionPolicyParameters {
     pub post_isolation_duration: f64,
-    pub uptake_probability: f64,
-    pub uptake_delay_period: f64,
+    pub isolation_probability: f64,
+    pub isolation_delay_period: f64,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, Copy)]
@@ -80,7 +80,7 @@ pub struct Params {
     /// The path to the transmission report file
     pub transmission_report_name: Option<String>,
     // Struct contain policy parameters for isolation guidance
-    // Post-isolation duration, uptake probability, and maximum uptake delay.
+    // Post-isolation duration, isolation probability, and maximum isolation delay.
     pub intervention_policy_parameters: Option<InterventionPolicyParameters>,
     // Facemask parameters
     // facemask_efficacy the reduction in tranmission associated with wearing a facemask.
@@ -199,16 +199,16 @@ fn validate_inputs(parameters: &Params) -> Result<(), IxaError> {
                 "The post-isolation duration must be non-negative.".to_string(),
             ));
         }
-        if intervention_policy_parameters.uptake_probability < 0.0
-            || intervention_policy_parameters.uptake_probability > 1.0
+        if intervention_policy_parameters.isolation_probability < 0.0
+            || intervention_policy_parameters.isolation_probability > 1.0
         {
             return Err(IxaError::IxaError(
-                "The uptake probability must be between 0 and 1, inclusive.".to_string(),
+                "The isolation probability must be between 0 and 1, inclusive.".to_string(),
             ));
         }
-        if intervention_policy_parameters.uptake_delay_period < 0.0 {
+        if intervention_policy_parameters.isolation_delay_period < 0.0 {
             return Err(IxaError::IxaError(
-                "The uptake delay period must be non-negative.".to_string(),
+                "The isolation delay period must be non-negative.".to_string(),
             ));
         }
     }
