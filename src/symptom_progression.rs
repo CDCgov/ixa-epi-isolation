@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use ixa::rand::Rng;
 use ixa::{
     define_person_property_with_default, define_rng, Context, ContextPeopleExt, ContextRandomExt,
-    IxaError, PersonId, PersonPropertyChangeEvent,
+    IxaError, PersonPropertyChangeEvent,
 };
 use serde::{Deserialize, Serialize};
 use statrs::distribution::Weibull;
@@ -164,11 +164,10 @@ impl Progression<Symptoms> for SymptomData {
     fn next(
         &self,
         context: &Context,
-        _person_id: PersonId,
-        last: Option<SymptomValue>,
+        event: PersonPropertyChangeEvent<Symptoms>,
     ) -> Option<(Option<SymptomValue>, f64)> {
         // People are `None` until they are infected and after their symptoms have improved.
-        if let Some(symptoms) = last {
+        if let Some(symptoms) = event.current {
             // People become presymptomatic when they are infected.
             // If they are presymptomatic, we schedule their symptom development.
             if symptoms == SymptomValue::Presymptomatic {
@@ -320,18 +319,32 @@ mod test {
             time_to_symptom_improvement: RightTruncatedWeibull::new(2.0, 3.0, 28.0).unwrap(),
         };
         let mut context = setup();
-        let person = context.add_person(()).unwrap();
-        let presymptomatic_next =
-            symptom_data.next(&context, person, Some(SymptomValue::Presymptomatic));
+        let person_id = context.add_person(()).unwrap();
+        let event_presymptomatic = PersonPropertyChangeEvent {
+            person_id,
+            current: Some(SymptomValue::Presymptomatic),
+            previous: None,
+        };
+        let presymptomatic_next = symptom_data.next(&context, event_presymptomatic);
         assert_eq!(
             presymptomatic_next.unwrap().0,
             Some(SymptomValue::Category1)
         );
         assert!(presymptomatic_next.unwrap().1 > 0.0); // Check that the time to symptoms is positive
-        let category1_next = symptom_data.next(&context, person, Some(SymptomValue::Category1));
+        let event_category1 = PersonPropertyChangeEvent {
+            person_id,
+            current: Some(SymptomValue::Category1),
+            previous: Some(SymptomValue::Presymptomatic),
+        };
+        let category1_next = symptom_data.next(&context, event_category1);
         assert!(category1_next.unwrap().0.is_none());
         assert!(category1_next.unwrap().1 > 0.0); // Check that the time to recovery is positive
-        let none_next = symptom_data.next(&context, person, None);
+        let event_recovery = PersonPropertyChangeEvent {
+            person_id,
+            current: None,
+            previous: Some(SymptomValue::Category1),
+        };
+        let none_next = symptom_data.next(&context, event_recovery);
         assert!(none_next.is_none());
     }
 
