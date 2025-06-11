@@ -186,18 +186,12 @@ mod test {
 
     #[test]
     fn test_isolation_guidance_event_sequence() {
-        // this test checks that times at which and individual starts and
-        // stops the isolating and masking is correct relative to the symptom onset
-        // and the intervention policy parameters. We expect an individual to begin isolating
-        // an isolation delay period after they start presenting with symptoms, and to stop isolating
-        // when symptoms end. We expect an individual to start masking when symptoms end and mask
-        // for post_isolation_duration days.
-
-        // 1. Keep track of the time of symptom onset and duration
-        // 2. Assert that start of isolation is the same as symptom onset + isolation delay
-        // 3. Assert that end of isolation is end of symptoms
-        // 4. Assert that start of facemask is end of symptoms
-        // 5. Assert that end of facemask is end of symptoms + post isolation days
+        // 1. Create a new person
+        // 2. Keep track of the time of symptom onset and duration
+        // 3. Assert that start of isolation is the same as symptom onset + isolation delay
+        // 4. Assert that end of isolation is end of symptoms
+        // 5. Assert that start of facemask is end of symptoms
+        // 6. Assert that end of facemask is end of symptoms + post isolation days
         let post_isolation_duration = 5.0;
         let isolation_probability = 1.0;
         let isolation_delay_period = 1.0;
