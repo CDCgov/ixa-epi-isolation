@@ -501,7 +501,7 @@ mod test {
         }
 
         #[allow(clippy::cast_precision_loss)]
-        let avg_number_infections = num_infected.take() as f64 / num_sims as f64;
+        let avg_number_infections = *num_infected.borrow() as f64 / num_sims as f64;
         assert_almost_eq!(
             avg_number_infections,
             modifier * rate * total_infectiousness_multiplier.unwrap(),
@@ -659,11 +659,11 @@ mod test {
                 context.execute();
             }
             #[allow(clippy::cast_precision_loss)]
-            let avg_number_infections_home = num_infected_home.take() as f64 / num_sims as f64;
+            let avg_number_infections_home = *num_infected_home.borrow() as f64 / num_sims as f64;
             assert_almost_eq!(avg_number_infections_home, ratio[0] / sum_of_ratio, 0.05);
             #[allow(clippy::cast_precision_loss)]
             let avg_number_infections_censustract =
-                num_infected_censustract.take() as f64 / num_sims as f64;
+                *num_infected_censustract.borrow() as f64 / num_sims as f64;
             assert_almost_eq!(
                 avg_number_infections_censustract,
                 ratio[1] / sum_of_ratio,
@@ -671,7 +671,7 @@ mod test {
             );
             #[allow(clippy::cast_precision_loss)]
             let avg_number_infections_workplace =
-                num_infected_workplace.take() as f64 / num_sims as f64;
+                *num_infected_workplace.borrow() as f64 / num_sims as f64;
             assert_almost_eq!(
                 avg_number_infections_workplace,
                 ratio[2] / sum_of_ratio,
