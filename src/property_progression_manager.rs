@@ -17,18 +17,18 @@ use crate::natural_history_parameter_manager::{
 };
 
 /// Defines a semi-Markovian method for getting the next value based on the last.
-/// `T` is the person property being mapped in the progression.
-pub trait Progression<T>
+/// `P` is the person property being mapped in the progression.
+pub trait Progression<P>
 where
-    T: PersonProperty + 'static,
+    P: PersonProperty + 'static,
 {
-    /// Returns the next value and the time to the next value given the current value and `Context`.
+    /// Returns the next value and the time to the next value given the current value and `&Context`.
     fn next(
         &self,
         context: &Context,
         person_id: PersonId,
-        last: T::Value,
-    ) -> Option<(T::Value, f64)>;
+        last: P::Value,
+    ) -> Option<(P::Value, f64)>;
 }
 
 #[derive(Default)]
@@ -45,47 +45,44 @@ define_data_plugin!(
 pub trait ContextPropertyProgressionExt {
     /// Registers a method that provides a sequence of person property values and times, and
     /// automatically changes the values of person properties according to that sequence.
-    fn register_property_progression<T: PersonProperty + 'static>(
+    fn register_property_progression<P: PersonProperty + 'static>(
         &mut self,
-        property: T,
-        tracer: impl Progression<T> + 'static,
+        property: P,
+        tracer: impl Progression<P> + 'static,
     );
 }
 
-impl<T> NaturalHistoryParameterLibrary for T
+impl<P> NaturalHistoryParameterLibrary for P
 where
-    T: PersonProperty + 'static,
+    P: PersonProperty + 'static,
 {
     fn library_size(&self, context: &Context) -> usize {
         let container = context.get_data_container(PropertyProgressions).unwrap();
-        let progressions = container
-            .progressions
-            .get(&TypeId::of::<T>())
-            .expect("Property");
+        let progressions = container.progressions.get(&TypeId::of::<P>()).unwrap();
         progressions.len()
     }
 }
 
 impl ContextPropertyProgressionExt for Context {
-    fn register_property_progression<T: PersonProperty + 'static>(
+    fn register_property_progression<P: PersonProperty + 'static>(
         &mut self,
-        property: T,
-        tracer: impl Progression<T> + 'static,
+        property: P,
+        tracer: impl Progression<P> + 'static,
     ) {
         // Add tracer to data container
         let container = self.get_data_container_mut(PropertyProgressions);
-        let progressions = container.progressions.entry(TypeId::of::<T>()).or_default();
-        let boxxed_tracer = Box::new(tracer) as Box<dyn Progression<T>>;
+        let progressions = container.progressions.entry(TypeId::of::<P>()).or_default();
+        let boxxed_tracer = Box::new(tracer) as Box<dyn Progression<P>>;
         progressions.push(Box::new(boxxed_tracer));
-        // Subscribe to change events if we have not yet already seen a progression that controls
-        // flow for this property
+        // Subscribe to change events for this property so that we can trace people through the progression
+        // if we have not yet been made aware that we should track progressions for this property
         if progressions.len() == 1 {
-            self.subscribe_to_event(move |context, event: PersonPropertyChangeEvent<T>| {
+            self.subscribe_to_event(move |context, event: PersonPropertyChangeEvent<P>| {
                 let container = context.get_data_container(PropertyProgressions).unwrap();
-                let progressions = container.progressions.get(&TypeId::of::<T>()).unwrap();
+                let progressions = container.progressions.get(&TypeId::of::<P>()).unwrap();
                 let id = context.get_parameter_id(property, event.person_id);
                 let tcr = progressions[id]
-                    .downcast_ref::<Box<dyn Progression<T>>>()
+                    .downcast_ref::<Box<dyn Progression<P>>>()
                     .unwrap()
                     .as_ref();
                 if let Some((next_value, time_to_next)) =
