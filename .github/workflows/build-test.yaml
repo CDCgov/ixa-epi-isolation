@@ -15,8 +15,8 @@ jobs:
     steps:
     - uses: moonrepo/setup-rust@v1
     - name: Build
-      run: cargo build --verbose
+      run: cargo build --verbose --manifest-path Cargo.toml
     - name: Run tests
-      run: cargo test --verbose
+      run: cargo test --verbose --manifest-path Cargo.toml
     - name: Run main example
-      run: cargo run -- -c input/input.json -o output
+      run: cargo run --manifest-path Cargo.toml -- -c input/input.json -o output
