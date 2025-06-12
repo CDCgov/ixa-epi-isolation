@@ -18,7 +18,6 @@ struct RateFnContainer {
     rates: Vec<Box<dyn InfectiousnessRateFn>>,
 }
 
-#[derive(Debug)]
 pub struct RateFn;
 
 impl NaturalHistoryParameterLibrary for RateFn {

@@ -4,12 +4,12 @@ use std::{
     collections::{hash_map::Entry, HashMap},
 };
 
-use ixa::{define_data_plugin, define_rng, trace, Context, ContextRandomExt, IxaError, PersonId};
+use ixa::{define_data_plugin, define_rng, Context, ContextRandomExt, IxaError, PersonId};
 
 define_rng!(NaturalHistoryParameterRng);
 
 /// Methods to specify a natural history parameter library
-pub trait NaturalHistoryParameterLibrary: std::fmt::Debug {
+pub trait NaturalHistoryParameterLibrary {
     /// Returns the size of a library of natural history parameters. Used to return a random index
     /// in the range of the library size when querying an id for a natural history parameter that
     /// has no assignment function previously registered.
@@ -64,7 +64,7 @@ pub trait ContextNaturalHistoryParameterExt {
 impl ContextNaturalHistoryParameterExt for Context {
     fn register_parameter_id_assigner<T, S>(
         &mut self,
-        parameter: T,
+        _parameter: T,
         assignment_fn: S,
     ) -> Result<(), IxaError>
     where
@@ -89,7 +89,6 @@ impl ContextNaturalHistoryParameterExt for Context {
         match container.parameter_id_assigners.entry(TypeId::of::<T>()) {
             Entry::Vacant(entry) => {
                 entry.insert(Box::new(assignment_fn));
-                trace!("Registered assignment function for parameter {parameter:?}",);
                 Ok(())
             }
 
@@ -114,9 +113,6 @@ impl ContextNaturalHistoryParameterExt for Context {
             .get(&TypeId::of::<T>())
             .and_then(|ids| ids.get(&person_id))
         {
-            trace!(
-                "Returning previously assigned id {potential_id:?} for person {person_id:?} for parameter {parameter:?}"
-            );
             return *potential_id;
         }
 
@@ -126,9 +122,6 @@ impl ContextNaturalHistoryParameterExt for Context {
             .get(&TypeId::of::<T>())
             .map(|x| x.as_ref())
         {
-            trace!(
-                "Using assignment function for parameter {parameter:?} to assign id for person {person_id:?}",
-            );
             // Get the id from the assignment function
             let id = assigner(self, person_id);
             // Store the id for this person
@@ -142,9 +135,6 @@ impl ContextNaturalHistoryParameterExt for Context {
         }
 
         // Else make a default random assignment and store it
-        trace!(
-            "No assignment function for parameter {parameter:?}, defaulting to random assignment for person {person_id:?}.",
-        );
         let library_size = parameter.library_size(self);
         let id = self.sample_range(NaturalHistoryParameterRng, 0..library_size);
         container
@@ -176,7 +166,6 @@ mod test {
         ContextNaturalHistoryParameterExt, NaturalHistoryParameterLibrary, NaturalHistoryParameters,
     };
 
-    #[derive(Debug)]
     struct ViralLoad;
 
     impl NaturalHistoryParameterLibrary for ViralLoad {
@@ -230,7 +219,6 @@ mod test {
         }
     }
 
-    #[derive(Debug)]
     struct AntigenPositivity;
 
     impl NaturalHistoryParameterLibrary for AntigenPositivity {
@@ -302,7 +290,6 @@ mod test {
         assert_eq!(id, 0);
     }
 
-    #[derive(Debug)]
     struct CulturePositivity;
 
     impl NaturalHistoryParameterLibrary for CulturePositivity {
@@ -311,7 +298,6 @@ mod test {
         }
     }
 
-    #[derive(Debug)]
     struct TestingPatterns;
 
     impl NaturalHistoryParameterLibrary for TestingPatterns {
