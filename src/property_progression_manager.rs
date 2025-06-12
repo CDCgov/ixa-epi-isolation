@@ -17,8 +17,7 @@ use crate::natural_history_parameter_manager::{
 };
 
 /// Defines a semi-Markovian method for getting the next value of a person property based on how
-/// it's changed (the event) and `&Context`.
-/// `P` is the person property being mapped in the progression.
+/// it's changed (the event) and `&Context`. `P` is the person property being mapped in the progression.
 pub trait Progression<P>
 where
     P: PersonProperty + 'static,
@@ -144,7 +143,7 @@ fn add_progressions_from_file(context: &mut Context, file: PathBuf) -> Result<()
     for record in reader {
         let record = record?;
         if record.id == last_id {
-            // Check if the distribution struct is the same
+            // Check if the progression type is the same
             if record.progression_type != last_progression_type {
                 return Err(IxaError::IxaError(format!(
                     "Progression type mismatch: expected {:?}, got {:?}",
@@ -155,7 +154,7 @@ fn add_progressions_from_file(context: &mut Context, file: PathBuf) -> Result<()
             parameter_names.push(record.parameter_name);
             parameters.push(record.parameter_value);
         } else {
-            // Take the last values of times and values and make them into a rate function
+            // Take the last set of parameters aggregated and make them into the right progression
             match last_progression_type {
                 ProgressionType::SymptomData => {
                     SymptomData::register(context, parameter_names, parameters)?;
