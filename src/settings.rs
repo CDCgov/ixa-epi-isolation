@@ -22,60 +22,69 @@ pub struct SettingProperties {
     pub itinerary_specification: Option<ItinerarySpecificationType>,
 }
 
-pub trait SettingType {
+pub trait SettingCategory: 'static {}
+
+#[derive(Debug, PartialEq)]
+pub struct SettingId<T: SettingCategory> {
+    pub id: usize,
+    // Marker to say this group id is associated with T (but does not own it)
+    _phantom: std::marker::PhantomData<T>,
+}
+
+pub trait AnySettingId {
+    fn id(&self) -> usize;
+    fn type_id(&self) -> TypeId;
     fn calculate_multiplier(
         &self,
         members: &[PersonId],
         setting_properties: SettingProperties,
-    ) -> f64;
-    fn get_type_id(&self) -> TypeId;
-    fn get_name(&self) -> &'static str;
+    ) -> f64 {
+        ((members.len() - 1) as f64).powf(setting_properties.alpha)
+    }
 }
 
-//going to implement anysettings
-
-#[derive(Debug, PartialEq)]
-pub struct SettingId<'a, T: SettingType + ?Sized> {
-    pub id: usize,
-    // Marker to say this group id is associated with T (but does not own it)
-    pub setting_type: &'a T,
+impl<T: SettingCategory> AnySettingId for SettingId<T> {
+    fn id(&self) -> usize {
+        self.id()
+    }
+    fn type_id(&self) -> TypeId {
+        TypeId::of::<SettingId<T>>()
+    }
 }
 
-impl<'a, T: SettingType + ?Sized> SettingId<'a, T> {
-    pub fn new(setting_type: &'a T, id: usize) -> SettingId<'a, T> {
-        SettingId { id, setting_type }
+impl<T: SettingCategory + ?Sized> SettingId<T> {
+    pub fn new(id: usize) -> SettingId<T> {
+        SettingId { id, _phantom: std::marker::PhantomData }
     }
 }
 
 #[derive(Copy, Clone, PartialEq, Debug)]
 pub struct ItineraryEntry {
-    setting_type: TypeId,
-    setting_id: usize,
+    pub setting: Box<dyn AnySettingId>,
     ratio: f64,
 }
 
 impl ItineraryEntry {
     #[allow(clippy::needless_pass_by_value)]
-    pub fn new<T: SettingType + ?Sized>(setting_id: SettingId<T>, ratio: f64) -> ItineraryEntry {
+    pub fn new<T: SettingCategory + ?Sized>(setting_id: Box<dyn AnySettingId>, ratio: f64) -> ItineraryEntry {
         ItineraryEntry {
-            setting_type: setting_id.setting_type.get_type_id(),
-            setting_id: setting_id.id,
+            setting: setting_id,
             ratio,
         }
     }
 }
 
 #[allow(dead_code)]
-pub enum ItineraryModifiers<'a> {
+pub enum ItineraryModifiers {
     // Replace itinerary with a new vector of itinerary entries
     ReplaceWith { itinerary: Vec<ItineraryEntry> },
     // Reduce the current itinerary to a setting type (e.g., Home)
-    RestrictTo { setting: &'a dyn SettingType },
+    RestrictTo { setting: Box<dyn SettingCategory> },
     // Exclude setting types from current itinerary (e.g., Workplace)
-    Exclude { setting: &'a dyn SettingType },
+    Exclude { setting: Box<dyn SettingCategory> },
 }
 
-pub fn append_itinerary_entry<T: SettingType + Copy + 'static>(
+pub fn append_itinerary_entry<T: SettingCategory + Copy + 'static>(
     itinerary: &mut Vec<ItineraryEntry>,
     context: &Context,
     setting_type: T,
@@ -96,7 +105,7 @@ pub fn append_itinerary_entry<T: SettingType + Copy + 'static>(
         // No point in adding an itinerary entry if the ratio is zero
         if ratio != 0.0 {
             itinerary.push(ItineraryEntry::new(
-                SettingId::new(&setting_type, setting_id),
+                Box::new(SettingId::<T>::new(setting_id)),
                 ratio,
             ));
         }
@@ -106,7 +115,7 @@ pub fn append_itinerary_entry<T: SettingType + Copy + 'static>(
 
 // In the future, this method could take the person id as an argument for making individual-level
 // itineraries.
-fn get_itinerary_ratio<T: SettingType + 'static>(
+fn get_itinerary_ratio<T: SettingCategory + 'static>(
     context: &Context,
     _setting_type: T,
 ) -> Result<f64, IxaError> {
@@ -129,11 +138,13 @@ fn get_itinerary_ratio<T: SettingType + 'static>(
 
 #[derive(Default)]
 struct SettingDataContainer {
-    setting_types: HashMap<TypeId, Box<dyn SettingType>>,
+    // TO DO: revisit and see if we actually need this.
+    setting_categories: HashMap<TypeId, Box<dyn SettingCategory>>,
     // For each setting type (e.g., Home) store the properties (e.g., alpha)
     setting_properties: HashMap<TypeId, SettingProperties>,
     // For each setting type, have a map of each setting id and a list of members
-    members: HashMap<TypeId, HashMap<usize, Vec<PersonId>>>,
+    // members: HashMap<TypeId, HashMap<usize, Vec<PersonId>>>,
+    members: HashMap<Box<dyn AnySettingId>, Vec<PersonId>>,
     itineraries: HashMap<PersonId, Vec<ItineraryEntry>>,
     modified_itineraries: HashMap<PersonId, Vec<ItineraryEntry>>,
 }
@@ -141,10 +152,9 @@ struct SettingDataContainer {
 impl SettingDataContainer {
     fn get_setting_members(
         &self,
-        setting_type: &TypeId,
-        setting_id: usize,
+        setting_id: &dyn AnySettingId,
     ) -> Option<&Vec<PersonId>> {
-        self.members.get(setting_type)?.get(&setting_id)
+        self.members.get(&setting_id)
     }
     fn get_itinerary(&self, person_id: PersonId) -> Option<&Vec<ItineraryEntry>> {
         if let Some(modified_itinerary) = self.modified_itineraries.get(&person_id) {
@@ -158,7 +168,7 @@ impl SettingDataContainer {
     }
     fn with_itinerary<F>(&self, person_id: PersonId, mut callback: F)
     where
-        F: FnMut(&dyn SettingType, &SettingProperties, &Vec<PersonId>, f64),
+        F: FnMut(&dyn SettingCategory, &SettingProperties, &Vec<PersonId>, f64),
     {
         if let Some(itinerary) = self.get_itinerary(person_id) {
             for entry in itinerary {
