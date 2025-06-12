@@ -13,10 +13,10 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v4
+    - uses: moonrepo/setup-rust@v1
     - name: Build
-      run: cargo build --verbose --manifest-path Cargo.toml
+      run: cargo build --verbose
     - name: Run tests
-      run: cargo test --verbose --manifest-path Cargo.toml
+      run: cargo test --verbose
     - name: Run main example
-      run: cargo run --manifest-path Cargo.toml -- -c input/input.json -o output
+      run: cargo run -- -c input/input.json -o output
