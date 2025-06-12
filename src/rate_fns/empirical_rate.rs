@@ -129,7 +129,7 @@ impl InfectiousnessRateFn for EmpiricalRate {
         // We need the get the index of the greatest value in `times` less than or equal to `t` for
         // the first step (querying the pre-calculated cumulative rates vector value at that index).
         // Later, we will need the estimated rate at `t` for the second step, so we get both here.
-        let (integration_index, _, estimated_rate) = self.lower_index_and_rate(t);
+        let (integration_index, _minimum_index, estimated_rate) = self.lower_index_and_rate(t);
         let mut cum_rate = self.cum_rates[integration_index];
         if t > self.times[self.times.len() - 1] {
             // rates for times greater than the last time are 0, so cum_rate stays the same

@@ -128,9 +128,9 @@ struct ProgressionRecord {
 
 fn add_progressions_from_file(context: &mut Context, file: PathBuf) -> Result<(), IxaError> {
     let mut reader = csv::Reader::from_path(file)?;
-    let mut reader = reader.deserialize::<ProgressionRecord>();
+    let mut reader = reader.deserialize();
     // Pop out the first record so we can initialize the trackers
-    let record = reader.next().unwrap()?;
+    let record: ProgressionRecord = reader.next().unwrap()?;
     let mut last_id = record.id;
     // Check that the first id is 1
     if last_id != 1 {
@@ -252,7 +252,7 @@ mod test {
         let mut context = Context::new();
         context.init_random(0);
         context
-            .register_parameter_id_assigner(Age, |_, _| 0)
+            .register_parameter_id_assigner(Age, |_context, _person_id| 0)
             .unwrap();
         context.register_property_progression(
             Age,
@@ -356,7 +356,7 @@ mod test {
         let mut context = Context::new();
         context.init_random(0);
         context
-            .register_parameter_id_assigner(Age, |_, _| 0)
+            .register_parameter_id_assigner(Age, |_context, _person_id| 0)
             .unwrap();
         let age_progression = AgeProgression {
             time_to_next_age: 1.0,
@@ -401,7 +401,7 @@ mod test {
         );
         // There should never ever be any more edits to the number of running shoes beyond 4.
         context.subscribe_to_event(
-            move |_, event: PersonPropertyChangeEvent<NumberRunningShoes>| {
+            |_context, event: PersonPropertyChangeEvent<NumberRunningShoes>| {
                 assert!(event.current <= 4);
             },
         );

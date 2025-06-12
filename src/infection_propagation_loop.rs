@@ -144,7 +144,6 @@ pub fn init(context: &mut Context) -> Result<(), IxaError> {
 }
 
 #[cfg(test)]
-#[allow(clippy::float_cmp)]
 mod test {
     use serde::{Deserialize, Serialize};
     use std::{cell::RefCell, collections::HashMap, path::PathBuf, rc::Rc};
@@ -507,7 +506,7 @@ mod test {
             modifier * rate * total_infectiousness_multiplier.unwrap(),
             0.05
         );
-        assert_eq!(modifier, INFECTIOUS_PARTIAL);
+        assert_almost_eq!(modifier, INFECTIOUS_PARTIAL, 0.0);
         // Check whether the times at when people are infected fall uniformly on [0, 1].
         check_ks_stat(&mut infection_times.borrow_mut(), |x| {
             Uniform::new(0.0, 1.0).unwrap().cdf(x)

@@ -81,7 +81,6 @@ impl<T: ?Sized + InfectiousnessRateFn> InfectiousnessRateFn for ScaledRateFn<'_,
 }
 
 #[cfg(test)]
-#[allow(clippy::float_cmp)]
 mod test {
     use statrs::assert_almost_eq;
 
@@ -98,8 +97,8 @@ mod test {
             scale: 2.0,
             elapsed: 0.0,
         };
-        assert_eq!(scaled_rate_fn.rate(0.0), 4.0);
-        assert_eq!(scaled_rate_fn.rate(5.0), 4.0);
+        assert_almost_eq!(scaled_rate_fn.rate(0.0), 4.0, 0.0);
+        assert_almost_eq!(scaled_rate_fn.rate(5.0), 4.0, 0.0);
     }
     #[test]
     fn test_scale_rate_fn_with_elapsed() {
@@ -109,10 +108,10 @@ mod test {
             scale: 2.0,
             elapsed: 3.0,
         };
-        assert_eq!(scaled_rate_fn.rate(0.0), 4.0);
+        assert_almost_eq!(scaled_rate_fn.rate(0.0), 4.0, 0.0);
         // Since the elapsed is 3.0, the rate at t=4.0 is past the total infectious
         // period (3.0 + 4.0 = 7.0), so the rate is 0.0.
-        assert_eq!(scaled_rate_fn.rate(4.0), 0.0);
+        assert_almost_eq!(scaled_rate_fn.rate(4.0), 0.0, 0.0);
     }
     #[test]
     fn test_scale_rate_fn_cum_rate() {
@@ -122,11 +121,11 @@ mod test {
             scale: 2.0,
             elapsed: 3.0,
         };
-        assert_eq!(scaled_rate_fn.cum_rate(1.0), 4.0);
-        assert_eq!(scaled_rate_fn.cum_rate(2.0), 8.0);
+        assert_almost_eq!(scaled_rate_fn.cum_rate(1.0), 4.0, 0.0);
+        assert_almost_eq!(scaled_rate_fn.cum_rate(2.0), 8.0, 0.0);
         // The cumulative rate for t=3.0 with an elapsed t=3.0 is still
         // only 2 days, since the infectiousness period ends at 5.0
-        assert_eq!(scaled_rate_fn.cum_rate(3.0), 8.0);
+        assert_almost_eq!(scaled_rate_fn.cum_rate(3.0), 8.0, 0.0);
     }
     #[test]
     fn test_scale_rate_fn_inverse_cum_rate() {

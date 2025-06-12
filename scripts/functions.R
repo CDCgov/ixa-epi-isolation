@@ -49,6 +49,7 @@ calculate_weibull_scale <- function(
   # The scale parameter is
   # = exp(si_beta_0 + si_beta_wr * wr_raw)
   # = exp(si_beta_0) * exp(si_beta_wr * wr_raw).
-  # Return si_scale
+  # We want to return the scale parameter for drawing
+  # samples from the corresponding Weibull
   si_beta_0_exponentiated * exp(si_beta_wr * wr_raw)
 }

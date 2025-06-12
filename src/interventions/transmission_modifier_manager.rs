@@ -166,12 +166,12 @@ impl ContextTransmissionModifierExt for Context {
             {
                 // Calculate the relative modifier for each registered function and multiply them
                 // together to get the total relative transmission modifier for the person
-                transmission_modifier_map
-                    .iter()
-                    .scan(1.0, |state, (_, tm)| {
-                        Some(*state * tm.get_relative_transmission(self, person_id))
-                    })
-                    .product()
+                transmission_modifier_map.iter().fold(
+                    1.0,
+                    |agg, (_type_id, transmission_modifier)| {
+                        agg * transmission_modifier.get_relative_transmission(self, person_id)
+                    },
+                )
             } else {
                 // If the infection status is not found in the map, return 1.0
                 1.0
