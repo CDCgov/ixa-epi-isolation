@@ -311,6 +311,8 @@ mod test {
             synth_population_file: PathBuf::from("."),
             transmission_report_name: None,
             settings_properties: HashMap::new(),
+            intervention_policy_parameters: None,
+            facemask_parameters: None,
         };
         context.init_random(parameters.seed);
         context
