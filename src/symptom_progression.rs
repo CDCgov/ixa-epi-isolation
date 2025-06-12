@@ -213,7 +213,10 @@ impl TransmissionModifier for AsymptomaticInfectiousnessModifier {
         let relative_infectiousness = context.get_params().relative_infectiousness_asymptomatics;
         let symptoms = context.get_person_property(person_id, Symptoms);
         match symptoms {
+            // Some can be either are Some(Presymptmatic) or Some(Category{1..=4})
+            // Presymptomatic individuals are not asymptomatic -- they will eventually develop symptoms
             Some(_) => 1.0,
+            // None means person is fully asymptomatic -- will never develop symptoms
             None => relative_infectiousness,
         }
     }
@@ -249,7 +252,8 @@ fn subscribe_to_becoming_infected(context: &mut Context) {
                 // We parameterize the model in terms of proportion asymptomatic, but we only do
                 // something if the person is symptomatic, so hence p = 1.0 - prop_asymptomatic.
                 if context.sample_bool(SymptomRng, 1.0 - prop_asymptomatic) {
-                    // People who will develop symptoms are first presymptomatic
+                    // People who will develop symptoms are first presymptomatic -- so we know that
+                    // all presymptomatic individuals will eventually develop symptoms.
                     // Becoming presymptomatic triggers the property progression manager's watcher
                     // to schedule the symptoms and recovery.
                     context.set_person_property(
