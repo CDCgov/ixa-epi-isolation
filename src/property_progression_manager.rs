@@ -5,7 +5,7 @@ use std::{
 };
 
 use ixa::{
-    define_data_plugin, Context, ContextPeopleExt, IxaError, PersonId, PersonProperty,
+    define_data_plugin, Context, ContextPeopleExt, IxaError, PersonProperty,
     PersonPropertyChangeEvent,
 };
 use serde::Deserialize;
@@ -16,19 +16,19 @@ use crate::natural_history_parameter_manager::{
     ContextNaturalHistoryParameterExt, NaturalHistoryParameterLibrary,
 };
 
-/// Defines a semi-Markovian method for getting the next value based on the last.
-/// `T` is the person property being mapped in the progression.
-pub trait Progression<T>
+/// Defines a semi-Markovian method for getting the next value of a person property based on how
+/// it's changed (the event) and `&Context`.
+/// `P` is the person property being mapped in the progression.
+pub trait Progression<P>
 where
-    T: PersonProperty + 'static,
+    P: PersonProperty + 'static,
 {
-    /// Returns the next value and the time to the next value given the current value and `Context`.
+    /// Returns the next value and the time to the next value given `&Context` and the event.
     fn next(
         &self,
         context: &Context,
-        person_id: PersonId,
-        last: T::Value,
-    ) -> Option<(T::Value, f64)>;
+        event: PersonPropertyChangeEvent<P>,
+    ) -> Option<(P::Value, f64)>;
 }
 
 #[derive(Default)]
@@ -45,52 +45,47 @@ define_data_plugin!(
 pub trait ContextPropertyProgressionExt {
     /// Registers a method that provides a sequence of person property values and times, and
     /// automatically changes the values of person properties according to that sequence.
-    fn register_property_progression<T: PersonProperty + 'static>(
+    fn register_property_progression<P: PersonProperty + 'static>(
         &mut self,
-        property: T,
-        tracer: impl Progression<T> + 'static,
+        property: P,
+        tracer: impl Progression<P> + 'static,
     );
 }
 
-impl<T> NaturalHistoryParameterLibrary for T
+impl<P> NaturalHistoryParameterLibrary for P
 where
-    T: PersonProperty + 'static,
+    P: PersonProperty + 'static,
 {
     fn library_size(&self, context: &Context) -> usize {
         let container = context.get_data_container(PropertyProgressions).unwrap();
-        let progressions = container
-            .progressions
-            .get(&TypeId::of::<T>())
-            .expect("Property");
+        let progressions = container.progressions.get(&TypeId::of::<P>()).unwrap();
         progressions.len()
     }
 }
 
 impl ContextPropertyProgressionExt for Context {
-    fn register_property_progression<T: PersonProperty + 'static>(
+    fn register_property_progression<P: PersonProperty + 'static>(
         &mut self,
-        property: T,
-        tracer: impl Progression<T> + 'static,
+        property: P,
+        tracer: impl Progression<P> + 'static,
     ) {
         // Add tracer to data container
         let container = self.get_data_container_mut(PropertyProgressions);
-        let progressions = container.progressions.entry(TypeId::of::<T>()).or_default();
-        let boxxed_tracer = Box::new(tracer) as Box<dyn Progression<T>>;
+        let progressions = container.progressions.entry(TypeId::of::<P>()).or_default();
+        let boxxed_tracer = Box::new(tracer) as Box<dyn Progression<P>>;
         progressions.push(Box::new(boxxed_tracer));
-        // Subscribe to change events if we have not yet already seen a progression that controls
-        // flow for this property
+        // Subscribe to change events for this property so that we can trace people through the progression
+        // if we have not yet been made aware that we should track progressions for this property
         if progressions.len() == 1 {
-            self.subscribe_to_event(move |context, event: PersonPropertyChangeEvent<T>| {
+            self.subscribe_to_event(move |context, event: PersonPropertyChangeEvent<P>| {
                 let container = context.get_data_container(PropertyProgressions).unwrap();
-                let progressions = container.progressions.get(&TypeId::of::<T>()).unwrap();
+                let progressions = container.progressions.get(&TypeId::of::<P>()).unwrap();
                 let id = context.get_parameter_id(property, event.person_id);
                 let tcr = progressions[id]
-                    .downcast_ref::<Box<dyn Progression<T>>>()
+                    .downcast_ref::<Box<dyn Progression<P>>>()
                     .unwrap()
                     .as_ref();
-                if let Some((next_value, time_to_next)) =
-                    tcr.next(context, event.person_id, event.current)
-                {
+                if let Some((next_value, time_to_next)) = tcr.next(context, event) {
                     let current_time = context.get_current_time();
                     context.add_plan(current_time + time_to_next, move |ctx| {
                         ctx.set_person_property(event.person_id, property, next_value);
@@ -196,7 +191,7 @@ mod test {
 
     use ixa::{
         define_person_property_with_default, Context, ContextPeopleExt, ContextRandomExt,
-        ExecutionPhase, IxaError, PersonId, PersonPropertyChangeEvent,
+        ExecutionPhase, IxaError, PersonPropertyChangeEvent,
     };
     use statrs::assert_almost_eq;
 
@@ -217,8 +212,12 @@ mod test {
 
     // Age takes on u8 values
     impl Progression<Age> for AgeProgression {
-        fn next(&self, _context: &Context, _person: PersonId, last: u8) -> Option<(u8, f64)> {
-            Some((last + 1, self.time_to_next_age))
+        fn next(
+            &self,
+            _context: &Context,
+            event: PersonPropertyChangeEvent<Age>,
+        ) -> Option<(u8, f64)> {
+            Some((event.current + 1, self.time_to_next_age))
         }
     }
 
@@ -228,15 +227,22 @@ mod test {
             time_to_next_age: 1.0,
         };
         let mut context = Context::new();
-        // Dummy person because Progression's next allows a person as an argument.
-        let person = context.add_person(()).unwrap();
-        let (next_value, time_to_next) = progression.next(&context, person, 0).unwrap();
+        // Dummy person because Progression's next requires a person property change event that has
+        // a person ID as an attribute.
+        let person_id = context.add_person(()).unwrap();
+        // The previous value doesn't matter in this event because the progression is only based on current
+        let event = PersonPropertyChangeEvent {
+            person_id,
+            current: 0,
+            previous: 0,
+        };
+        let (next_value, time_to_next) = progression.next(&context, event).unwrap();
         assert_eq!(next_value, 1);
         assert_almost_eq!(time_to_next, 1.0, 0.0);
 
         let boxed = Box::new(progression);
         let tcr = boxed.as_ref();
-        let (next_value, time_to_next) = tcr.next(&context, person, 0).unwrap();
+        let (next_value, time_to_next) = tcr.next(&context, event).unwrap();
         assert_eq!(next_value, 1);
         assert_almost_eq!(time_to_next, 1.0, 0.0);
     }
@@ -288,8 +294,13 @@ mod test {
     #[test]
     fn test_multiple_progressions_registered() {
         let mut context = Context::new();
-        // Dummy person because Progression's next allows a person as an argument.
-        let person = context.add_person(()).unwrap();
+        // Dummy person because Progression's next requires a person property change event.
+        let person_id = context.add_person(()).unwrap();
+        let event = PersonPropertyChangeEvent {
+            person_id,
+            current: 0,
+            previous: 0,
+        };
         context.init_random(0);
         let one_yr_progression = AgeProgression {
             time_to_next_age: 1.0,
@@ -309,14 +320,14 @@ mod test {
             .unwrap()
             .as_ref();
         // This age progression has 1.0 time unit to the next age.
-        assert_eq!(tcr.next(&context, person, 0).unwrap(), (1, 1.0));
+        assert_eq!(tcr.next(&context, event).unwrap(), (1, 1.0));
         // Same for the second
         let tcr = progressions[1]
             .downcast_ref::<Box<dyn Progression<Age>>>()
             .unwrap()
             .as_ref();
         // This age progression has 2.0 time units to the next age.
-        assert_eq!(tcr.next(&context, person, 0).unwrap(), (1, 2.0));
+        assert_eq!(tcr.next(&context, event).unwrap(), (1, 2.0));
     }
 
     define_person_property_with_default!(NumberRunningShoes, u8, 0);
@@ -328,11 +339,15 @@ mod test {
     }
 
     impl Progression<NumberRunningShoes> for RunningShoesProgression {
-        fn next(&self, _context: &Context, _person_id: PersonId, last: u8) -> Option<(u8, f64)> {
-            if last >= self.max {
+        fn next(
+            &self,
+            _context: &Context,
+            event: PersonPropertyChangeEvent<NumberRunningShoes>,
+        ) -> Option<(u8, f64)> {
+            if event.current >= self.max {
                 return None;
             }
-            Some((last + self.increase, self.time_to_next))
+            Some((event.current + self.increase, self.time_to_next))
         }
     }
 
@@ -418,12 +433,16 @@ mod test {
     }
 
     impl Progression<NumberRunningShoes> for ShoesMultiplyProgression {
-        fn next(&self, context: &Context, person_id: PersonId, last: u8) -> Option<(u8, f64)> {
-            let n = context.get_person_property(person_id, NumberRunningShoes);
+        fn next(
+            &self,
+            context: &Context,
+            event: PersonPropertyChangeEvent<NumberRunningShoes>,
+        ) -> Option<(u8, f64)> {
+            let n = context.get_person_property(event.person_id, NumberRunningShoes);
             if n >= self.max_running_shoes {
                 return None;
             }
-            Some((last * self.multiplier, self.time_to_next))
+            Some((event.current * self.multiplier, self.time_to_next))
         }
     }
 
@@ -431,7 +450,22 @@ mod test {
     fn test_multiple_implementations() {
         let mut context = Context::new();
         // Dummy person because Progression's next allows a person as an argument.
-        let person = context.add_person(()).unwrap();
+        let person_id = context.add_person(()).unwrap();
+        let event_zero_shoes = PersonPropertyChangeEvent {
+            person_id,
+            current: 0,
+            previous: 0,
+        };
+        let event_one_shoe = PersonPropertyChangeEvent {
+            person_id,
+            current: 1,
+            previous: 1,
+        };
+        let event_ten_shoes = PersonPropertyChangeEvent {
+            person_id,
+            current: 10,
+            previous: 10,
+        };
         let running_shoes_progression = RunningShoesProgression {
             max: 4,
             increase: 2,
@@ -461,16 +495,16 @@ mod test {
                 .downcast_ref::<Box<dyn Progression<NumberRunningShoes>>>()
                 .unwrap()
                 .as_ref();
-            assert_eq!(tcr.next(&context, person, 0).unwrap(), (2, 0.5));
+            assert_eq!(tcr.next(&context, event_zero_shoes).unwrap(), (2, 0.5));
             // Same for the second
             let tcr = shoes_progressions[1]
                 .downcast_ref::<Box<dyn Progression<NumberRunningShoes>>>()
                 .unwrap()
                 .as_ref();
-            assert_eq!(tcr.next(&context, person, 1).unwrap(), (2, 0.5));
+            assert_eq!(tcr.next(&context, event_one_shoe).unwrap(), (2, 0.5));
         }
         // Show that when we change the person property, the behavior of the progression changes.
-        context.set_person_property(person, NumberRunningShoes, 5);
+        context.set_person_property(person_id, NumberRunningShoes, 5);
         // Get the tracer back out
         let container = context.get_data_container(PropertyProgressions).unwrap();
         let shoes_progressions = container
@@ -483,8 +517,8 @@ mod test {
             .as_ref();
         // Regardless of what we plug in as the last value, we get None because we changed the
         // number of running shoes and the tracer behavior depends on that person property.
-        assert!(tcr.next(&context, person, 1).is_none());
-        assert!(tcr.next(&context, person, 10).is_none());
+        assert!(tcr.next(&context, event_one_shoe).is_none());
+        assert!(tcr.next(&context, event_ten_shoes).is_none());
     }
 
     #[test]
@@ -525,7 +559,12 @@ mod test {
     fn test_load_progression_library() {
         let mut context = Context::new();
         context.init_random(0);
-        let person = context.add_person(()).unwrap();
+        let person_id = context.add_person(()).unwrap();
+        let event = PersonPropertyChangeEvent {
+            person_id,
+            current: Some(SymptomValue::Presymptomatic),
+            previous: None,
+        };
         let file = PathBuf::from("./tests/data/two_symptom_data_progressions.csv");
         // Load the library and check for an error
         load_progressions(
@@ -547,9 +586,7 @@ mod test {
             .as_ref();
         // Check that this progression gives us category 2
         assert_eq!(
-            tcr.next(&context, person, Some(SymptomValue::Presymptomatic))
-                .unwrap()
-                .0,
+            tcr.next(&context, event).unwrap().0,
             Some(SymptomValue::Category2)
         );
         // Same for the second
@@ -559,9 +596,7 @@ mod test {
             .as_ref();
         // Check that this progression gives us category 3
         assert_eq!(
-            tcr.next(&context, person, Some(SymptomValue::Presymptomatic))
-                .unwrap()
-                .0,
+            tcr.next(&context, event).unwrap().0,
             Some(SymptomValue::Category3)
         );
     }

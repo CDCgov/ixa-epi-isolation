@@ -117,6 +117,8 @@ mod test {
                 "initial_incidence": 0.01,
                 "initial_recovered": 0.0,
                 "report_period": 1.0,
+                "proportion_asymptomatic": 0.0,
+                "relative_infectiousness_asymptomatics": 0.0,
                 "settings_properties": {},
                 "synth_population_file": "input/people_test.csv"
                 }
@@ -138,6 +140,8 @@ mod test {
                 "initial_incidence": 0.01,
                 "initial_recovered": 0.0,
                 "report_period": 1.0,
+                "proportion_asymptomatic": 0.0,
+                "relative_infectiousness_asymptomatics": 0.0,
                 "settings_properties": {},
                 "synth_population_file": "input/people_test.csv",
                 "transmission_report_name": "output.csv"
@@ -160,6 +164,8 @@ mod test {
                 "infectiousness_rate_fn": {"Constant": {"rate": 1.0, "duration": 5.0}},
                 "initial_incidence": 0.01,
                 "initial_recovered": 0.0,
+                "proportion_asymptomatic": 0.0,
+                "relative_infectiousness_asymptomatics": 0.0,
                 "report_period": 1.0,
                 "settings_properties": {},
                 "synth_population_file": "input/people_test.csv",
