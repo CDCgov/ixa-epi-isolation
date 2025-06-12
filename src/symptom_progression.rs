@@ -225,7 +225,7 @@ pub fn init(context: &mut Context) -> Result<(), IxaError> {
     load_progressions(context, params.symptom_progression_library.clone())?;
 
     // Subscribe to infection status change events to assign people symptoms
-    event_subscriptions(context);
+    subscribe_to_becoming_infected(context);
 
     // Register that asymptomatics have an infectiousness modifier
     context.register_transmission_modifier_fn(
@@ -241,12 +241,17 @@ pub fn init(context: &mut Context) -> Result<(), IxaError> {
     Ok(())
 }
 
-fn event_subscriptions(context: &mut Context) {
+fn subscribe_to_becoming_infected(context: &mut Context) {
     context.subscribe_to_event(
         |context, event: PersonPropertyChangeEvent<InfectionStatus>| {
             if event.current == InfectionStatusValue::Infectious {
                 let prop_asymptomatic = context.get_params().proportion_asymptomatic;
+                // We parameterize the model in terms of proportion asymptomatic, but we only do
+                // something if the person is symptomatic, so hence p = 1.0 - prop_asymptomatic.
                 if context.sample_bool(SymptomRng, 1.0 - prop_asymptomatic) {
+                    // People who will develop symptoms are first presymptomatic
+                    // Becoming presymptomatic triggers the property progression manager's watcher
+                    // to schedule the symptoms and recovery.
                     context.set_person_property(
                         event.person_id,
                         Symptoms,
@@ -271,8 +276,8 @@ mod test {
         property_progression_manager::Progression,
         rate_fns::load_rate_fns,
         symptom_progression::{
-            event_subscriptions, schedule_recovery, schedule_symptoms, RightTruncatedWeibull,
-            Symptoms,
+            schedule_recovery, schedule_symptoms, subscribe_to_becoming_infected,
+            RightTruncatedWeibull, Symptoms,
         },
         Params,
     };
@@ -381,7 +386,7 @@ mod test {
     fn test_event_subscriptions() {
         let mut context = setup(0.0);
         let person = context.add_person(()).unwrap();
-        event_subscriptions(&mut context);
+        subscribe_to_becoming_infected(&mut context);
         context.infect_person(person, None, None, None);
         context.execute();
         // The person should be presymptomatic
@@ -619,7 +624,7 @@ mod test {
                 // 1000 people
                 context.add_person(()).unwrap();
             }
-            event_subscriptions(&mut context);
+            subscribe_to_becoming_infected(&mut context);
             // Infect all of the people -- triggering the event subscriptions if they are symptomatic
             for person in context.query_people((Alive, true)) {
                 context.infect_person(person, None, None, None);
