@@ -74,7 +74,7 @@ impl<T: ?Sized + InfectiousnessRateFn> InfectiousnessRateFn for ScaledRateFn<'_,
                 - self.elapsed,
         )
     }
-    /// Returns the remaining infectiousness period at `elapsed`.
+    /// Returns the duration of infectiousness.
     fn infection_duration(&self) -> f64 {
         self.base.infection_duration() - self.elapsed
     }
