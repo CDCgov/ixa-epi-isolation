@@ -241,6 +241,8 @@ mod test {
                     },
                 ),
             ]),
+            intervention_policy_parameters: None,
+            facemask_parameters: None,
         };
         context.init_random(parameters.seed);
         context
