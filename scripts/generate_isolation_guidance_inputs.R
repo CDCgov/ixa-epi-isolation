@@ -6,6 +6,7 @@ library(sjmisc)
 source("scripts/functions.R")
 set.seed(108)
 
+# Our
 # Jason's suggestion: add some time before infectiousness starts
 # to get the time of infection. We can calibrate this time and use
 # it to check our assumption that infectiousness starts at logVL > 0.
