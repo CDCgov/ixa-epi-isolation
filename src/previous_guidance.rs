@@ -146,6 +146,7 @@ impl ContextIsolationGuidanceInternalExt for Context {
             move |context, event: PersonPropertyChangeEvent<PresentingWithSymptoms>| {
                 if event.current {
                     context.administer_test(event.person_id, intervention_policy_parameters);
+                    
                 } else if event.previous {
                     context.handle_symptom_resolution(event.person_id, intervention_policy_parameters);
                 }
