@@ -144,7 +144,6 @@ pub fn init(context: &mut Context) -> Result<(), IxaError> {
 }
 
 #[cfg(test)]
-#[allow(clippy::float_cmp)]
 mod test {
     use serde::{Deserialize, Serialize};
     use std::{cell::RefCell, collections::HashMap, path::PathBuf, rc::Rc};
@@ -176,8 +175,8 @@ mod test {
         },
         rate_fns::{load_rate_fns, InfectiousnessRateExt},
         settings::{
-            init as settings_init, CensusTract, ContextSettingExt, Home, ItineraryEntry, SettingId,
-            SettingProperties, Workplace,
+            CensusTract, ContextSettingExt, Home, ItineraryEntry, SettingId, SettingProperties,
+            Workplace,
         },
     };
 
@@ -501,13 +500,13 @@ mod test {
         }
 
         #[allow(clippy::cast_precision_loss)]
-        let avg_number_infections = num_infected.take() as f64 / num_sims as f64;
+        let avg_number_infections = *num_infected.borrow() as f64 / num_sims as f64;
         assert_almost_eq!(
             avg_number_infections,
             modifier * rate * total_infectiousness_multiplier.unwrap(),
             0.05
         );
-        assert_eq!(modifier, INFECTIOUS_PARTIAL);
+        assert_almost_eq!(modifier, INFECTIOUS_PARTIAL, 0.0);
         // Check whether the times at when people are infected fall uniformly on [0, 1].
         check_ks_stat(&mut infection_times.borrow_mut(), |x| {
             Uniform::new(0.0, 1.0).unwrap().cdf(x)
@@ -597,7 +596,7 @@ mod test {
                 let num_infected_cenustract_clone = Rc::clone(&num_infected_censustract);
                 let num_infected_workplace_clone = Rc::clone(&num_infected_workplace);
                 let mut context = setup_context(seed, rate, alpha, 5.0, 0.0);
-                settings_init(&mut context);
+                crate::settings::init(&mut context);
 
                 // Add a a person who will get infected.
                 let infectious_person = context.add_person(()).unwrap();
@@ -659,11 +658,11 @@ mod test {
                 context.execute();
             }
             #[allow(clippy::cast_precision_loss)]
-            let avg_number_infections_home = num_infected_home.take() as f64 / num_sims as f64;
+            let avg_number_infections_home = *num_infected_home.borrow() as f64 / num_sims as f64;
             assert_almost_eq!(avg_number_infections_home, ratio[0] / sum_of_ratio, 0.05);
             #[allow(clippy::cast_precision_loss)]
             let avg_number_infections_censustract =
-                num_infected_censustract.take() as f64 / num_sims as f64;
+                *num_infected_censustract.borrow() as f64 / num_sims as f64;
             assert_almost_eq!(
                 avg_number_infections_censustract,
                 ratio[1] / sum_of_ratio,
@@ -671,7 +670,7 @@ mod test {
             );
             #[allow(clippy::cast_precision_loss)]
             let avg_number_infections_workplace =
-                num_infected_workplace.take() as f64 / num_sims as f64;
+                *num_infected_workplace.borrow() as f64 / num_sims as f64;
             assert_almost_eq!(
                 avg_number_infections_workplace,
                 ratio[2] / sum_of_ratio,

@@ -621,7 +621,7 @@ impl ContextSettingExt for Context {
     fn add_itinerary(
         &mut self,
         person_id: PersonId,
-        mut itinerary: Vec<ItineraryEntry>,
+        itinerary: Vec<ItineraryEntry>,
     ) -> Result<(), IxaError> {
         // Normalize itinerary ratios
         self.validate_itinerary(&itinerary)?;
@@ -629,6 +629,7 @@ impl ContextSettingExt for Context {
         let total_ratio: f64 = itinerary.iter().map(|entry| entry.ratio).sum();
         // If we passed validation, we know setting entries aren't all zero, so we can divide by
         // total_ratio without worrying about dividing by zero.
+        let mut itinerary = itinerary;
         for entry in &mut itinerary {
             entry.ratio /= total_ratio;
         }

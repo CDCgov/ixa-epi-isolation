@@ -231,7 +231,6 @@ impl InfectionContextExt for Context {
 }
 
 #[cfg(test)]
-#[allow(clippy::float_cmp)]
 mod test {
     use serde::{Deserialize, Serialize};
     use statrs::assert_almost_eq;
@@ -325,7 +324,7 @@ mod test {
         else {
             panic!("Person {p1} is not infectious")
         };
-        assert_eq!(infection_time, 2.0);
+        assert_almost_eq!(infection_time, 2.0, 0.0);
         context.get_person_rate_fn(p1);
     }
 
@@ -347,8 +346,8 @@ mod test {
         else {
             panic!("Person {p1} is not recovered")
         };
-        assert_eq!(infection_time, 2.0);
-        assert_eq!(recovery_time, 3.0);
+        assert_almost_eq!(infection_time, 2.0, 0.0);
+        assert_almost_eq!(recovery_time, 3.0, 0.0);
     }
 
     #[test]
@@ -358,9 +357,12 @@ mod test {
         context.add_plan(2.0, move |context| {
             context.infect_person(p1, None, None, None);
         });
-        context.add_plan(3.0, move |_| {});
+        // Run the simulation until time 3.0 at which the point the individual should have been
+        // infected for 1.0 time units.
+        context.add_plan(3.0, ixa::Context::shutdown);
         context.execute();
-        assert_eq!(context.get_elapsed_infection_time(p1), 1.0);
+        // Check infection time
+        assert_almost_eq!(context.get_elapsed_infection_time(p1), 1.0, 0.0);
     }
 
     #[test]
@@ -368,7 +370,7 @@ mod test {
         let mut context = setup_context();
         let p1 = context.add_person(()).unwrap();
 
-        assert_eq!(max_total_infectiousness_multiplier(&context, p1), 0.0);
+        assert_almost_eq!(max_total_infectiousness_multiplier(&context, p1), 0.0, 0.0);
     }
 
     #[test]
@@ -379,8 +381,8 @@ mod test {
         let p2 = context.add_person(()).unwrap();
         set_homogeneous_mixing_itinerary(&mut context, p2).unwrap();
 
-        assert_eq!(max_total_infectiousness_multiplier(&context, p1), 1.0);
-        assert_eq!(max_total_infectiousness_multiplier(&context, p2), 1.0);
+        assert_almost_eq!(max_total_infectiousness_multiplier(&context, p1), 1.0, 0.0);
+        assert_almost_eq!(max_total_infectiousness_multiplier(&context, p2), 1.0, 0.0);
     }
 
     #[test]
@@ -399,8 +401,7 @@ mod test {
 
         let f = get_forecast(&context, p1).expect("Forecast should be returned");
         // The expected rate is 2.0, because intrinsic is 1.0 and there are 2 contacts.
-        // TODO<ryl8@cdc>: Check if the times are reasonable
-        assert_eq!(f.forecasted_total_infectiousness, 2.0);
+        assert_almost_eq!(f.forecasted_total_infectiousness, 2.0, 0.0);
     }
 
     #[test]

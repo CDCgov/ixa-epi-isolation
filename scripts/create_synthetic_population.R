@@ -124,17 +124,17 @@ while (nrow(synth_pop_df) < population_size) {
   ## Assign workplaces
   work_id_list <- map_chr(house_sample$WRK, function(x) {
     if (x %in% c("1")) {
-      return(sample(synth_workplace_df$workplace_id, size = 1))
+      sample(synth_workplace_df$workplace_id, size = 1)
     } else {
-      return(NA)
+      NA
     }
   })
 
   school_id_list <- map_chr(house_sample$SCH, function(x) {
     if (x %in% c("2", "3")) {
-      return(sample(synth_school_df$school_id, size = 1))
+      sample(synth_school_df$school_id, size = 1)
     } else {
-      return(NA)
+      NA
     }
   })
   synth_pop_df <- bind_rows(

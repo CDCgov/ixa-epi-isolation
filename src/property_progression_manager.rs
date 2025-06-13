@@ -17,8 +17,7 @@ use crate::natural_history_parameter_manager::{
 };
 
 /// Defines a semi-Markovian method for getting the next value of a person property based on how
-/// it's changed (the event) and `&Context`.
-/// `P` is the person property being mapped in the progression.
+/// it's changed (the event) and `&Context`. `P` is the person property being mapped in the progression.
 pub trait Progression<P>
 where
     P: PersonProperty + 'static,
@@ -128,9 +127,9 @@ struct ProgressionRecord {
 
 fn add_progressions_from_file(context: &mut Context, file: PathBuf) -> Result<(), IxaError> {
     let mut reader = csv::Reader::from_path(file)?;
-    let mut reader = reader.deserialize::<ProgressionRecord>();
+    let mut reader = reader.deserialize();
     // Pop out the first record so we can initialize the trackers
-    let record = reader.next().unwrap()?;
+    let record: ProgressionRecord = reader.next().unwrap()?;
     let mut last_id = record.id;
     // Check that the first id is 1
     if last_id != 1 {
@@ -144,7 +143,7 @@ fn add_progressions_from_file(context: &mut Context, file: PathBuf) -> Result<()
     for record in reader {
         let record = record?;
         if record.id == last_id {
-            // Check if the distribution struct is the same
+            // Check if the progression type is the same
             if record.progression_type != last_progression_type {
                 return Err(IxaError::IxaError(format!(
                     "Progression type mismatch: expected {:?}, got {:?}",
@@ -155,7 +154,7 @@ fn add_progressions_from_file(context: &mut Context, file: PathBuf) -> Result<()
             parameter_names.push(record.parameter_name);
             parameters.push(record.parameter_value);
         } else {
-            // Take the last values of times and values and make them into a rate function
+            // Take the last set of parameters aggregated and make them into the right progression
             match last_progression_type {
                 ProgressionType::SymptomData => {
                     SymptomData::register(context, parameter_names, parameters)?;
@@ -252,7 +251,7 @@ mod test {
         let mut context = Context::new();
         context.init_random(0);
         context
-            .register_parameter_id_assigner(Age, |_, _| 0)
+            .register_parameter_id_assigner(Age, |_context, _person_id| 0)
             .unwrap();
         context.register_property_progression(
             Age,
@@ -356,7 +355,7 @@ mod test {
         let mut context = Context::new();
         context.init_random(0);
         context
-            .register_parameter_id_assigner(Age, |_, _| 0)
+            .register_parameter_id_assigner(Age, |_context, _person_id| 0)
             .unwrap();
         let age_progression = AgeProgression {
             time_to_next_age: 1.0,
@@ -401,7 +400,7 @@ mod test {
         );
         // There should never ever be any more edits to the number of running shoes beyond 4.
         context.subscribe_to_event(
-            move |_, event: PersonPropertyChangeEvent<NumberRunningShoes>| {
+            |_context, event: PersonPropertyChangeEvent<NumberRunningShoes>| {
                 assert!(event.current <= 4);
             },
         );

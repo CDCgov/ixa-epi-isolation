@@ -5,16 +5,16 @@ use crate::utils::{cumulative_trapezoid_integral, linear_interpolation, trapezoi
 use super::InfectiousnessRateFn;
 
 pub struct EmpiricalRate {
-    // Times
+    // Times at which we have samples of the infectiousness rate
     times: Vec<f64>,
-    // Samples of the hazard rate at the given times
+    // Samples of the instantaneous infectiousness rate at the corresponding times
     instantaneous_rate: Vec<f64>,
-    // Estimated cumulative hazard elapsed at a given time
+    // Estimated cumulative infectiousness elapsed at a given time
     cum_rates: Vec<f64>,
 }
 
 impl EmpiricalRate {
-    /// Creates a new empirical rate function from a sample of times and hazard rates
+    /// Creates a new empirical rate function from a sample of times and infectiousness rates
     /// # Errors
     /// - If `times` and `instantaneous_rate` do not have the same length and are less than two
     ///   elements long.
@@ -106,6 +106,52 @@ impl EmpiricalRate {
     }
 }
 
+/// Returns a pair of indices referring to locations in `xs`. The first is the index of the largest
+/// value in `xs` that is less than or equal to `xp` (unless `xp` < `min(xs)` in which case it
+/// returns 0). This index is used for querying that value or a vector calculated from the
+/// corresponding values in `xs`. The second index is an adjusted version of the first index that
+/// ensures that there is at least one value to the right of the index in `xs`. In other words, if
+/// the first index is the last index in `xs`, the second index will be the second to last index in
+/// `xs`.
+/// If there are multiple values in `xs` that satisfy being the largest value less than or equal to
+/// `xp`, the function checks to return the smallest of those values.
+/// Assumes that `xs` is sorted in ascending order. However, this is a private function only called
+/// within `EmpiricalRate` where the values are already checked to be sorted.
+fn get_lower_index(xs: &[f64], xp: f64) -> (usize, usize) {
+    let mut integration_index = match xs.binary_search_by(|x| x.partial_cmp(&xp).unwrap()) {
+        Ok(i) => i,
+        // xp may be less than min(xs), so binary search may return Err(0). This case can arise
+        // because we do not require that the samples of the rate function start at time = 0.0 or if
+        // the `events` called in `inverse_cum_rate` is less than the first value in `cum_rates`.
+        // We still want to be able to query a value of `cum_rates`, so we need to return 0.
+        // We subtract 1 normally because binary search returns the index of the where `xp` would
+        // go if it were inserted, which is one after the greatest value less than `xp` in `xs`.
+        Err(i) => usize::max(i, 1) - 1,
+    };
+
+    // We want to make sure we return the smallest index in the case where there are multiple values
+    // in `xs` that are equal to the value at `integration_index`.
+    // To do this, we "walk left" along the array until we hit a value not equal to the value in
+    // question.
+    let val = xs[integration_index];
+    while integration_index > 0 {
+        #[allow(clippy::float_cmp)]
+        if xs[integration_index - 1] != val {
+            break;
+        }
+        integration_index -= 1;
+    }
+
+    // We need to return the integration index and an adjusted version of that index for
+    // interpolation.
+    (
+        integration_index,
+        // In the case where xp >= max(xs), we want to return the second to last index so that we
+        // have two points over which to do interpolation.
+        usize::min(integration_index, xs.len() - 2),
+    )
+}
+
 impl InfectiousnessRateFn for EmpiricalRate {
     fn rate(&self, t: f64) -> f64 {
         if t < self.times[0] {
@@ -116,6 +162,7 @@ impl InfectiousnessRateFn for EmpiricalRate {
         }
         self.lower_index_and_rate(t).2
     }
+
     fn cum_rate(&self, t: f64) -> f64 {
         if t < self.times[0] {
             return 0.0;
@@ -128,7 +175,8 @@ impl InfectiousnessRateFn for EmpiricalRate {
         // We need the get the index of the greatest value in `times` less than or equal to `t` for
         // the first step (querying the pre-calculated cumulative rates vector value at that index).
         // Later, we will need the estimated rate at `t` for the second step, so we get both here.
-        let (integration_index, _, estimated_rate) = self.lower_index_and_rate(t);
+        let (integration_index, _interpolation_index, estimated_rate) =
+            self.lower_index_and_rate(t);
         let mut cum_rate = self.cum_rates[integration_index];
         if t > self.times[self.times.len() - 1] {
             // rates for times greater than the last time are 0, so cum_rate stays the same
@@ -146,6 +194,8 @@ impl InfectiousnessRateFn for EmpiricalRate {
     }
 
     fn inverse_cum_rate(&self, events: f64) -> Option<f64> {
+        // If events is greater than the maximum value in `cum_rates`, we return None because this
+        // rate function cannot produce that much infectiousness.
         if events > self.cum_rates[self.cum_rates.len() - 1] {
             return None;
         }
@@ -157,7 +207,8 @@ impl InfectiousnessRateFn for EmpiricalRate {
         // We know that `cum_rates` is the running total of how many events have happened by a given
         // time, so we start be finding the index of the greatest value in `cum_rates` less than or
         // equal to `events` and using that to figure out at least how much time has passed.
-        let (mut integration_index, _) = get_lower_index(&self.cum_rates, events);
+        let (mut integration_index, _interpolation_index) =
+            get_lower_index(&self.cum_rates, events);
 
         // We need the number of events beyond the last value in `cum_rates` to estimate the extra
         // time that has passed. We describe a formula below for relating this value to the time.
@@ -227,56 +278,8 @@ impl InfectiousnessRateFn for EmpiricalRate {
     }
 }
 
-/// Returns a pair of indices referring to locations in `xs`. The first is the index of the largest
-/// value in `xs` that is less than or equal to `xp` (unless `xp` < `min(xs)` in which case it
-/// returns 0). This index is used for querying that value or a vector calculated from the
-/// corresponding values in `xs`. The second index is an adjusted version of the first index that
-/// ensures that there is at least one value to the right of the index in `xs`. In other words, if
-/// the first index is the last index in `xs`, the second index will be the second to last index in
-/// `xs`.
-/// Assumes that `xs` is sorted in ascending order. However, this is a private function only called
-/// within `EmpiricalRate` where the values are already checked to be sorted.
-/// If there are multiple values in `xs` that satisfy being the largest value less than or equal to
-/// `xp`, the function checks to return the smallest of those values.
-fn get_lower_index(xs: &[f64], xp: f64) -> (usize, usize) {
-    let mut integration_index = match xs.binary_search_by(|x| x.partial_cmp(&xp).unwrap()) {
-        Ok(i) => i,
-        // xp may be less than min(xs), so binary search may return Err(0). This case can arise
-        // because we do not require that the samples of the rate function start at time = 0.0 or if
-        // the `events` in `inverse_cum_rate` are less than the first value in `cum_rates`.
-        // We still want to be able to query a value of `cum_rates`, so we need to return 0.
-        // We subtract 1 normally because binary search returns the index of the where `xp` would
-        // fit, which is one after the closest value in `xs`.
-        Err(i) => usize::max(i, 1) - 1,
-    };
-
-    // We want to make sure we return the smallest index in the case where there are multiple values
-    // in `xs` that are equal to the value at `integration_index`.
-    // To do this, we "walk left" along the array until we hit a value not equal to the value in
-    // question.
-    let val = xs[integration_index];
-    while integration_index > 0 {
-        #[allow(clippy::float_cmp)]
-        if xs[integration_index - 1] != val {
-            break;
-        }
-        integration_index -= 1;
-    }
-
-    // We need to return the integration index and an adjusted version of that index for
-    // interpolation.
-    (
-        integration_index,
-        // In the case where xp >= max(xs), we want to return the second to last index so that we
-        // have two points over which to do interpolation.
-        usize::min(integration_index, xs.len() - 2),
-    )
-}
-
 #[cfg(test)]
 mod test {
-    use core::f64;
-
     use ixa::IxaError;
     use statrs::assert_almost_eq;
 

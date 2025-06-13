@@ -85,6 +85,7 @@ mod test {
     use ixa::{
         Context, ContextGlobalPropertiesExt, ContextPeopleExt, ContextRandomExt, ContextReportExt,
     };
+    use statrs::assert_almost_eq;
     use std::path::PathBuf;
     use tempfile::tempdir;
 
@@ -154,7 +155,6 @@ mod test {
     }
 
     #[test]
-    #[allow(clippy::float_cmp)]
     fn test_generate_transmission_report() {
         let params_json = r#"
             {
@@ -201,7 +201,7 @@ mod test {
         let mut reader = csv::Reader::from_path(file_path).unwrap();
         for result in reader.deserialize() {
             let record: TransmissionReport = result.unwrap();
-            assert_eq!(record.time, infection_time);
+            assert_almost_eq!(record.time, infection_time, 0.0);
             assert_eq!(record.target_id, target);
             assert_eq!(record.infected_by.unwrap(), source);
             assert_eq!(

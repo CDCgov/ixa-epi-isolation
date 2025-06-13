@@ -1,8 +1,8 @@
 use ixa::IxaError;
 
-/// Calculate the integral of `y` as a function of `x` using the trapezoid rule -- estimating that
-/// the value of `y` between two adjacent `x` values is the midpoint of the start and end `y` value/
-/// `y` changes linearly between each adjacent set of `x` values.
+/// Calculate the definite integral of `y` as a function of `x` using the trapezoid rule -- estimating
+/// that the value of `y` between two adjacent `x` values is the midpoint of the start and end `y`
+/// value/ `y` changes linearly between each adjacent set of `x` values.
 /// # Errors
 /// - If `x` and `y` do not have the same length.
 pub fn trapezoid_integral(x: &[f64], y: &[f64]) -> Result<f64, IxaError> {
@@ -46,7 +46,7 @@ pub fn cumulative_trapezoid_integral(x: &[f64], y: &[f64]) -> Result<Vec<f64>, I
 }
 
 #[cfg(test)]
-mod tests {
+mod test {
     use ixa::IxaError;
     use statrs::assert_almost_eq;
 

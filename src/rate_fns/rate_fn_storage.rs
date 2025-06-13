@@ -74,10 +74,9 @@ pub fn load_rate_fns(context: &mut Context) -> Result<(), IxaError> {
         }
     }
 
-    context.register_parameter_id_assigner(RateFn, |context, _| {
-        let container = context.get_data_container(RateFnPlugin).unwrap();
-        let len = container.rates.len();
-        context.sample_range(InfectiousnessRng, 0..len)
+    context.register_parameter_id_assigner(RateFn, |context, _person_id| {
+        let library_size = RateFn.library_size(context);
+        context.sample_range(InfectiousnessRng, 0..library_size)
     })?;
     Ok(())
 }
@@ -98,9 +97,9 @@ fn add_rate_fns_from_file(context: &mut Context, file: PathBuf) -> Result<(), Ix
         unreachable!("This function should only be called for empirical rate functions");
     };
     let mut reader = csv::Reader::from_path(file)?;
-    let mut reader = reader.deserialize::<EmpiricalRateFnRecord>();
+    let mut reader = reader.deserialize();
     // Pop out the first record so we can initialize the vectors
-    let record = reader.next().unwrap()?;
+    let record: EmpiricalRateFnRecord = reader.next().unwrap()?;
     let mut last_id = record.id;
     // Require that the first id is 1
     if last_id != 1 {
@@ -143,7 +142,7 @@ fn add_rate_fns_from_file(context: &mut Context, file: PathBuf) -> Result<(), Ix
 }
 
 #[cfg(test)]
-mod tests {
+mod test {
     use std::collections::HashMap;
 
     use crate::parameters::{GlobalParams, Params};
@@ -173,7 +172,7 @@ mod tests {
         let mut context = Context::new();
         context.init_random(0);
         context
-            .register_parameter_id_assigner(RateFn, |context, _| {
+            .register_parameter_id_assigner(RateFn, |context, _person_id| {
                 let container = context.get_data_container(RateFnPlugin).unwrap();
                 let len = container.rates.len();
                 context.sample_range(InfectiousnessRng, 0..len)

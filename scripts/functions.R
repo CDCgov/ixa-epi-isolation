@@ -12,14 +12,19 @@
 #'
 #' @examples triangle_vl()
 triangle_vl <- function(t, dp, tp, wp, wr) {
-  log_vl <- rep(NA, length(t))
-
-  log_vl <- dplyr::if_else(t <= tp,
+  # t: time at which to evaluate the triangular viral load
+  # dp: peak value of viral load
+  # tp: time of peak viral load
+  # wp: proliferation time (time from logVL = 0 up to peak)
+  # wr: clearance time (time from peak back down to logVL = 0)
+  # The triangular viral load function is defined as follows:
+  # if t <= tp, then VL(t) = dp / wp * (t - (tp - wp))
+  # if t > tp, then VL(t) = dp - (dp / wr) * (t - tp)
+  # This function returns the viral load at time t.
+  dplyr::if_else(t <= tp,
     (dp / wp) * (t - (tp - wp)),
     dp - (dp / wr) * (t - tp)
   )
-
-  return(log_vl)
 }
 
 calculate_weibull_scale <- function(
@@ -44,6 +49,7 @@ calculate_weibull_scale <- function(
   # The scale parameter is
   # = exp(si_beta_0 + si_beta_wr * wr_raw)
   # = exp(si_beta_0) * exp(si_beta_wr * wr_raw).
-  si_scale <- si_beta_0_exponentiated * exp(si_beta_wr * wr_raw)
-  return(si_scale)
+  # We want to return the scale parameter for drawing
+  # samples from the corresponding Weibull
+  si_beta_0_exponentiated * exp(si_beta_wr * wr_raw)
 }

@@ -8,7 +8,7 @@ use ixa::{define_data_plugin, define_rng, Context, ContextRandomExt, IxaError, P
 
 define_rng!(NaturalHistoryParameterRng);
 
-/// Specifies behavior for a library of natural history parameters
+/// Methods to specify a natural history parameter library
 pub trait NaturalHistoryParameterLibrary {
     /// Returns the size of a library of natural history parameters. Used to return a random index
     /// in the range of the library size when querying an id for a natural history parameter that
@@ -31,14 +31,14 @@ define_data_plugin!(
 
 /// Provides methods for specifying relationships between libraries of natural history parameters.
 pub trait ContextNaturalHistoryParameterExt {
-    /// Register the function used to assign a particular index from a library of natural history
-    /// parameters `T` to a person. The function is evaluated when the id is requested, so it can
+    /// Register the function used to assign a particular index from a natural history parameter
+    /// // library `T` to a person. The function is evaluated when the id is requested, so it can
     /// depend on other parameters and takes `&Context` and `PersonId` as arguments. Values from
     /// the registered function are returned when `context.get_parameter_id` is called.
     /// # Errors
     /// - If an assignment function for the parameter has already been registered
-    /// - If an id for the parameter has already been queried for a person (i.e., defaulting to
-    ///   random assignment)
+    /// - If an id for the parameter has been queried for a person (i.e., defaulting to random
+    ///   assignment) prior to registering an assignment function.
     fn register_parameter_id_assigner<T, S>(
         &mut self,
         parameter: T,
@@ -48,12 +48,12 @@ pub trait ContextNaturalHistoryParameterExt {
         T: NaturalHistoryParameterLibrary + 'static,
         S: Fn(&Context, PersonId) -> usize + 'static;
 
-    /// Get the id for a natural history parameter for a person. If an assignment function is
-    /// registered, returns the id from evaluating that function, and if no assignment function is
-    /// registered, returns a random id between 0 (inclusive) and the parameter's library size
-    /// (exclusive).
-    /// Stores the assigned id so that calling this function again with the same parameter and
-    /// person will return the same id.
+    /// Get the id for a natural history parameter for a person. If an id for the parameter has
+    /// already been assigned for this person, returns that id. If no id has been assigned, first
+    /// checks whether an assignment function has been registered for the parameter. If so, evaluates
+    /// the assignment function and returns the computed id. Otherwise, returns a random id between
+    /// 0 (inclusive) and the parameter's library size (exclusive). Stores the assigned id so that
+    /// calling this function again with the same parameter and person will return the same id.
     /// Does not check whether the id returned from an assignment function is in the range of the
     /// library size.
     fn get_parameter_id<T>(&self, parameter: T, person_id: PersonId) -> usize
@@ -75,12 +75,12 @@ impl ContextNaturalHistoryParameterExt for Context {
 
         // We shouldn't be registering assignment functions for parameters where we've already been
         // asked to provide an id and defaulted to random assignment. In this case, the assignment
-        // function does not apply to all ids, so the id assignment is ambiguous.
+        // function would not apply to all ids, so the id assignment is ambiguous.
         if container.ids.borrow().contains_key(&TypeId::of::<T>()) {
             return Err(IxaError::IxaError(
-                "An id for this parameter has been previously queried, so a new assignment function cannot be specified.
-                If this is desired behavior, register an assignment function that changes from random to the specified
-                behavior at the time at which this assignment is registered.".to_string(),
+                "An id for this parameter has been previously queried, so a new assignment function cannot be specified.".to_string() +
+                " If this is desired behavior, register an assignment function that changes from random to the specified" +
+                " behavior at the time at which this assignment is registered."
             ));
         }
 
@@ -185,7 +185,7 @@ mod test {
         let mut context = init_context();
         let person = context.add_person(()).unwrap();
         context
-            .register_parameter_id_assigner(ViralLoad, |_, _| 0)
+            .register_parameter_id_assigner(ViralLoad, |_context, _person_id| 0)
             .unwrap();
         let container = context
             .get_data_container(NaturalHistoryParameters)
@@ -203,9 +203,9 @@ mod test {
     fn test_error_register_two_assignments_same_parameter() {
         let mut context = init_context();
         context
-            .register_parameter_id_assigner(ViralLoad, |_, _| 0)
+            .register_parameter_id_assigner(ViralLoad, |_context, _person_id| 0)
             .unwrap();
-        let result = context.register_parameter_id_assigner(ViralLoad, |_, _| 1);
+        let result = context.register_parameter_id_assigner(ViralLoad, |_context, _person_id| 1);
         let e = result.err();
         match e {
             Some(IxaError::IxaError(msg)) => {
@@ -233,19 +233,20 @@ mod test {
         let person = context.add_person(()).unwrap();
         // We have to register something to make sure the data container exists.
         context
-            .register_parameter_id_assigner(ViralLoad, |_, _| 0)
+            .register_parameter_id_assigner(ViralLoad, |_context, _person_id| 0)
             .unwrap();
         // This section also tests that we default to random assignment in library range for
         // parameters not previously seen if some registration has occured previously.
         let result = context.get_parameter_id(AntigenPositivity, person);
         assert_eq!(result, 0);
-        let result = context.register_parameter_id_assigner(AntigenPositivity, |_, _| 1);
+        let result =
+            context.register_parameter_id_assigner(AntigenPositivity, |_context, _person_id| 1);
         let e = result.err();
         match e {
             Some(IxaError::IxaError(msg)) => {
-                assert_eq!(msg, "An id for this parameter has been previously queried, so a new assignment function cannot be specified.
-                If this is desired behavior, register an assignment function that changes from random to the specified
-                behavior at the time at which this assignment is registered.".to_string());
+                assert_eq!(msg, "An id for this parameter has been previously queried, so a new assignment function cannot be specified.".to_string() +
+                " If this is desired behavior, register an assignment function that changes from random to the specified" +
+                " behavior at the time at which this assignment is registered.");
             }
             Some(ue) => panic!(
                 "Expected an error that an id for this parameter has been previously queried so an assignment function cannot be registered. Instead got {:?}",
@@ -270,7 +271,7 @@ mod test {
         let mut context = init_context();
         let person = context.add_person(()).unwrap();
         context
-            .register_parameter_id_assigner(ViralLoad, |_, _| 0)
+            .register_parameter_id_assigner(ViralLoad, |_context, _person_id| 0)
             .unwrap();
         let id = context.get_parameter_id(ViralLoad, person);
         assert_eq!(id, 0);
