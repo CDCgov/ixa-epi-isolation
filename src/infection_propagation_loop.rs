@@ -57,27 +57,25 @@ fn query_susceptibles_and_seed(
     to_seed: u64,
     seed_fn: impl Fn(&mut Context, PersonId),
 ) -> Result<(), IxaError> {
+    let mut susceptibles = context
+        .query_people((InfectionStatus, InfectionStatusValue::Susceptible))
+        .into_iter();
+    trace!("Found {} susceptibles to seed.", susceptibles.len());
     for _ in 0..to_seed {
-        let person = context.sample_person(
-            InfectionRng,
-            // Since the default value for `InfectionStatus` is `Susceptible`, we use it to grab
-            // people to whom nothing has happened yet.
-            (InfectionStatus, InfectionStatusValue::Susceptible),
-        );
-        match person {
-            Some(person) => {
-                seed_fn(context, person);
-            }
-            None => {
-                return Err(IxaError::IxaError("The number of people to seed with initial conditions has surpassed the population size.".to_string()));
-            }
+        let person = susceptibles.next();
+        if let Some(person) = person {
+            seed_fn(context, person);
+        } else {
+            return Err(IxaError::IxaError(
+                "The number of people to seed with initial conditions has surpassed the number of susceptibles remaining.".to_string() +
+                " Instead, seeded as many people as possible, applying the seed function to all remaining susceptible people."
+            ));
         }
     }
     Ok(())
 }
 
 fn seed_initial_infections(context: &mut Context, initial_infections: u64) -> Result<(), IxaError> {
-    trace!("Seeding initial infections.");
     query_susceptibles_and_seed(context, initial_infections, |context, person_id| {
         trace!("Infecting person {person_id} as an initial infection.");
         context.infect_person(person_id, None, None, None);
@@ -85,7 +83,6 @@ fn seed_initial_infections(context: &mut Context, initial_infections: u64) -> Re
 }
 
 fn seed_initial_recovered(context: &mut Context, initial_recovered: u64) -> Result<(), IxaError> {
-    trace!("Seeding initial recovered.");
     query_susceptibles_and_seed(context, initial_recovered, |context, person_id| {
         trace!("Recovering person {person_id} as an initial recovered.");
         context.set_person_property(
@@ -276,7 +273,8 @@ mod test {
             Some(IxaError::IxaError(msg)) => {
                 assert_eq!(
                     msg,
-                    "The number of people to seed with initial conditions has surpassed the population size."
+                    "The number of people to seed with initial conditions has surpassed the number of susceptibles remaining.".to_string() +
+                    " Instead, seeded as many people as possible, applying the seed function to all remaining susceptible people."
                 );
             }
             Some(ue) => panic!(
