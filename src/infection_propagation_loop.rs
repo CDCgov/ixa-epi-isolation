@@ -11,7 +11,6 @@ use ixa::{
     define_rng, trace, Context, ContextPeopleExt, ContextRandomExt, IxaError, PersonId,
     PersonPropertyChangeEvent,
 };
-use statrs::distribution::Binomial;
 
 define_rng!(InfectionRng);
 
@@ -54,35 +53,26 @@ fn schedule_recovery(context: &mut Context, person: PersonId) {
 /// - If the total number of people to seed is greater than the population size.
 fn query_susceptibles_and_seed(
     context: &mut Context,
-    to_seed: u64,
+    proportion_to_seed: f64,
     seed_fn: impl Fn(&mut Context, PersonId),
-) -> Result<(), IxaError> {
-    let mut susceptibles = context
-        .query_people((InfectionStatus, InfectionStatusValue::Susceptible))
-        .into_iter();
-    trace!("Found {} susceptibles to seed.", susceptibles.len());
-    for _ in 0..to_seed {
-        let person = susceptibles.next();
-        if let Some(person) = person {
+) {
+    let susceptibles = context.query_people((InfectionStatus, InfectionStatusValue::Susceptible));
+    for person in susceptibles {
+        // We use a random number to determine whether to seed this person.
+        if context.sample_bool(InfectionRng, proportion_to_seed) {
             seed_fn(context, person);
-        } else {
-            return Err(IxaError::IxaError(
-                "The number of people to seed with initial conditions has surpassed the number of susceptibles remaining.".to_string() +
-                " Instead, seeded as many people as possible, applying the seed function to all remaining susceptible people."
-            ));
         }
     }
-    Ok(())
 }
 
-fn seed_initial_infections(context: &mut Context, initial_infections: u64) -> Result<(), IxaError> {
-    query_susceptibles_and_seed(context, initial_infections, |context, person_id| {
+fn seed_initial_infections(context: &mut Context, initial_incidence: f64) {
+    query_susceptibles_and_seed(context, initial_incidence, |context, person_id| {
         trace!("Infecting person {person_id} as an initial infection.");
         context.infect_person(person_id, None, None, None);
-    })
+    });
 }
 
-fn seed_initial_recovered(context: &mut Context, initial_recovered: u64) -> Result<(), IxaError> {
+fn seed_initial_recovered(context: &mut Context, initial_recovered: f64) {
     query_susceptibles_and_seed(context, initial_recovered, |context, person_id| {
         trace!("Recovering person {person_id} as an initial recovered.");
         context.set_person_property(
@@ -96,7 +86,7 @@ fn seed_initial_recovered(context: &mut Context, initial_recovered: u64) -> Resu
                 recovery_time: f64::NAN,
             },
         );
-    })
+    });
 }
 
 pub fn init(context: &mut Context) -> Result<(), IxaError> {
@@ -108,22 +98,9 @@ pub fn init(context: &mut Context) -> Result<(), IxaError> {
 
     load_rate_fns(context)?;
 
-    // Seed initial infections and recovered
-    // Convert usize to u64 for Binomial::new()
-    let population: u64 = context.get_current_population().try_into().unwrap();
-    let initial_infections = context.sample_distr(
-        InfectionRng,
-        Binomial::new(initial_incidence, population).unwrap(),
-    );
-    trace!("Initial infections to seed: {initial_infections}");
-    let initial_recovered = context.sample_distr(
-        InfectionRng,
-        Binomial::new(initial_recovered, population).unwrap(),
-    );
-    trace!("Initial infections to seed: {initial_infections}");
     context.add_plan(0.0, move |context| {
-        seed_initial_infections(context, initial_infections).unwrap();
-        seed_initial_recovered(context, initial_recovered).unwrap();
+        seed_initial_infections(context, initial_incidence);
+        seed_initial_recovered(context, initial_recovered);
     });
 
     // Subscribe to the person becoming infectious to trigger the infection propagation loop
@@ -262,53 +239,21 @@ mod test {
     }
 
     #[test]
-    fn test_seed_infections_errors() {
-        let mut context = setup_context(0, 1.0, 1.0, 5.0, 0.0);
-        for _ in 0..3 {
-            context.add_person(()).unwrap();
-        }
-        load_rate_fns(&mut context).unwrap();
-        let e = seed_initial_infections(&mut context, 5).err();
-        match e {
-            Some(IxaError::IxaError(msg)) => {
-                assert_eq!(
-                    msg,
-                    "The number of people to seed with initial conditions has surpassed the number of susceptibles remaining.".to_string() +
-                    " Instead, seeded as many people as possible, applying the seed function to all remaining susceptible people."
-                );
-            }
-            Some(ue) => panic!(
-                "Expected an error that seeding infections should fail because the population size is too small. Instead got {:?}",
-                ue.to_string()
-            ),
-            None => panic!("Expected an error. Instead, seeded infections with no errors."),
-        }
-    }
-
-    #[test]
     fn test_seed_initial_conditions() {
         let mut context = setup_context(0, 1.0, 1.0, 5.0, 0.0);
-        for _ in 0..10 {
-            context.add_person(()).unwrap();
-        }
-
-        let initial_infections = 3;
-        seed_initial_infections(&mut context, initial_infections).unwrap();
-        let infectious_count = context
-            .query_people((InfectionStatus, InfectionStatusValue::Infectious))
-            .len();
-        // Need to cast the infectious count to u64 from usize for comparison
+        let initial_infected = context.add_person(()).unwrap();
+        seed_initial_infections(&mut context, 1.0);
         assert_eq!(
-            infectious_count,
-            usize::try_from(initial_infections).unwrap()
+            context.get_person_property(initial_infected, InfectionStatus),
+            InfectionStatusValue::Infectious
         );
 
-        let initial_recovered = 2;
-        seed_initial_recovered(&mut context, initial_recovered).unwrap();
-        let recovered_count = context
-            .query_people((InfectionStatus, InfectionStatusValue::Recovered))
-            .len();
-        assert_eq!(recovered_count, usize::try_from(initial_recovered).unwrap());
+        let initial_recovered = context.add_person(()).unwrap();
+        seed_initial_recovered(&mut context, 1.0);
+        assert_eq!(
+            context.get_person_property(initial_recovered, InfectionStatus),
+            InfectionStatusValue::Recovered
+        );
     }
 
     #[test]
@@ -533,10 +478,11 @@ mod test {
 
     #[test]
     fn test_schedule_recovery() {
+        // Create a simulation with an infected person and schedule their recovery.
         let mut context = setup_context(0, 0.0, 1.0, 5.0, 0.0);
         load_rate_fns(&mut context).unwrap();
         let person = context.add_person(()).unwrap();
-        seed_initial_infections(&mut context, 1).unwrap();
+        seed_initial_infections(&mut context, 1.0);
         // For later, we need to get the recovery time from the rate function.
         let recovery_time = context.get_person_rate_fn(person).infection_duration();
         schedule_recovery(&mut context, person);

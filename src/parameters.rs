@@ -75,6 +75,7 @@ fn validate_inputs(parameters: &Params) -> Result<(), IxaError> {
             "The max simulation running time must be non-negative.".to_string(),
         ));
     }
+    // Initial conditions
     if !(0.0..=1.0).contains(&parameters.initial_incidence) {
         return Err(IxaError::IxaError(
             "The initial incidence must be between 0 and 1, inclusive.".to_string(),
@@ -85,11 +86,20 @@ fn validate_inputs(parameters: &Params) -> Result<(), IxaError> {
             "The initial recovered proportion must be between 0 and 1, inclusive.".to_string(),
         ));
     }
+    // The sum of the initial incidence and initial recovered must be less than or equal to 1.
+    if parameters.initial_incidence + parameters.initial_recovered > 1.0 {
+        return Err(IxaError::IxaError(
+            "The sum of the initial incidence and initial recovered proportions must be less than or equal to 1."
+                .to_string(),
+        ));
+    }
+
     if parameters.report_period < 0.0 {
         return Err(IxaError::IxaError(
             "The report writing period must be non-negative.".to_string(),
         ));
     }
+    // Check the infectiousness rate function
     match parameters.infectiousness_rate_fn {
         RateFnType::Constant { rate, duration } => {
             if rate < 0.0 {
