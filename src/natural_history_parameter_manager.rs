@@ -78,9 +78,9 @@ impl ContextNaturalHistoryParameterExt for Context {
         // function would not apply to all ids, so the id assignment is ambiguous.
         if container.ids.borrow().contains_key(&TypeId::of::<T>()) {
             return Err(IxaError::IxaError(
-                "An id for this parameter has been previously queried, so a new assignment function cannot be specified.
-                If this is desired behavior, register an assignment function that changes from random to the specified
-                behavior at the time at which this assignment is registered.".to_string(),
+                "An id for this parameter has been previously queried, so a new assignment function cannot be specified.".to_string() +
+                " If this is desired behavior, register an assignment function that changes from random to the specified" +
+                " behavior at the time at which this assignment is registered."
             ));
         }
 
@@ -244,9 +244,9 @@ mod test {
         let e = result.err();
         match e {
             Some(IxaError::IxaError(msg)) => {
-                assert_eq!(msg, "An id for this parameter has been previously queried, so a new assignment function cannot be specified.
-                If this is desired behavior, register an assignment function that changes from random to the specified
-                behavior at the time at which this assignment is registered.".to_string());
+                assert_eq!(msg, "An id for this parameter has been previously queried, so a new assignment function cannot be specified.".to_string() +
+                " If this is desired behavior, register an assignment function that changes from random to the specified" +
+                " behavior at the time at which this assignment is registered.");
             }
             Some(ue) => panic!(
                 "Expected an error that an id for this parameter has been previously queried so an assignment function cannot be registered. Instead got {:?}",
