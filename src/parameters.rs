@@ -87,7 +87,7 @@ fn validate_inputs(parameters: &Params) -> Result<(), IxaError> {
         ));
     }
     // The sum of the initial incidence and initial recovered must be less than or equal to 1.
-    if parameters.initial_incidence + parameters.initial_recovered > 1.0 {
+    if parameters.initial_incidence + parameters.initial_recovered >= 1.0 {
         return Err(IxaError::IxaError(
             "The sum of the initial incidence and initial recovered proportions must be less than or equal to 1."
                 .to_string(),
