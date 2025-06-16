@@ -25,7 +25,7 @@ pub struct SettingProperties {
 pub trait SettingCategory: 'static {}
 
 #[derive(Debug, PartialEq)]
-pub struct SettingId<T: SettingCategory> {
+pub struct SettingId<T: SettingCategory + ?Sized> {
     pub id: usize,
     // Marker to say this group id is associated with T (but does not own it)
     _phantom: std::marker::PhantomData<T>,
@@ -58,7 +58,7 @@ impl<T: SettingCategory + ?Sized> SettingId<T> {
     }
 }
 
-#[derive(Copy, Clone, PartialEq, Debug)]
+#[derive(Clone, PartialEq, Debug)]
 pub struct ItineraryEntry {
     pub setting: Box<dyn AnySettingId>,
     ratio: f64,
@@ -228,22 +228,22 @@ macro_rules! define_setting_type {
         #[derive(Default, Copy, Clone, Debug, Hash, Eq, PartialEq)]
         pub struct $name;
 
-        impl $crate::settings::SettingType for $name {
-            #[allow(clippy::cast_precision_loss)]
-            fn calculate_multiplier(
-                &self,
-                members: &[ixa::PersonId],
-                setting_properties: $crate::settings::SettingProperties,
-            ) -> f64 {
-                let n_members = members.len();
-                ((n_members - 1) as f64).powf(setting_properties.alpha)
-            }
-            fn get_type_id(&self) -> std::any::TypeId {
-                std::any::TypeId::of::<$name>()
-            }
-            fn get_name(&self) -> &'static str {
-                stringify!($name)
-            }
+        impl $crate::settings::SettingCategory for $name {
+            // #[allow(clippy::cast_precision_loss)]
+            // fn calculate_multiplier(
+            //     &self,
+            //     members: &[ixa::PersonId],
+            //     setting_properties: $crate::settings::SettingProperties,
+            // ) -> f64 {
+            //     let n_members = members.len();
+            //     ((n_members - 1) as f64).powf(setting_properties.alpha)
+            // }
+            // fn get_type_id(&self) -> std::any::TypeId {
+            //     std::any::TypeId::of::<$name>()
+            // }
+            // fn get_name(&self) -> &'static str {
+            //     stringify!($name)
+            // }
         }
     };
 }
