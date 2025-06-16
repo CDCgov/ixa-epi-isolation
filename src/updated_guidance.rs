@@ -180,11 +180,14 @@ mod test {
         isolation_probability: f64,
         isolation_delay_period: f64,
         facemask_efficacy: f64,
+        proportion_asymptomatic: f64,
     ) -> Context {
         let mut context = Context::new();
         let parameters = Params {
             initial_incidence: 0.1,
             initial_recovered: 0.35,
+            proportion_asymptomatic,
+            relative_infectiousness_asymptomatics: 0.0,
             max_time: 100.0,
             seed: 0,
             infectiousness_rate_fn: RateFnType::Constant {
@@ -254,12 +257,14 @@ mod test {
         let isolation_probability = 1.0;
         let isolation_delay_period = 1.0;
         let facemask_efficacy = 0.5;
+        let proportion_asymptomatic = 0.0;
 
         let mut context = setup_context(
             post_isolation_duration,
             isolation_probability,
             isolation_delay_period,
             facemask_efficacy,
+            proportion_asymptomatic,
         );
         let p1 = context.add_person(()).unwrap();
         let itinerary = vec![
@@ -341,9 +346,10 @@ mod test {
         // Note this requires an isolation delay period of 0.
 
         let post_isolation_duration = 5.0;
-        let isolation_probability = 1.0;
+        let isolation_probability = 0.75;
         let isolation_delay_period = 0.0;
         let facemask_efficacy = 0.5;
+        let proportion_asymptomatic = 0.3;
 
         let num_people_isolating = Rc::new(RefCell::new(0usize));
 
@@ -356,6 +362,7 @@ mod test {
                 isolation_probability,
                 isolation_delay_period,
                 facemask_efficacy,
+                proportion_asymptomatic,
             );
             context.init_random(seed);
             let first_person = context.add_person(()).unwrap();
@@ -395,7 +402,7 @@ mod test {
         #[allow(clippy::cast_precision_loss)]
         let proportion_isolating =
             *num_people_isolating.borrow() as f64 / (num_people * num_sims) as f64;
-        assert_almost_eq!(proportion_isolating, isolation_probability, 0.01);
+        assert_almost_eq!(proportion_isolating, isolation_probability * (1.0 - proportion_asymptomatic), 0.01);
     }
 
     #[test]
@@ -411,6 +418,8 @@ mod test {
                     // For those tests that need infectious people, we add them manually.
                     initial_incidence: 0.0,
                     initial_recovered: 0.0,
+                    proportion_asymptomatic: 0.0,
+                    relative_infectiousness_asymptomatics: 0.0,
                     max_time: 10.0,
                     seed: 0,
                     infectiousness_rate_fn: RateFnType::Constant {
@@ -451,6 +460,8 @@ mod test {
                     // For those tests that need infectious people, we add them manually.
                     initial_incidence: 0.0,
                     initial_recovered: 0.0,
+                    proportion_asymptomatic: 0.0,
+                    relative_infectiousness_asymptomatics: 0.0,
                     max_time: 10.0,
                     seed: 0,
                     infectiousness_rate_fn: RateFnType::Constant {

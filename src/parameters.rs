@@ -218,7 +218,7 @@ fn validate_inputs(parameters: &Params) -> Result<(), IxaError> {
             || facemask_parameters.facemask_efficacy > 1.0
         {
             return Err(IxaError::IxaError(
-                "The isolation probability must be between 0 and 1, inclusive.".to_string(),
+                "The facemask probability must be between 0 and 1, inclusive.".to_string(),
             ));
         }
     }
@@ -550,6 +550,8 @@ mod test {
             synth_population_file: PathBuf::from("."),
             transmission_report_name: None,
             settings_properties: HashMap::new(),
+            intervention_policy_parameters: None,
+            facemask_parameters: None,
         };
         // Should pass
         let parameters = get_parameters(1.0);
