@@ -1,6 +1,6 @@
 {
   "epi_isolation.GlobalParams": {
-    "max_time": 50.0,
+    "max_time": 200.0,
     "seed": 123,
     "infectiousness_rate_fn": {"EmpiricalFromFile": {"file": "input/library_empirical_rate_fns.csv",
                                                      "scale": 1.0}},
@@ -26,7 +26,7 @@
       "isolation_delay_period": 3.0
     },
     "facemask_parameters": {
-      "facemask_efficacy": 0.5
+      "facemask_efficacy": 0.2
     }
   }
 }

@@ -214,9 +214,11 @@ fn validate_inputs(parameters: &Params) -> Result<(), IxaError> {
     }
 
     if let Some(facemask_parameters) = parameters.facemask_parameters {
-        if facemask_parameters.facemask_efficacy < 0.0 {
+        if facemask_parameters.facemask_efficacy < 0.0
+            || facemask_parameters.facemask_efficacy > 1.0
+        {
             return Err(IxaError::IxaError(
-                "The facemask transmission modifier must be non-negative.".to_string(),
+                "The isolation probability must be between 0 and 1, inclusive.".to_string(),
             ));
         }
     }

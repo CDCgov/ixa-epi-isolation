@@ -49,11 +49,13 @@ impl ContextIsolationGuidanceInternalExt for Context {
         person: PersonId,
         isolation_status: bool,
     ) -> Result<(), IxaError> {
-        self.set_person_property(person, IsolatingStatus, isolation_status);
-        if isolation_status {
-            self.modify_itinerary(person, ItineraryModifiers::RestrictTo { setting: &Home })?;
-        } else {
-            self.remove_modified_itinerary(person)?;
+        if self.get_person_property(person, IsolatingStatus) != isolation_status {
+            self.set_person_property(person, IsolatingStatus, isolation_status);
+            if isolation_status {
+                self.modify_itinerary(person, ItineraryModifiers::RestrictTo { setting: &Home })?;
+            } else {
+                self.remove_modified_itinerary(person)?;
+            }
         }
         Ok(())
     }
@@ -115,7 +117,7 @@ impl ContextIsolationGuidanceInternalExt for Context {
     }
 }
 
-pub fn init(context: &mut Context) {
+pub fn init(context: &mut Context) -> Result<(), IxaError> {
     let &Params {
         intervention_policy_parameters,
         facemask_parameters,
@@ -131,14 +133,18 @@ pub fn init(context: &mut Context) {
             )
             .unwrap();
     } else {
-        trace!("No facemask parameters provided. Facemasks will have no impact.");
+        return Err(IxaError::IxaError(
+            "No facemask parameters provided. They are required for the intervention policy."
+                .to_string(),
+        ));
     }
 
     if let Some(intervention_policy_parameters) = intervention_policy_parameters {
         context.setup_isolation_guidance_event_sequence(intervention_policy_parameters);
     } else {
-        trace!("No isolation policy parameters provided. Skipping isolation guidance setup.");
+        return Err(IxaError::IxaError("No intervention policy parameters provided. They are required for the intervention policy.".to_string()));
     }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -162,7 +168,7 @@ mod test {
 
     use ixa::{
         define_person_property_with_default, Context, ContextGlobalPropertiesExt, ContextPeopleExt,
-        ContextRandomExt, PersonPropertyChangeEvent,
+        ContextRandomExt, IxaError, PersonPropertyChangeEvent,
     };
 
     use super::{IsolatingStatus, MaskingStatus};
@@ -263,7 +269,7 @@ mod test {
         ];
         context.add_itinerary(p1, itinerary).unwrap();
         crate::symptom_progression::init(&mut context).unwrap();
-        super::init(&mut context);
+        super::init(&mut context).unwrap();
 
         define_person_property_with_default!(SymptomStartTime, f64, 0.0);
         define_person_property_with_default!(SymptomEndTime, f64, 0.0);
@@ -362,7 +368,7 @@ mod test {
                 .add_itinerary(first_person, itinerary.clone())
                 .unwrap();
             crate::symptom_progression::init(&mut context).unwrap();
-            super::init(&mut context);
+            super::init(&mut context).unwrap();
 
             // Add our people
             for _ in 1..num_people {
@@ -390,5 +396,93 @@ mod test {
         let proportion_isolating =
             *num_people_isolating.borrow() as f64 / (num_people * num_sims) as f64;
         assert_almost_eq!(proportion_isolating, isolation_probability, 0.01);
+    }
+
+    #[test]
+    fn test_isolation_guidance_input_validation() {
+        // this test checks that the correct errors are raised when the input parameters
+        // are not provided
+        let mut context = Context::new();
+        context.init_random(0);
+        context
+            .set_global_property_value(
+                GlobalParams,
+                Params {
+                    // For those tests that need infectious people, we add them manually.
+                    initial_incidence: 0.0,
+                    initial_recovered: 0.0,
+                    max_time: 10.0,
+                    seed: 0,
+                    infectiousness_rate_fn: RateFnType::Constant {
+                        rate: 1.0,
+                        duration: 5.0,
+                    },
+                    symptom_progression_library: None,
+                    report_period: 1.0,
+                    synth_population_file: PathBuf::from("."),
+                    transmission_report_name: None,
+                    // We set the itineraries manually in `set_homogeneous_mixing_itinerary`.
+                    settings_properties: HashMap::new(),
+                    intervention_policy_parameters: None,
+                    facemask_parameters: None,
+                },
+            )
+            .unwrap();
+        let e = super::init(&mut context).err();
+        match e {
+                Some(IxaError::IxaError(msg)) => {
+                    assert_eq!(
+                        msg,
+                        "No facemask parameters provided. They are required for the intervention policy."
+                    );
+                }
+                Some(ue) => panic!(
+                    "Expected an error that initialization should fail due to unsupplied parameters. Instead got {:?}",
+                    ue.to_string()
+                ),
+                None => panic!("Expected an error. Instead, policy initialized with no errors."),
+            }
+
+        let mut context = Context::new();
+        context
+            .set_global_property_value(
+                GlobalParams,
+                Params {
+                    // For those tests that need infectious people, we add them manually.
+                    initial_incidence: 0.0,
+                    initial_recovered: 0.0,
+                    max_time: 10.0,
+                    seed: 0,
+                    infectiousness_rate_fn: RateFnType::Constant {
+                        rate: 1.0,
+                        duration: 5.0,
+                    },
+                    symptom_progression_library: None,
+                    report_period: 1.0,
+                    synth_population_file: PathBuf::from("."),
+                    transmission_report_name: None,
+                    // We set the itineraries manually in `set_homogeneous_mixing_itinerary`.
+                    settings_properties: HashMap::new(),
+                    intervention_policy_parameters: None,
+                    facemask_parameters: Some(FacemaskParameters {
+                        facemask_efficacy: 0.5,
+                    }),
+                },
+            )
+            .unwrap();
+        let e = super::init(&mut context).err();
+        match e {
+                Some(IxaError::IxaError(msg)) => {
+                    assert_eq!(
+                        msg,
+                        "No intervention policy parameters provided. They are required for the intervention policy."
+                    );
+                }
+                Some(ue) => panic!(
+                    "Expected an error that initialization should fail due to unsupplied parameters. Instead got {:?}",
+                    ue.to_string()
+                ),
+                None => panic!("Expected an error. Instead, policy initialized with no errors."),
+            }
     }
 }
