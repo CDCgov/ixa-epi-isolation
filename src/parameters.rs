@@ -199,9 +199,7 @@ fn validate_inputs(parameters: &Params) -> Result<(), IxaError> {
                 "The post-isolation duration must be non-negative.".to_string(),
             ));
         }
-        if intervention_policy_parameters.isolation_probability < 0.0
-            || intervention_policy_parameters.isolation_probability > 1.0
-        {
+        if !(0.0..=1.0).contains(&intervention_policy_parameters.isolation_probability) {
             return Err(IxaError::IxaError(
                 "The isolation probability must be between 0 and 1, inclusive.".to_string(),
             ));
@@ -214,9 +212,7 @@ fn validate_inputs(parameters: &Params) -> Result<(), IxaError> {
     }
 
     if let Some(facemask_parameters) = parameters.facemask_parameters {
-        if facemask_parameters.facemask_efficacy < 0.0
-            || facemask_parameters.facemask_efficacy > 1.0
-        {
+        if !(0.0..=1.0).contains(&facemask_parameters.facemask_efficacy) {
             return Err(IxaError::IxaError(
                 "The facemask probability must be between 0 and 1, inclusive.".to_string(),
             ));
