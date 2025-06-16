@@ -402,7 +402,11 @@ mod test {
         #[allow(clippy::cast_precision_loss)]
         let proportion_isolating =
             *num_people_isolating.borrow() as f64 / (num_people * num_sims) as f64;
-        assert_almost_eq!(proportion_isolating, isolation_probability * (1.0 - proportion_asymptomatic), 0.01);
+        assert_almost_eq!(
+            proportion_isolating,
+            isolation_probability * (1.0 - proportion_asymptomatic),
+            0.01
+        );
     }
 
     #[test]
