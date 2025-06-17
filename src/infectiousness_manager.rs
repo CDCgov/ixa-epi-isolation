@@ -9,7 +9,7 @@ use crate::{
     interventions::ContextTransmissionModifierExt,
     population_loader::Alive,
     rate_fns::{InfectiousnessRateExt, InfectiousnessRateFn, ScaledRateFn},
-    settings::{ContextSettingExt, SettingId, SettingType},
+    settings::{ContextSettingExt, SettingId, SettingCategory},
 };
 
 #[derive(Serialize, PartialEq, Debug, Clone, Copy)]
@@ -76,7 +76,7 @@ pub fn max_total_infectiousness_multiplier(context: &Context, person_id: PersonI
 define_rng!(ForecastRng);
 
 // Infection attempt function for a context and given `PersonId`
-pub fn infection_attempt<T: SettingType + ?Sized>(
+pub fn infection_attempt<T: SettingCategory + ?Sized>(
     context: &Context,
     person_id: PersonId,
     setting_id: SettingId<T>,

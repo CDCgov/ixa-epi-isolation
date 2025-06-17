@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 
 use std::{
     any::TypeId,
-    collections::{hash_map::Entry, HashMap, HashSet},
+    collections::{HashMap, HashSet},
     hash::Hash,
 };
 
@@ -45,7 +45,7 @@ pub trait AnySettingId {
 
 impl<T: SettingCategory> AnySettingId for SettingId<T> {
     fn id(&self) -> usize {
-        self.id()
+        self.id
     }
     fn type_id(&self) -> TypeId {
         TypeId::of::<SettingId<T>>()
@@ -58,7 +58,7 @@ impl<T: SettingCategory + ?Sized> SettingId<T> {
     }
 }
 
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Clone, PartialEq, Debug, Hash)]
 pub struct ItineraryEntry {
     pub setting: Box<dyn AnySettingId>,
     ratio: f64,
@@ -79,9 +79,9 @@ pub enum ItineraryModifiers {
     // Replace itinerary with a new vector of itinerary entries
     ReplaceWith { itinerary: Vec<ItineraryEntry> },
     // Reduce the current itinerary to a setting type (e.g., Home)
-    RestrictTo { setting: Box<dyn SettingCategory> },
+    RestrictTo { setting: Box<dyn AnySettingId> },
     // Exclude setting types from current itinerary (e.g., Workplace)
-    Exclude { setting: Box<dyn SettingCategory> },
+    Exclude { setting: Box<dyn AnySettingId> },
 }
 
 pub fn append_itinerary_entry<T: SettingCategory + Copy + 'static>(
@@ -139,11 +139,12 @@ fn get_itinerary_ratio<T: SettingCategory + 'static>(
 #[derive(Default)]
 struct SettingDataContainer {
     // TO DO: revisit and see if we actually need this.
-    setting_categories: HashMap<TypeId, Box<dyn SettingCategory>>,
+    setting_categories: HashSet<TypeId>,
     // For each setting type (e.g., Home) store the properties (e.g., alpha)
     setting_properties: HashMap<TypeId, SettingProperties>,
     // For each setting type, have a map of each setting id and a list of members
     // members: HashMap<TypeId, HashMap<usize, Vec<PersonId>>>,
+    // members: HashMap<i64, HashMap<usize, Vec<PersonId>>>,
     members: HashMap<Box<dyn AnySettingId>, Vec<PersonId>>,
     itineraries: HashMap<PersonId, Vec<ItineraryEntry>>,
     modified_itineraries: HashMap<PersonId, Vec<ItineraryEntry>>,
@@ -168,16 +169,16 @@ impl SettingDataContainer {
     }
     fn with_itinerary<F>(&self, person_id: PersonId, mut callback: F)
     where
-        F: FnMut(&dyn SettingCategory, &SettingProperties, &Vec<PersonId>, f64),
+        F: FnMut(&dyn AnySettingId, &SettingProperties, &Vec<PersonId>, f64),
     {
         if let Some(itinerary) = self.get_itinerary(person_id) {
             for entry in itinerary {
-                let setting_type = self.setting_types.get(&entry.setting_type).unwrap();
-                let setting_props = self.setting_properties.get(&entry.setting_type).unwrap();
+                let setting = entry.setting.as_ref();
+                let setting_props = self.setting_properties.get(&entry.setting).unwrap();
                 let members = self
-                    .get_setting_members(&entry.setting_type, entry.setting_id)
+                    .get_setting_members(&entry.setting)
                     .unwrap();
-                callback(setting_type.as_ref(), setting_props, members, entry.ratio);
+                callback(setting, setting_props, members, entry.ratio);
             }
         }
     }
@@ -190,17 +191,15 @@ impl SettingDataContainer {
             // TODO: If we are changing a person's itinerary, the person_id should be removed from vector
             // This isn't the same as the concept of being present or not.
             if !self
-                .setting_types
-                .contains_key(&itinerary_entry.setting_type)
+                .setting_categories
+                .contains(&itinerary_entry.setting.type_id())
             {
                 return Err(IxaError::from(
                     "Itinerary entry setting type not registered",
                 ));
             }
             self.members
-                .entry(itinerary_entry.setting_type)
-                .or_default()
-                .entry(itinerary_entry.setting_id)
+                .entry(&itinerary_entry.setting.as_ref())
                 .or_default()
                 .push(person_id);
         }
@@ -213,9 +212,7 @@ impl SettingDataContainer {
     ) {
         for itinerary_entry in itinerary {
             self.members
-                .entry(itinerary_entry.setting_type)
-                .or_default()
-                .entry(itinerary_entry.setting_id)
+                .entry(&itinerary_entry.setting.as_ref())
                 .or_default()
                 .retain(|&x| x != person_id);
         }
@@ -262,13 +259,13 @@ define_data_plugin!(
 
 #[allow(dead_code)]
 pub trait ContextSettingExt {
-    fn get_setting_properties<T: SettingType + 'static>(
+    fn get_setting_properties(
         &self,
-        setting_type: T,
+        setting: &dyn AnySettingId,
     ) -> Result<SettingProperties, IxaError>;
-    fn register_setting_type<T: SettingType + 'static>(
+    fn register_setting_type(
         &mut self,
-        setting: T,
+        setting: &dyn AnySettingId,
         setting_props: SettingProperties,
     ) -> Result<(), IxaError>;
     fn add_itinerary(
@@ -285,14 +282,14 @@ pub trait ContextSettingExt {
     fn validate_itinerary(&self, itinerary: &[ItineraryEntry]) -> Result<(), IxaError>;
 
     /// `get_setting_ids` returns a vector of the numerical values of the ID for a setting type
-    fn get_setting_ids<T: SettingType>(
+    fn get_setting_ids(
         &mut self,
         person_id: PersonId,
-        setting_type: T,
+        setting: &dyn AnySettingId,
     ) -> Vec<usize>;
-    fn get_setting_members<T: SettingType + 'static>(
+    fn get_setting_members(
         &self,
-        setting_id: SettingId<T>,
+        setting: &dyn AnySettingId,
     ) -> Option<&Vec<PersonId>>;
     /// Get the total infectiousness multiplier for a person
     /// This is the sum of the infectiousness multipliers for each setting derived from the itinerary
@@ -301,10 +298,10 @@ pub trait ContextSettingExt {
     fn calculate_total_infectiousness_multiplier_for_person(&self, person_id: PersonId) -> f64;
 
     fn get_itinerary(&self, person_id: PersonId) -> Option<&Vec<ItineraryEntry>>;
-    fn get_contact<T: SettingType + ?Sized, Q: Query + 'static>(
+    fn get_contact<Q: Query + 'static>(
         &self,
         person_id: PersonId,
-        setting_id: SettingId<T>,
+        setting: &dyn AnySettingId,
         q: Q,
     ) -> Result<Option<PersonId>, IxaError>;
     fn draw_contact_from_transmitter_itinerary<Q: Query>(
@@ -312,22 +309,16 @@ pub trait ContextSettingExt {
         person_id: PersonId,
         q: Q,
     ) -> Result<Option<PersonId>, IxaError>;
-    fn get_setting_for_contact(&self, person_id: PersonId) -> Option<SettingId<dyn SettingType>>;
+    fn get_setting_for_contact(&self, person_id: PersonId) -> Option<&dyn AnySettingId>;
 }
 
 trait ContextSettingInternalExt {
     fn get_contact_internal<T: Query>(
         &self,
         person_id: PersonId,
-        setting_type: TypeId,
-        setting_id: usize,
+        setting: &dyn AnySettingId,
         q: T,
     ) -> Result<Option<PersonId>, IxaError>;
-    fn get_setting_members_internal(
-        &self,
-        setting_type: TypeId,
-        setting_id: usize,
-    ) -> Option<&Vec<PersonId>>;
     /// Takes an itinerary and adds makes it the modified itinerary of `person id`
     /// This modified itinerary is used as the person's itinerary instead of default itinerary
     /// for as long as modified itinerary exists in the container.
@@ -341,12 +332,12 @@ trait ContextSettingInternalExt {
     fn limit_itinerary_by_setting_type(
         &mut self,
         person_id: PersonId,
-        setting_type: &dyn SettingType,
+        setting_type: &dyn AnySettingId,
     ) -> Result<(), IxaError>;
     fn exclude_setting_from_itinerary(
         &mut self,
         person_id: PersonId,
-        setting_type: &dyn SettingType,
+        setting_type: &dyn AnySettingId,
     ) -> Result<(), IxaError>;
 }
 
@@ -354,11 +345,10 @@ impl ContextSettingInternalExt for Context {
     fn get_contact_internal<T: Query>(
         &self,
         person_id: PersonId,
-        setting_type: TypeId,
-        setting_id: usize,
+        setting: &dyn AnySettingId,
         q: T,
     ) -> Result<Option<PersonId>, IxaError> {
-        let members = self.get_setting_members_internal(setting_type, setting_id);
+        let members = self.get_setting_members(setting);
         if let Some(members) = members {
             if !members.contains(&person_id) {
                 return Err(IxaError::from(
@@ -397,14 +387,7 @@ impl ContextSettingInternalExt for Context {
             Err(IxaError::from("Group membership is None"))
         }
     }
-    fn get_setting_members_internal(
-        &self,
-        setting_type: TypeId,
-        setting_id: usize,
-    ) -> Option<&Vec<PersonId>> {
-        self.get_data_container(SettingDataPlugin)?
-            .get_setting_members(&setting_type, setting_id)
-    }
+
 
     fn add_modified_itinerary(
         &mut self,
@@ -451,7 +434,7 @@ impl ContextSettingInternalExt for Context {
     fn exclude_setting_from_itinerary(
         &mut self,
         person_id: PersonId,
-        setting_type: &dyn SettingType,
+        setting: &dyn AnySettingId,
     ) -> Result<(), IxaError> {
         let container = self.get_data_container_mut(SettingDataPlugin);
         match container.itineraries.get(&person_id) {
@@ -459,7 +442,7 @@ impl ContextSettingInternalExt for Context {
             Some(itinerary_vector) => {
                 let mut modified_itinerary = Vec::<ItineraryEntry>::new();
                 for entry in itinerary_vector {
-                    if entry.setting_type != setting_type.get_type_id() {
+                    if entry.setting.type_id() != setting.type_id() {
                         modified_itinerary.push(*entry);
                     }
                 }
@@ -477,7 +460,7 @@ impl ContextSettingInternalExt for Context {
     fn limit_itinerary_by_setting_type(
         &mut self,
         person_id: PersonId,
-        setting_type: &dyn SettingType,
+        setting: &dyn AnySettingId,
     ) -> Result<(), IxaError> {
         let container = self.get_data_container_mut(SettingDataPlugin);
         match container.itineraries.get(&person_id) {
@@ -485,7 +468,7 @@ impl ContextSettingInternalExt for Context {
             Some(itineraries) => {
                 let mut modified_itinerary = Vec::<ItineraryEntry>::new();
                 for entry in itineraries {
-                    if entry.setting_type == setting_type.get_type_id() {
+                    if entry.setting.type_id() == setting.type_id() {
                         modified_itinerary.push(*entry);
                     }
                 }
@@ -503,9 +486,9 @@ impl ContextSettingInternalExt for Context {
 }
 
 impl ContextSettingExt for Context {
-    fn get_setting_properties<T: SettingType + 'static>(
+    fn get_setting_properties(
         &self,
-        _setting_properties: T,
+        setting: &dyn AnySettingId,
     ) -> Result<SettingProperties, IxaError> {
         let data_container =
             self.get_data_container(SettingDataPlugin)
@@ -513,31 +496,30 @@ impl ContextSettingExt for Context {
                     "Setting plugin data is none".to_string(),
                 ))?;
 
-        match data_container.setting_properties.get(&TypeId::of::<T>()) {
+        match data_container.setting_properties.get(&setting.type_id()) {
             None => Err(IxaError::from(
                 "Attempting to get properties of unregistered setting type",
             )),
             Some(properties) => Ok(*properties),
         }
     }
-    fn register_setting_type<T: SettingType + 'static>(
+    fn register_setting_type(
         &mut self,
-        setting_type: T,
+        setting: &dyn AnySettingId,
         setting_props: SettingProperties,
     ) -> Result<(), IxaError> {
         let container = self.get_data_container_mut(SettingDataPlugin);
 
-        match container.setting_types.entry(TypeId::of::<T>()) {
-            Entry::Vacant(entry) => {
-                entry.insert(Box::new(setting_type));
-            }
-            Entry::Occupied(_) => return Err(IxaError::from("Setting type is already registered")),
+        if container.setting_categories.contains(&setting.type_id()) {
+            return Err(IxaError::from("Setting type is already registered"));
+        } else {
+            container.setting_categories.insert(setting.type_id());
         }
 
         // Add properties
         container
             .setting_properties
-            .insert(TypeId::of::<T>(), setting_props);
+            .insert(setting.type_id(), setting_props);
         Ok(())
     }
 
@@ -562,8 +544,8 @@ impl ContextSettingExt for Context {
             Some(default_itinerary) => {
                 for itinerary_entry in default_itinerary {
                     if !container
-                        .setting_types
-                        .contains_key(&itinerary_entry.setting_type)
+                        .setting_categories
+                        .contains_key(&itinerary_entry.setting.type_id())
                     {
                         return Err(IxaError::from(
                             "Itinerary entry setting type not registered",
@@ -572,9 +554,7 @@ impl ContextSettingExt for Context {
 
                     container
                         .members
-                        .entry(itinerary_entry.setting_type)
-                        .or_default()
-                        .entry(itinerary_entry.setting_id)
+                        .entry(&itinerary_entry.setting.as_ref())
                         .or_default()
                         .push(person_id);
                 }
@@ -596,24 +576,24 @@ impl ContextSettingExt for Context {
             ItineraryModifiers::RestrictTo { setting } => {
                 trace!(
                     "ItineraryModifier::RestrictTo person {person_id} -- {:?}",
-                    setting.get_type_id()
+                    setting.type_id()
                 );
-                self.limit_itinerary_by_setting_type(person_id, setting)
+                self.limit_itinerary_by_setting_type(person_id, &setting)
             }
             ItineraryModifiers::Exclude { setting } => {
                 trace!(
                     "ItineraryModifier::Exclude person {person_id}-- {:?}",
-                    setting.get_type_id()
+                    setting.type_id()
                 );
-                self.exclude_setting_from_itinerary(person_id, setting)
+                self.exclude_setting_from_itinerary(person_id, &setting)
             }
         }
     }
 
-    fn get_setting_ids<T: SettingType>(
+    fn get_setting_ids(
         &mut self,
         person_id: PersonId,
-        setting_type: T,
+        setting: &dyn AnySettingId,
     ) -> Vec<usize> {
         let container = self.get_data_container_mut(SettingDataPlugin);
         match container.itineraries.get(&person_id) {
@@ -621,7 +601,7 @@ impl ContextSettingExt for Context {
             Some(itineraries) => {
                 let mut setting_id_vec = Vec::new();
                 for entry in itineraries {
-                    if entry.setting_type == setting_type.get_type_id() {
+                    if entry.setting.type_id() == setting.get_type_id() {
                         setting_id_vec.push(entry.setting_id);
                     }
                 }
@@ -661,8 +641,8 @@ impl ContextSettingExt for Context {
     fn validate_itinerary(&self, itinerary: &[ItineraryEntry]) -> Result<(), IxaError> {
         let mut setting_counts: HashMap<TypeId, HashSet<usize>> = HashMap::new();
         for itinerary_entry in itinerary {
-            let setting_id = itinerary_entry.setting_id;
-            let setting_type = itinerary_entry.setting_type;
+            let setting_id = itinerary_entry.setting.id();
+            let setting_type = itinerary_entry.setting.type_id();
             if let Some(setting_count_set) = setting_counts.get(&setting_type) {
                 if setting_count_set.contains(&setting_id) {
                     return Err(IxaError::from("Duplicated setting".to_string()));
@@ -683,19 +663,20 @@ impl ContextSettingExt for Context {
         Ok(())
     }
 
-    fn get_setting_members<T: SettingType + 'static>(
+    // Erik to do: is this method redundant?
+    fn get_setting_members(
         &self,
-        setting_id: SettingId<T>,
+        setting: &dyn AnySettingId,
     ) -> Option<&Vec<PersonId>> {
         self.get_data_container(SettingDataPlugin)?
-            .get_setting_members(&TypeId::of::<T>(), setting_id.id)
+            .get_setting_members(setting)
     }
 
     fn calculate_total_infectiousness_multiplier_for_person(&self, person_id: PersonId) -> f64 {
         let container = self.get_data_container(SettingDataPlugin).unwrap();
         let mut collector = 0.0;
-        container.with_itinerary(person_id, |setting_type, setting_props, members, ratio| {
-            let multiplier = setting_type.calculate_multiplier(members, *setting_props);
+        container.with_itinerary(person_id, |setting, setting_props, members, ratio| {
+            let multiplier = setting.calculate_multiplier(members, *setting_props);
             collector += ratio * multiplier;
         });
         collector
@@ -708,17 +689,16 @@ impl ContextSettingExt for Context {
             .get_itinerary(person_id)
     }
 
-    fn get_contact<T: SettingType + ?Sized, Q: Query + 'static>(
+    fn get_contact<Q: Query + 'static>(
         &self,
         person_id: PersonId,
-        setting_id: SettingId<T>,
+        setting: &dyn AnySettingId,
         q: Q,
     ) -> Result<Option<PersonId>, IxaError> {
         // let container: &SettingDataContainer = self.get_data_container(SettingDataPlugin).unwrap();
         self.get_contact_internal(
             person_id,
-            setting_id.setting_type.get_type_id(),
-            setting_id.id,
+            setting,
             q,
         )
     }
@@ -740,15 +720,14 @@ impl ContextSettingExt for Context {
             let itinerary_entry = &itinerary[setting_index];
             self.get_contact_internal(
                 person_id,
-                itinerary_entry.setting_type,
-                itinerary_entry.setting_id,
+                &itinerary_entry.setting,
                 q,
             )
         } else {
             Ok(None)
         }
     }
-    fn get_setting_for_contact(&self, person_id: PersonId) -> Option<SettingId<dyn SettingType>> {
+    fn get_setting_for_contact(&self, person_id: PersonId) -> Option<&dyn AnySettingId> {
         let container = self.get_data_container(SettingDataPlugin).unwrap();
         let mut itinerary_multiplier = Vec::new();
         container.with_itinerary(person_id, |setting_type, setting_props, members, ratio| {
@@ -760,12 +739,7 @@ impl ContextSettingExt for Context {
 
         if let Some(itinerary) = self.get_itinerary(person_id) {
             let itinerary_entry = &itinerary[setting_index];
-            let setting_type = container
-                .setting_types
-                .get(&itinerary_entry.setting_type)
-                .unwrap()
-                .as_ref();
-            Some(SettingId::new(setting_type, itinerary_entry.setting_id))
+            Some(&itinerary_entry.setting)
         } else {
             None
         }
@@ -1151,7 +1125,7 @@ mod test {
     fn test_itinerary_modifiers_replace() {
         let mut context = Context::new();
         register_default_settings(&mut context);
-        let itinerary_vec: Vec<Vec<(&dyn SettingType, usize)>> = vec![
+        let itinerary_vec: Vec<Vec<(&dyn AnySettingId, usize)>> = vec![
             vec![(&Home, 0), (&Workplace, 0), (&School, 0)],
             vec![(&Home, 0), (&Workplace, 0)],
             vec![(&Home, 0), (&Workplace, 0)],
