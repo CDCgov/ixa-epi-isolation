@@ -13,6 +13,8 @@ use std::{
     hash::Hash,
 };
 
+use dyn_clone::DynClone;
+
 define_rng!(SettingsRng);
 
 // This is not the most flexible structure but would work for now
@@ -22,16 +24,18 @@ pub struct SettingProperties {
     pub itinerary_specification: Option<ItinerarySpecificationType>,
 }
 
-pub trait SettingCategory: 'static {}
+pub trait SettingCategory: std::fmt::Debug + Clone + Hash + Eq + 'static {}
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone, Copy, Eq, Hash)]
 pub struct SettingId<T: SettingCategory + ?Sized> {
     pub id: usize,
     // Marker to say this group id is associated with T (but does not own it)
     _phantom: std::marker::PhantomData<T>,
 }
 
-pub trait AnySettingId {
+pub trait AnySettingId
+where
+    Self: std::fmt::Debug + PartialEq + Eq + Hash + Clone + 'static,{
     fn id(&self) -> usize;
     fn type_id(&self) -> TypeId;
     fn calculate_multiplier(
@@ -45,7 +49,7 @@ pub trait AnySettingId {
 
 impl<T: SettingCategory> AnySettingId for SettingId<T> {
     fn id(&self) -> usize {
-        self.id
+        self.id()
     }
     fn type_id(&self) -> TypeId {
         TypeId::of::<SettingId<T>>()
@@ -54,11 +58,15 @@ impl<T: SettingCategory> AnySettingId for SettingId<T> {
 
 impl<T: SettingCategory + ?Sized> SettingId<T> {
     pub fn new(id: usize) -> SettingId<T> {
-        SettingId { id, _phantom: std::marker::PhantomData }
+        SettingId { id, _phantom: std::marker::PhantomData::<T> }
+    }
+
+    fn id(&self) -> usize {
+            self.id
     }
 }
 
-#[derive(Clone, PartialEq, Debug, Hash)]
+#[derive(Clone, Debug)]
 pub struct ItineraryEntry {
     pub setting: Box<dyn AnySettingId>,
     ratio: f64,
