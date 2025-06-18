@@ -45,6 +45,7 @@ pub struct InterventionPolicyParameters {
     pub duration_from_symptom_onset: f64,
     pub mild_symptom_isolation_duration: f64,
     pub moderate_symptom_isolation_duration: f64,
+    pub negative_test_isolation_duration: f64,
     pub isolation_probability: f64,
     pub isolation_delay_period: f64,
     pub test_sensitivity: f64,
@@ -82,7 +83,7 @@ pub struct Params {
     pub synth_population_file: PathBuf,
     /// The path to the transmission report file
     pub transmission_report_name: Option<String>,
-     // Struct contain policy parameters for isolation guidance
+    // Struct contain policy parameters for isolation guidance
     // duration from symptom onset, isolation probability, isolation delay,
     // mild and moderate symptom isolation durations.
     pub intervention_policy_parameters: Option<InterventionPolicyParameters>,
@@ -525,6 +526,8 @@ mod test {
             synth_population_file: PathBuf::from("."),
             transmission_report_name: None,
             settings_properties: HashMap::new(),
+            intervention_policy_parameters: None,
+            facemask_parameters: None,
         };
         // Should pass
         let parameters = get_parameters(1.0);

@@ -5,12 +5,12 @@ mod interventions;
 mod natural_history_parameter_manager;
 mod parameters;
 mod population_loader;
+mod previous_guidance;
 mod property_progression_manager;
 pub mod rate_fns;
 mod settings;
 mod symptom_progression;
 mod transmission_report;
-mod previous_guidance;
 pub mod utils;
 
 use infectiousness_manager::InfectionStatus;
