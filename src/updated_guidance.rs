@@ -276,6 +276,9 @@ mod test {
         crate::symptom_progression::init(&mut context).unwrap();
         super::init(&mut context).unwrap();
 
+        let policy_ran_flag = Rc::new(RefCell::new(false));
+        let policy_ran_flag_clone = Rc::clone(&policy_ran_flag);
+
         define_person_property_with_default!(SymptomStartTime, f64, 0.0);
         define_person_property_with_default!(SymptomEndTime, f64, 0.0);
 
@@ -332,11 +335,15 @@ mod test {
                         context.get_current_time(),
                         0.0
                     );
+                    *policy_ran_flag_clone.borrow_mut() = true;
                 }
             },
         );
         context.infect_person(p1, None, None, None);
         context.execute();
+
+        // Check that the policy ran
+        assert!(*policy_ran_flag.borrow());
     }
 
     #[test]
