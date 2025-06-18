@@ -8,9 +8,9 @@ use ixa::{
 use serde::{Deserialize, Serialize};
 
 use std::{
-    any::TypeId,
+    any::{TypeId, Any},
     collections::{HashMap, HashSet},
-    hash::Hash,
+    hash::{Hash, Hasher},
 };
 
 define_rng!(SettingsRng);
@@ -31,10 +31,28 @@ pub struct SettingId<T: SettingCategory + ?Sized> {
     _phantom: std::marker::PhantomData<T>,
 }
 
-pub trait AnySettingId
-where
-    Self: std::fmt::Debug + 'static,{
-    fn id(&self) -> usize;
+// pub trait AnySettingId
+// where
+//     Self: std::fmt::Debug + 'static,{
+//     fn id(&self) -> usize;
+//     fn type_id(&self) -> TypeId;
+//     fn calculate_multiplier(
+//         &self,
+//         members: &[PersonId],
+//         setting_properties: SettingProperties,
+//     ) -> f64 {
+//         ((members.len() - 1) as f64).powf(setting_properties.alpha)
+//     }
+// }
+
+trait AnySettingId: Any {
+    fn as_any(&self) -> &dyn Any;
+    fn dyn_eq(&self, other: &dyn AnySettingId) -> bool;
+    fn dyn_hash(&self, state: &mut dyn Hasher);
+    fn dyn_partial_eq(&self, other: &dyn AnySettingId) -> bool;
+    fn dyn_clone(&self) -> Box<dyn AnySettingId>;
+    fn dyn_debug(&self) -> String;
+    // fn id(&self) -> usize;
     fn type_id(&self) -> TypeId;
     fn calculate_multiplier(
         &self,
@@ -45,14 +63,82 @@ where
     }
 }
 
-impl<T: SettingCategory> AnySettingId for SettingId<T> {
-    fn id(&self) -> usize {
-        self.id()
+impl<T> AnySettingId for T
+where
+    T: Any + Eq + Hash + Clone + PartialEq + std::fmt::Debug + 'static,
+{
+    fn as_any(&self) -> &dyn Any {
+        self
     }
+
+    fn dyn_eq(&self, other: &dyn AnySettingId) -> bool {
+        other
+            .as_any()
+            .downcast_ref::<T>()
+            .map_or(false, |o| o == self)
+    }
+
+    fn dyn_hash(&self, mut state: &mut dyn Hasher) {
+        Hash::hash(self, &mut state)
+    }
+
+    fn dyn_partial_eq(&self, other: &dyn AnySettingId) -> bool {
+        self.dyn_eq(other)
+    }
+
+    fn dyn_clone(&self) -> Box<dyn AnySettingId> {
+        Box::new(self.clone())
+    }
+
+    fn dyn_debug(&self) -> String {
+        format!("{:?}", self)
+    }
+
+    // fn id(&self) -> usize {
+    //     // This is a placeholder implementation, as the actual ID logic would depend on the specific setting type.
+    //     // In practice, you would implement this in the concrete setting types.
+    //     self.id()
+    // }
     fn type_id(&self) -> TypeId {
-        TypeId::of::<SettingId<T>>()
+        TypeId::of::<T>()
     }
 }
+
+struct DynSettingId(Box<dyn AnySettingId>);
+
+impl PartialEq for DynSettingId {
+    fn eq(&self, other: &Self) -> bool {
+        self.0.dyn_eq(&*other.0)
+    }
+}
+impl Eq for DynSettingId {}
+
+impl Hash for DynSettingId {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.0.dyn_hash(state);
+    }
+}
+
+impl std::fmt::Debug for DynSettingId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "DynSettingId({})", self.0.dyn_debug())
+    }
+}
+
+impl Clone for DynSettingId {
+    fn clone(&self) -> Self {
+        DynSettingId(self.0.dyn_clone())
+    }
+}
+
+// impl<T: SettingCategory> AnySettingId for SettingId<T> {
+//     fn id(&self) -> usize {
+//         self.id()
+//     }
+//     fn type_id(&self) -> TypeId {
+//         TypeId::of::<SettingId<T>>()
+//     }
+// }
 
 impl<T: SettingCategory + ?Sized> SettingId<T> {
     pub fn new(id: usize) -> SettingId<T> {
@@ -66,7 +152,7 @@ impl<T: SettingCategory + ?Sized> SettingId<T> {
 
 #[derive(Clone, PartialEq, Debug)]
 pub struct ItineraryEntry {
-    pub setting: Box<dyn AnySettingId>,
+    pub setting: DynSettingId,
     ratio: f64,
 }
 
