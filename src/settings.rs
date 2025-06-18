@@ -13,8 +13,6 @@ use std::{
     hash::Hash,
 };
 
-use dyn_clone::DynClone;
-
 define_rng!(SettingsRng);
 
 // This is not the most flexible structure but would work for now
@@ -35,7 +33,7 @@ pub struct SettingId<T: SettingCategory + ?Sized> {
 
 pub trait AnySettingId
 where
-    Self: std::fmt::Debug + PartialEq + Eq + Hash + Clone + 'static,{
+    Self: std::fmt::Debug + 'static,{
     fn id(&self) -> usize;
     fn type_id(&self) -> TypeId;
     fn calculate_multiplier(
@@ -66,7 +64,7 @@ impl<T: SettingCategory + ?Sized> SettingId<T> {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, PartialEq, Debug)]
 pub struct ItineraryEntry {
     pub setting: Box<dyn AnySettingId>,
     ratio: f64,
