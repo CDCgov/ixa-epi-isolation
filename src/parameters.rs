@@ -69,6 +69,29 @@ pub struct Params {
     pub transmission_report_name: Option<String>,
 }
 
+#[cfg(test)]
+impl Default for Params {
+    fn default() -> Self {
+        Self {
+            initial_incidence: 0.0,
+            initial_recovered: 0.0,
+            max_time: 10.0,
+            seed: 0,
+            infectiousness_rate_fn: RateFnType::Constant {
+                rate: 1.0,
+                duration: 5.0,
+            },
+            symptom_progression_library: None,
+            proportion_asymptomatic: 0.0,
+            relative_infectiousness_asymptomatics: 0.0,
+            report_period: 1.0,
+            synth_population_file: PathBuf::from("."),
+            transmission_report_name: None,
+            settings_properties: HashMap::new(),
+        }
+    }
+}
+
 fn validate_inputs(parameters: &Params) -> Result<(), IxaError> {
     if parameters.max_time < 0.0 {
         return Err(IxaError::IxaError(

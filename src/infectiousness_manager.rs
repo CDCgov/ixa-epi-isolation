@@ -234,7 +234,6 @@ impl InfectionContextExt for Context {
 mod test {
     use serde::{Deserialize, Serialize};
     use statrs::assert_almost_eq;
-    use std::{collections::HashMap, path::PathBuf};
 
     use super::{
         evaluate_forecast, get_forecast, infection_attempt, max_total_infectiousness_multiplier,
@@ -246,7 +245,7 @@ mod test {
             InfectionData, InfectionDataValue, InfectionStatus, InfectionStatusValue,
         },
         interventions::ContextTransmissionModifierExt,
-        parameters::{GlobalParams, ItinerarySpecificationType, Params, RateFnType},
+        parameters::{GlobalParams, ItinerarySpecificationType, Params},
         rate_fns::{load_rate_fns, InfectiousnessRateExt},
         settings::{ContextSettingExt, ItineraryEntry, SettingId, SettingProperties},
     };
@@ -271,29 +270,14 @@ mod test {
     fn setup_context() -> Context {
         let mut context = Context::new();
         context.init_random(0);
+
+        let params = Params {
+            initial_incidence: 0.0,
+            ..Default::default()
+        };
+
         context
-            .set_global_property_value(
-                GlobalParams,
-                Params {
-                    // For those tests that need infectious people, we add them manually.
-                    initial_incidence: 0.0,
-                    initial_recovered: 0.0,
-                    max_time: 10.0,
-                    seed: 0,
-                    infectiousness_rate_fn: RateFnType::Constant {
-                        rate: 1.0,
-                        duration: 5.0,
-                    },
-                    symptom_progression_library: None,
-                    proportion_asymptomatic: 0.0,
-                    relative_infectiousness_asymptomatics: 0.0,
-                    report_period: 1.0,
-                    synth_population_file: PathBuf::from("."),
-                    transmission_report_name: None,
-                    // We set the itineraries manually in `set_homogeneous_mixing_itinerary`.
-                    settings_properties: HashMap::new(),
-                },
-            )
+            .set_global_property_value(GlobalParams, params)
             .unwrap();
         load_rate_fns(&mut context).unwrap();
         context
