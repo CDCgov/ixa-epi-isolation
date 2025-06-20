@@ -8,12 +8,66 @@ use ixa::{
 use serde::{Deserialize, Serialize};
 
 use std::{
-    any::{TypeId, Any},
+    any::{Any, TypeId},
     collections::{HashMap, HashSet},
     hash::{Hash, Hasher},
 };
 
+use dyn_clone::DynClone;
+
 define_rng!(SettingsRng);
+
+trait DynHash {
+    fn dyn_hash(&self, state: &mut dyn Hasher);
+}
+
+// impl<T: ?Sized + Hash> DynHash for T {
+impl<T: Hash> DynHash for T {
+    fn dyn_hash(&self, mut state: &mut dyn Hasher) {
+        self.hash(&mut state)
+    }
+}
+
+impl Hash for dyn DynHash + '_ {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.dyn_hash(state)
+    }
+}
+
+trait AsDynCompare: Any {
+    fn as_any(&self) -> &dyn Any;
+    fn as_dyn_compare(&self) -> &dyn DynCompare;
+}
+
+// Sized types only
+impl<T: Any + DynCompare> AsDynCompare for T {
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+    fn as_dyn_compare(&self) -> &dyn DynCompare {
+        self
+    }
+}
+
+trait DynCompare: AsDynCompare {
+    fn dyn_eq(&self, other: &dyn DynCompare) -> bool;
+}
+
+impl<T: Any + PartialEq> DynCompare for T {
+    fn dyn_eq(&self, other: &dyn DynCompare) -> bool {
+        if let Some(other) = other.as_any().downcast_ref::<Self>() {
+            self == other
+        } else {
+            false
+        }
+    }
+}
+
+impl PartialEq<dyn DynCompare> for dyn DynCompare {
+    fn eq(&self, other: &dyn DynCompare) -> bool {
+        self.dyn_eq(other)
+    }
+}
 
 // This is not the most flexible structure but would work for now
 #[derive(Debug, Clone, Copy, Deserialize, Serialize)]
@@ -31,28 +85,11 @@ pub struct SettingId<T: SettingCategory + ?Sized> {
     _phantom: std::marker::PhantomData<T>,
 }
 
-// pub trait AnySettingId
-// where
-//     Self: std::fmt::Debug + 'static,{
-//     fn id(&self) -> usize;
-//     fn type_id(&self) -> TypeId;
-//     fn calculate_multiplier(
-//         &self,
-//         members: &[PersonId],
-//         setting_properties: SettingProperties,
-//     ) -> f64 {
-//         ((members.len() - 1) as f64).powf(setting_properties.alpha)
-//     }
-// }
-
-trait AnySettingId: Any {
-    fn as_any(&self) -> &dyn Any;
-    fn dyn_eq(&self, other: &dyn AnySettingId) -> bool;
-    fn dyn_hash(&self, state: &mut dyn Hasher);
-    fn dyn_partial_eq(&self, other: &dyn AnySettingId) -> bool;
-    fn dyn_clone(&self) -> Box<dyn AnySettingId>;
-    fn dyn_debug(&self) -> String;
-    // fn id(&self) -> usize;
+pub trait AnySettingId
+where
+    Self: std::fmt::Debug + DynHash + DynCompare + DynClone + 'static,
+{
+    fn id(&self) -> usize;
     fn type_id(&self) -> TypeId;
     fn calculate_multiplier(
         &self,
@@ -63,102 +100,54 @@ trait AnySettingId: Any {
     }
 }
 
-impl<T> AnySettingId for T
-where
-    T: Any + Eq + Hash + Clone + PartialEq + std::fmt::Debug + 'static,
-{
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
+dyn_clone::clone_trait_object!(AnySettingId);
 
-    fn dyn_eq(&self, other: &dyn AnySettingId) -> bool {
-        other
-            .as_any()
-            .downcast_ref::<T>()
-            .map_or(false, |o| o == self)
+impl Hash for dyn AnySettingId {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.dyn_hash(state)
     }
+}
 
-    fn dyn_hash(&self, mut state: &mut dyn Hasher) {
-        Hash::hash(self, &mut state)
-    }
-
-    fn dyn_partial_eq(&self, other: &dyn AnySettingId) -> bool {
+// Implement PartialEq for dyn AnySettingId using DynCompare
+impl PartialEq for dyn AnySettingId {
+    fn eq(&self, other: &Self) -> bool {
         self.dyn_eq(other)
     }
+}
 
-    fn dyn_clone(&self) -> Box<dyn AnySettingId> {
-        Box::new(self.clone())
+impl Eq for dyn AnySettingId {}
+
+impl<T: SettingCategory> AnySettingId for SettingId<T> {
+    fn id(&self) -> usize {
+        self.id()
     }
-
-    fn dyn_debug(&self) -> String {
-        format!("{:?}", self)
-    }
-
-    // fn id(&self) -> usize {
-    //     // This is a placeholder implementation, as the actual ID logic would depend on the specific setting type.
-    //     // In practice, you would implement this in the concrete setting types.
-    //     self.id()
-    // }
     fn type_id(&self) -> TypeId {
-        TypeId::of::<T>()
+        TypeId::of::<SettingId<T>>()
     }
 }
-
-struct DynSettingId(Box<dyn AnySettingId>);
-
-impl PartialEq for DynSettingId {
-    fn eq(&self, other: &Self) -> bool {
-        self.0.dyn_eq(&*other.0)
-    }
-}
-impl Eq for DynSettingId {}
-
-impl Hash for DynSettingId {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        self.0.dyn_hash(state);
-    }
-}
-
-impl std::fmt::Debug for DynSettingId {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "DynSettingId({})", self.0.dyn_debug())
-    }
-}
-
-impl Clone for DynSettingId {
-    fn clone(&self) -> Self {
-        DynSettingId(self.0.dyn_clone())
-    }
-}
-
-// impl<T: SettingCategory> AnySettingId for SettingId<T> {
-//     fn id(&self) -> usize {
-//         self.id()
-//     }
-//     fn type_id(&self) -> TypeId {
-//         TypeId::of::<SettingId<T>>()
-//     }
-// }
 
 impl<T: SettingCategory + ?Sized> SettingId<T> {
     pub fn new(id: usize) -> SettingId<T> {
-        SettingId { id, _phantom: std::marker::PhantomData::<T> }
+        SettingId {
+            id,
+            _phantom: std::marker::PhantomData::<T>,
+        }
     }
 
     fn id(&self) -> usize {
-            self.id
+        self.id
     }
 }
 
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Clone, Debug)]
 pub struct ItineraryEntry {
-    pub setting: DynSettingId,
+    pub setting: Box<dyn AnySettingId>,
     ratio: f64,
 }
 
 impl ItineraryEntry {
     #[allow(clippy::needless_pass_by_value)]
-    pub fn new<T: SettingCategory + ?Sized>(setting_id: Box<dyn AnySettingId>, ratio: f64) -> ItineraryEntry {
+    pub fn new(setting_id: Box<dyn AnySettingId>, ratio: f64) -> ItineraryEntry {
         ItineraryEntry {
             setting: setting_id,
             ratio,
@@ -243,11 +232,8 @@ struct SettingDataContainer {
 }
 
 impl SettingDataContainer {
-    fn get_setting_members(
-        &self,
-        setting_id: &dyn AnySettingId,
-    ) -> Option<&Vec<PersonId>> {
-        self.members.get(&setting_id)
+    fn get_setting_members(&self, setting_id: &dyn AnySettingId) -> Option<&Vec<PersonId>> {
+        self.members.get(setting_id)
     }
     fn get_itinerary(&self, person_id: PersonId) -> Option<&Vec<ItineraryEntry>> {
         if let Some(modified_itinerary) = self.modified_itineraries.get(&person_id) {
@@ -266,10 +252,11 @@ impl SettingDataContainer {
         if let Some(itinerary) = self.get_itinerary(person_id) {
             for entry in itinerary {
                 let setting = entry.setting.as_ref();
-                let setting_props = self.setting_properties.get(&entry.setting).unwrap();
-                let members = self
-                    .get_setting_members(&entry.setting)
+                let setting_props = self
+                    .setting_properties
+                    .get(&entry.setting.type_id())
                     .unwrap();
+                let members = self.get_setting_members(setting).unwrap();
                 callback(setting, setting_props, members, entry.ratio);
             }
         }
@@ -291,7 +278,7 @@ impl SettingDataContainer {
                 ));
             }
             self.members
-                .entry(&itinerary_entry.setting.as_ref())
+                .entry(itinerary_entry.setting.clone())
                 .or_default()
                 .push(person_id);
         }
@@ -304,7 +291,7 @@ impl SettingDataContainer {
     ) {
         for itinerary_entry in itinerary {
             self.members
-                .entry(&itinerary_entry.setting.as_ref())
+                .entry(itinerary_entry.setting.clone())
                 .or_default()
                 .retain(|&x| x != person_id);
         }
@@ -374,15 +361,8 @@ pub trait ContextSettingExt {
     fn validate_itinerary(&self, itinerary: &[ItineraryEntry]) -> Result<(), IxaError>;
 
     /// `get_setting_ids` returns a vector of the numerical values of the ID for a setting type
-    fn get_setting_ids(
-        &mut self,
-        person_id: PersonId,
-        setting: &dyn AnySettingId,
-    ) -> Vec<usize>;
-    fn get_setting_members(
-        &self,
-        setting: &dyn AnySettingId,
-    ) -> Option<&Vec<PersonId>>;
+    fn get_setting_ids(&mut self, person_id: PersonId, setting: &dyn AnySettingId) -> Vec<usize>;
+    fn get_setting_members(&self, setting: &dyn AnySettingId) -> Option<&Vec<PersonId>>;
     /// Get the total infectiousness multiplier for a person
     /// This is the sum of the infectiousness multipliers for each setting derived from the itinerary
     /// These are generated without modification from the general formula of ratio * (N - 1) ^ alpha
@@ -480,7 +460,6 @@ impl ContextSettingInternalExt for Context {
         }
     }
 
-
     fn add_modified_itinerary(
         &mut self,
         person_id: PersonId,
@@ -534,8 +513,8 @@ impl ContextSettingInternalExt for Context {
             Some(itinerary_vector) => {
                 let mut modified_itinerary = Vec::<ItineraryEntry>::new();
                 for entry in itinerary_vector {
-                    if entry.setting.type_id() != setting.type_id() {
-                        modified_itinerary.push(*entry);
+                    if entry.setting.type_id() != AnySettingId::type_id(setting) {
+                        modified_itinerary.push(entry.clone());
                     }
                 }
                 if modified_itinerary.is_empty() {
@@ -560,8 +539,8 @@ impl ContextSettingInternalExt for Context {
             Some(itineraries) => {
                 let mut modified_itinerary = Vec::<ItineraryEntry>::new();
                 for entry in itineraries {
-                    if entry.setting.type_id() == setting.type_id() {
-                        modified_itinerary.push(*entry);
+                    if entry.setting.type_id() == AnySettingId::type_id(setting) {
+                        modified_itinerary.push(entry.clone());
                     }
                 }
                 if modified_itinerary.is_empty() {
@@ -682,11 +661,7 @@ impl ContextSettingExt for Context {
         }
     }
 
-    fn get_setting_ids(
-        &mut self,
-        person_id: PersonId,
-        setting: &dyn AnySettingId,
-    ) -> Vec<usize> {
+    fn get_setting_ids(&mut self, person_id: PersonId, setting: &dyn AnySettingId) -> Vec<usize> {
         let container = self.get_data_container_mut(SettingDataPlugin);
         match container.itineraries.get(&person_id) {
             None => Vec::new(),
@@ -756,10 +731,7 @@ impl ContextSettingExt for Context {
     }
 
     // Erik to do: is this method redundant?
-    fn get_setting_members(
-        &self,
-        setting: &dyn AnySettingId,
-    ) -> Option<&Vec<PersonId>> {
+    fn get_setting_members(&self, setting: &dyn AnySettingId) -> Option<&Vec<PersonId>> {
         self.get_data_container(SettingDataPlugin)?
             .get_setting_members(setting)
     }
@@ -788,11 +760,7 @@ impl ContextSettingExt for Context {
         q: Q,
     ) -> Result<Option<PersonId>, IxaError> {
         // let container: &SettingDataContainer = self.get_data_container(SettingDataPlugin).unwrap();
-        self.get_contact_internal(
-            person_id,
-            setting,
-            q,
-        )
+        self.get_contact_internal(person_id, setting, q)
     }
     fn draw_contact_from_transmitter_itinerary<Q: Query>(
         &self,
@@ -810,11 +778,7 @@ impl ContextSettingExt for Context {
 
         if let Some(itinerary) = self.get_itinerary(person_id) {
             let itinerary_entry = &itinerary[setting_index];
-            self.get_contact_internal(
-                person_id,
-                &itinerary_entry.setting,
-                q,
-            )
+            self.get_contact_internal(person_id, &itinerary_entry.setting, q)
         } else {
             Ok(None)
         }

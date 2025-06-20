@@ -9,7 +9,7 @@ use crate::{
     interventions::ContextTransmissionModifierExt,
     population_loader::Alive,
     rate_fns::{InfectiousnessRateExt, InfectiousnessRateFn, ScaledRateFn},
-    settings::{ContextSettingExt, SettingId, SettingCategory},
+    settings::{ContextSettingExt, SettingCategory, SettingId},
 };
 
 #[derive(Serialize, PartialEq, Debug, Clone, Copy)]
