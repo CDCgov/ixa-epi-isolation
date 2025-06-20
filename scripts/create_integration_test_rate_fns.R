@@ -7,7 +7,7 @@
 ### infectiousness.
 
 ### This script makes 3 sets of empirical rate functions (saved as .csv files):
-### rate_fns_exp_I, rate_fns_exp_E_exp_I, 
+### rate_fns_exp_I, rate_fns_exp_E_exp_I, rate_fn_triangle
 
 set.seed(456)
 
