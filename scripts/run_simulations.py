@@ -11,22 +11,10 @@ def main(config_file):
         experiments_directory="experiments",
         config_file=config_file,
     )
-
-    # Initialize the simulation bundle for input storage
-    simulation_bundle = experiment.initialize_simbundle()
-
-    # Run the simulations
-    for index in simulation_bundle.inputs["simulation"]:
-        wrappers.products_from_inputs_index(
-            index,
-            experiment=experiment,
-            data_processing_fn=return_count_only,
-            products=["simulations"],
-        )
-
-    parquet_path = os.path.join(experiment.data_path, "simulations")
-    simulation_df = pl.read_parquet(parquet_path)
-    print(simulation_df)
+    simulation_df = wrappers.create_simulation_data(
+        experiment=experiment, 
+        data_processing_fn=return_count_only
+    )
 
     simulation_df.filter((pl.col("t") > 5) & (pl.col("t") < 10)).write_csv(
         os.path.join(experiment.data_path, "filtered_results.csv")

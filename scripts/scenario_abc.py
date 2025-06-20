@@ -30,7 +30,6 @@ def main(config_file: str):
             experiments_directory=experiment.directory,
             config_file=config_path,
         )
-        subexperiment.initialize_simbundle()
 
         _simulation_data_frame = wrappers.create_simulation_data(
             experiment = subexperiment, 

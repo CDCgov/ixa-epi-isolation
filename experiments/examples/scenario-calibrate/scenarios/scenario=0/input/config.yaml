@@ -1,0 +1,17 @@
+azb:
+  azure_batch: false
+experiment_conditions:
+  replicates_per_particle: 5
+  samples_per_step: 3
+  scenario_key: epi_isolation.GlobalParams
+  seed: 12345
+  tolerance:
+    '0': 900
+    '1': 850
+local_path:
+  default_params_file: experiments/examples/scenario-calibrate/scenarios/scenario=0/input/base.json
+  exe_file: target/release/epi-isolation
+  griddle_file: experiments/examples/scenario-calibrate/input/griddle.json
+  sub_experiment_name: scenario=0
+  super_experiment_name: scenarios
+  target_data_file: output/person_property_count.csv
