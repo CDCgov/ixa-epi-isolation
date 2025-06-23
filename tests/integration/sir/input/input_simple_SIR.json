@@ -18,6 +18,6 @@
       "workplace": 0.0,
       "census_tract": 0.5}},
     "report_period": 1,
-    "synth_population_file": "input/simple_people.csv"
+    "synth_population_file": "tests/data/simple_pop.csv"
   }
 }
