@@ -8,7 +8,7 @@ from abmwrappers.experiment_class import Experiment
 
 
 def main(config_file):
-    if not os.path.exists("input/rate_fns_SIR.csv"):
+    if not os.path.exists("tests/data/rate_fns_exp_I.csv"):
         # These should create ALL of the rates, populations, and ODE output, not just the rate_fns_SIR.csv
         subprocess.run("RScript scripts/create_integration_test_rate_fns.R".split())
         subprocess.run("Rscript scripts/create_integration_test_pops.R".split())
