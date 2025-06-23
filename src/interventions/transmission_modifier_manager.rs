@@ -191,7 +191,6 @@ mod test {
     };
     use serde::{Deserialize, Serialize};
     use statrs::assert_almost_eq;
-    use std::{collections::HashMap, path::PathBuf};
 
     use super::{
         ContextTransmissionModifierExt, PersonPropertyModifier, TransmissionModifier,
@@ -199,7 +198,7 @@ mod test {
     };
     use crate::{
         infectiousness_manager::{InfectionContextExt, InfectionStatusValue},
-        parameters::{GlobalParams, Params, RateFnType},
+        parameters::{ContextParametersExt, GlobalParams, Params},
         rate_fns::load_rate_fns,
     };
     use std::any::TypeId;
@@ -226,34 +225,18 @@ mod test {
     pub const SUSCEPTIBLE_PARTIAL: f64 = 0.8;
     pub const INFECTIOUS_PARTIAL: f64 = 0.5;
 
-    fn setup(seed: u64) -> Context {
+    fn setup() -> Context {
         let mut context = Context::new();
-        context.init_random(seed);
         context
             .set_global_property_value(
                 GlobalParams,
                 Params {
-                    // For those tests that need infectious people, we add them manually.
-                    initial_incidence: 0.0,
-                    initial_recovered: 0.0,
-                    max_time: 10.0,
-                    seed,
-                    infectiousness_rate_fn: RateFnType::Constant {
-                        rate: 1.0,
-                        duration: 10.0,
-                    },
-                    symptom_progression_library: None,
-                    proportion_asymptomatic: 0.0,
-                    relative_infectiousness_asymptomatics: 0.0,
-                    report_period: 1.0,
-                    synth_population_file: PathBuf::from("."),
-                    transmission_report_name: None,
-                    settings_properties: HashMap::new(),
-                    intervention_policy_parameters: None,
-                    facemask_parameters: None,
+                    ..Default::default()
                 },
             )
             .unwrap();
+        let &Params { seed, .. } = context.get_params();
+        context.init_random(seed);
 
         load_rate_fns(&mut context).unwrap();
 
@@ -517,7 +500,7 @@ mod test {
 
     #[test]
     fn test_setup_modifier_values_registration_susceptible() {
-        let mut context = setup(0);
+        let mut context = setup();
 
         let person_id_partial = context
             .add_person((MandatoryInterventionStatus, MandatoryIntervention::Partial))
@@ -539,7 +522,7 @@ mod test {
 
     #[test]
     fn test_setup_modifier_values_registration_infectious() {
-        let mut context = setup(0);
+        let mut context = setup();
 
         let infectious_id = context
             .add_person((MandatoryInterventionStatus, MandatoryIntervention::Partial))
@@ -554,7 +537,7 @@ mod test {
 
     #[test]
     fn test_default_aggregator_from_container() {
-        let mut context = setup(0);
+        let mut context = setup();
 
         let person_id = context
             .add_person((
@@ -578,7 +561,7 @@ mod test {
     #[test]
     // Test that the default aggregator works correctly when person properties change
     fn test_get_relative_total_transmission() {
-        let mut context = setup(0);
+        let mut context = setup();
 
         let person_id = context
             .add_person((MandatoryInterventionStatus, MandatoryIntervention::Partial))

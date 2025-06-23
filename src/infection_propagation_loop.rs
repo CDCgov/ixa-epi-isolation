@@ -120,7 +120,7 @@ pub fn init(context: &mut Context) -> Result<(), IxaError> {
 #[cfg(test)]
 mod test {
     use serde::{Deserialize, Serialize};
-    use std::{cell::RefCell, collections::HashMap, path::PathBuf, rc::Rc};
+    use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
     use ixa::{
         define_person_property_with_default, Context, ContextGlobalPropertiesExt, ContextPeopleExt,
@@ -181,12 +181,6 @@ mod test {
             max_time: 100.0,
             seed,
             infectiousness_rate_fn: RateFnType::Constant { rate, duration },
-            symptom_progression_library: None,
-            proportion_asymptomatic: 0.0,
-            relative_infectiousness_asymptomatics: 0.0,
-            report_period: 1.0,
-            synth_population_file: PathBuf::from("."),
-            transmission_report_name: None,
             settings_properties: HashMap::from([
                 (
                     CoreSettingsTypes::Home,
@@ -216,8 +210,7 @@ mod test {
                     },
                 ),
             ]),
-            intervention_policy_parameters: None,
-            facemask_parameters: None,
+            ..Default::default()
         };
         context.init_random(parameters.seed);
         context

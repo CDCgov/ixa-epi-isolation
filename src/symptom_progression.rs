@@ -269,13 +269,13 @@ fn subscribe_to_becoming_infected(context: &mut Context) {
 
 #[cfg(test)]
 mod test {
-    use std::{cell::RefCell, collections::HashMap, path::PathBuf, rc::Rc};
+    use std::{cell::RefCell, rc::Rc};
 
     use super::{init, SymptomData, SymptomValue};
     use crate::{
         infectiousness_manager::InfectionContextExt,
         interventions::ContextTransmissionModifierExt,
-        parameters::{ContextParametersExt, GlobalParams, RateFnType},
+        parameters::{ContextParametersExt, GlobalParams},
         population_loader::Alive,
         property_progression_manager::Progression,
         rate_fns::load_rate_fns,
@@ -296,23 +296,9 @@ mod test {
         let mut context = Context::new();
         let parameters = Params {
             // We add infections manually in the tests that require infections.
-            initial_incidence: 0.0,
-            initial_recovered: 0.0,
             max_time: 100.0,
-            seed: 0,
-            infectiousness_rate_fn: RateFnType::Constant {
-                rate: 1.0,
-                duration: 5.0,
-            },
-            symptom_progression_library: None,
             proportion_asymptomatic,
-            relative_infectiousness_asymptomatics: 0.0,
-            report_period: 1.0,
-            synth_population_file: PathBuf::from("."),
-            transmission_report_name: None,
-            settings_properties: HashMap::new(),
-            intervention_policy_parameters: None,
-            facemask_parameters: None,
+            ..Default::default()
         };
         context.init_random(parameters.seed);
         context

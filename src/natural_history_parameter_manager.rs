@@ -149,7 +149,7 @@ impl ContextNaturalHistoryParameterExt for Context {
 
 #[cfg(test)]
 mod test {
-    use std::{any::TypeId, collections::HashMap, path::PathBuf};
+    use std::{any::TypeId, path::PathBuf};
 
     use ixa::{
         context::Context, ContextGlobalPropertiesExt, ContextPeopleExt, ContextRandomExt, IxaError,
@@ -325,10 +325,6 @@ mod test {
         let mut context = init_context();
 
         let parameters = Params {
-            initial_incidence: 0.0,
-            initial_recovered: 0.0,
-            max_time: 100.0,
-            seed: 0,
             infectiousness_rate_fn: RateFnType::EmpiricalFromFile {
                 file: PathBuf::from("./input/library_empirical_rate_fns.csv"),
                 scale: 1.0,
@@ -336,14 +332,7 @@ mod test {
             symptom_progression_library: Some(ProgressionLibraryType::EmpiricalFromFile {
                 file: PathBuf::from("./input/library_symptom_parameters.csv"),
             }),
-            proportion_asymptomatic: 0.0,
-            relative_infectiousness_asymptomatics: 0.0,
-            report_period: 1.0,
-            synth_population_file: PathBuf::from("."),
-            transmission_report_name: None,
-            settings_properties: HashMap::new(),
-            intervention_policy_parameters: None,
-            facemask_parameters: None,
+            ..Default::default()
         };
 
         context

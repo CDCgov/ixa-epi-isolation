@@ -22,6 +22,15 @@ pub enum RateFnType {
     },
 }
 
+impl Default for RateFnType {
+    fn default() -> Self {
+        RateFnType::Constant {
+            rate: 1.0,
+            duration: 5.0,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ProgressionLibraryType {
     EmpiricalFromFile { file: PathBuf },
@@ -52,7 +61,7 @@ pub struct FacemaskParameters {
     pub facemask_efficacy: f64,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, Default)]
 pub struct Params {
     /// The proportion of initial people who are infectious when we seed the population.
     pub initial_incidence: f64,
@@ -244,10 +253,10 @@ mod test {
         parameters::{ContextParametersExt, GlobalParams, Params, RateFnType},
         settings::SettingProperties,
     };
-    use std::{collections::HashMap, path::PathBuf};
+    use std::collections::HashMap;
 
     #[test]
-    fn test_default_input_file() {
+    fn test_standard_input_file() {
         let mut context = Context::new();
         let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("input/input.json");
         context
@@ -257,26 +266,31 @@ mod test {
     }
 
     #[test]
+    fn test_default_rate_fn_type() {
+        let p_default = Params {
+            ..Default::default()
+        };
+
+        let Params {
+            infectiousness_rate_fn,
+            ..
+        } = p_default;
+
+        assert_eq!(
+            infectiousness_rate_fn,
+            RateFnType::Constant {
+                rate: 1.0,
+                duration: 5.0
+            }
+        );
+    }
+
+    #[test]
     fn test_get_params() {
         let mut context = Context::new();
         let parameters = Params {
             initial_incidence: 0.1,
-            initial_recovered: 0.0,
-            max_time: 100.0,
-            seed: 0,
-            infectiousness_rate_fn: RateFnType::Constant {
-                rate: 1.0,
-                duration: 5.0,
-            },
-            symptom_progression_library: None,
-            proportion_asymptomatic: 0.0,
-            relative_infectiousness_asymptomatics: 0.0,
-            report_period: 1.0,
-            synth_population_file: PathBuf::from("."),
-            transmission_report_name: None,
-            settings_properties: HashMap::new(),
-            intervention_policy_parameters: None,
-            facemask_parameters: None,
+            ..Default::default()
         };
         context
             .set_global_property_value(GlobalParams, parameters)
@@ -291,23 +305,8 @@ mod test {
     #[test]
     fn test_validate_max_time() {
         let parameters = Params {
-            initial_incidence: 0.0,
-            initial_recovered: 0.0,
             max_time: -100.0,
-            seed: 0,
-            infectiousness_rate_fn: RateFnType::Constant {
-                rate: 1.0,
-                duration: 5.0,
-            },
-            symptom_progression_library: None,
-            proportion_asymptomatic: 0.0,
-            relative_infectiousness_asymptomatics: 0.0,
-            report_period: 1.0,
-            synth_population_file: PathBuf::from("."),
-            transmission_report_name: None,
-            settings_properties: HashMap::new(),
-            intervention_policy_parameters: None,
-            facemask_parameters: None,
+            ..Default::default()
         };
         let e = validate_inputs(&parameters).err();
         match e {
@@ -325,20 +324,6 @@ mod test {
     #[test]
     fn test_validate_split_zeros() {
         let parameters = Params {
-            initial_incidence: 0.0,
-            initial_recovered: 0.0,
-            max_time: 100.0,
-            seed: 0,
-            infectiousness_rate_fn: RateFnType::Constant {
-                rate: 1.0,
-                duration: 5.0,
-            },
-            symptom_progression_library: None,
-            proportion_asymptomatic: 0.0,
-            relative_infectiousness_asymptomatics: 0.0,
-            report_period: 1.0,
-            synth_population_file: PathBuf::from("."),
-            transmission_report_name: None,
             settings_properties: HashMap::from([
                 (
                     CoreSettingsTypes::Home,
@@ -359,8 +344,7 @@ mod test {
                     },
                 ),
             ]),
-            intervention_policy_parameters: None,
-            facemask_parameters: None,
+            ..Default::default()
         };
         let e = validate_inputs(&parameters).err();
         match e {
@@ -378,20 +362,6 @@ mod test {
     #[test]
     fn test_validate_split_negative() {
         let parameters = Params {
-            initial_incidence: 0.0,
-            initial_recovered: 0.0,
-            max_time: 100.0,
-            seed: 0,
-            infectiousness_rate_fn: RateFnType::Constant {
-                rate: 1.0,
-                duration: 5.0,
-            },
-            symptom_progression_library: None,
-            proportion_asymptomatic: 0.0,
-            relative_infectiousness_asymptomatics: 0.0,
-            report_period: 1.0,
-            synth_population_file: PathBuf::from("."),
-            transmission_report_name: None,
             settings_properties: HashMap::from([
                 (
                     CoreSettingsTypes::Home,
@@ -412,8 +382,7 @@ mod test {
                     },
                 ),
             ]),
-            intervention_policy_parameters: None,
-            facemask_parameters: None,
+            ..Default::default()
         };
         let e = validate_inputs(&parameters).err();
         match e {
@@ -434,20 +403,6 @@ mod test {
     #[test]
     fn test_validation_itinerary_all_none() {
         let parameters = Params {
-            initial_incidence: 0.0,
-            initial_recovered: 0.0,
-            max_time: 100.0,
-            seed: 0,
-            infectiousness_rate_fn: RateFnType::Constant {
-                rate: 1.0,
-                duration: 5.0,
-            },
-            symptom_progression_library: None,
-            proportion_asymptomatic: 0.0,
-            relative_infectiousness_asymptomatics: 0.0,
-            report_period: 1.0,
-            synth_population_file: PathBuf::from("."),
-            transmission_report_name: None,
             settings_properties: HashMap::from([
                 (
                     CoreSettingsTypes::Home,
@@ -464,8 +419,7 @@ mod test {
                     },
                 ),
             ]),
-            intervention_policy_parameters: None,
-            facemask_parameters: None,
+            ..Default::default()
         };
         let e = validate_inputs(&parameters).err();
         assert!(e.is_none(), "Expected no error, but got: {e:?}");
@@ -474,20 +428,6 @@ mod test {
     #[test]
     fn test_validation_itinerary_one_some_zero_rest_none() {
         let parameters = Params {
-            initial_incidence: 0.0,
-            initial_recovered: 0.0,
-            max_time: 100.0,
-            seed: 0,
-            infectiousness_rate_fn: RateFnType::Constant {
-                rate: 1.0,
-                duration: 5.0,
-            },
-            symptom_progression_library: None,
-            proportion_asymptomatic: 0.0,
-            relative_infectiousness_asymptomatics: 0.0,
-            report_period: 1.0,
-            synth_population_file: PathBuf::from("."),
-            transmission_report_name: None,
             settings_properties: HashMap::from([
                 (
                     CoreSettingsTypes::Home,
@@ -506,8 +446,7 @@ mod test {
                     },
                 ),
             ]),
-            intervention_policy_parameters: None,
-            facemask_parameters: None,
+            ..Default::default()
         };
         let e = validate_inputs(&parameters).err();
         assert!(e.is_none(), "Expected no error, but got: {e:?}");
@@ -531,23 +470,8 @@ mod test {
     #[test]
     fn test_proportion_asymptomatic() {
         let get_parameters = |proportion_asymptomatic| Params {
-            initial_incidence: 0.0,
-            initial_recovered: 0.0,
-            max_time: 100.0,
-            seed: 0,
-            infectiousness_rate_fn: RateFnType::Constant {
-                rate: 1.0,
-                duration: 5.0,
-            },
-            symptom_progression_library: None,
             proportion_asymptomatic,
-            relative_infectiousness_asymptomatics: 0.0,
-            report_period: 1.0,
-            synth_population_file: PathBuf::from("."),
-            transmission_report_name: None,
-            settings_properties: HashMap::new(),
-            intervention_policy_parameters: None,
-            facemask_parameters: None,
+            ..Default::default()
         };
         // Should pass
         let parameters = get_parameters(1.0);

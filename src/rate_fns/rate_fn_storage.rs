@@ -143,8 +143,6 @@ fn add_rate_fns_from_file(context: &mut Context, file: PathBuf) -> Result<(), Ix
 
 #[cfg(test)]
 mod test {
-    use std::collections::HashMap;
-
     use crate::parameters::{GlobalParams, Params};
 
     use super::*;
@@ -198,23 +196,11 @@ mod test {
     fn test_load_rate_functions_constant() {
         let mut context = Context::new();
         let parameters = Params {
-            initial_incidence: 0.0,
-            initial_recovered: 0.0,
-            max_time: 100.0,
-            seed: 0,
             infectiousness_rate_fn: RateFnType::Constant {
                 rate: 1.0,
                 duration: 5.0,
             },
-            symptom_progression_library: None,
-            proportion_asymptomatic: 0.0,
-            relative_infectiousness_asymptomatics: 0.0,
-            report_period: 1.0,
-            synth_population_file: PathBuf::from("."),
-            transmission_report_name: None,
-            settings_properties: HashMap::new(),
-            intervention_policy_parameters: None,
-            facemask_parameters: None,
+            ..Default::default()
         };
         context
             .set_global_property_value(GlobalParams, parameters)
@@ -233,23 +219,11 @@ mod test {
         let scale = 2.0;
         let mut context = Context::new();
         let parameters = Params {
-            initial_incidence: 0.0,
-            initial_recovered: 0.0,
-            max_time: 100.0,
-            seed: 0,
             infectiousness_rate_fn: RateFnType::EmpiricalFromFile {
                 file: PathBuf::from("./tests/data/two_rate_fns.csv"),
                 scale,
             },
-            symptom_progression_library: None,
-            proportion_asymptomatic: 0.0,
-            relative_infectiousness_asymptomatics: 0.0,
-            report_period: 1.0,
-            synth_population_file: PathBuf::from("."),
-            transmission_report_name: None,
-            settings_properties: HashMap::new(),
-            intervention_policy_parameters: None,
-            facemask_parameters: None,
+            ..Default::default()
         };
         context
             .set_global_property_value(GlobalParams, parameters)
@@ -277,23 +251,11 @@ mod test {
     fn test_read_rate_function_discontiguous_ids() {
         let mut context = Context::new();
         let parameters = Params {
-            initial_incidence: 0.0,
-            initial_recovered: 0.0,
-            max_time: 100.0,
-            seed: 0,
             infectiousness_rate_fn: RateFnType::EmpiricalFromFile {
                 file: PathBuf::from("./tests/data/two_rate_fns_discontiguous_ids.csv"),
                 scale: 1.0,
             },
-            symptom_progression_library: None,
-            proportion_asymptomatic: 0.0,
-            relative_infectiousness_asymptomatics: 0.0,
-            report_period: 1.0,
-            synth_population_file: PathBuf::from("."),
-            transmission_report_name: None,
-            settings_properties: HashMap::new(),
-            intervention_policy_parameters: None,
-            facemask_parameters: None,
+            ..Default::default()
         };
         context
             .set_global_property_value(GlobalParams, parameters)
@@ -317,23 +279,11 @@ mod test {
     fn test_read_rate_function_id_starts_at_two() {
         let mut context = Context::new();
         let parameters = Params {
-            initial_incidence: 0.0,
-            initial_recovered: 0.0,
-            max_time: 100.0,
-            seed: 0,
             infectiousness_rate_fn: RateFnType::EmpiricalFromFile {
                 file: PathBuf::from("./tests/data/rate_fn_id_starts_at_two.csv"),
                 scale: 1.0,
             },
-            symptom_progression_library: None,
-            proportion_asymptomatic: 0.0,
-            relative_infectiousness_asymptomatics: 0.0,
-            report_period: 1.0,
-            synth_population_file: PathBuf::from("."),
-            transmission_report_name: None,
-            settings_properties: HashMap::new(),
-            intervention_policy_parameters: None,
-            facemask_parameters: None,
+            ..Default::default()
         };
         context
             .set_global_property_value(GlobalParams, parameters)

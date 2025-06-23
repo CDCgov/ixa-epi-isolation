@@ -84,9 +84,7 @@ pub fn init(context: &mut Context) -> Result<(), IxaError> {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::parameters::{
-        CoreSettingsTypes, GlobalParams, ItinerarySpecificationType, RateFnType,
-    };
+    use crate::parameters::{CoreSettingsTypes, GlobalParams, ItinerarySpecificationType};
     use crate::settings::{CensusTract, Home, School, SettingId, SettingProperties, Workplace};
     use ixa::{ContextGlobalPropertiesExt, ContextPeopleExt};
     use std::collections::HashMap;
@@ -104,20 +102,6 @@ mod test {
     fn setup() -> Context {
         let mut context = Context::new();
         let parameters = Params {
-            initial_incidence: 0.0,
-            initial_recovered: 0.0,
-            max_time: 100.0,
-            seed: 0,
-            infectiousness_rate_fn: RateFnType::Constant {
-                rate: 1.0,
-                duration: 5.0,
-            },
-            symptom_progression_library: None,
-            proportion_asymptomatic: 0.0,
-            relative_infectiousness_asymptomatics: 0.0,
-            report_period: 1.0,
-            synth_population_file: PathBuf::from("."),
-            transmission_report_name: None,
             // We need to specify an itinerary split here even though we don't draw people from
             // itineraries because `load_synth_population` calls `create_itinerary` for each person,
             // and that function requires an itinerary write function to be set.
@@ -159,8 +143,7 @@ mod test {
                     },
                 ),
             ]),
-            intervention_policy_parameters: None,
-            facemask_parameters: None,
+            ..Default::default()
         };
         context
             .set_global_property_value(GlobalParams, parameters)

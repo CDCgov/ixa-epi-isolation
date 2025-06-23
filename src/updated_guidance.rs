@@ -154,7 +154,7 @@ mod test {
         infectiousness_manager::InfectionContextExt,
         parameters::{
             CoreSettingsTypes, FacemaskParameters, GlobalParams, InterventionPolicyParameters,
-            ItinerarySpecificationType, ProgressionLibraryType, RateFnType,
+            ItinerarySpecificationType, ProgressionLibraryType,
         },
         population_loader::Alive,
         rate_fns::load_rate_fns,
@@ -187,19 +187,10 @@ mod test {
             initial_incidence: 0.1,
             initial_recovered: 0.35,
             proportion_asymptomatic,
-            relative_infectiousness_asymptomatics: 0.0,
             max_time: 100.0,
-            seed: 0,
-            infectiousness_rate_fn: RateFnType::Constant {
-                rate: 1.0,
-                duration: 5.0,
-            },
             symptom_progression_library: Some(ProgressionLibraryType::EmpiricalFromFile {
                 file: PathBuf::from("./input/library_symptom_parameters.csv"),
             }),
-            report_period: 1.0,
-            synth_population_file: PathBuf::from("."),
-            transmission_report_name: None,
             settings_properties: HashMap::from([
                 (
                     CoreSettingsTypes::Home,
@@ -235,6 +226,7 @@ mod test {
                 isolation_delay_period,
             }),
             facemask_parameters: Some(FacemaskParameters { facemask_efficacy }),
+            ..Default::default()
         };
         context.init_random(parameters.seed);
         context
@@ -426,25 +418,7 @@ mod test {
             .set_global_property_value(
                 GlobalParams,
                 Params {
-                    // For those tests that need infectious people, we add them manually.
-                    initial_incidence: 0.0,
-                    initial_recovered: 0.0,
-                    proportion_asymptomatic: 0.0,
-                    relative_infectiousness_asymptomatics: 0.0,
-                    max_time: 10.0,
-                    seed: 0,
-                    infectiousness_rate_fn: RateFnType::Constant {
-                        rate: 1.0,
-                        duration: 5.0,
-                    },
-                    symptom_progression_library: None,
-                    report_period: 1.0,
-                    synth_population_file: PathBuf::from("."),
-                    transmission_report_name: None,
-                    // We set the itineraries manually in `set_homogeneous_mixing_itinerary`.
-                    settings_properties: HashMap::new(),
-                    intervention_policy_parameters: None,
-                    facemask_parameters: None,
+                    ..Default::default()
                 },
             )
             .unwrap();
@@ -468,27 +442,10 @@ mod test {
             .set_global_property_value(
                 GlobalParams,
                 Params {
-                    // For those tests that need infectious people, we add them manually.
-                    initial_incidence: 0.0,
-                    initial_recovered: 0.0,
-                    proportion_asymptomatic: 0.0,
-                    relative_infectiousness_asymptomatics: 0.0,
-                    max_time: 10.0,
-                    seed: 0,
-                    infectiousness_rate_fn: RateFnType::Constant {
-                        rate: 1.0,
-                        duration: 5.0,
-                    },
-                    symptom_progression_library: None,
-                    report_period: 1.0,
-                    synth_population_file: PathBuf::from("."),
-                    transmission_report_name: None,
-                    // We set the itineraries manually in `set_homogeneous_mixing_itinerary`.
-                    settings_properties: HashMap::new(),
-                    intervention_policy_parameters: None,
                     facemask_parameters: Some(FacemaskParameters {
                         facemask_efficacy: 0.5,
                     }),
+                    ..Default::default()
                 },
             )
             .unwrap();
