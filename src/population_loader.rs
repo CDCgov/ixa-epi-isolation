@@ -7,9 +7,7 @@ use serde::Deserialize;
 use std::path::PathBuf;
 
 use crate::parameters::{ContextParametersExt, Params};
-use crate::settings::{
-    append_itinerary_entry, CensusTract, ContextSettingExt, Home, School, Workplace,
-};
+use crate::settings::{append_itinerary_entry, ContextSettingExt, Setting, SettingCategory::*};
 
 #[derive(Deserialize, Debug)]
 #[allow(non_snake_case)]
@@ -38,19 +36,18 @@ fn create_person_from_record(
 
     // Initialize a vector of home and census tract since everyone has these settings
     let mut itinerary = vec![];
-    append_itinerary_entry(&mut itinerary, context, Home, home_id.parse()?)?;
-    append_itinerary_entry(&mut itinerary, context, CensusTract, tract.parse()?)?;
+    append_itinerary_entry(&mut itinerary, context, Setting::Home(home_id.parse()?))?;
+    append_itinerary_entry(&mut itinerary, context, Setting::CensusTract(tract.parse()?))?;
 
     // Check for school and work memberships
     if !school_string.is_empty() {
-        append_itinerary_entry(&mut itinerary, context, School, school_string.parse()?)?;
+        append_itinerary_entry(&mut itinerary, context, Setting::School(school_string.parse()?))?;
     }
     if !workplace_string.is_empty() {
         append_itinerary_entry(
             &mut itinerary,
             context,
-            Workplace,
-            workplace_string.parse()?,
+            Setting::Workplace(workplace_string.parse()?),
         )?;
     }
 
@@ -88,7 +85,7 @@ mod test {
         CoreSettingsTypes, GlobalParams, ItinerarySpecificationType, RateFnType,
     };
     use crate::settings::{
-        init as settings_init, CensusTract, Home, School, SettingId, SettingProperties, Workplace,
+        init as settings_init, SettingCategory::*, Setting, SettingProperties,
     };
     use ixa::{ContextGlobalPropertiesExt, ContextPeopleExt};
     use std::collections::HashMap;
@@ -186,7 +183,7 @@ mod test {
             assert_eq!(
                 1,
                 context
-                    .get_setting_members(SettingId::new(&Home, home_id[i]))
+                    .get_setting_members(Setting::Home(home_id[i]))
                     .unwrap()
                     .len()
             );
@@ -194,7 +191,7 @@ mod test {
         assert_eq!(
             2,
             context
-                .get_setting_members(SettingId::new(&CensusTract, census_tract_id))
+                .get_setting_members(Setting::CensusTract(census_tract_id))
                 .unwrap()
                 .len()
         );
@@ -230,14 +227,14 @@ mod test {
             assert_eq!(
                 1,
                 context
-                    .get_setting_members(SettingId::new(&School, school_id[i]))
+                    .get_setting_members(Setting::School(school_id[i]))
                     .unwrap()
                     .len()
             );
             assert_eq!(
                 1,
                 context
-                    .get_setting_members(SettingId::new(&Home, home_id[i]))
+                    .get_setting_members(Setting::Home(home_id[i]))
                     .unwrap()
                     .len()
             );
@@ -245,7 +242,7 @@ mod test {
         assert_eq!(
             2,
             context
-                .get_setting_members(SettingId::new(&CensusTract, census_tract_id))
+                .get_setting_members(Setting::CensusTract(census_tract_id))
                 .unwrap()
                 .len()
         );
@@ -271,14 +268,14 @@ mod test {
             assert_eq!(
                 1,
                 context
-                    .get_setting_members(SettingId::new(&Workplace, workplace_id[i]))
+                    .get_setting_members(Setting::Workplace(workplace_id[i]))
                     .unwrap()
                     .len()
             );
             assert_eq!(
                 1,
                 context
-                    .get_setting_members(SettingId::new(&Home, home_id[i]))
+                    .get_setting_members(Setting::Home(home_id[i]))
                     .unwrap()
                     .len()
             );
@@ -286,7 +283,7 @@ mod test {
         assert_eq!(
             2,
             context
-                .get_setting_members(SettingId::new(&CensusTract, census_tract_id))
+                .get_setting_members(Setting::CensusTract(census_tract_id))
                 .unwrap()
                 .len()
         );

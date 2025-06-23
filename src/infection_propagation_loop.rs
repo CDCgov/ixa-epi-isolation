@@ -24,12 +24,18 @@ fn schedule_next_forecasted_infection(context: &mut Context, person: PersonId) {
         context.add_plan(next_time, move |context| {
             if evaluate_forecast(context, person, forecasted_total_infectiousness) {
                 if let Some(setting_id) = context.get_setting_for_contact(person) {
-                    let str_setting = setting_id.setting_type.get_name();
-                    let id = setting_id.id;
+                    let str_setting = setting_id.category().into();
+                    let id = setting_id.id();
                     if let Some(next_contact) =
                         infection_attempt(context, person, setting_id)
                     {
-                        trace!("Person {person}: Forecast accepted, setting type {str_setting} {id}, infecting {next_contact}");
+                        trace!(
+                            "Person {}: Forecast accepted, setting type {} {}, infecting {}",
+                            person,
+                            str_setting,
+                            id,
+                            next_contact
+                        );
                         context.infect_person(next_contact, Some(person), Some(str_setting), Some(id));
                     }
                 }
@@ -160,7 +166,6 @@ mod test {
     };
 
     use crate::{
-        define_setting_type,
         infection_propagation_loop::{
             init, schedule_next_forecasted_infection, schedule_recovery, seed_initial_infections,
             seed_initial_recovered, InfectionStatus, InfectionStatusValue,
@@ -175,20 +180,17 @@ mod test {
             Params, RateFnType,
         },
         rate_fns::{load_rate_fns, InfectiousnessRateExt},
-        settings::{
-            init as settings_init, CensusTract, ContextSettingExt, Home, ItineraryEntry, SettingId,
-            SettingProperties, Workplace,
-        },
+        settings::init as settings_init,
+        settings::*
     };
 
-    define_setting_type!(HomogeneousMixing);
 
     fn set_homogeneous_mixing_itinerary(
         context: &mut Context,
         person_id: PersonId,
     ) -> Result<(), IxaError> {
         let itinerary = vec![ItineraryEntry::new(
-            SettingId::new(&HomogeneousMixing, 0),
+            Setting::HomogeneousMixing(0),
             1.0,
         )];
         context.add_itinerary(person_id, itinerary)
@@ -251,7 +253,7 @@ mod test {
         // we still have people in settings.
         context
             .register_setting_type(
-                HomogeneousMixing,
+                SettingCategory::HomogeneousMixing,
                 SettingProperties {
                     alpha,
                     itinerary_specification: Some(ItinerarySpecificationType::Constant {
@@ -603,15 +605,15 @@ mod test {
                 let person_censustract = context.add_person(()).unwrap();
                 let person_workplace = context.add_person(()).unwrap();
                 let itinerary_all = vec![
-                    ItineraryEntry::new(SettingId::new(&Home, 0), ratio[0]),
-                    ItineraryEntry::new(SettingId::new(&CensusTract, 0), ratio[1]),
-                    ItineraryEntry::new(SettingId::new(&Workplace, 0), ratio[2]),
+                    ItineraryEntry::new(Setting::Home(0), ratio[0]),
+                    ItineraryEntry::new(Setting::CensusTract(0), ratio[1]),
+                    ItineraryEntry::new(Setting::Workplace(0), ratio[2]),
                 ];
-                let itinerary_home = vec![ItineraryEntry::new(SettingId::new(&Home, 0), 1.0)];
+                let itinerary_home = vec![ItineraryEntry::new(Setting::Home(0), 1.0)];
                 let itinerary_censustract =
-                    vec![ItineraryEntry::new(SettingId::new(&CensusTract, 0), 1.0)];
+                    vec![ItineraryEntry::new(Setting::CensusTract(0), 1.0)];
                 let itinerary_workplace =
-                    vec![ItineraryEntry::new(SettingId::new(&Workplace, 0), 1.0)];
+                    vec![ItineraryEntry::new(Setting::Workplace(0), 1.0)];
                 context
                     .add_itinerary(infectious_person, itinerary_all)
                     .unwrap();

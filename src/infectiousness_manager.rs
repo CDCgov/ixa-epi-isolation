@@ -9,7 +9,7 @@ use crate::{
     interventions::ContextTransmissionModifierExt,
     population_loader::Alive,
     rate_fns::{InfectiousnessRateExt, InfectiousnessRateFn, ScaledRateFn},
-    settings::{ContextSettingExt, SettingId, SettingCategory},
+    settings::{ContextSettingExt, Setting, SettingCategory},
 };
 
 #[derive(Serialize, PartialEq, Debug, Clone, Copy)]
@@ -76,10 +76,10 @@ pub fn max_total_infectiousness_multiplier(context: &Context, person_id: PersonI
 define_rng!(ForecastRng);
 
 // Infection attempt function for a context and given `PersonId`
-pub fn infection_attempt<T: SettingCategory + ?Sized>(
+pub fn infection_attempt(
     context: &Context,
     person_id: PersonId,
-    setting_id: SettingId<T>,
+    setting_id: Setting,
 ) -> Option<PersonId> {
     let next_contact = context
         .get_contact(person_id, setting_id, (Alive, true))
@@ -242,28 +242,26 @@ mod test {
         InfectionContextExt,
     };
     use crate::{
-        define_setting_type,
         infectiousness_manager::{
             InfectionData, InfectionDataValue, InfectionStatus, InfectionStatusValue,
         },
         interventions::ContextTransmissionModifierExt,
         parameters::{GlobalParams, ItinerarySpecificationType, Params, RateFnType},
         rate_fns::{load_rate_fns, InfectiousnessRateExt},
-        settings::{ContextSettingExt, ItineraryEntry, SettingId, SettingProperties},
+        settings::{ContextSettingExt, ItineraryEntry, Setting, SettingProperties},
     };
     use ixa::{
         define_person_property, Context, ContextGlobalPropertiesExt, ContextPeopleExt,
         ContextRandomExt, IxaError, PersonId,
     };
-
-    define_setting_type!(HomogeneousMixing);
+    use crate::settings::SettingCategory;
 
     fn set_homogeneous_mixing_itinerary(
         context: &mut Context,
         person_id: PersonId,
     ) -> Result<(), IxaError> {
         let itinerary = vec![ItineraryEntry::new(
-            SettingId::new(&HomogeneousMixing, 0),
+            Setting::HomogeneousMixing(0),
             1.0,
         )];
         context.add_itinerary(person_id, itinerary)
@@ -297,7 +295,7 @@ mod test {
         load_rate_fns(&mut context).unwrap();
         context
             .register_setting_type(
-                HomogeneousMixing,
+                SettingCategory::HomogeneousMixing,
                 SettingProperties {
                     alpha: 1.0,
                     itinerary_specification: Some(ItinerarySpecificationType::Constant {
@@ -498,7 +496,7 @@ mod test {
         set_homogeneous_mixing_itinerary(&mut context, source).unwrap();
 
         for _ in 0..n {
-            if infection_attempt(&context, source, SettingId::new(&HomogeneousMixing, 0)).is_some()
+            if infection_attempt(&context, source, Setting::HomogeneousMixing(0)).is_some()
             {
                 count += 1;
             }
