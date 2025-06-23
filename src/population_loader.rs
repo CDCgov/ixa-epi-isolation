@@ -159,6 +159,8 @@ mod test {
                     },
                 ),
             ]),
+            intervention_policy_parameters: None,
+            facemask_parameters: None,
         };
         context
             .set_global_property_value(GlobalParams, parameters)
