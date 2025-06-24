@@ -1,3 +1,5 @@
+use std::f64;
+
 use ixa::{
     define_derived_property, define_person_property_with_default, define_rng, trace, Context,
     ContextPeopleExt, ContextRandomExt, IxaError, PersonId, PersonPropertyChangeEvent,
@@ -81,47 +83,6 @@ impl ContextIsolationGuidanceInternalExt for Context {
             PolicyRng,
             intervention_policy_parameters.isolation_probability,
         ) {
-            let mut isolation_duration = -1.0;
-            let symptoms = self.get_person_property(person_id, Symptoms);
-            if self.get_person_property(person_id, LastTestResult)
-                && self.get_person_property(person_id, NumberOfTests) == 1
-            {
-                if symptoms == Some(SymptomValue::Category1)
-                    || symptoms == Some(SymptomValue::Category2)
-                {
-                    isolation_duration =
-                        intervention_policy_parameters.mild_symptom_isolation_duration;
-                } else if symptoms == Some(SymptomValue::Category3)
-                    || symptoms == Some(SymptomValue::Category4)
-                {
-                    isolation_duration =
-                        intervention_policy_parameters.moderate_symptom_isolation_duration;
-                }
-            } else if self.get_person_property(person_id, LastTestResult)
-                && self.get_person_property(person_id, NumberOfTests) == 2
-            {
-                if symptoms == Some(SymptomValue::Category1)
-                    || symptoms == Some(SymptomValue::Category2)
-                {
-                    isolation_duration = intervention_policy_parameters
-                        .mild_symptom_isolation_duration
-                        - intervention_policy_parameters.negative_test_isolation_duration;
-                } else if symptoms == Some(SymptomValue::Category3)
-                    || symptoms == Some(SymptomValue::Category4)
-                {
-                    isolation_duration = intervention_policy_parameters
-                        .moderate_symptom_isolation_duration
-                        - intervention_policy_parameters.negative_test_isolation_duration;
-                }
-            } else if !self.get_person_property(person_id, LastTestResult)
-                && self.get_person_property(person_id, NumberOfTests) == 1
-            {
-                isolation_duration =
-                    intervention_policy_parameters.negative_test_isolation_duration;
-            } else if !self.get_person_property(person_id, LastTestResult)
-                && self.get_person_property(person_id, NumberOfTests) == 2
-            {
-            }
             self.add_plan(
                 self.get_current_time() + intervention_policy_parameters.isolation_delay_period,
                 move |context| {
@@ -129,13 +90,16 @@ impl ContextIsolationGuidanceInternalExt for Context {
                     trace!("Person {person_id} is now isolating");
                 },
             );
-            self.add_plan(
-                self.get_current_time() + isolation_duration,
-                move |context| {
-                    context.modify_isolation_status(person_id, false).unwrap();
-                    trace!("Person {person_id} is now isolating");
-                },
-            );
+            if !self.get_person_property(person_id, LastTestResult) {
+                self.add_plan(
+                    self.get_current_time()
+                        + intervention_policy_parameters.negative_test_isolation_duration,
+                    move |context| {
+                        context.administer_test(person_id, intervention_policy_parameters);
+                        trace!("Person {person_id} was tested");
+                    },
+                );
+            }
         }
     }
 
@@ -144,18 +108,16 @@ impl ContextIsolationGuidanceInternalExt for Context {
         person_id: PersonId,
         intervention_policy_parameters: InterventionPolicyParameters,
     ) {
-        if self.get_person_property(person_id, IsolatingStatus) {
-            self.modify_isolation_status(person_id, false).unwrap();
+        let proposed_masking_end_time = self.get_person_property(person_id, SymptomStartTime)
+            + intervention_policy_parameters.duration_from_symptom_onset;
+        if proposed_masking_end_time > self.get_current_time() {
             self.set_person_property(person_id, MaskingStatus, true);
             trace!("Person {person_id} is now masking and no longer isolating");
-            self.add_plan(
-                self.get_current_time()
-                    + intervention_policy_parameters.mild_symptom_isolation_duration,
-                move |context| {
-                    context.set_person_property(person_id, MaskingStatus, false);
-                    trace!("Person {person_id} is now no longer masking");
-                },
-            );
+
+            self.add_plan(proposed_masking_end_time, move |context| {
+                context.set_person_property(person_id, MaskingStatus, false);
+                trace!("Person {person_id} is now no longer masking");
+            });
         }
     }
 
@@ -183,10 +145,48 @@ impl ContextIsolationGuidanceInternalExt for Context {
         person_id: PersonId,
         intervention_policy_parameters: InterventionPolicyParameters,
     ) {
-        if self.get_person_property(person_id, PresentingWithSymptoms) {
-            trace!("Person {person_id} has resolved symptoms.");
-            self.set_person_property(person_id, PresentingWithSymptoms, false);
-            self.post_isolation(person_id, intervention_policy_parameters);
+        if self.sample_bool(
+            PolicyRng,
+            intervention_policy_parameters.isolation_probability,
+        ) {
+            let mut remaining_isolation_duration = -1.0;
+            let symptoms = self.get_person_property(person_id, Symptoms);
+            let current_duration_isolation =
+                self.get_current_time() - self.get_person_property(person_id, SymptomStartTime);
+            if self.get_person_property(person_id, LastTestResult) {
+                if symptoms == Some(SymptomValue::Category1)
+                    || symptoms == Some(SymptomValue::Category2)
+                {
+                    remaining_isolation_duration = f64::max(
+                        intervention_policy_parameters.mild_symptom_isolation_duration
+                            - current_duration_isolation,
+                        0.0,
+                    );
+                    self.add_plan(
+                        self.get_current_time() + remaining_isolation_duration,
+                        move |context| {
+                            context.modify_isolation_status(person_id, false).unwrap();
+                            trace!("Person {person_id} is now no longer isolating");
+                            context.post_isolation(person_id, intervention_policy_parameters);
+                        },
+                    );
+                } else if symptoms == Some(SymptomValue::Category3)
+                    || symptoms == Some(SymptomValue::Category4)
+                {
+                    remaining_isolation_duration = f64::max(
+                        intervention_policy_parameters.moderate_symptom_isolation_duration
+                            - current_duration_isolation,
+                        0.0,
+                    );
+                    self.add_plan(
+                        self.get_current_time() + remaining_isolation_duration,
+                        move |context| {
+                            context.modify_isolation_status(person_id, false).unwrap();
+                            trace!("Person {person_id} is now no longer isolating");
+                        },
+                    );
+                }
+            }
         }
     }
 
@@ -271,8 +271,8 @@ mod test {
     use super::{IsolatingStatus, MaskingStatus};
 
     use statrs::assert_almost_eq;
-    
-#[allow(clippy::too_many_arguments)]
+
+    #[allow(clippy::too_many_arguments)]
     fn setup_context(
         duration_from_symptom_onset: f64,
         mild_symptom_isolation_duration: f64,
