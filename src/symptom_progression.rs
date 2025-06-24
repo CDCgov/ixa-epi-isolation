@@ -298,6 +298,7 @@ mod test {
             // We add infections manually in the tests that require infections.
             max_time: 100.0,
             proportion_asymptomatic,
+            relative_infectiousness_asymptomatics: 0.6,
             ..Default::default()
         };
         context.init_random(parameters.seed);

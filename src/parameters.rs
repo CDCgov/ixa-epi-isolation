@@ -22,15 +22,6 @@ pub enum RateFnType {
     },
 }
 
-impl Default for RateFnType {
-    fn default() -> Self {
-        RateFnType::Constant {
-            rate: 1.0,
-            duration: 5.0,
-        }
-    }
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ProgressionLibraryType {
     EmpiricalFromFile { file: PathBuf },
@@ -61,7 +52,7 @@ pub struct FacemaskParameters {
     pub facemask_efficacy: f64,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, Default)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Params {
     /// The proportion of initial people who are infectious when we seed the population.
     pub initial_incidence: f64,
@@ -95,6 +86,36 @@ pub struct Params {
     // facemask_efficacy the reduction in tranmission associated with wearing a facemask.
     pub facemask_parameters: Option<FacemaskParameters>,
 }
+
+// Any default parameters must be specified here
+// Please provide in-line justification for irregular defaults,
+// such as: non-zero floats/integers, Some() options, and non-empty HashMaps
+impl Default for Params {
+    fn default() -> Self {
+        Params {
+            initial_incidence: 0.0,
+            initial_recovered: 0.0,
+            max_time: 0.0,
+            seed: 0,
+            infectiousness_rate_fn: RateFnType::Constant {
+                rate: 1.0,
+                duration: 5.0,
+            },
+            symptom_progression_library: None,
+            proportion_asymptomatic: 0.0,
+            // Asymptomatics, if included, should act as symptomatics unless otherwise specified
+            relative_infectiousness_asymptomatics: 1.0,
+            // If reports are called for some reason and not specified, 0.0 could lead to large memory errors
+            report_period: 1.0,
+            settings_properties: HashMap::new(),
+            synth_population_file: PathBuf::new(),
+            transmission_report_name: None,
+            intervention_policy_parameters: None,
+            facemask_parameters: None,
+        }
+    }
+}
+
 #[allow(clippy::too_many_lines)]
 fn validate_inputs(parameters: &Params) -> Result<(), IxaError> {
     if parameters.max_time < 0.0 {
