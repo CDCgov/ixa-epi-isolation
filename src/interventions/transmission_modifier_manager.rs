@@ -228,12 +228,7 @@ mod test {
     fn setup() -> Context {
         let mut context = Context::new();
         context
-            .set_global_property_value(
-                GlobalParams,
-                Params {
-                    ..Default::default()
-                },
-            )
+            .set_global_property_value(GlobalParams, Params::default())
             .unwrap();
         let &Params { seed, .. } = context.get_params();
         context.init_random(seed);

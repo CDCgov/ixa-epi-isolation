@@ -415,12 +415,7 @@ mod test {
         let mut context = Context::new();
         context.init_random(0);
         context
-            .set_global_property_value(
-                GlobalParams,
-                Params {
-                    ..Default::default()
-                },
-            )
+            .set_global_property_value(GlobalParams, Params::default())
             .unwrap();
         let e = super::init(&mut context).err();
         match e {

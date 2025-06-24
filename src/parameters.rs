@@ -288,14 +288,10 @@ mod test {
 
     #[test]
     fn test_default_rate_fn_type() {
-        let p_default = Params {
-            ..Default::default()
-        };
-
         let Params {
             infectiousness_rate_fn,
             ..
-        } = p_default;
+        } = Params::default();
 
         assert_eq!(
             infectiousness_rate_fn,
