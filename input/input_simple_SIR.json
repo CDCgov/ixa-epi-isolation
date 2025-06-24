@@ -4,7 +4,8 @@
     "seed": 50,
     "infectiousness_rate_fn": {
       "EmpiricalFromFile": {
-        "file": "input/rate_fns_SIR.csv"
+        "file": "input/rate_fns_SIR.csv",
+        "scale": 1.0
       }
     },
     "initial_infections": 1,
