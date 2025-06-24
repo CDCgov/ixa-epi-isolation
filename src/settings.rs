@@ -796,12 +796,9 @@ pub fn init(context: &mut Context) {
 
 #[cfg(test)]
 mod test {
-
-    use std::path::PathBuf;
-
     use super::*;
     use crate::{
-        parameters::{GlobalParams, ItinerarySpecificationType, RateFnType},
+        parameters::{GlobalParams, ItinerarySpecificationType},
         settings::ContextSettingExt,
     };
     use ixa::{define_person_property, ContextGlobalPropertiesExt, ContextPeopleExt};
@@ -1917,20 +1914,6 @@ mod test {
     fn test_only_include_registered_settings_in_itineraries() {
         let mut context = Context::new();
         let parameters = Params {
-            initial_incidence: 0.0,
-            initial_recovered: 0.0,
-            max_time: 100.0,
-            seed: 0,
-            infectiousness_rate_fn: RateFnType::Constant {
-                rate: 1.0,
-                duration: 5.0,
-            },
-            symptom_progression_library: None,
-            proportion_asymptomatic: 0.0,
-            relative_infectiousness_asymptomatics: 0.0,
-            report_period: 1.0,
-            synth_population_file: PathBuf::from("."),
-            transmission_report_name: None,
             settings_properties: HashMap::from([(
                 CoreSettingsTypes::Home,
                 SettingProperties {
@@ -1940,8 +1923,7 @@ mod test {
                     }),
                 },
             )]),
-            intervention_policy_parameters: None,
-            facemask_parameters: None,
+            ..Default::default()
         };
 
         context
