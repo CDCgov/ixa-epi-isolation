@@ -11,6 +11,11 @@
 
 set.seed(456)
 
+file_path <- "tests/input"
+if (!dir.exists(file_path)){
+    dir.create(file_path)
+}
+
 ### Exponentially distributed infectious period: rate_fns_exp_I ###
 ### empirical rate functions that correspond to SIR or SIS assumptions
 
@@ -38,7 +43,7 @@ rate_fns_exp_I <- rbind(rate_fns_exp_I_start_df, rate_fns_exp_I_end_df)
 rate_fns_exp_I <- rate_fns_exp_I[order(rate_fns_exp_I$id), ]
 
 write.csv(x = rate_fns_exp_I,
-    file = "tests/data/rate_fns_exp_I.csv",
+    file = "tests/input/rate_fns_exp_I.csv",
     row.names = FALSE)
 
 ### Exponentially distributed latent and infectious periods:
@@ -64,7 +69,7 @@ rate_fns_exp_E_exp_I_end_df)
 rate_fns_exp_E_exp_I <- rate_fns_exp_E_exp_I[order(rate_fns_exp_E_exp_I$id), ]
 
 write.csv(x = rate_fns_exp_E_exp_I,
-    file = "tests/data/rate_fns_exp_E_exp_I.csv",
+    file = "tests/input/rate_fns_exp_E_exp_I.csv",
     row.names = FALSE)
 
 ### Empirical rate function for "triangle" infectiousness: rate_fn_triangle ###
@@ -81,5 +86,5 @@ rate_fn_triangle <- data.frame(
     "time" = c(1, 1.5, 3),
     "value" = c(0, 3, 0))
 
-write.csv(x = rate_fn_triangle, file = "tests/data/rate_fn_triangle.csv",
+write.csv(x = rate_fn_triangle, file = "tests/input/rate_fn_triangle.csv",
 row.names = FALSE)

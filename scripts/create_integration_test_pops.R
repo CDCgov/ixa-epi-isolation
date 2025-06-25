@@ -3,6 +3,11 @@
 
 ### This script is assumed to run from the root directory of the repo.
 
+file_path <- "tests/input"
+if (!dir.exists(file_path)){
+    dir.create(file_path)
+}
+
 ### This script makes 3 synthentic population .csv files:
 ### simple_pop, unique_hh_pop, two_hh_pop
 
@@ -13,14 +18,14 @@ pop_size <- 50
 
 simple_pop <- data.frame(
   "age" = rep(1, times = pop_size),
-  "homeId" = 10000000000,
+  "homeId" = "10000000000",
   "schoolId" = NA,
   "workplaceId" = NA
 )
 
 write.csv(
   x = simple_pop,
-  file = "tests/data/simple_pop.csv",
+  file = "tests/input/pop_simple.csv",
   row.names = FALSE,
   na = ""
 )
@@ -37,7 +42,7 @@ unique_hh_pop <- data.frame(
 
 write.csv(
   x = unique_hh_pop,
-  file = "tests/data/unique_hh_pop.csv",
+  file = "tests/input/pop_unique_hh.csv",
   row.names = FALSE,
   na = ""
 )
@@ -58,7 +63,7 @@ two_hh_pop <- data.frame(
 
 write.csv(
   x = two_hh_pop,
-  file = "tests/data/two_hh_pop.csv",
+  file = "tests/input/pop_two_hh.csv",
   row.names = FALSE,
   na = ""
 )
