@@ -1,3 +1,4 @@
+# nolint start: object_name_linter.
 ### Generate ordinary differential equation compartmental model output ###
 # Output from these ordinary differential equations will be used to compare
 # to Ixa output for the purpose of integration testing; importantly, a single
@@ -28,7 +29,7 @@ sir_model <- function(time, state, parameters) {
   dI <- beta * S * I / (S + I + R) - gamma * I
   dR <- gamma * I
 
-  return(list(c(dS, dI, dR)))
+  list(c(dS, dI, dR))
 }
 
 # Define the SEIR model function
@@ -50,26 +51,7 @@ seir_model <- function(time, state, parameters) {
   dI <- eta * E - gamma * I
   dR <- gamma * I
 
-  return(list(c(dS, dE, dI, dR)))
-}
-
-# Define the SIR model function for a two-population metapopulation model
-sir_model <- function(time, state, parameters) {
-  # Unpack state variables
-  S <- state[1]
-  I <- state[2]
-  R <- state[3]
-
-  # Unpack parameters
-  beta <- parameters["beta"]
-  gamma <- parameters["gamma"]
-
-  # Calculate derivatives
-  dS <- -beta * S * I / (S + I + R)
-  dI <- beta * S * I / (S + I + R) - gamma * I
-  dR <- gamma * I
-
-  return(list(c(dS, dI, dR)))
+  list(c(dS, dE, dI, dR))
 }
 
 pop_size <- 50
@@ -121,7 +103,10 @@ ode_results_SEIR <- ode(
 
 ode_results_df_SEIR <- ode_results_SEIR |>
   as.data.frame() |>
-  rename(t = time, Susceptible = S, Exposed = E, Infectious = I, Recovered = R) |>
+  rename(
+    t = time, Susceptible = S, Exposed = E,
+    Infectious = I, Recovered = R
+  ) |>
   pivot_longer(
     cols = c(Susceptible, Exposed, Infectious, Recovered),
     names_to = "InfectionStatus",
@@ -137,3 +122,4 @@ write.csv(
 
 # Additional ODE output that is needed
 # SIR ODE output, R0 = 2 (beta = 1, mean duration infectiousness 2)
+# nolint end: object_name_linter.
