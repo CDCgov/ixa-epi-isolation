@@ -11,20 +11,23 @@ def main(config_file):
     rate_fns_path = "tests/input/rate_fns_exp_I.csv"
     if not os.path.exists(rate_fns_path):
         # These should create ALL of the rates, populations, and ODE output, not just the rate_fns_SIR.csv
-        subprocess.run("Rscript scripts/create_integration_test_rate_fns.R".split())
-        subprocess.run("Rscript scripts/create_integration_test_pops.R".split())
+        subprocess.run(
+            "Rscript scripts/create_integration_test_rate_fns.R".split()
+        )
+        subprocess.run(
+            "Rscript scripts/create_integration_test_pops.R".split()
+        )
         subprocess.run("Rscript scripts/create_ode_output.R".split())
 
     experiment = Experiment(
-        experiments_directory="tests",
-        config_file=config_file
+        experiments_directory="tests", config_file=config_file
     )
     simulation_df = wrappers.create_simulation_data(
-        experiment=experiment, 
-        data_processing_fn=return_infection_count
+        experiment=experiment, data_processing_fn=return_infection_count
     )
 
     print(simulation_df)
+
 
 def return_infection_count(directory: str):
     file_path = os.path.join(directory, "person_property_count.csv")
@@ -36,6 +39,7 @@ def return_infection_count(directory: str):
     df = df.group_by(["t", "InfectionStatus"]).agg(pl.col("count").sum())
 
     return df
+
 
 def return_raw_count(directory: str):
     file_path = os.path.join(directory, "person_property_count.csv")

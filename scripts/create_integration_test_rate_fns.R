@@ -12,8 +12,8 @@
 set.seed(456)
 
 file_path <- "tests/input"
-if (!dir.exists(file_path)){
-    dir.create(file_path)
+if (!dir.exists(file_path)) {
+  dir.create(file_path)
 }
 
 ### Exponentially distributed infectious period: rate_fns_exp_I ###
@@ -30,21 +30,25 @@ id <- seq_len(num_ids)
 infectious_duration <- rexp(n = num_ids, rate = 1 / mean_duration_infectious)
 
 rate_fns_exp_I_start_df <- data.frame(
-    "id" = id,
-    "time" = 0,
-    "value" = beta_infectiousness)
+  "id" = id,
+  "time" = 0,
+  "value" = beta_infectiousness
+)
 
 rate_fns_exp_I_end_df <- data.frame(
-    "id" = id,
-    "time" = infectious_duration,
-    "value" = beta_infectiousness)
+  "id" = id,
+  "time" = infectious_duration,
+  "value" = beta_infectiousness
+)
 
 rate_fns_exp_I <- rbind(rate_fns_exp_I_start_df, rate_fns_exp_I_end_df)
 rate_fns_exp_I <- rate_fns_exp_I[order(rate_fns_exp_I$id), ]
 
-write.csv(x = rate_fns_exp_I,
-    file = "tests/input/rate_fns_exp_I.csv",
-    row.names = FALSE)
+write.csv(
+  x = rate_fns_exp_I,
+  file = "tests/input/rate_fns_exp_I.csv",
+  row.names = FALSE
+)
 
 ### Exponentially distributed latent and infectious periods:
 ### rate_fns_exp_E_exp_I ###
@@ -55,22 +59,28 @@ mean_duration_latent <- 1 # mean number of time units in latent period
 latent_duration <- rexp(n = num_ids, rate = 1 / mean_duration_latent)
 
 rate_fns_exp_E_exp_I_start_df <- data.frame(
-    "id" = id,
-    "time" = latent_duration,
-    "value" = beta_infectiousness)
+  "id" = id,
+  "time" = latent_duration,
+  "value" = beta_infectiousness
+)
 
 rate_fns_exp_E_exp_I_end_df <- data.frame(
-    "id" = id,
-    "time" = latent_duration + infectious_duration,
-    "value" = beta_infectiousness)
+  "id" = id,
+  "time" = latent_duration + infectious_duration,
+  "value" = beta_infectiousness
+)
 
-rate_fns_exp_E_exp_I <- rbind(rate_fns_exp_E_exp_I_start_df,
-rate_fns_exp_E_exp_I_end_df)
+rate_fns_exp_E_exp_I <- rbind(
+  rate_fns_exp_E_exp_I_start_df,
+  rate_fns_exp_E_exp_I_end_df
+)
 rate_fns_exp_E_exp_I <- rate_fns_exp_E_exp_I[order(rate_fns_exp_E_exp_I$id), ]
 
-write.csv(x = rate_fns_exp_E_exp_I,
-    file = "tests/input/rate_fns_exp_E_exp_I.csv",
-    row.names = FALSE)
+write.csv(
+  x = rate_fns_exp_E_exp_I,
+  file = "tests/input/rate_fns_exp_E_exp_I.csv",
+  row.names = FALSE
+)
 
 ### Empirical rate function for "triangle" infectiousness: rate_fn_triangle ###
 ### empirical rate function where infectiousness starts 1 time unit after
@@ -82,9 +92,12 @@ write.csv(x = rate_fns_exp_E_exp_I,
 ### time-varying, and 2) the same rate function is applied to all infections
 
 rate_fn_triangle <- data.frame(
-    "id" = 1,
-    "time" = c(1, 1.5, 3),
-    "value" = c(0, 3, 0))
+  "id" = 1,
+  "time" = c(1, 1.5, 3),
+  "value" = c(0, 3, 0)
+)
 
-write.csv(x = rate_fn_triangle, file = "tests/input/rate_fn_triangle.csv",
-row.names = FALSE)
+write.csv(
+  x = rate_fn_triangle, file = "tests/input/rate_fn_triangle.csv",
+  row.names = FALSE
+)

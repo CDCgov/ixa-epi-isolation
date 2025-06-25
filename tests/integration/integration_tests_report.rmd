@@ -9,7 +9,7 @@ This report is intended to serve three purposes:
 
 1) To generate figures and other output that, by visual inspection, serve as integration tests that demonstrate that Ixa-epi-isolation is performing as expected. The primary conceptual basis for these tests is to compare output from Ixa with output from ordinary differential equation models.
 2) To document how to perform various modeling tasks in Ixa-epi-isolation, with a focus on the specifications set in the input `.json` files.
-3) To compare and contrast agent-based and ODE modeling approaches, demonstrating how ODE assumptions can be encoded in Ixa. 
+3) To compare and contrast agent-based and ODE modeling approaches, demonstrating how ODE assumptions can be encoded in Ixa.
 
 ```{r, echo = FALSE, warning = FALSE, message = FALSE}
 # load packages
@@ -36,21 +36,29 @@ ixa_SIR_df <- as.data.frame(open_dataset("sir/data/simulations"))
 ode_results_SIR <- read.csv("../input/ode_results_SIR.csv")
 
 ode_results_SIR$InfectionStatus <- factor(ode_results_SIR$InfectionStatus,
-levels = c("Susceptible", "Infectious", "Recovered"))
+  levels = c("Susceptible", "Infectious", "Recovered")
+)
 
 ixa_SIR_df |>
   ggplot() +
-  geom_line(aes(x = t, y = count,
-  group = interaction(simulation, InfectionStatus), color = InfectionStatus),
-  alpha = 0.1) +
+  geom_line(
+    aes(
+      x = t, y = count,
+      group = interaction(simulation, InfectionStatus), color = InfectionStatus
+    ),
+    alpha = 0.1
+  ) +
   xlab("Day") +
   ylab("Number of people (prevalence)") +
   theme_minimal() +
-  geom_line(data = ode_results_SIR,
-    aes(x = t, y = count, color = InfectionStatus)) +
-  scale_color_manual(values = c("Susceptible" = "blue",
-  "Infectious" = "red", "Recovered" = "green"))
-
+  geom_line(
+    data = ode_results_SIR,
+    aes(x = t, y = count, color = InfectionStatus)
+  ) +
+  scale_color_manual(values = c(
+    "Susceptible" = "blue",
+    "Infectious" = "red", "Recovered" = "green"
+  ))
 ```
 
 ## Simple SEIR model
@@ -71,18 +79,27 @@ ixa_SEIR_df <- as.data.frame(open_dataset("seir/data/simulations"))
 ode_results_SEIR <- read.csv("../input/ode_results_SEIR.csv")
 
 ode_results_SEIR$InfectionStatus <- factor(ode_results_SEIR$InfectionStatus,
-levels = c("Susceptible", "Exposed", "Infectious", "Recovered"))
+  levels = c("Susceptible", "Exposed", "Infectious", "Recovered")
+)
 
 ixa_SEIR_df |>
   ggplot() +
-  geom_line(aes(x = t, y = count,
-  group = interaction(simulation, InfectionStatus), color = InfectionStatus),
-  alpha = 0.1) +
+  geom_line(
+    aes(
+      x = t, y = count,
+      group = interaction(simulation, InfectionStatus), color = InfectionStatus
+    ),
+    alpha = 0.1
+  ) +
   xlab("Day") +
   ylab("Number of people (prevalence)") +
-  theme_minimal() + 
-  geom_line(data = ode_results_SEIR,
-    aes(x = t, y = count, color = InfectionStatus)) +
-  scale_color_manual(values = c("Susceptible" = "blue", "Exposed" = "purple",
-  "Infectious" = "red", "Recovered" = "green"))
+  theme_minimal() +
+  geom_line(
+    data = ode_results_SEIR,
+    aes(x = t, y = count, color = InfectionStatus)
+  ) +
+  scale_color_manual(values = c(
+    "Susceptible" = "blue", "Exposed" = "purple",
+    "Infectious" = "red", "Recovered" = "green"
+  ))
 ```
