@@ -1,0 +1,88 @@
+---
+title: "Ixa-epi-isolation integration tests and documentation"
+output: html_document
+---
+
+# Preface
+
+This report is intended to serve three purposes:
+
+1) To generate figures and other output that, by visual inspection, serve as integration tests that demonstrate that Ixa-epi-isolation is performing as expected. The primary conceptual basis for these tests is to compare output from Ixa with output from ordinary differential equation models.
+2) To document how to perform various modeling tasks in Ixa-epi-isolation, with a focus on the specifications set in the input `.json` files.
+3) To compare and contrast agent-based and ODE modeling approaches, demonstrating how ODE assumptions can be encoded in Ixa. 
+
+```{r, echo = FALSE, warning = FALSE, message = FALSE}
+# load packages
+
+library(tidyverse)
+library(arrow)
+```
+
+## Simple SIR model
+This integration test compares output from Ixa with output from a simple SIR ODE model. The key to getting Ixa to reflect canonical SIR ODE assumptions is to create a "rate function" where each infected individual's duration of infectiousness is drawn from an exponential distribution.
+
+The key part of the file `tests/integration/sir/input/input_simple_SIR.json` that specifies the rate function is as follows:
+
+```
+    "infectiousness_rate_fn": {
+      "EmpiricalFromFile": {
+        "file": "tests/input/rate_fns_exp_I.csv",
+        "scale": 1.0
+      }
+    }
+```
+```{r, echo = FALSE}
+ixa_SIR_df <- as.data.frame(open_dataset("sir/data/simulations"))
+ode_results_SIR <- read.csv("../input/ode_results_SIR.csv")
+
+ode_results_SIR$InfectionStatus <- factor(ode_results_SIR$InfectionStatus,
+levels = c("Susceptible", "Infectious", "Recovered"))
+
+ixa_SIR_df |>
+  ggplot() +
+  geom_line(aes(x = t, y = count,
+  group = interaction(simulation, InfectionStatus), color = InfectionStatus),
+  alpha = 0.1) +
+  xlab("Day") +
+  ylab("Number of people (prevalence)") +
+  theme_minimal() +
+  geom_line(data = ode_results_SIR,
+    aes(x = t, y = count, color = InfectionStatus)) +
+  scale_color_manual(values = c("Susceptible" = "blue",
+  "Infectious" = "red", "Recovered" = "green"))
+
+```
+
+## Simple SEIR model
+This integration test compares output from Ixa with output from a simple SEIR ODE model. The key to getting Ixa to reflect canonical SIR ODE assumptions is to create a "rate function" where, as in the SIR example, each infected individual's duration of infectiousness is drawn from an exponential distribution, but the difference is that there is an exponentially distributed period from when infection occurs to when infectiousness begins.
+
+The file `tests/integration/seir/input/input_simple_SEIR.json` was modfied as follows to specify a different rate function.
+
+```
+    "infectiousness_rate_fn": {
+      "EmpiricalFromFile": {
+        "file": "tests/input/rate_fns_exp_E_exp_I.csv",
+        "scale": 1.0
+      }
+    }
+```
+```{r, echo = FALSE}
+ixa_SEIR_df <- as.data.frame(open_dataset("seir/data/simulations"))
+ode_results_SEIR <- read.csv("../input/ode_results_SEIR.csv")
+
+ode_results_SEIR$InfectionStatus <- factor(ode_results_SEIR$InfectionStatus,
+levels = c("Susceptible", "Exposed", "Infectious", "Recovered"))
+
+ixa_SEIR_df |>
+  ggplot() +
+  geom_line(aes(x = t, y = count,
+  group = interaction(simulation, InfectionStatus), color = InfectionStatus),
+  alpha = 0.1) +
+  xlab("Day") +
+  ylab("Number of people (prevalence)") +
+  theme_minimal() + 
+  geom_line(data = ode_results_SEIR,
+    aes(x = t, y = count, color = InfectionStatus)) +
+  scale_color_manual(values = c("Susceptible" = "blue", "Exposed" = "purple",
+  "Infectious" = "red", "Recovered" = "green"))
+```
