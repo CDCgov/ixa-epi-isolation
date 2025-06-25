@@ -6,7 +6,6 @@
 # Load necessary libraries
 library(tidyverse)
 library(deSolve)
-library(jsonlite)
 
 file_path <- "tests/input"
 if (!dir.exists(file_path)){
