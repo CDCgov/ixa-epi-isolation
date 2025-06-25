@@ -8,8 +8,8 @@ library(tidyverse)
 library(deSolve)
 
 file_path <- "tests/input"
-if (!dir.exists(file_path)){
-    dir.create(file_path)
+if (!dir.exists(file_path)) {
+  dir.create(file_path)
 }
 
 # Define the SIR model function

@@ -4,8 +4,8 @@
 ### This script is assumed to run from the root directory of the repo.
 
 file_path <- "tests/input"
-if (!dir.exists(file_path)){
-    dir.create(file_path)
+if (!dir.exists(file_path)) {
+  dir.create(file_path)
 }
 
 ### This script makes 3 synthentic population .csv files:
@@ -55,8 +55,10 @@ second_hh_size <- pop_size - first_hh_size
 
 two_hh_pop <- data.frame(
   "age" = rep(1, times = pop_size),
-  "homeId" = c(rep(1000000000001, times = first_hh_size),
-               rep(1000000000002, times = second_hh_size)),
+  "homeId" = c(
+    rep(1000000000001, times = first_hh_size),
+    rep(1000000000002, times = second_hh_size)
+  ),
   "schoolId" = NA,
   "workplaceId" = NA
 )
