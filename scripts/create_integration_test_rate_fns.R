@@ -1,3 +1,4 @@
+# nolint start: object_name_linter.
 ### This script creates empirical rate functions for use in integration tests.
 ### A single set of rate functions may be used in multiple integration tests.
 
@@ -101,3 +102,4 @@ write.csv(
   x = rate_fn_triangle, file = "tests/input/rate_fn_triangle.csv",
   row.names = FALSE
 )
+# nolint end: object_name_linter.
