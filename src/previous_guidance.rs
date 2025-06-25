@@ -16,7 +16,6 @@ use crate::{
 define_person_property_with_default!(MaskingStatus, bool, false);
 define_person_property_with_default!(IsolatingStatus, bool, false);
 define_person_property_with_default!(LastTestResult, bool, false);
-define_person_property_with_default!(NumberOfTests, u32, 0);
 define_person_property_with_default!(SymptomStartTime, f64, 0.0);
 
 define_derived_property!(PresentingWithSymptoms, bool, [Symptoms], |symptom_value| {
@@ -95,8 +94,10 @@ impl ContextIsolationGuidanceInternalExt for Context {
                     self.get_current_time()
                         + intervention_policy_parameters.negative_test_isolation_duration,
                     move |context| {
-                        context.administer_test(person_id, intervention_policy_parameters);
-                        trace!("Person {person_id} was tested");
+                        if context.get_person_property(person_id, PresentingWithSymptoms) {
+                            context.administer_test(person_id, intervention_policy_parameters);
+                            trace!("Person {person_id} was tested");
+                        }
                     },
                 );
             }
@@ -126,11 +127,6 @@ impl ContextIsolationGuidanceInternalExt for Context {
         person_id: PersonId,
         intervention_policy_parameters: InterventionPolicyParameters,
     ) {
-        self.set_person_property(
-            person_id,
-            NumberOfTests,
-            self.get_person_property(person_id, NumberOfTests) + 1,
-        );
         if self.sample_bool(PolicyRng, intervention_policy_parameters.test_sensitivity) {
             trace!("Person {person_id} tested positive.");
             self.set_person_property(person_id, LastTestResult, true);
@@ -145,10 +141,7 @@ impl ContextIsolationGuidanceInternalExt for Context {
         person_id: PersonId,
         intervention_policy_parameters: InterventionPolicyParameters,
     ) {
-        if self.sample_bool(
-            PolicyRng,
-            intervention_policy_parameters.isolation_probability,
-        ) {
+        if self.get_person_property(person_id, IsolatingStatus) {
             let mut remaining_isolation_duration = -1.0;
             let symptoms = self.get_person_property(person_id, Symptoms);
             let current_duration_isolation =

@@ -61,6 +61,7 @@ fn main() {
         infection_propagation_loop::init(context)?;
         transmission_report::init(context)?;
         symptom_progression::init(context)?;
+        previous_guidance::init(context);
 
         Ok(())
     })
