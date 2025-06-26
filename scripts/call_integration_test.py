@@ -7,7 +7,7 @@ from abmwrappers import wrappers
 from abmwrappers.experiment_class import Experiment
 
 
-def main(config_file):
+def main(config_file, verbose):
     rate_fns_path = "tests/input/rate_fns_exp_I.csv"
     if not os.path.exists(rate_fns_path):
         # These should create ALL of the rates, populations, and ODE output, not just the rate_fns_SIR.csv
@@ -26,7 +26,8 @@ def main(config_file):
         experiment=experiment, data_processing_fn=return_infection_count
     )
 
-    print(simulation_df)
+    if verbose:
+        print(simulation_df)
 
 
 def return_infection_count(directory: str):
@@ -41,16 +42,6 @@ def return_infection_count(directory: str):
     return df
 
 
-def return_raw_count(directory: str):
-    file_path = os.path.join(directory, "person_property_count.csv")
-    if os.path.exists(file_path):
-        df = pl.read_csv(file_path)
-    else:
-        raise FileNotFoundError(f"Expected file not found: {file_path}")
-
-    return df
-
-
 parser = argparse.ArgumentParser()
 parser.add_argument(
     "-f",
@@ -59,5 +50,6 @@ parser.add_argument(
     required=True,
     help="Path to the configuration file.",
 )
+parser.add_argument("-v", "--verbose", action="store_true")
 args = parser.parse_args()
-main(config_file=args.config_file)
+main(config_file=args.config_file, verbose=args.verbose)
