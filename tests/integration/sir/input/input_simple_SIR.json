@@ -1,24 +1,27 @@
 {
   "epi_isolation.GlobalParams": {
-    "max_time": 50,
-    "seed": 50,
-    "infectiousness_rate_fn": {
-      "EmpiricalFromFile": {
-        "file": "tests/input/rate_fns_exp_I.csv",
-        "scale": 1.0
-      }
+    "max_time": 50.0,
+    "seed": 123,
+    "infectiousness_rate_fn": {"EmpiricalFromFile": {"file": "tests/input/rate_fns_exp_I.csv",
+                                                     "scale": 1.0}},
+    "initial_incidence": 0.01,
+    "initial_recovered": 0.0,
+    "proportion_asymptomatic": 0.0,
+    "relative_infectiousness_asymptomatics": 1.0,
+    "settings_properties": {"Home": {"alpha": 0.0,
+                                     "itinerary_specification": {"Constant": {"ratio": 0.5}}},
+                            "CensusTract": {"alpha": 0.0,
+                                            "itinerary_specification": {"Constant": {"ratio": 0.5}}}},
+    "report_period": 1.0,
+    "synth_population_file": "tests/input/pop_simple.csv",
+    "transmission_report_name": "transmission_report.csv",
+    "intervention_policy_parameters": {
+      "post_isolation_duration": 0.0,
+      "isolation_probability": 0.0,
+      "isolation_delay_period": 0.0
     },
-    "initial_infections": 1,
-    "settings_properties": [
-      {"Home": {"alpha": 0}},
-      {"CensusTract": {"alpha": 0}}
-    ],
-    "itinerary_fn_type": {"Split": {
-      "home": 0.5,
-      "school": 0.0,
-      "workplace": 0.0,
-      "census_tract": 0.5}},
-    "report_period": 1,
-    "synth_population_file": "tests/input/pop_simple.csv"
+    "facemask_parameters": {
+      "facemask_efficacy": 0.0
+    }
   }
 }
