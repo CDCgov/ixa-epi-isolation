@@ -6,6 +6,5 @@ That bash script will generate inputs (by running `scripts/create_integration_te
 
 The following actions are required before running the bash script:
 
-- Ensure that a release version of the model has been built and is located at `target/release`. If necessary, run `cargo --build release`.
 - Ensure the following R packages are installed: `tidyverse`, `deSolve`, `arrow`, and `rmarkdown`.
 - Run `poetry install`.
