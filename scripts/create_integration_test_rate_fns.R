@@ -1,4 +1,3 @@
-# nolint start: object_name_linter.
 ### This script creates empirical rate functions for use in integration tests.
 ### A single set of rate functions may be used in multiple integration tests.
 
@@ -17,36 +16,43 @@ if (!dir.exists(file_path)) {
   dir.create(file_path)
 }
 
+### Define parameters ###
+# hard-coded parameters that are also used in base-case SIR and SEIR ODE model
+
+gamma <- 1 / 2
+eta <- 1
+beta <- 1.5
+
 ### Exponentially distributed infectious period: rate_fns_exp_I ###
 ### empirical rate functions that correspond to SIR or SIS assumptions
 
 num_ids <- 1000 # number of "draws" of rate function to create
-mean_duration_infectious <- 2 # mean number of time units infectious
-beta_infectiousness <- 1.5 # expected onward transmissions per unit time
+mean_duration_infectious <- 1 / gamma # mean number of time units infectious
+beta_infectiousness <- beta # expected onward transmissions per unit time
 
 # when infectiousness is constant within infectious period
-# we only need to set a start and end time
+# we only need to set start and end times because interpolated in between
 
 id <- seq_len(num_ids)
 infectious_duration <- rexp(n = num_ids, rate = 1 / mean_duration_infectious)
 
-rate_fns_exp_I_start_df <- data.frame(
+rate_fns_exp_i_start_df <- data.frame(
   "id" = id,
   "time" = 0,
   "value" = beta_infectiousness
 )
 
-rate_fns_exp_I_end_df <- data.frame(
+rate_fns_exp_i_end_df <- data.frame(
   "id" = id,
   "time" = infectious_duration,
   "value" = beta_infectiousness
 )
 
-rate_fns_exp_I <- rbind(rate_fns_exp_I_start_df, rate_fns_exp_I_end_df)
-rate_fns_exp_I <- rate_fns_exp_I[order(rate_fns_exp_I$id), ]
+rate_fns_exp_i <- rbind(rate_fns_exp_i_start_df, rate_fns_exp_i_end_df)
+rate_fns_exp_i <- rate_fns_exp_i[order(rate_fns_exp_i$id), ]
 
 write.csv(
-  x = rate_fns_exp_I,
+  x = rate_fns_exp_i,
   file = "tests/input/rate_fns_exp_I.csv",
   row.names = FALSE
 )
@@ -55,30 +61,30 @@ write.csv(
 ### rate_fns_exp_E_exp_I ###
 ### empirical rate functions that correspond to SEIR or SEIS assumptions
 
-mean_duration_latent <- 1 # mean number of time units in latent period
+mean_duration_latent <- 1 / eta # mean number of time units in latent period
 
 latent_duration <- rexp(n = num_ids, rate = 1 / mean_duration_latent)
 
-rate_fns_exp_E_exp_I_start_df <- data.frame(
+rate_fns_exp_e_exp_i_start_df <- data.frame(
   "id" = id,
   "time" = latent_duration,
   "value" = beta_infectiousness
 )
 
-rate_fns_exp_E_exp_I_end_df <- data.frame(
+rate_fns_exp_e_exp_i_end_df <- data.frame(
   "id" = id,
   "time" = latent_duration + infectious_duration,
   "value" = beta_infectiousness
 )
 
-rate_fns_exp_E_exp_I <- rbind(
-  rate_fns_exp_E_exp_I_start_df,
-  rate_fns_exp_E_exp_I_end_df
+rate_fns_exp_e_exp_i <- rbind(
+  rate_fns_exp_e_exp_i_start_df,
+  rate_fns_exp_e_exp_i_end_df
 )
-rate_fns_exp_E_exp_I <- rate_fns_exp_E_exp_I[order(rate_fns_exp_E_exp_I$id), ]
+rate_fns_exp_e_exp_i <- rate_fns_exp_e_exp_i[order(rate_fns_exp_e_exp_i$id), ]
 
 write.csv(
-  x = rate_fns_exp_E_exp_I,
+  x = rate_fns_exp_e_exp_i,
   file = "tests/input/rate_fns_exp_E_exp_I.csv",
   row.names = FALSE
 )
@@ -102,4 +108,3 @@ write.csv(
   x = rate_fn_triangle, file = "tests/input/rate_fn_triangle.csv",
   row.names = FALSE
 )
-# nolint end: object_name_linter.

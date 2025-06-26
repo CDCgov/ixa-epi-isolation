@@ -1,8 +1,19 @@
-# nolint start: object_name_linter.
 ### Generate ordinary differential equation compartmental model output ###
 # Output from these ordinary differential equations will be used to compare
 # to Ixa output for the purpose of integration testing; importantly, a single
 # ODE simulation run may be used in multiple integration tests.
+
+### Define parameters ###
+# single place in script for hard-coded parameters
+pop_size <- 100
+init_infect <- 1
+
+gamma <- 1 / 2
+eta <- 1
+beta <- 1.5
+
+max_time <- 50
+time_step <- 1
 
 # Load necessary libraries
 library(tidyverse)
@@ -16,29 +27,29 @@ if (!dir.exists(file_path)) {
 # Define the SIR model function
 sir_model <- function(time, state, parameters) {
   # Unpack state variables
-  S <- state[1]
-  I <- state[2]
-  R <- state[3]
+  s <- state[1]
+  i <- state[2]
+  r <- state[3]
 
   # Unpack parameters
   beta <- parameters["beta"]
   gamma <- parameters["gamma"]
 
   # Calculate derivatives
-  dS <- -beta * S * I / (S + I + R)
-  dI <- beta * S * I / (S + I + R) - gamma * I
-  dR <- gamma * I
+  ds <- -beta * s * i / (s + i + r)
+  di <- beta * s * i / (s + i + r) - gamma * i
+  dr <- gamma * i
 
-  list(c(dS, dI, dR))
+  list(c(ds, di, dr))
 }
 
 # Define the SEIR model function
 seir_model <- function(time, state, parameters) {
   # Unpack state variables
-  S <- state[1]
-  E <- state[2]
-  I <- state[3]
-  R <- state[4]
+  s <- state[1]
+  e <- state[2]
+  i <- state[3]
+  r <- state[4]
 
   # Unpack parameters
   beta <- parameters["beta"]
@@ -46,41 +57,39 @@ seir_model <- function(time, state, parameters) {
   gamma <- parameters["gamma"]
 
   # Calculate derivatives
-  dS <- -beta * S * I / (S + E + I + R)
-  dE <- beta * S * I / (S + E + I + R) - eta * E
-  dI <- eta * E - gamma * I
-  dR <- gamma * I
+  ds <- -beta * s * i / (s + e + i + r)
+  de <- beta * s * i / (s + e + i + r) - eta * e
+  di <- eta * e - gamma * i
+  dr <- gamma * i
 
-  list(c(dS, dE, dI, dR))
+  list(c(ds, de, di, dr))
 }
 
-pop_size <- 50
-
 # Initial conditions
-initial_state_SIR <- c(S = pop_size - 1, I = 1, R = 0)
-initial_state_SEIR <- c(S = pop_size - 1, E = 1, I = 0, R = 0)
-
-# Define parameters
-gamma <- 1 / 2
-eta <- 1
-beta <- 1.5
-parameters_SIR <- c(beta = beta, gamma = gamma)
-parameters_SEIR <- c(beta = beta, eta = eta, gamma = gamma)
-
-# Time sequence for simulation (e.g., from day 0 to day 100)
-time_sequence <- seq(0, 50, by = 1)
-
-# Run the ODE solver
-ode_results_SIR <- ode(
-  y = initial_state_SIR,
-  times = time_sequence,
-  func = sir_model,
-  parms = parameters_SIR
+initial_state_sir <- c(s = pop_size - init_infect, i = init_infect, r = 0)
+initial_state_seir <- c(
+  s = pop_size - init_infect, e = init_infect,
+  i = 0, r = 0
 )
 
-ode_results_df_SIR <- ode_results_SIR |>
+# Create parameter vectors
+parameters_sir <- c(beta = beta, gamma = gamma)
+parameters_seir <- c(beta = beta, eta = eta, gamma = gamma)
+
+# Time sequence for simulation output
+time_sequence <- seq(0, max_time, by = time_step)
+
+# Run the ODE solver
+ode_results_sir <- ode(
+  y = initial_state_sir,
+  times = time_sequence,
+  func = sir_model,
+  parms = parameters_sir
+)
+
+ode_results_df_sir <- ode_results_sir |>
   as.data.frame() |>
-  rename(t = time, Susceptible = S, Infectious = I, Recovered = R) |>
+  rename(t = time, Susceptible = s, Infectious = i, Recovered = r) |>
   pivot_longer(
     cols = c(Susceptible, Infectious, Recovered),
     names_to = "InfectionStatus",
@@ -88,24 +97,24 @@ ode_results_df_SIR <- ode_results_SIR |>
   )
 
 write.csv(
-  x = ode_results_df_SIR,
+  x = ode_results_df_sir,
   file = "tests/input/ode_results_SIR.csv",
   row.names = FALSE,
   na = ""
 )
 
-ode_results_SEIR <- ode(
-  y = initial_state_SEIR,
+ode_results_seir <- ode(
+  y = initial_state_seir,
   times = time_sequence,
   func = seir_model,
-  parms = parameters_SEIR
+  parms = parameters_seir
 )
 
-ode_results_df_SEIR <- ode_results_SEIR |>
+ode_results_df_seir <- ode_results_seir |>
   as.data.frame() |>
   rename(
-    t = time, Susceptible = S, Exposed = E,
-    Infectious = I, Recovered = R
+    t = time, Susceptible = s, Exposed = e,
+    Infectious = i, Recovered = r
   ) |>
   pivot_longer(
     cols = c(Susceptible, Exposed, Infectious, Recovered),
@@ -114,7 +123,7 @@ ode_results_df_SEIR <- ode_results_SEIR |>
   )
 
 write.csv(
-  x = ode_results_df_SEIR,
+  x = ode_results_df_seir,
   file = "tests/input/ode_results_SEIR.csv",
   row.names = FALSE,
   na = ""
@@ -122,4 +131,3 @@ write.csv(
 
 # Additional ODE output that is needed
 # SIR ODE output, R0 = 2 (beta = 1, mean duration infectiousness 2)
-# nolint end: object_name_linter.
