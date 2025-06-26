@@ -1,6 +1,10 @@
 ### This script creates synthetic populations for use in integration tests.
 ### A single synthetic population may be used in multiple integration tests.
 
+### Define parameters ###
+# single place in script for all hard-coded parameters
+pop_size <- 100
+
 ### This script is assumed to run from the root directory of the repo.
 
 file_path <- "tests/input"
@@ -13,8 +17,6 @@ if (!dir.exists(file_path)) {
 
 ### Simple homogeneous mixing population: simple_pop ###
 ### synthetic population where all persons live in same household
-
-pop_size <- 50
 
 simple_pop <- data.frame(
   "age" = rep(1, times = pop_size),
