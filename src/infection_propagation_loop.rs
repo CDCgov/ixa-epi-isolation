@@ -22,14 +22,21 @@ fn schedule_next_forecasted_infection(context: &mut Context, person: PersonId) {
     {
         context.add_plan(next_time, move |context| {
             if evaluate_forecast(context, person, forecasted_total_infectiousness) {
-                if let Some(setting_id) = context.get_setting_for_contact(person) {
-                    let str_setting = setting_id.setting_type.get_name();
-                    let id = setting_id.id;
-                    if let Some(next_contact) =
-                        infection_attempt(context, person, setting_id)
-                    {
-                        trace!("Person {person}: Forecast accepted, setting type {str_setting} {id}, infecting {next_contact}");
-                        context.infect_person(next_contact, Some(person), Some(str_setting), Some(id));
+                if let Some(setting) = context.get_setting_for_contact(person) {
+                    if let Some(next_contact) = infection_attempt(context, person, setting) {
+                        trace!(
+                            "Person {}: Forecast accepted, setting type {} {}, infecting {}",
+                            person,
+                            setting.name(),
+                            setting.id(),
+                            next_contact
+                        );
+                        context.infect_person(
+                            next_contact,
+                            Some(person),
+                            Some(setting.name()),
+                            Some(setting.id()),
+                        );
                     }
                 }
             }
@@ -133,7 +140,7 @@ mod test {
     };
 
     use crate::{
-        define_setting_type,
+        define_setting_category,
         infection_propagation_loop::{
             init, schedule_next_forecasted_infection, schedule_recovery, seed_initial_infections,
             seed_initial_recovered, InfectionStatus, InfectionStatusValue,
@@ -154,14 +161,14 @@ mod test {
         },
     };
 
-    define_setting_type!(HomogeneousMixing);
+    define_setting_category!(HomogeneousMixing);
 
     fn set_homogeneous_mixing_itinerary(
         context: &mut Context,
         person_id: PersonId,
     ) -> Result<(), IxaError> {
         let itinerary = vec![ItineraryEntry::new(
-            SettingId::new(&HomogeneousMixing, 0),
+            Box::new(SettingId::<HomogeneousMixing>::new(0)),
             1.0,
         )];
         context.add_itinerary(person_id, itinerary)
@@ -221,7 +228,7 @@ mod test {
         // we still have people in settings.
         context
             .register_setting_type(
-                HomogeneousMixing,
+                &SettingId::<HomogeneousMixing>::new(0),
                 SettingProperties {
                     alpha,
                     itinerary_specification: Some(ItinerarySpecificationType::Constant {
@@ -543,15 +550,22 @@ mod test {
                 let person_censustract = context.add_person(()).unwrap();
                 let person_workplace = context.add_person(()).unwrap();
                 let itinerary_all = vec![
-                    ItineraryEntry::new(SettingId::new(&Home, 0), ratio[0]),
-                    ItineraryEntry::new(SettingId::new(&CensusTract, 0), ratio[1]),
-                    ItineraryEntry::new(SettingId::new(&Workplace, 0), ratio[2]),
+                    ItineraryEntry::new(Box::new(SettingId::<Home>::new(0)), ratio[0]),
+                    ItineraryEntry::new(Box::new(SettingId::<CensusTract>::new(0)), ratio[1]),
+                    ItineraryEntry::new(Box::new(SettingId::<Workplace>::new(0)), ratio[2]),
                 ];
-                let itinerary_home = vec![ItineraryEntry::new(SettingId::new(&Home, 0), 1.0)];
-                let itinerary_censustract =
-                    vec![ItineraryEntry::new(SettingId::new(&CensusTract, 0), 1.0)];
-                let itinerary_workplace =
-                    vec![ItineraryEntry::new(SettingId::new(&Workplace, 0), 1.0)];
+                let itinerary_home = vec![ItineraryEntry::new(
+                    Box::new(SettingId::<Home>::new(0)),
+                    1.0,
+                )];
+                let itinerary_censustract = vec![ItineraryEntry::new(
+                    Box::new(SettingId::<CensusTract>::new(0)),
+                    1.0,
+                )];
+                let itinerary_workplace = vec![ItineraryEntry::new(
+                    Box::new(SettingId::<Workplace>::new(0)),
+                    1.0,
+                )];
                 context
                     .add_itinerary(infectious_person, itinerary_all)
                     .unwrap();
