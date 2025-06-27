@@ -7,7 +7,7 @@ use crate::{
     infectiousness_manager::InfectionStatusValue,
     interventions::ContextTransmissionModifierExt,
     parameters::{ContextParametersExt, InterventionPolicyParameters, Params},
-    settings::{ContextSettingExt, Home, ItineraryModifiers, SettingId},
+    settings::{ContextSettingExt, Home, ItineraryModifiers},
     symptom_progression::{SymptomValue, Symptoms},
 };
 
@@ -55,7 +55,7 @@ impl ContextIsolationGuidanceInternalExt for Context {
                 self.modify_itinerary(
                     person,
                     ItineraryModifiers::RestrictTo {
-                        setting: Box::new(SettingId::<Home>::new(0)),
+                        setting: Box::new(Home),
                     },
                 )?;
             } else {
