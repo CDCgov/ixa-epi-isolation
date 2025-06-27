@@ -228,7 +228,7 @@ mod test {
         // we still have people in settings.
         context
             .register_setting_type(
-                &SettingId::<HomogeneousMixing>::new(0),
+                &HomogeneousMixing,
                 SettingProperties {
                     alpha,
                     itinerary_specification: Some(ItinerarySpecificationType::Constant {

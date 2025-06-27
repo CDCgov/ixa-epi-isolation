@@ -283,7 +283,7 @@ mod test {
         load_rate_fns(&mut context).unwrap();
         context
             .register_setting_type(
-                &SettingId::<HomogeneousMixing>::new(0),
+                &HomogeneousMixing,
                 SettingProperties {
                     alpha: 1.0,
                     itinerary_specification: Some(ItinerarySpecificationType::Constant {

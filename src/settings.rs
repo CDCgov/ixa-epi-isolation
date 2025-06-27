@@ -24,7 +24,9 @@ pub struct SettingProperties {
     pub itinerary_specification: Option<ItinerarySpecificationType>,
 }
 
-pub trait SettingCategory: std::fmt::Debug + Clone + Hash + Eq + 'static {}
+pub trait SettingCategory: std::fmt::Debug + 'static {
+    fn get_type_id(&self) -> std::any::TypeId;
+}
 
 #[derive(Debug, PartialEq, Clone, Copy, Eq, Hash)]
 pub struct SettingId<T: SettingCategory> {
@@ -54,7 +56,7 @@ where
 
 dyn_clone::clone_trait_object!(AnySettingId);
 
-impl<T: SettingCategory> AnySettingId for SettingId<T> {
+impl<T: SettingCategory + Clone> AnySettingId for SettingId<T> {
     fn id(&self) -> usize {
         self.id()
     }
@@ -94,9 +96,9 @@ pub enum ItineraryModifiers {
     // Replace itinerary with a new vector of itinerary entries
     ReplaceWith { itinerary: Vec<ItineraryEntry> },
     // Reduce the current itinerary to a setting type (e.g., Home)
-    RestrictTo { setting: Box<dyn AnySettingId> },
+    RestrictTo { setting: Box<dyn SettingCategory> },
     // Exclude setting types from current itinerary (e.g., Workplace)
-    Exclude { setting: Box<dyn AnySettingId> },
+    Exclude { setting: Box<dyn SettingCategory> },
 }
 
 pub fn append_itinerary_entry(
@@ -245,12 +247,9 @@ macro_rules! define_setting_category {
             //     let n_members = members.len();
             //     ((n_members - 1) as f64).powf(setting_properties.alpha)
             // }
-            // fn get_type_id(&self) -> std::any::TypeId {
-            //     std::any::TypeId::of::<$name>()
-            // }
-            // fn get_name(&self) -> &'static str {
-            //     stringify!($name)
-            // }
+            fn get_type_id(&self) -> std::any::TypeId {
+                std::any::TypeId::of::<$name>()
+            }
         }
     };
 }
@@ -271,11 +270,11 @@ define_data_plugin!(
 pub trait ContextSettingExt {
     fn get_setting_properties(
         &self,
-        setting: &dyn AnySettingId,
+        setting: &dyn SettingCategory,
     ) -> Result<SettingProperties, IxaError>;
     fn register_setting_type(
         &mut self,
-        setting: &dyn AnySettingId,
+        setting: &dyn SettingCategory,
         setting_props: SettingProperties,
     ) -> Result<(), IxaError>;
     fn add_itinerary(
@@ -335,12 +334,12 @@ trait ContextSettingInternalExt {
     fn limit_itinerary_by_setting_type(
         &mut self,
         person_id: PersonId,
-        setting_type: &dyn AnySettingId,
+        setting_type: &dyn SettingCategory,
     ) -> Result<(), IxaError>;
     fn exclude_setting_from_itinerary(
         &mut self,
         person_id: PersonId,
-        setting_type: &dyn AnySettingId,
+        setting_type: &dyn SettingCategory,
     ) -> Result<(), IxaError>;
 }
 
@@ -436,7 +435,7 @@ impl ContextSettingInternalExt for Context {
     fn exclude_setting_from_itinerary(
         &mut self,
         person_id: PersonId,
-        setting: &dyn AnySettingId,
+        setting: &dyn SettingCategory,
     ) -> Result<(), IxaError> {
         let container = self.get_data_container_mut(SettingDataPlugin);
         match container.itineraries.get(&person_id) {
@@ -462,7 +461,7 @@ impl ContextSettingInternalExt for Context {
     fn limit_itinerary_by_setting_type(
         &mut self,
         person_id: PersonId,
-        setting: &dyn AnySettingId,
+        setting: &dyn SettingCategory,
     ) -> Result<(), IxaError> {
         let container = self.get_data_container_mut(SettingDataPlugin);
         match container.itineraries.get(&person_id) {
@@ -490,7 +489,7 @@ impl ContextSettingInternalExt for Context {
 impl ContextSettingExt for Context {
     fn get_setting_properties(
         &self,
-        setting: &dyn AnySettingId,
+        setting: &dyn SettingCategory,
     ) -> Result<SettingProperties, IxaError> {
         let data_container =
             self.get_data_container(SettingDataPlugin)
@@ -510,7 +509,7 @@ impl ContextSettingExt for Context {
     }
     fn register_setting_type(
         &mut self,
-        setting: &dyn AnySettingId,
+        setting: &dyn SettingCategory,
         setting_props: SettingProperties,
     ) -> Result<(), IxaError> {
         let container = self.get_data_container_mut(SettingDataPlugin);
@@ -755,22 +754,22 @@ pub fn init(context: &mut Context) {
         match setting_type {
             CoreSettingsTypes::Home => {
                 context
-                    .register_setting_type(&SettingId::<Home>::new(0), setting_properties)
+                    .register_setting_type(&Home, setting_properties)
                     .unwrap();
             }
             CoreSettingsTypes::CensusTract => {
                 context
-                    .register_setting_type(&SettingId::<CensusTract>::new(0), setting_properties)
+                    .register_setting_type(&CensusTract, setting_properties)
                     .unwrap();
             }
             CoreSettingsTypes::School => {
                 context
-                    .register_setting_type(&SettingId::<School>::new(0), setting_properties)
+                    .register_setting_type(&School, setting_properties)
                     .unwrap();
             }
             CoreSettingsTypes::Workplace => {
                 context
-                    .register_setting_type(&SettingId::<Workplace>::new(0), setting_properties)
+                    .register_setting_type(&Workplace, setting_properties)
                     .unwrap();
             }
         }
@@ -792,7 +791,7 @@ mod test {
     fn register_default_settings(context: &mut Context) {
         context
             .register_setting_type(
-                &SettingId::<Home>::new(0),
+                &Home,
                 SettingProperties {
                     alpha: 0.1,
                     itinerary_specification: None,
@@ -801,7 +800,7 @@ mod test {
             .unwrap();
         context
             .register_setting_type(
-                &SettingId::<Workplace>::new(0),
+                &Workplace,
                 SettingProperties {
                     alpha: 0.3,
                     itinerary_specification: None,
@@ -810,7 +809,7 @@ mod test {
             .unwrap();
         context
             .register_setting_type(
-                &SettingId::<CensusTract>::new(0),
+                &CensusTract,
                 SettingProperties {
                     alpha: 0.01,
                     itinerary_specification: None,
@@ -820,7 +819,7 @@ mod test {
 
         context
             .register_setting_type(
-                &SettingId::<School>::new(0),
+                &School,
                 SettingProperties {
                     alpha: 0.01,
                     itinerary_specification: None,
@@ -834,7 +833,7 @@ mod test {
         let mut context = Context::new();
         context
             .register_setting_type(
-                &SettingId::<Home>::new(0),
+                &Home,
                 SettingProperties {
                     alpha: 0.1,
                     itinerary_specification: Some(ItinerarySpecificationType::Constant {
@@ -845,7 +844,7 @@ mod test {
             .unwrap();
         context
             .register_setting_type(
-                &SettingId::<CensusTract>::new(0),
+                &CensusTract,
                 SettingProperties {
                     alpha: 0.001,
                     itinerary_specification: Some(ItinerarySpecificationType::Constant {
@@ -854,12 +853,8 @@ mod test {
                 },
             )
             .unwrap();
-        let home_props = context
-            .get_setting_properties(&SettingId::<Home>::new(0))
-            .unwrap();
-        let tract_props = context
-            .get_setting_properties(&SettingId::<CensusTract>::new(0))
-            .unwrap();
+        let home_props = context.get_setting_properties(&Home).unwrap();
+        let tract_props = context.get_setting_properties(&CensusTract).unwrap();
 
         assert_almost_eq!(0.1, home_props.alpha, 0.0);
         assert_eq!(
@@ -876,9 +871,7 @@ mod test {
     #[test]
     fn test_get_properties_after_registration() {
         let mut context = Context::new();
-        let e = context
-            .get_setting_properties(&SettingId::<Home>::new(0))
-            .err();
+        let e = context.get_setting_properties(&Home).err();
         match e {
             Some(IxaError::IxaError(msg)) => {
                 assert_eq!(msg, "Setting plugin data is none");
@@ -892,19 +885,15 @@ mod test {
 
         context
             .register_setting_type(
-                &SettingId::<Home>::new(0),
+                &Home,
                 SettingProperties {
                     alpha: 0.1,
                     itinerary_specification: None,
                 },
             )
             .unwrap();
-        context
-            .get_setting_properties(&SettingId::<Home>::new(0))
-            .unwrap();
-        let e = context
-            .get_setting_properties(&SettingId::<CensusTract>::new(0))
-            .err();
+        context.get_setting_properties(&Home).unwrap();
+        let e = context.get_setting_properties(&CensusTract).err();
         match e {
             Some(IxaError::IxaError(msg)) => {
                 assert_eq!(msg, "Attempting to get properties of unregistered setting type");
@@ -922,7 +911,7 @@ mod test {
         let mut context = Context::new();
         context
             .register_setting_type(
-                &SettingId::<Home>::new(0),
+                &Home,
                 SettingProperties {
                     alpha: 0.1,
                     itinerary_specification: None,
@@ -931,7 +920,7 @@ mod test {
             .unwrap();
         let e = context
             .register_setting_type(
-                &SettingId::<Home>::new(0),
+                &Home,
                 SettingProperties {
                     alpha: 0.001,
                     itinerary_specification: None,
@@ -1185,18 +1174,9 @@ mod test {
                 person_0 = Some(person);
             }
         }
-        let alpha_h = context
-            .get_setting_properties(&SettingId::<Home>::new(0))
-            .unwrap()
-            .alpha;
-        let alpha_w = context
-            .get_setting_properties(&SettingId::<Workplace>::new(0))
-            .unwrap()
-            .alpha;
-        let alpha_s = context
-            .get_setting_properties(&SettingId::<School>::new(0))
-            .unwrap()
-            .alpha;
+        let alpha_h = context.get_setting_properties(&Home).unwrap().alpha;
+        let alpha_w = context.get_setting_properties(&Workplace).unwrap().alpha;
+        let alpha_s = context.get_setting_properties(&School).unwrap().alpha;
 
         let inf_multiplier =
             context.calculate_total_infectiousness_multiplier_for_person(person_0.unwrap());
@@ -1322,7 +1302,7 @@ mod test {
         let _ = context.modify_itinerary(
             person,
             ItineraryModifiers::RestrictTo {
-                setting: Box::new(SettingId::<Home>::new(0)),
+                setting: Box::new(Home),
             },
         );
 
@@ -1404,7 +1384,7 @@ mod test {
         let _ = context.modify_itinerary(
             person,
             ItineraryModifiers::Exclude {
-                setting: Box::new(SettingId::<Workplace>::new(0)),
+                setting: Box::new(Workplace),
             },
         );
 
@@ -1439,7 +1419,7 @@ mod test {
         let mut context = Context::new();
         context
             .register_setting_type(
-                &SettingId::<Home>::new(0),
+                &Home,
                 SettingProperties {
                     alpha: 0.1,
                     itinerary_specification: None,
@@ -1448,7 +1428,7 @@ mod test {
             .unwrap();
         context
             .register_setting_type(
-                &SettingId::<CensusTract>::new(0),
+                &CensusTract,
                 SettingProperties {
                     alpha: 0.01,
                     itinerary_specification: None,
@@ -1481,7 +1461,7 @@ mod test {
         let mut context = Context::new();
         context
             .register_setting_type(
-                &SettingId::<Home>::new(0),
+                &Home,
                 SettingProperties {
                     alpha: 0.1,
                     itinerary_specification: None,
@@ -1574,14 +1554,8 @@ mod test {
         let inf_multiplier_two_settings =
             context.calculate_total_infectiousness_multiplier_for_person(person);
 
-        let alpha_h = context
-            .get_setting_properties(&SettingId::<Home>::new(0))
-            .unwrap()
-            .alpha;
-        let alpha_ct = context
-            .get_setting_properties(&SettingId::<CensusTract>::new(0))
-            .unwrap()
-            .alpha;
+        let alpha_h = context.get_setting_properties(&Home).unwrap().alpha;
+        let alpha_ct = context.get_setting_properties(&CensusTract).unwrap().alpha;
 
         assert_almost_eq!(
             inf_multiplier_two_settings,
@@ -1596,7 +1570,7 @@ mod test {
         context.init_random(42);
         context
             .register_setting_type(
-                &SettingId::<Home>::new(0),
+                &Home,
                 SettingProperties {
                     alpha: 0.1,
                     itinerary_specification: None,
@@ -1605,7 +1579,7 @@ mod test {
             .unwrap();
         context
             .register_setting_type(
-                &SettingId::<CensusTract>::new(0),
+                &CensusTract,
                 SettingProperties {
                     alpha: 0.01,
                     itinerary_specification: None,
@@ -1656,7 +1630,7 @@ mod test {
         context.init_random(42);
         context
             .register_setting_type(
-                &SettingId::<Home>::new(0),
+                &Home,
                 SettingProperties {
                     alpha: 0.1,
                     itinerary_specification: None,
@@ -1665,7 +1639,7 @@ mod test {
             .unwrap();
         context
             .register_setting_type(
-                &SettingId::<CensusTract>::new(0),
+                &CensusTract,
                 SettingProperties {
                     alpha: 0.01,
                     itinerary_specification: None,
@@ -1748,7 +1722,7 @@ mod test {
             context.init_random(seed);
             context
                 .register_setting_type(
-                    &SettingId::<Home>::new(0),
+                    &Home,
                     SettingProperties {
                         alpha: 0.1,
                         itinerary_specification: None,
@@ -1757,7 +1731,7 @@ mod test {
                 .unwrap();
             context
                 .register_setting_type(
-                    &SettingId::<CensusTract>::new(0),
+                    &CensusTract,
                     SettingProperties {
                         alpha: 0.01,
                         itinerary_specification: None,
@@ -1833,7 +1807,7 @@ mod test {
         context.init_random(1234);
         context
             .register_setting_type(
-                &SettingId::<Home>::new(0),
+                &Home,
                 SettingProperties {
                     alpha: 0.1,
                     itinerary_specification: None,
@@ -1842,7 +1816,7 @@ mod test {
             .unwrap();
         context
             .register_setting_type(
-                &SettingId::<CensusTract>::new(0),
+                &CensusTract,
                 SettingProperties {
                     alpha: 0.01,
                     itinerary_specification: None,
@@ -1914,7 +1888,7 @@ mod test {
         let mut context = Context::new();
         context
             .register_setting_type(
-                &SettingId::<Home>::new(0),
+                &Home,
                 SettingProperties {
                     alpha: 0.1,
                     itinerary_specification: None,
@@ -1942,7 +1916,7 @@ mod test {
         let mut context = Context::new();
         context
             .register_setting_type(
-                &SettingId::<Home>::new(0),
+                &Home,
                 SettingProperties {
                     alpha: 0.1,
                     itinerary_specification: Some(ItinerarySpecificationType::Constant {
@@ -1953,7 +1927,7 @@ mod test {
             .unwrap();
         context
             .register_setting_type(
-                &SettingId::<School>::new(0),
+                &School,
                 SettingProperties {
                     alpha: 0.2,
                     itinerary_specification: Some(ItinerarySpecificationType::Constant {
@@ -1983,7 +1957,7 @@ mod test {
         let mut context = Context::new();
         context
             .register_setting_type(
-                &SettingId::<Home>::new(0),
+                &Home,
                 SettingProperties {
                     alpha: 0.1,
                     itinerary_specification: Some(ItinerarySpecificationType::Constant {
@@ -2035,7 +2009,7 @@ mod test {
         let person = context.add_person(()).unwrap();
         context
             .register_setting_type(
-                &SettingId::<Home>::new(0),
+                &Home,
                 SettingProperties {
                     alpha: 0.1,
                     itinerary_specification: Some(ItinerarySpecificationType::Constant {
@@ -2046,7 +2020,7 @@ mod test {
             .unwrap();
         context
             .register_setting_type(
-                &SettingId::<CensusTract>::new(0),
+                &CensusTract,
                 SettingProperties {
                     alpha: 0.01,
                     itinerary_specification: Some(ItinerarySpecificationType::Constant {
@@ -2057,7 +2031,7 @@ mod test {
             .unwrap();
         context
             .register_setting_type(
-                &SettingId::<School>::new(0),
+                &School,
                 SettingProperties {
                     alpha: 0.2,
                     itinerary_specification: Some(ItinerarySpecificationType::Constant {
