@@ -9,7 +9,7 @@ use crate::{
     interventions::ContextTransmissionModifierExt,
     population_loader::Alive,
     rate_fns::{InfectiousnessRateExt, InfectiousnessRateFn, ScaledRateFn},
-    settings::{ContextSettingExt, SettingId, SettingType},
+    settings::{AnySettingId, ContextSettingExt},
 };
 
 #[derive(Serialize, PartialEq, Debug, Clone, Copy)]
@@ -76,13 +76,13 @@ pub fn max_total_infectiousness_multiplier(context: &Context, person_id: PersonI
 define_rng!(ForecastRng);
 
 // Infection attempt function for a context and given `PersonId`
-pub fn infection_attempt<T: SettingType + ?Sized>(
+pub fn infection_attempt(
     context: &Context,
     person_id: PersonId,
-    setting_id: SettingId<T>,
+    setting: &dyn AnySettingId,
 ) -> Option<PersonId> {
     let next_contact = context
-        .get_contact(person_id, setting_id, (Alive, true))
+        .get_contact(person_id, setting, (Alive, true))
         .unwrap()?;
     match context.get_person_property(next_contact, InfectionStatus) {
         InfectionStatusValue::Susceptible => {
@@ -240,7 +240,7 @@ mod test {
         InfectionContextExt,
     };
     use crate::{
-        define_setting_type,
+        define_setting_category,
         infectiousness_manager::{
             InfectionData, InfectionDataValue, InfectionStatus, InfectionStatusValue,
         },
@@ -254,14 +254,14 @@ mod test {
         ContextRandomExt, IxaError, PersonId,
     };
 
-    define_setting_type!(HomogeneousMixing);
+    define_setting_category!(HomogeneousMixing);
 
     fn set_homogeneous_mixing_itinerary(
         context: &mut Context,
         person_id: PersonId,
     ) -> Result<(), IxaError> {
         let itinerary = vec![ItineraryEntry::new(
-            SettingId::new(&HomogeneousMixing, 0),
+            Box::new(SettingId::<HomogeneousMixing>::new(0)),
             1.0,
         )];
         context.add_itinerary(person_id, itinerary)
@@ -283,7 +283,7 @@ mod test {
         load_rate_fns(&mut context).unwrap();
         context
             .register_setting_type(
-                HomogeneousMixing,
+                &SettingId::<HomogeneousMixing>::new(0),
                 SettingProperties {
                     alpha: 1.0,
                     itinerary_specification: Some(ItinerarySpecificationType::Constant {
@@ -486,7 +486,8 @@ mod test {
         set_homogeneous_mixing_itinerary(&mut context, source).unwrap();
 
         for _ in 0..n {
-            if infection_attempt(&context, source, SettingId::new(&HomogeneousMixing, 0)).is_some()
+            if infection_attempt(&context, source, &SettingId::<HomogeneousMixing>::new(0))
+                .is_some()
             {
                 count += 1;
             }
