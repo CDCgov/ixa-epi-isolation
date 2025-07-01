@@ -27,6 +27,7 @@
     },
     "facemask_parameters": {
       "facemask_efficacy": 0.2
-    }
+    },
+    "guidance_policy": "Updated"
   }
 }

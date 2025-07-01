@@ -3,6 +3,7 @@ use std::{collections::HashMap, fmt::Debug, path::PathBuf};
 use ixa::{define_global_property, ContextGlobalPropertiesExt, IxaError};
 use serde::{Deserialize, Serialize};
 
+use crate::policies::GuidancePolicies;
 use crate::settings::SettingProperties;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -85,6 +86,9 @@ pub struct Params {
     // Facemask parameters
     // facemask_efficacy the reduction in tranmission associated with wearing a facemask.
     pub facemask_parameters: Option<FacemaskParameters>,
+    // Guidance Policy
+    // Specifiies the policy guidance to use for interventions, defaulting to None
+    pub guidance_policy: Option<GuidancePolicies>,
 }
 
 // Any default parameters must be specified here
@@ -112,6 +116,7 @@ impl Default for Params {
             transmission_report_name: None,
             intervention_policy_parameters: None,
             facemask_parameters: None,
+            guidance_policy: None,
         }
     }
 }
