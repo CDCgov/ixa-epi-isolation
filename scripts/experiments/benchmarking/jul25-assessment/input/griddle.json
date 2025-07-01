@@ -1,0 +1,11 @@
+{
+    "schema": "v0.3",
+    "parameters": {
+        "synth_population_file": {
+            "vary": ["input/synth_pop_people_WY_1000.csv", "input/synth_pop_people_WY_10000.csv", "input/synth_pop_people_WY_100000.csv"]
+        },
+        "intervention_policy_parameters>>>isolation_probability": {
+            "vary": [0.0, 0.25, 0.75, 1.0]
+        }
+    }
+}
