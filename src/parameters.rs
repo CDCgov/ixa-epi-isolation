@@ -3,7 +3,7 @@ use std::{collections::HashMap, fmt::Debug, path::PathBuf};
 use ixa::{define_global_property, ContextGlobalPropertiesExt, IxaError};
 use serde::{Deserialize, Serialize};
 
-use crate::policies::GuidancePolicies;
+use crate::policies::{validate_guidance_policy, GuidancePolicies};
 use crate::settings::SettingProperties;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -42,13 +42,6 @@ pub enum ItinerarySpecificationType {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, Copy)]
-pub struct InterventionPolicyParameters {
-    pub post_isolation_duration: f64,
-    pub isolation_probability: f64,
-    pub isolation_delay_period: f64,
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone, Copy)]
 pub struct FacemaskParameters {
     pub facemask_efficacy: f64,
 }
@@ -80,14 +73,12 @@ pub struct Params {
     pub synth_population_file: PathBuf,
     /// The path to the transmission report file
     pub transmission_report_name: Option<String>,
-    // Struct contain policy parameters for isolation guidance
-    // Post-isolation duration, isolation probability, and maximum isolation delay.
-    pub intervention_policy_parameters: Option<InterventionPolicyParameters>,
     // Facemask parameters
     // facemask_efficacy the reduction in tranmission associated with wearing a facemask.
     pub facemask_parameters: Option<FacemaskParameters>,
     // Guidance Policy
     // Specifiies the policy guidance to use for interventions, defaulting to None
+    // Enum variants should contain structs with policy-relevant data values
     pub guidance_policy: Option<GuidancePolicies>,
 }
 
@@ -114,7 +105,6 @@ impl Default for Params {
             settings_properties: HashMap::new(),
             synth_population_file: PathBuf::new(),
             transmission_report_name: None,
-            intervention_policy_parameters: None,
             facemask_parameters: None,
             guidance_policy: None,
         }
@@ -176,6 +166,9 @@ fn validate_inputs(parameters: &Params) -> Result<(), IxaError> {
         }
     }
 
+    // The policies module contains it's own validation function based on a match statement for the enum variant
+    validate_guidance_policy(parameters.guidance_policy)?;
+
     // If all the itinerary ratios are None, we can't validate them.
     // If some of them are zero and the rest are none, we still shouldn't fail.
     // We only want to fail when all of them are 0.
@@ -228,24 +221,6 @@ fn validate_inputs(parameters: &Params) -> Result<(), IxaError> {
     if !(0.0..=1.0).contains(&parameters.relative_infectiousness_asymptomatics) {
         return Err(IxaError::IxaError("The relative infectiousness of asymptomatic individuals must be between 0 and 1, inclusive.".to_string()));
     }
-    if let Some(intervention_policy_parameters) = parameters.intervention_policy_parameters {
-        if intervention_policy_parameters.post_isolation_duration < 0.0 {
-            return Err(IxaError::IxaError(
-                "The post-isolation duration must be non-negative.".to_string(),
-            ));
-        }
-        if !(0.0..=1.0).contains(&intervention_policy_parameters.isolation_probability) {
-            return Err(IxaError::IxaError(
-                "The isolation probability must be between 0 and 1, inclusive.".to_string(),
-            ));
-        }
-        if intervention_policy_parameters.isolation_delay_period < 0.0 {
-            return Err(IxaError::IxaError(
-                "The isolation delay period must be non-negative.".to_string(),
-            ));
-        }
-    }
-
     if let Some(facemask_parameters) = parameters.facemask_parameters {
         if !(0.0..=1.0).contains(&facemask_parameters.facemask_efficacy) {
             return Err(IxaError::IxaError(
