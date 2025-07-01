@@ -52,12 +52,7 @@ impl ContextIsolationGuidanceInternalExt for Context {
         if self.get_person_property(person, IsolatingStatus) != isolation_status {
             self.set_person_property(person, IsolatingStatus, isolation_status);
             if isolation_status {
-                self.modify_itinerary(
-                    person,
-                    ItineraryModifiers::RestrictTo {
-                        setting: Box::new(Home),
-                    },
-                )?;
+                self.modify_itinerary(person, ItineraryModifiers::RestrictTo { setting: &Home })?;
             } else {
                 self.remove_modified_itinerary(person)?;
             }
@@ -265,9 +260,9 @@ mod test {
         );
         let p1 = context.add_person(()).unwrap();
         let itinerary = vec![
-            ItineraryEntry::new(Box::new(SettingId::<Home>::new(0)), 1.0),
-            ItineraryEntry::new(Box::new(SettingId::<CensusTract>::new(0)), 1.0),
-            ItineraryEntry::new(Box::new(SettingId::<Workplace>::new(0)), 1.0),
+            ItineraryEntry::new(SettingId::new(Home, 0), 1.0),
+            ItineraryEntry::new(SettingId::new(CensusTract, 0), 1.0),
+            ItineraryEntry::new(SettingId::new(Workplace, 0), 1.0),
         ];
         context.add_itinerary(p1, itinerary).unwrap();
         crate::symptom_progression::init(&mut context).unwrap();
@@ -371,9 +366,9 @@ mod test {
             context.init_random(seed);
             let first_person = context.add_person(()).unwrap();
             let itinerary = vec![
-                ItineraryEntry::new(Box::new(SettingId::<Home>::new(0)), 1.0),
-                ItineraryEntry::new(Box::new(SettingId::<CensusTract>::new(0)), 1.0),
-                ItineraryEntry::new(Box::new(SettingId::<Workplace>::new(0)), 1.0),
+                ItineraryEntry::new(SettingId::new(Home, 0), 1.0),
+                ItineraryEntry::new(SettingId::new(CensusTract, 0), 1.0),
+                ItineraryEntry::new(SettingId::new(Workplace, 0), 1.0),
             ];
             context
                 .add_itinerary(first_person, itinerary.clone())
