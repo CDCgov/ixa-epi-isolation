@@ -66,7 +66,7 @@ impl<T: SettingCategory + Clone> AnySettingId for SettingId<T> {
 }
 
 impl<T: SettingCategory> SettingId<T> {
-    pub fn new(id: usize) -> SettingId<T> {
+    pub fn new(_category: T, id: usize) -> SettingId<T> {
         SettingId {
             id,
             _phantom: std::marker::PhantomData::<T>,
@@ -86,8 +86,9 @@ pub struct ItineraryEntry {
 
 impl ItineraryEntry {
     #[allow(clippy::needless_pass_by_value)]
-    pub fn new(setting: Box<dyn AnySettingId>, ratio: f64) -> ItineraryEntry {
-        ItineraryEntry { setting, ratio }
+    pub fn new(setting: impl AnySettingId, ratio: f64) -> ItineraryEntry {
+        let boxed_setting = Box::new(setting);
+        ItineraryEntry { setting: boxed_setting, ratio }
     }
 }
 
@@ -120,7 +121,7 @@ pub fn append_itinerary_entry(
         let ratio = get_itinerary_ratio(context, setting)?;
         // No point in adding an itinerary entry if the ratio is zero
         if ratio != 0.0 {
-            itinerary.push(ItineraryEntry::new(dyn_clone::clone_box(setting), ratio));
+            itinerary.push(ItineraryEntry::new(setting, ratio));
         }
     }
     Ok(())
