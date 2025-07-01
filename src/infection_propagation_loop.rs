@@ -168,7 +168,7 @@ mod test {
         person_id: PersonId,
     ) -> Result<(), IxaError> {
         let itinerary = vec![ItineraryEntry::new(
-            Box::new(SettingId::<HomogeneousMixing>::new(0)),
+            SettingId::new(HomogeneousMixing, 0),
             1.0,
         )];
         context.add_itinerary(person_id, itinerary)
@@ -227,7 +227,7 @@ mod test {
         // We also set up a homogenous mixing itinerary so that when we don't call `settings::init`,
         // we still have people in settings.
         context
-            .register_setting_type(
+            .register_setting_category(
                 &HomogeneousMixing,
                 SettingProperties {
                     alpha,
@@ -550,22 +550,15 @@ mod test {
                 let person_censustract = context.add_person(()).unwrap();
                 let person_workplace = context.add_person(()).unwrap();
                 let itinerary_all = vec![
-                    ItineraryEntry::new(Box::new(SettingId::<Home>::new(0)), ratio[0]),
-                    ItineraryEntry::new(Box::new(SettingId::<CensusTract>::new(0)), ratio[1]),
-                    ItineraryEntry::new(Box::new(SettingId::<Workplace>::new(0)), ratio[2]),
+                    ItineraryEntry::new(SettingId::new(Home, 0), ratio[0]),
+                    ItineraryEntry::new(SettingId::new(CensusTract, 0), ratio[1]),
+                    ItineraryEntry::new(SettingId::new(Workplace, 0), ratio[2]),
                 ];
-                let itinerary_home = vec![ItineraryEntry::new(
-                    Box::new(SettingId::<Home>::new(0)),
-                    1.0,
-                )];
-                let itinerary_censustract = vec![ItineraryEntry::new(
-                    Box::new(SettingId::<CensusTract>::new(0)),
-                    1.0,
-                )];
-                let itinerary_workplace = vec![ItineraryEntry::new(
-                    Box::new(SettingId::<Workplace>::new(0)),
-                    1.0,
-                )];
+                let itinerary_home = vec![ItineraryEntry::new(SettingId::new(Home, 0), 1.0)];
+                let itinerary_censustract =
+                    vec![ItineraryEntry::new(SettingId::new(CensusTract, 0), 1.0)];
+                let itinerary_workplace =
+                    vec![ItineraryEntry::new(SettingId::new(Workplace, 0), 1.0)];
                 context
                     .add_itinerary(infectious_person, itinerary_all)
                     .unwrap();

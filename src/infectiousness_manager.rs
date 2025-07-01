@@ -261,7 +261,7 @@ mod test {
         person_id: PersonId,
     ) -> Result<(), IxaError> {
         let itinerary = vec![ItineraryEntry::new(
-            Box::new(SettingId::<HomogeneousMixing>::new(0)),
+            SettingId::new(HomogeneousMixing, 0),
             1.0,
         )];
         context.add_itinerary(person_id, itinerary)
@@ -282,7 +282,7 @@ mod test {
             .unwrap();
         load_rate_fns(&mut context).unwrap();
         context
-            .register_setting_type(
+            .register_setting_category(
                 &HomogeneousMixing,
                 SettingProperties {
                     alpha: 1.0,
@@ -486,8 +486,7 @@ mod test {
         set_homogeneous_mixing_itinerary(&mut context, source).unwrap();
 
         for _ in 0..n {
-            if infection_attempt(&context, source, &SettingId::<HomogeneousMixing>::new(0))
-                .is_some()
+            if infection_attempt(&context, source, &SettingId::new(HomogeneousMixing, 0)).is_some()
             {
                 count += 1;
             }
