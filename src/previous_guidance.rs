@@ -58,6 +58,11 @@ trait ContextIsolationGuidanceInternalExt {
     );
 }
 
+// Previous isolation policy edge case questions:
+// 1. What happens if a person's symptoms end before their second test? Do they follow post-isolation precautions?
+// 2. What happens if a person's delay to start isolation is greater than 2 and their first test is negative?
+// 3. What happens if a person never isolations
+
 impl ContextIsolationGuidanceInternalExt for Context {
     fn modify_isolation_status(
         &mut self,
@@ -142,7 +147,6 @@ impl ContextIsolationGuidanceInternalExt for Context {
         intervention_policy_parameters: InterventionPolicyParameters,
     ) {
         if self.get_person_property(person_id, IsolatingStatus) {
-            let mut remaining_isolation_duration = -1.0;
             let symptoms = self.get_person_property(person_id, Symptoms);
             let current_duration_isolation =
                 self.get_current_time() - self.get_person_property(person_id, SymptomStartTime);
@@ -150,7 +154,7 @@ impl ContextIsolationGuidanceInternalExt for Context {
                 if symptoms == Some(SymptomValue::Category1)
                     || symptoms == Some(SymptomValue::Category2)
                 {
-                    remaining_isolation_duration = f64::max(
+                    let remaining_isolation_duration = f64::max(
                         intervention_policy_parameters.mild_symptom_isolation_duration
                             - current_duration_isolation,
                         0.0,
@@ -166,7 +170,7 @@ impl ContextIsolationGuidanceInternalExt for Context {
                 } else if symptoms == Some(SymptomValue::Category3)
                     || symptoms == Some(SymptomValue::Category4)
                 {
-                    remaining_isolation_duration = f64::max(
+                    let remaining_isolation_duration = f64::max(
                         intervention_policy_parameters.moderate_symptom_isolation_duration
                             - current_duration_isolation,
                         0.0,
