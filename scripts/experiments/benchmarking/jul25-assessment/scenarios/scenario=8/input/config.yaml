@@ -1,0 +1,14 @@
+azb:
+  azure_batch: false
+experiment_conditions:
+  replicates_per_particle: 5
+  samples_per_step: 1
+  scenario_key: epi_isolation.GlobalParams
+  seed: 12345
+local_path:
+  default_params_file: scripts/experiments/benchmarking/jul25-assessment/scenarios/scenario=8/input/base.json
+  exe_file: target/release/epi-isolation
+  griddle_file: /home/xui6/github/ixa-epi-isolation/scripts/experiments/benchmarking/jul25-assessment/input/griddle.json
+  sub_experiment_name: scenario=8
+  super_experiment_name: scenarios
+  target_data_file: null
