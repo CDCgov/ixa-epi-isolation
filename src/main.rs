@@ -10,6 +10,7 @@ mod settings;
 mod symptom_progression;
 mod transmission_report;
 mod updated_guidance;
+mod hospitalizations;
 pub mod utils;
 
 use infectiousness_manager::InfectionStatus;
