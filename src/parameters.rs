@@ -52,6 +52,16 @@ pub struct FacemaskParameters {
     pub facemask_efficacy: f64,
 }
 
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct HospitalizationParameters {
+    /// The probability of hospitalization by age group.
+    pub probability_by_age: Vec<f64>,
+    /// The mean of the delay distribution to hospitalization.
+    pub mean_delay_to_hospitalization: f64,
+    /// The mean of the duration of hospitalization.
+    pub mean_duration_of_hospitalization: f64,
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Params {
     /// The proportion of initial people who are infectious when we seed the population.
@@ -85,6 +95,9 @@ pub struct Params {
     // Facemask parameters
     // facemask_efficacy the reduction in tranmission associated with wearing a facemask.
     pub facemask_parameters: Option<FacemaskParameters>,
+    //Hospitalization parameters contain the probability of hospitalization by age group
+    // the mean of the delay distribution to hospitalization, and the mean of the duration of hospitalization.
+    pub hospitalization_parameters: Option<HospitalizationParameters>,
 }
 
 // Any default parameters must be specified here
@@ -112,6 +125,7 @@ impl Default for Params {
             transmission_report_name: None,
             intervention_policy_parameters: None,
             facemask_parameters: None,
+            hospitalization_parameters: None,
         }
     }
 }
