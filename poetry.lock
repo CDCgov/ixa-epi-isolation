@@ -53,7 +53,7 @@ sobol-seq = "^0.2.0"
 type = "git"
 url = "https://github.com/CDCgov/abm-python-wrappers.git"
 reference = "wtk-experiment-class"
-resolved_reference = "d57e20d2c779dba1db608b04b5d35e1be62f17f6"
+resolved_reference = "f8cb36091df4c1b0bf48d784f4d89b4e6737218f"
 
 [[package]]
 name = "adal"
