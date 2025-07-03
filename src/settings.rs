@@ -348,30 +348,53 @@ impl ContextSettingInternalExt for Context {
     ) -> Result<Option<PersonId>, IxaError> {
         let members = self.get_setting_members_internal(setting_type, setting_id);
         if let Some(members) = members {
-            if !members.contains(&person_id) {
+            if members.len() == 1 {
+                // Only contains `person_id`; no one else to infect.
+                return Ok(None);
+            }
+
+            // Instead of scanning the entire set of contacts, collecting those that match the
+            // query, and then randomly selecting, we randomly select and then check the selected
+            // person to see if they match the query and repeat if they do not. We set a max number
+            // of guess-and-checks to be some number n. One can write down a closed form formula
+            // for the expected number of steps this strategy takes. The original strategy takes
+            // c + 1 steps (c checks and 1 random selection), where c is the number of contacts
+            // (excluding infector). If a is the percentage of contacts that match the query (a for
+            // "alive"), it can be shown that the "break even" point,
+            //    E[runtime of this strategy] = c + 1,
+            // occurs when a = 2/(c + 3). Notice this is independent of n. The number of
+            // guess-and-checks needed to find a match to the query is geometrically distributed
+            // and has expected value 1/a. Note this is independent of c. At the break even point,
+            // the expected number of guess-and-checks needed is
+            //     1/a = (c + 3)/2.
+            // We set n = (c + 3)/2 as a heuristic.
+            //
+            // For the sake of efficiency, we "cheat" a little and don't remove `person_id` first.
+            let n = (members.len() + 3) / 2;
+            for _ in 0..n {
+                let potential_contact_id =
+                    members[self.sample_range(SettingsRng, 0..members.len())];
+                if potential_contact_id != person_id && self.match_person(potential_contact_id, q) {
+                    return Ok(Some(potential_contact_id));
+                }
+            }
+            // If we haven't found a match by now, we do it the "hard" way by collecting all
+            // matching people first, which is guaranteed to find someone.
+
+            // Don't mutate the original vector.
+            let mut contacts = members.clone();
+
+            if let Some(pos) = contacts.iter().position(|x| *x == person_id) {
+                contacts.swap_remove(pos);
+            } else {
                 return Err(IxaError::from(
                     "Attempting contact outside of group membership",
                 ));
             }
-            // The setting has one person in it -- this person
-            if members.len() == 1 {
-                return Ok(None);
-            }
-            let member_iter = members.iter().filter(|&x| *x != person_id);
 
-            let mut contacts = vec![];
-            if q.get_query().is_empty() {
-                // If the query is empty we push members directly to the vector
-                for contact in member_iter {
-                    contacts.push(*contact);
-                }
-            } else {
+            if !q.get_query().is_empty() {
                 // If the query is not empty, we match setting members to the query
-                for contact in member_iter {
-                    if self.match_person(*contact, q) {
-                        contacts.push(*contact);
-                    }
-                }
+                self.filter_people(&mut contacts, q);
             }
 
             if contacts.is_empty() {
