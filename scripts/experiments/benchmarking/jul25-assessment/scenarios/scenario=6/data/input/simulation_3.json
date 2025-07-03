@@ -1,7 +1,7 @@
 {
     "epi_isolation.GlobalParams": {
         "max_time": 365.0,
-        "seed": 1233,
+        "seed": 3900086157,
         "infectiousness_rate_fn": {
             "Constant": {
                 "rate": 1.0,
@@ -52,7 +52,7 @@
             }
         },
         "report_period": 1.0,
-        "synth_population_file": "input/synth_pop_people_WY_1000.csv",
+        "synth_population_file": "input/synth_pop_people_WY_10000.csv",
         "transmission_report_name": "transmission_report.csv",
         "intervention_policy_parameters": {
             "post_isolation_duration": 5.0,

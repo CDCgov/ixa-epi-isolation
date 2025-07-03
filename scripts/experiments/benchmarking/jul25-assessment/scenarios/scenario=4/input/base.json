@@ -14,7 +14,7 @@
         "relative_infectiousness_asymptomatics": 0.7,
         "settings_properties": {
             "Home": {
-                "alpha": 0.1,
+                "alpha": 0.0,
                 "itinerary_specification": {
                     "Constant": {
                         "ratio": 0.25
@@ -22,7 +22,7 @@
                 }
             },
             "Workplace": {
-                "alpha": 0.1,
+                "alpha": 0.0,
                 "itinerary_specification": {
                     "Constant": {
                         "ratio": 0.25
@@ -30,7 +30,7 @@
                 }
             },
             "School": {
-                "alpha": 0.1,
+                "alpha": 0.0,
                 "itinerary_specification": {
                     "Constant": {
                         "ratio": 0.25
@@ -52,11 +52,11 @@
             }
         },
         "report_period": 1.0,
-        "synth_population_file": "input/synth_pop_people_WY_1000.csv",
+        "synth_population_file": "input/synth_pop_people_WY_10000.csv",
         "transmission_report_name": "transmission_report.csv",
         "intervention_policy_parameters": {
             "post_isolation_duration": 5.0,
-            "isolation_probability": 0.0,
+            "isolation_probability": 0.25,
             "isolation_delay_period": 0.0
         },
         "facemask_parameters": {

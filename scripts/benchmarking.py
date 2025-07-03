@@ -3,6 +3,7 @@ from abmwrappers.experiment_class import Experiment
 import os
 import time
 import polars as pl 
+import yaml
 def main():
     # Create the new Experiment and scenarios folder
     experiment = Experiment(
@@ -22,16 +23,21 @@ def main():
         config_path = os.path.join(
             scenarios_dir, scenario, "input", "config.yaml"
         )
-
+        with open(config_path, "r") as f:
+            experiment_dict = yaml.safe_load(f)
+        
         subexperiment = Experiment(
             experiments_directory=experiment.directory,
             config_file=config_path,
         )
-
+        start_time = time.time()
         wrappers.create_simulation_data(
             experiment=subexperiment,
             data_processing_fn=read_fn
         )
+        end_time = time.time()
+        average_time = (end_time - start_time) / experiment_dict["experiment_conditions"]["replicates_per_particle"]
+        print(f"Average time for {scenario}: {average_time:.2f} seconds")
         experiment.simulation_bundles.update(
             {scenario: subexperiment.simulation_bundles[0]}
         )
@@ -52,17 +58,15 @@ def read_fn(outputs_dir):
         df = pl.read_csv(output_file_path)
     else:
         raise FileNotFoundError(f"{output_file_path} does not exist.")
-
-    # Select day and person count columns for ascertained cases
+    max_t = df["t"].max()
     df = (
         df.group_by(["t", "InfectionStatus"])
         .agg(pl.col("count").sum())
         .filter(
             (pl.col("InfectionStatus") == pl.lit("Recovered"))
-            & (pl.col("InfectionStatus") == pl.lit("Symptomatic"))
         )
-    )
-
+    ).filter(pl.col("t") == max_t).select(pl.col("count").alias("attack_rate"))
+    print(df.to_series().to_list()[0])
     return df
 
 main()
