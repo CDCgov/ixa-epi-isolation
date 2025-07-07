@@ -1,7 +1,7 @@
-use ixa::{define_derived_property, define_person_property_with_default, define_rng, Context, ContextPeopleExt, ContextRandomExt, PersonId, PersonPropertyChangeEvent};
+use ixa::{define_derived_property, define_person_property_with_default, define_rng, Context, ContextPeopleExt, ContextRandomExt, IxaError, PersonId, PersonPropertyChangeEvent};
 use statrs::distribution::Exp;
 
-use crate::{define_setting_category, parameters::ContextParametersExt, population_loader::Age, settings::{ContextSettingExt, ItineraryEntry, ItineraryModifiers, SettingId}, symptom_progression::{SymptomValue, Symptoms}};
+use crate::{define_setting_category, parameters::{ContextParametersExt, HospitalizationParameters, Params}, population_loader::Age, settings::{ContextSettingExt, ItineraryEntry, ItineraryModifiers, SettingId}, symptom_progression::{SymptomValue, Symptoms}};
 
 define_setting_category!(Hospital);
 define_person_property_with_default!(
@@ -27,18 +27,22 @@ trait ContextHospitalizationInternalExt {
     fn plan_hospital_arrival(
         &mut self,
         person_id: PersonId,
+        hospitalization_parameters: HospitalizationParameters,
     ) -> Result<(), ixa::IxaError>;
     fn plan_hospital_departure(
         &mut self,
         person_id: PersonId,
+        hospitalization_parameters: HospitalizationParameters,
     ) -> Result<(), ixa::IxaError>;
     fn setup_hospitalization_event_sequence(
         &mut self,
+        hospitalization_parameters: HospitalizationParameters,
     );
     fn get_hospital_id(&self, person_id: PersonId) -> Option<usize>;
     fn evaluate_hospitalization_risk(
         &mut self,
         person_id: PersonId,
+        hospitalization_parameters: HospitalizationParameters,
     ) -> bool;
 }
 
@@ -67,12 +71,12 @@ impl ContextHospitalizationInternalExt for Context {
     fn plan_hospital_arrival(
         &mut self,
         person_id: PersonId,
+        hospitalization_parameters: HospitalizationParameters,
     ) -> Result<(), ixa::IxaError> {
         // get hospital parameters
         // evaluate hospitalization risk
         // plan a delay to enter the hospital
-        if self.evaluate_hospitalization_risk(person_id) {
-            if let Some(ref hospitalization_parameters) = self.get_params().hospitalization_parameters {
+        if self.evaluate_hospitalization_risk(person_id, hospitalization_parameters.clone()) {
                 // Get the hospital ID for the person                    // Plan the arrival at the hospital
                     let exp = Exp::new(hospitalization_parameters.mean_delay_to_hospitalization).unwrap();
                     let delay_to_hospitalization = self.sample_distr(HospitalizationRng, exp);
@@ -86,19 +90,18 @@ impl ContextHospitalizationInternalExt for Context {
                         },
                     );
                     return Ok(())
-                }
             }
             Ok(())
     }
     fn plan_hospital_departure(
         &mut self,
         person_id: PersonId,
+        hospitalization_parameters: HospitalizationParameters
     ) -> Result<(), ixa::IxaError> {
         // get hospital parameters
         // select a duration of hospitalization
         // plan to leave the hospital after the duration
-        if self.evaluate_hospitalization_risk(person_id) {
-            if let Some(ref hospitalization_parameters) = self.get_params().hospitalization_parameters {
+        if self.evaluate_hospitalization_risk(person_id, hospitalization_parameters.clone()) {
                 // Get the hospital ID for the person                    // Plan the arrival at the hospital
                 let exp = Exp::new(hospitalization_parameters.mean_duration_of_hospitalization).unwrap();
                 let hospitalization_duration = self.sample_distr(HospitalizationRng, exp);
@@ -112,20 +115,26 @@ impl ContextHospitalizationInternalExt for Context {
                     },
                 );
                 return Ok(())
-            }
         }
         Ok(())
     }
 
-    fn setup_hospitalization_event_sequence(&mut self) {
+    fn setup_hospitalization_event_sequence(
+        &mut self,
+        hospitalization_parameters: HospitalizationParameters,
+    ) {
         // Initialize any necessary sequences or properties related to hospitalization
         self.subscribe_to_event(
-            move |context, event: PersonPropertyChangeEvent<Symptoms>| {
-                match event.current{
-                    Some(SymptomValue::Presymptomatic) => {context.plan_hospital_arrival(
-                        event.person_id
-                    ).unwrap();},
-                    _ => {}
+            {
+                let hospitalization_parameters = hospitalization_parameters.clone();
+                move |context, event: PersonPropertyChangeEvent<Symptoms>| {
+                    match event.current{
+                        Some(SymptomValue::Presymptomatic) => {context.plan_hospital_arrival(
+                            event.person_id,
+                            hospitalization_parameters.clone(),
+                        ).unwrap();},
+                        _ => {}
+                    }
                 }
             },
         );
@@ -139,22 +148,32 @@ impl ContextHospitalizationInternalExt for Context {
     fn evaluate_hospitalization_risk(
         &mut self,
         person_id: PersonId,
+        hospitalization_parameters: HospitalizationParameters,
     ) -> bool {
         // Evaluate the risk of hospitalization based on the person's age
-        if let Some(ref hospitalization_parameters) = self.get_params().hospitalization_parameters {
-            let age = self.get_person_property(person_id, Age);
-            if age >= 65 {
-                return self.sample_bool(HospitalizationRng, hospitalization_parameters.probability_by_age[2]);
-            } else if age >= 18 {
-                return self.sample_bool(HospitalizationRng, hospitalization_parameters.probability_by_age[1]);
-            } else {
-                return self.sample_bool(HospitalizationRng, hospitalization_parameters.probability_by_age[0]);
-            }
+        let age = self.get_person_property(person_id, Age);
+        if age >= 65 {
+            return self.sample_bool(HospitalizationRng, hospitalization_parameters.probability_by_age[2]);
+        } else if age >= 18 {
+            return self.sample_bool(HospitalizationRng, hospitalization_parameters.probability_by_age[1]);
+        } else {
+            return self.sample_bool(HospitalizationRng, hospitalization_parameters.probability_by_age[0]);
         }
-        false
     }
 
 }
 
+pub fn init(context: &mut Context) -> Result<(), IxaError> {
+    let Params {
+        hospitalization_parameters,
+        ..
+    } = context.get_params();
+    if let Some(hospitalization_parameters) = hospitalization_parameters {
+        context.setup_hospitalization_event_sequence(hospitalization_parameters.clone());
+    } else {
+        return Err(IxaError::IxaError("No hospitalization parameters provided. They are required for the hospitalization policy.".to_string()));
+    }
+    Ok(())
+}
 
 
