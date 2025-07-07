@@ -27,6 +27,11 @@
     },
     "facemask_parameters": {
       "facemask_efficacy": 0.2
+    },
+    "hospitalization_parameters": {
+      "probability_by_age": [0.001, 0.01, 0.05],
+      "mean_delay_to_hospitalization": 2.0,
+      "mean_duration_of_hospitalization": 10.0
     }
   }
 }
