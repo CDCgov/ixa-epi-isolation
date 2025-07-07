@@ -45,7 +45,7 @@ where
         members: &[PersonId],
         setting_properties: SettingProperties,
     ) -> f64;
-    fn name(&self) -> &'static str {
+    fn get_category_id(&self) -> &'static str {
         stringify!(self)
     }
     fn get_type_id(&self) -> TypeId;
