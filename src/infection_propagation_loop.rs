@@ -27,14 +27,14 @@ fn schedule_next_forecasted_infection(context: &mut Context, person: PersonId) {
                         trace!(
                             "Person {}: Forecast accepted, setting type {} {}, infecting {}",
                             person,
-                            setting.name(),
+                            setting.get_category_id(),
                             setting.id(),
                             next_contact
                         );
                         context.infect_person(
                             next_contact,
                             Some(person),
-                            Some(setting.name()),
+                            Some(setting.get_category_id()),
                             Some(setting.id()),
                         );
                     }
