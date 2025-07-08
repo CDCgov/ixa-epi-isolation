@@ -8,9 +8,7 @@ use crate::{
     define_setting_category,
     parameters::{ContextParametersExt, HospitalizationParameters, Params},
     population_loader::Age,
-    settings::{
-        ContextSettingExt, ItineraryEntry, ItineraryModifiers, SettingId, SettingProperties,
-    },
+    settings::{ContextSettingExt, SettingProperties},
     symptom_progression::{SymptomValue, Symptoms},
 };
 
@@ -31,7 +29,7 @@ pub trait ContextHospitalizationExt {
 
 impl ContextHospitalizationExt for Context {
     fn get_hospital_id(&self) -> usize {
-        self.get_hospital_id_internal().unwrap_or(0)
+        0 // Placeholder implementation, assuming everyone goes to the same hospital
     }
 }
 
@@ -55,7 +53,6 @@ trait ContextHospitalizationInternalExt {
         &mut self,
         hospitalization_parameters: HospitalizationParameters,
     );
-    fn get_hospital_id_internal(&self) -> Option<usize>;
     fn evaluate_hospitalization_risk(
         &mut self,
         person_id: PersonId,
@@ -73,16 +70,15 @@ impl ContextHospitalizationInternalExt for Context {
         // depending on the person property value being set activate or deactivate the hospitalization itinerary
         self.set_person_property(person_id, Hospitalized, hospitalized);
         if hospitalized {
-            if let Some(hospital_id) = self.get_hospital_id_internal() {
-                let itinerary = vec![ItineraryEntry::new(
-                    SettingId::new(Hospital, hospital_id),
-                    1.0,
-                )];
-                self.modify_itinerary(person_id, ItineraryModifiers::ReplaceWith { itinerary })?;
-                trace!("Person {person_id} is hospitalized at hospital {hospital_id}");
-            }
+            // let hospital_id = self.get_hospital_id()
+            // let itinerary = vec![ItineraryEntry::new(
+            //     SettingId::new(Hospital, hospital_id),
+            //     1.0,
+            // )];
+            // self.modify_itinerary(person_id, ItineraryModifiers::ReplaceWith { itinerary })?;
+            trace!("Person {person_id} is hospitalized at hospital");
         } else {
-            self.remove_modified_itinerary(person_id)?;
+            // self.remove_modified_itinerary(person_id)?;
             trace!("Person {person_id} is discharged from the hospital");
         }
         Ok(())
@@ -166,11 +162,6 @@ impl ContextHospitalizationInternalExt for Context {
                 }
             },
         );
-    }
-
-    fn get_hospital_id_internal(&self) -> Option<usize> {
-        // Retrieve the hospital ID for a given person
-        Some(0)
     }
 
     fn evaluate_hospitalization_risk(
