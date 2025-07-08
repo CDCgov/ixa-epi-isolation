@@ -60,6 +60,8 @@ pub struct HospitalizationParameters {
     pub mean_delay_to_hospitalization: f64,
     /// The mean of the duration of hospitalization.
     pub mean_duration_of_hospitalization: f64,
+    /// The path to the hospitalization incidence report file.
+    pub hospital_incidence_report_name: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]

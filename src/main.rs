@@ -1,3 +1,5 @@
+mod hospital_incidence_report;
+mod hospitalizations;
 mod infection_propagation_loop;
 mod infectiousness_manager;
 mod interventions;
@@ -10,7 +12,6 @@ mod settings;
 mod symptom_progression;
 mod transmission_report;
 mod updated_guidance;
-mod hospitalizations;
 pub mod utils;
 
 use infectiousness_manager::InfectionStatus;
@@ -19,6 +20,8 @@ use ixa::{ContextPeopleExt, ContextRandomExt, ContextReportExt};
 use parameters::{ContextParametersExt, Params};
 use population_loader::Age;
 use symptom_progression::Symptoms;
+
+use crate::hospitalizations::Hospitalized;
 
 // You must run this with a parameters file:
 // cargo run -- --config input/input.json
@@ -48,7 +51,7 @@ fn main() {
         context.add_periodic_report(
             "person_property_count",
             report_period,
-            (Age, Symptoms, InfectionStatus),
+            (Age, Symptoms, InfectionStatus, Hospitalized),
         )?;
 
         settings::init(context);
@@ -62,6 +65,8 @@ fn main() {
         transmission_report::init(context)?;
         symptom_progression::init(context)?;
         updated_guidance::init(context)?;
+        hospitalizations::init(context)?;
+        hospital_incidence_report::init(context)?;
 
         Ok(())
     })
