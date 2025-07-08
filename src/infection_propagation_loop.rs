@@ -364,7 +364,7 @@ mod test {
         // attempt happens quickly, that increases the chance we see another in 1.0 time units, and
         // because there is basically this compensating relationship between the time and the number
         // of events, they "cancel" each other out to give a uniform distribution (handwavingly).
-        let num_sims: u64 = 15_000;
+        let num_sims: u64 = 20_000;
         let rate = 1.5;
         let alpha = 0.42;
         let duration = 5.0;
