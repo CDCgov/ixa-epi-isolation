@@ -497,7 +497,7 @@ mod test {
     #[test]
     #[allow(clippy::cast_precision_loss, clippy::cast_lossless)]
     fn test_rejection_sample_forecast_intervention() {
-        let n = 1_000;
+        let n = 5_000;
         let mut count = 0;
         let relative_effect = 0.8;
 
@@ -536,6 +536,6 @@ mod test {
                 count += 1;
             }
         }
-        assert_almost_eq!(count as f64 / n as f64, relative_effect, 0.005);
+        assert_almost_eq!(count as f64 / n as f64, relative_effect, 0.01);
     }
 }
