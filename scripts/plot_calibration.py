@@ -11,7 +11,7 @@ prior = {
     "infectiousness_rate_fn": {
         "EmpiricalFromFile": {
             "scale": gamma(
-                a=4, scale=0.2
+                a=1, scale=0.5
             )
         }
     }

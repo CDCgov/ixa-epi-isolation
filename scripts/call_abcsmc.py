@@ -7,14 +7,14 @@ from math import log
 from abmwrappers import wrappers
 from abmwrappers.experiment_class import Experiment
 
-def main(config_file: str):
+def main(config_file: str, keep: bool):
 
     # Misspecified prior for scale that should be 1.0
     prior = {
         "infectiousness_rate_fn": {
             "EmpiricalFromFile": {
                 "scale": gamma(
-                    a=4, scale=0.2
+                    a=1, scale=0.5
                 )
             }
         }
@@ -41,6 +41,7 @@ def main(config_file: str):
         experiment=experiment,
         distance_fn=ode_lhood,
         data_processing_fn=output_processing_function,
+        keep_all_sims=keep
     )
 
 def ode_lhood(results_data: pl.DataFrame, target_data: pl.DataFrame):
@@ -121,7 +122,13 @@ argparser.add_argument(
     help="Clean up raw output files after processing into products",
     required=False
 )
+argparser.add_argument(
+    "--keep",
+    action="store_true",
+    help="Keep all the simulation parquet parts from results",
+    required=False
+)
 
 args = argparser.parse_args()
 if args.execute == "main":
-    main(config_file=args.config_file)
+    main(config_file=args.config_file, keep=args.keep)

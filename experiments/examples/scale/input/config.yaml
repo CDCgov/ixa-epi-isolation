@@ -19,7 +19,7 @@ azb:
   create_pool: false
 experiment_conditions:
   replicates_per_particle: 10
-  samples_per_step: 200
+  samples_per_step: 150
   seed: 12345
   scenario_key: epi_isolation.GlobalParams
   tolerance:
