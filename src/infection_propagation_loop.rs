@@ -8,8 +8,7 @@ use crate::parameters::{ContextParametersExt, Params};
 use crate::rate_fns::{load_rate_fns, InfectiousnessRateExt};
 use crate::settings::ContextSettingExt;
 use ixa::{
-    define_rng, trace, Context, ContextPeopleExt, IxaError, PersonId,
-    PersonPropertyChangeEvent,
+    define_rng, trace, Context, ContextPeopleExt, IxaError, PersonId, PersonPropertyChangeEvent,
 };
 
 define_rng!(InfectionRng);
@@ -57,7 +56,10 @@ fn query_susceptibles_and_seed(
     proportion_to_seed: f64,
     seed_fn: impl Fn(&mut Context, PersonId),
 ) {
+    #[allow(clippy::cast_precision_loss)]
     let n = proportion_to_seed * context.get_current_population() as f64;
+
+    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
     let susceptibles = context.sample_people(
         InfectionRng,
         (InfectionStatus, InfectionStatusValue::Susceptible),
