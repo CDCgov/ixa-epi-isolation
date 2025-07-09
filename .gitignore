@@ -1,6 +1,10 @@
 #####
 # Exclude many data and output file types by default
 
+# experiment
+scripts/experiment/benchmarking/jul25-assessment/data/
+scripts/experiment/benchmarking/jul25-assessment/scenarios/
+
 # Data
 *.csv
 *.tsv
