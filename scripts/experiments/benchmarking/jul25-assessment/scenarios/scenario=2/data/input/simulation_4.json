@@ -1,7 +1,7 @@
 {
     "epi_isolation.GlobalParams": {
         "max_time": 365.0,
-        "seed": 1720853911,
+        "seed": 2484302334,
         "infectiousness_rate_fn": {
             "Constant": {
                 "rate": 1.0,
