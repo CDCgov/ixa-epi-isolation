@@ -83,7 +83,11 @@ def main():
     import matplotlib.pyplot as plt
 
     plt.figure()
-    plt.plot(unique_exp_output["pop_size"], unique_exp_output["average_time"], marker="o")
+    plt.plot(
+        unique_exp_output["pop_size"],
+        unique_exp_output["average_time"],
+        marker="o",
+    )
     plt.xscale("log")
     plt.xlabel("Population Size")
     plt.ylabel("Average Runtime")

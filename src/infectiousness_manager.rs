@@ -80,9 +80,7 @@ pub fn infection_attempt<T: SettingType + ?Sized>(
     person_id: PersonId,
     setting_id: SettingId<T>,
 ) -> Option<PersonId> {
-    let next_contact = context
-        .get_contact(person_id, setting_id, ())
-        .unwrap()?;
+    let next_contact = context.get_contact(person_id, setting_id, ()).unwrap()?;
     match context.get_person_property(next_contact, InfectionStatus) {
         InfectionStatusValue::Susceptible => {
             if context.sample_bool(
