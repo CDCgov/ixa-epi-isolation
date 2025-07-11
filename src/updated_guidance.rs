@@ -7,6 +7,7 @@ use crate::{
     infectiousness_manager::InfectionStatusValue,
     interventions::ContextTransmissionModifierExt,
     parameters::{ContextParametersExt, InterventionPolicyParameters, Params},
+    profiling::ContextProfilingExt,
     settings::{ContextSettingExt, Home, ItineraryModifiers},
     symptom_progression::{SymptomValue, Symptoms},
 };
@@ -72,7 +73,9 @@ impl ContextIsolationGuidanceInternalExt for Context {
             self.add_plan(
                 self.get_current_time() + intervention_policy_parameters.isolation_delay_period,
                 move |context| {
+                    context.increment_named_count("isolation attempt");
                     if context.get_person_property(person_id, PresentingWithSymptoms) {
+                        context.increment_named_count("isolation accepted");
                         context.modify_isolation_status(person_id, true).unwrap();
                         trace!("Person {person_id} is now isolating");
                     }

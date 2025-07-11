@@ -5,6 +5,7 @@ use crate::infectiousness_manager::{
     InfectionData, InfectionDataValue, InfectionStatus, InfectionStatusValue,
 };
 use crate::parameters::{ContextParametersExt, Params};
+use crate::profiling::ContextProfilingExt;
 use crate::rate_fns::{load_rate_fns, InfectiousnessRateExt};
 use crate::settings::ContextSettingExt;
 use ixa::{
@@ -21,6 +22,7 @@ fn schedule_next_forecasted_infection(context: &mut Context, person: PersonId) {
     }) = get_forecast(context, person)
     {
         context.add_plan(next_time, move |context| {
+            context.increment_named_count("forecasted infection");
             if evaluate_forecast(context, person, forecasted_total_infectiousness) {
                 if let Some(setting_id) = context.get_setting_for_contact(person) {
                     let str_setting = setting_id.setting_type.get_name();
@@ -28,6 +30,7 @@ fn schedule_next_forecasted_infection(context: &mut Context, person: PersonId) {
                     if let Some(next_contact) =
                         infection_attempt(context, person, setting_id)
                     {
+                        context.increment_named_count("accepted infection");
                         trace!("Person {person}: Forecast accepted, setting type {str_setting} {id}, infecting {next_contact}");
                         context.infect_person(next_contact, Some(person), Some(str_setting), Some(id));
                     }
@@ -43,6 +46,7 @@ fn schedule_recovery(context: &mut Context, person: PersonId) {
     let infection_duration = context.get_person_rate_fn(person).infection_duration();
     let recovery_time = context.get_current_time() + infection_duration;
     context.add_plan(recovery_time, move |context| {
+        context.increment_named_count("recovery");
         trace!("Person {person} has recovered at {recovery_time}");
         context.recover_person(person);
     });
@@ -132,6 +136,7 @@ mod test {
         distribution::{ContinuousCDF, Discrete, Poisson, Uniform},
     };
 
+    use crate::profiling::ContextProfilingExt;
     use crate::{
         define_setting_type,
         infection_propagation_loop::{
@@ -676,6 +681,7 @@ mod test {
                     match event.current {
                         Masking::None => {
                             context.add_plan(t + nonmasking_duration, move |context| {
+                                context.increment_named_count("mask wearing");
                                 context.set_person_property(
                                     event.person_id,
                                     MaskingStatus,
@@ -685,6 +691,7 @@ mod test {
                         }
                         Masking::Wearing => {
                             context.add_plan(t + masking_duration, move |context| {
+                                context.increment_named_count("mask removed");
                                 context.set_person_property(
                                     event.person_id,
                                     MaskingStatus,
