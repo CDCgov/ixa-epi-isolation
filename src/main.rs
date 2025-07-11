@@ -7,6 +7,7 @@ mod natural_history_parameter_manager;
 mod parameters;
 mod policies;
 mod population_loader;
+mod profiling;
 mod property_progression_manager;
 pub mod rate_fns;
 mod settings;
@@ -14,6 +15,7 @@ mod symptom_progression;
 mod transmission_report;
 pub mod utils;
 
+use crate::profiling::ContextProfilingExt;
 use infectiousness_manager::InfectionStatus;
 use ixa::runner::run_with_args;
 use ixa::{ContextPeopleExt, ContextRandomExt, ContextReportExt};
@@ -27,7 +29,7 @@ use crate::hospitalizations::Hospitalized;
 // Try enabling logs to see some output about infections:
 // cargo run -- --config input/input.json --log-level=Trace -f | grep epi_isolation
 fn main() {
-    run_with_args(|context, _, _| {
+    let context = run_with_args(|context, _, _| {
         // Read the global properties.
         let &Params {
             max_time,
@@ -64,10 +66,13 @@ fn main() {
         transmission_report::init(context)?;
         symptom_progression::init(context)?;
         policies::init(context)?;
+        profiling::init(context);
         hospitalizations::init(context);
         hospital_incidence_report::init(context)?;
 
         Ok(())
     })
     .unwrap();
+
+    context.print_named_counts();
 }
