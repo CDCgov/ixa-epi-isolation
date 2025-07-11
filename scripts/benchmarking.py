@@ -1,11 +1,10 @@
-import json
 import os
 import time
 
 import polars as pl
-import yaml
 from abmwrappers import wrappers
 from abmwrappers.experiment_class import Experiment
+import matplotlib.pyplot as plt
 
 
 def main():
@@ -25,30 +24,22 @@ def main():
         config_path = os.path.join(
             scenarios_dir, scenario, "input", "config.yaml"
         )
-        with open(config_path, "r") as f:
-            experiment_dict = yaml.safe_load(f)
 
         subexperiment = Experiment(
             experiments_directory=experiment.directory,
             config_file=config_path,
         )
         start_time = time.time()
-        wrappers.run_step_return_data(
-            experiment=subexperiment, data_preprocessing_fn=read_fn
+        subexperiment.run_step(
+            data_processing_fn=read_fn, products=["simulations"]
         )
         end_time = time.time()
         average_time = (end_time - start_time) / subexperiment.replicates
-            "experiment_conditions"
-        ]["replicates_per_particle"]
 
-       with open(subexperiment.default_params_file, "r") as f:
-        with open(sim_input, "r") as f:
-            sim_data = json.load(f)
-        pop_size = pl.read_csv(
-        pop_size = pl.read_csv(sim_data[subexperiment.scenario_key]["synth_population_file"])
-                "synth_population_file"
-            ]
-        ).height
+        synth_pop = subexperiment.simulation_bundles[0].baseline_params[
+            subexperiment.scenario_key
+        ]["synth_population_file"]
+        pop_size = pl.read_csv(synth_pop).height
         average_times.append(
             {
                 "scenario": int(scenario.split("=")[-1]),
@@ -66,36 +57,14 @@ def main():
             experiment_data_path=experiment.data_path,
             clean=False,
         )
-    experiment.save(
-        experiment.save()
-    )
+    experiment.save()
     exp_output = experiment.read_results(filename="scenarios")
-        os.path.join(experiment.directory, "data", "scenarios")
-    )
     exp_output = exp_output.join(
         pl.DataFrame(average_times), on="scenario", how="left"
     )
-    print(exp_output)
+    exp_output.write_csv(os.path.join(experiment.directory, "experiment_runtime.csv"))
 
-    # Reduce to rows with unique pop_size value
-    unique_exp_output = exp_output.unique(subset=["pop_size"])
-
-    import matplotlib.pyplot as plt
-
-    plt.figure()
-    plt.plot(
-        unique_exp_output["pop_size"],
-        unique_exp_output["average_time"],
-        marker="o",
-    )
-    plt.xscale("log")
-    plt.xlabel("Population Size")
-    plt.ylabel("Average Runtime")
-    plt.title("Population Size vs Average Runtime")
-    plt.grid(True)
-    plt.tight_layout()
-    plt.savefig(os.path.join(experiment.directory, "popsize_vs_avgtime.png"))
-    plt.close()
+    plot_runtime(exp_output, experiment)
 
 
 def read_fn(outputs_dir):
@@ -117,5 +86,21 @@ def read_fn(outputs_dir):
     print(df.to_series().to_list()[0])
     return df
 
+def plot_runtime(exp_output, experiment):
+    unique_exp_output = exp_output.unique(subset=["pop_size"])
+    plt.figure()
+    plt.plot(
+        unique_exp_output["pop_size"],
+        unique_exp_output["average_time"],
+        marker="o",
+    )
+    plt.xscale("log")
+    plt.xlabel("Population Size")
+    plt.ylabel("Average Runtime")
+    plt.title("Population Size vs Average Runtime")
+    plt.grid(True)
+    plt.tight_layout()
+    plt.savefig(os.path.join(experiment.directory, "popsize_vs_avgtime.png"))
+    plt.close()
 
 main()
