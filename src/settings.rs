@@ -798,7 +798,9 @@ pub fn init(context: &mut Context) {
 mod test {
     use super::*;
     use crate::{
+        infectiousness_manager::{evaluate_forecast, get_forecast, InfectionContextExt},
         parameters::{GlobalParams, ItinerarySpecificationType},
+        rate_fns::load_rate_fns,
         settings::ContextSettingExt,
     };
     use ixa::{define_person_property, ContextGlobalPropertiesExt, ContextPeopleExt};
@@ -1990,5 +1992,68 @@ mod test {
 
         let total_ratio: Vec<f64> = itinerary.iter().map(|entry| entry.ratio).collect();
         assert_eq!(total_ratio, vec![0.5, 0.25, 0.25]);
+    }
+
+    #[test]
+    fn test_forecast_during_self_itinerary_modification() {
+        let mut context = Context::new();
+
+        // Create a single itinerary for a group of people
+        // Itinerary is pslit 50% at home and 50% at work, but at home transmission potential is density-dependent
+        let parameters = Params {
+            ..Default::default()
+        };
+
+        context
+            .set_global_property_value(GlobalParams, parameters)
+            .unwrap();
+        context
+            .register_setting_type(
+                Home,
+                SettingProperties {
+                    alpha: 1.0,
+                    itinerary_specification: Some(ItinerarySpecificationType::Constant {
+                        ratio: 0.5,
+                    }),
+                },
+            )
+            .unwrap();
+        context
+            .register_setting_type(
+                Workplace,
+                SettingProperties {
+                    alpha: 0.0,
+                    itinerary_specification: Some(ItinerarySpecificationType::Constant {
+                        ratio: 0.5,
+                    }),
+                },
+            )
+            .unwrap();
+        context.init_random(0);
+        let mut itinerary = vec![];
+        append_itinerary_entry(&mut itinerary, &context, Home, 1).unwrap();
+        append_itinerary_entry(&mut itinerary, &context, Workplace, 1).unwrap();
+
+        let infector = context.add_person(()).unwrap();
+        load_rate_fns(&mut context).unwrap();
+        context.infect_person(infector, None, None, None);
+        context.add_itinerary(infector, itinerary.clone()).unwrap();
+
+        for _ in 0..5 {
+            let contact = context.add_person(()).unwrap();
+            context.add_itinerary(contact, itinerary.clone()).unwrap();
+        }
+
+        let forecast = get_forecast(&context, infector).unwrap();
+        context.add_plan(forecast.next_time / 2.0, move |context| {
+            context
+                .modify_itinerary(infector, ItineraryModifiers::RestrictTo { setting: &Home })
+                .unwrap();
+        });
+        context.add_plan(forecast.next_time, move |context| {
+            evaluate_forecast(context, infector, forecast.forecasted_total_infectiousness);
+        });
+
+        context.execute();
     }
 }
