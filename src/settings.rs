@@ -2,8 +2,8 @@ use crate::parameters::{
     ContextParametersExt, CoreSettingsTypes, ItinerarySpecificationType, Params,
 };
 use ixa::{
-    define_data_plugin, define_rng, people::Query, trace, Context, ContextPeopleExt,
-    ContextRandomExt, IxaError, PersonId,
+    define_data_plugin, define_rng, people::Query, trace, Context, ContextRandomExt, IxaError,
+    PersonId,
 };
 use serde::{Deserialize, Serialize};
 
@@ -344,7 +344,7 @@ impl ContextSettingInternalExt for Context {
         person_id: PersonId,
         setting_type: TypeId,
         setting_id: usize,
-        q: T,
+        _q: T,
     ) -> Result<Option<PersonId>, IxaError> {
         let members = self.get_setting_members_internal(setting_type, setting_id);
         if let Some(members) = members {
@@ -357,22 +357,26 @@ impl ContextSettingInternalExt for Context {
             if members.len() == 1 {
                 return Ok(None);
             }
-            let member_iter = members.iter().filter(|&x| *x != person_id);
+            let contacts = members
+                .iter()
+                .filter(|&x| *x != person_id)
+                .copied()
+                .collect::<Vec<PersonId>>();
 
-            let mut contacts = vec![];
-            if q.get_query().is_empty() {
-                // If the query is empty we push members directly to the vector
-                for contact in member_iter {
-                    contacts.push(*contact);
-                }
-            } else {
-                // If the query is not empty, we match setting members to the query
-                for contact in member_iter {
-                    if self.match_person(*contact, q) {
-                        contacts.push(*contact);
-                    }
-                }
-            }
+            // let mut contacts = vec![];
+            // if q.get_query().is_empty() {
+            //     // If the query is empty we push members directly to the vector
+            //     for contact in member_iter {
+            //         contacts.push(*contact);
+            //     }
+            // } else {
+            //     // If the query is not empty, we match setting members to the query
+            //     for contact in member_iter {
+            //         if self.match_person(*contact, q) {
+            //             contacts.push(*contact);
+            //         }
+            //     }
+            // }
 
             if contacts.is_empty() {
                 return Ok(None);
