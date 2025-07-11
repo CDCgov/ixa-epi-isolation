@@ -1,13 +1,14 @@
+use super::computed_statistic::ComputableType;
 use super::Span;
 #[cfg(feature = "profiling")]
-use super::TOTAL_MEASURED;
-#[cfg(feature = "profiling")]
+use super::{
+    ComputedStatistic, ComputedValue, CustomStatisticComputer, CustomStatisticPrinter,
+    ACCEPTED_INFECTION_LABEL, FORECASTED_INFECTION_LABEL, TOTAL_MEASURED,
+};
 use ixa::HashMap;
 #[cfg(feature = "profiling")]
-use std::{
-    sync::{Mutex, MutexGuard, OnceLock},
-    time::{Duration, Instant},
-};
+use std::sync::{Mutex, MutexGuard, OnceLock};
+use std::time::{Duration, Instant};
 
 #[cfg(feature = "profiling")]
 static PROFILING_DATA: OnceLock<Mutex<ProfilingDataContainer>> = OnceLock::new();
@@ -18,7 +19,7 @@ static PROFILING_DATA: OnceLock<Mutex<ProfilingDataContainer>> = OnceLock::new()
 pub(super) fn profiling_data() -> MutexGuard<'static, ProfilingDataContainer> {
     #[cfg(test)]
     PROFILING_DATA
-        .get_or_init(|| Mutex::new(ProfilingDataContainer::default()))
+        .get_or_init(|| Mutex::new(ProfilingDataContainer::new()))
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner)
 }
@@ -28,14 +29,13 @@ pub(super) fn profiling_data() -> MutexGuard<'static, ProfilingDataContainer> {
 pub(super) fn profiling_data() -> MutexGuard<'static, ProfilingDataContainer> {
     #[cfg(not(test))]
     PROFILING_DATA
-        .get_or_init(|| Mutex::new(ProfilingDataContainer::default()))
+        .get_or_init(|| Mutex::new(ProfilingDataContainer::new()))
         .lock()
         .unwrap()
 }
 
-#[cfg(feature = "profiling")]
 #[derive(Default)]
-pub(super) struct ProfilingDataContainer {
+pub struct ProfilingDataContainer {
     pub start_time: Option<Instant>,
     pub counts: HashMap<&'static str, usize>,
     // We store span counts with the span duration, because they are updated when
@@ -47,18 +47,50 @@ pub(super) struct ProfilingDataContainer {
     // spans. When `open_span_count` transitions from `0`, the `total_measured` span is opened.
     // When `open_span_count` transitions back to `0`, `total_measured` is closed and duration
     // is recorded.
-    pub open_span_count: usize,
-    pub coverage: Option<Instant>,
+    #[cfg(feature = "profiling")]
+    pub(super) open_span_count: usize,
+    #[cfg(feature = "profiling")]
+    pub(super) coverage: Option<Instant>,
+    // Custom computed statistics. They are wrapped in an `Option` to allow for temporarily
+    // removing them to avoid a double borrow.
+    #[cfg(feature = "profiling")]
+    pub(super) computed_statistics: Vec<Option<ComputedStatistic>>,
 }
 
 #[cfg(feature = "profiling")]
 impl ProfilingDataContainer {
-    pub fn increment_named_count(&mut self, key: &'static str) {
+    /// Initialize a new `ProfilingDataContainer` with any default computed statistics.
+    fn new() -> Self {
+        let mut container = Self::default();
+        let computer = |container: &ProfilingDataContainer| {
+            if let (Some(accepted), Some(forecasted)) = (
+                container.get_named_count(ACCEPTED_INFECTION_LABEL),
+                container.get_named_count(FORECASTED_INFECTION_LABEL),
+            ) {
+                #[allow(clippy::cast_precision_loss)]
+                let efficiency = (accepted as f64) / (forecasted as f64) * 100.0;
+                Some(efficiency)
+            } else {
+                None
+            }
+        };
+        let computer: CustomStatisticComputer<f64> = Box::new(computer);
+
+        let printer = |efficiency| {
+            println!("Infection Forecasting Efficiency: {:.2}%", efficiency);
+        };
+        let printer: CustomStatisticPrinter<f64> = Box::new(printer);
+        container.add_computed_statistic("infection forecasting efficiency", computer, printer);
+
+        container
+    }
+
+    pub(super) fn increment_named_count(&mut self, key: &'static str) {
         self.init_start_time();
         self.counts.entry(key).and_modify(|v| *v += 1).or_insert(1);
     }
 
-    pub fn get_named_count(&self, key: &'static str) -> Option<usize> {
+    pub(super) fn get_named_count(&self, key: &'static str) -> Option<usize> {
         self.counts.get(&key).copied()
     }
 
@@ -149,6 +181,20 @@ impl ProfilingDataContainer {
 
         rows
     }
+
+    pub(super) fn add_computed_statistic<T: ComputableType>(
+        &mut self,
+        label: &'static str,
+        computer: CustomStatisticComputer<T>,
+        printer: CustomStatisticPrinter<T>,
+    ) {
+        let computed_stat = ComputedStatistic {
+            label,
+            value: None,
+            functions: T::new_functions(computer, printer),
+        };
+        self.computed_statistics.push(Some(computed_stat));
+    }
 }
 
 #[cfg(feature = "profiling")]
@@ -174,6 +220,6 @@ pub fn open_span(label: &'static str) -> Span {
 /// Call this if you want to explicitly close a span before the end of the scope in which the
 /// span was defined. Equivalent to `span.drop()`.
 pub fn close_span(_span: Span) {
-    // The `span` is dropped here, and `"ProfilingDataContainer::close_span` is called
+    // The `span` is dropped here, and `ProfilingDataContainer::close_span` is called
     // from `Span::drop`. Incidentally, this is the same implementation as `span.drop()`!
 }
