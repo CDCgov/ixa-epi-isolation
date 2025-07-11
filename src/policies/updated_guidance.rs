@@ -6,7 +6,8 @@ use ixa::{
 use crate::{
     infectiousness_manager::InfectionStatusValue,
     interventions::ContextTransmissionModifierExt,
-    parameters::{ContextParametersExt, InterventionPolicyParameters, Params},
+    parameters::{ContextParametersExt, Params},
+    policies::GuidancePolicies,
     settings::{ContextSettingExt, Home, ItineraryModifiers},
     symptom_progression::{SymptomValue, Symptoms},
 };
@@ -20,6 +21,13 @@ define_derived_property!(PresentingWithSymptoms, bool, [Symptoms], |symptom_valu
     }
 });
 define_rng!(PolicyRng);
+
+#[derive(Debug, Clone, Copy)]
+struct InterventionPolicyParameters {
+    post_isolation_duration: f64,
+    isolation_probability: f64,
+    isolation_delay_period: f64,
+}
 
 trait ContextIsolationGuidanceInternalExt {
     fn modify_isolation_status(
@@ -119,7 +127,7 @@ impl ContextIsolationGuidanceInternalExt for Context {
 
 pub fn init(context: &mut Context) -> Result<(), IxaError> {
     let &Params {
-        intervention_policy_parameters,
+        guidance_policy,
         facemask_parameters,
         ..
     } = context.get_params();
@@ -139,10 +147,25 @@ pub fn init(context: &mut Context) -> Result<(), IxaError> {
         ));
     }
 
-    if let Some(intervention_policy_parameters) = intervention_policy_parameters {
-        context.setup_isolation_guidance_event_sequence(intervention_policy_parameters);
-    } else {
-        return Err(IxaError::IxaError("No intervention policy parameters provided. They are required for the intervention policy.".to_string()));
+    match guidance_policy {
+        Some(GuidancePolicies::Updated {
+            post_isolation_duration,
+            isolation_probability,
+            isolation_delay_period,
+        }) => {
+            let intervention_policy_parameters = InterventionPolicyParameters {
+                post_isolation_duration,
+                isolation_probability,
+                isolation_delay_period,
+            };
+            context.setup_isolation_guidance_event_sequence(intervention_policy_parameters);
+        }
+        _ => {
+            return Err(IxaError::IxaError(
+                "Policy enum does not match specified enum variant for updated guidance."
+                    .to_string(),
+            ))
+        }
     }
     Ok(())
 }
@@ -153,9 +176,10 @@ mod test {
     use crate::{
         infectiousness_manager::InfectionContextExt,
         parameters::{
-            CoreSettingsTypes, FacemaskParameters, GlobalParams, InterventionPolicyParameters,
-            ItinerarySpecificationType, ProgressionLibraryType,
+            CoreSettingsTypes, FacemaskParameters, GlobalParams, ItinerarySpecificationType,
+            ProgressionLibraryType,
         },
+        policies::GuidancePolicies,
         population_loader::Alive,
         rate_fns::load_rate_fns,
         settings::{
@@ -220,7 +244,7 @@ mod test {
                     },
                 ),
             ]),
-            intervention_policy_parameters: Some(InterventionPolicyParameters {
+            guidance_policy: Some(GuidancePolicies::Updated {
                 post_isolation_duration,
                 isolation_probability,
                 isolation_delay_period,
@@ -449,7 +473,7 @@ mod test {
                 Some(IxaError::IxaError(msg)) => {
                     assert_eq!(
                         msg,
-                        "No intervention policy parameters provided. They are required for the intervention policy."
+                        "Policy enum does not match specified enum variant for updated guidance."
                     );
                 }
                 Some(ue) => panic!(
