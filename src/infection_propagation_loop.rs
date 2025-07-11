@@ -8,8 +8,7 @@ use crate::parameters::{ContextParametersExt, Params};
 use crate::rate_fns::{load_rate_fns, InfectiousnessRateExt};
 use crate::settings::ContextSettingExt;
 use ixa::{
-    define_rng, trace, Context, ContextPeopleExt, ContextRandomExt, IxaError, PersonId,
-    PersonPropertyChangeEvent,
+    define_rng, trace, Context, ContextPeopleExt, IxaError, PersonId, PersonPropertyChangeEvent,
 };
 
 define_rng!(InfectionRng);
@@ -49,6 +48,7 @@ fn schedule_recovery(context: &mut Context, person: PersonId) {
 }
 
 /// Takes susceptible people from the population and changes them according to a provided `seed_fn`.
+/// The proportion to seed is calibrated to the population size, not the current number of susceptibles.
 /// # Errors
 /// - If the total number of people to seed is greater than the population size.
 fn query_susceptibles_and_seed(
@@ -56,12 +56,17 @@ fn query_susceptibles_and_seed(
     proportion_to_seed: f64,
     seed_fn: impl Fn(&mut Context, PersonId),
 ) {
-    let susceptibles = context.query_people((InfectionStatus, InfectionStatusValue::Susceptible));
+    #[allow(clippy::cast_precision_loss)]
+    let n = proportion_to_seed * context.get_current_population() as f64;
+
+    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+    let susceptibles = context.sample_people(
+        InfectionRng,
+        (InfectionStatus, InfectionStatusValue::Susceptible),
+        n as usize,
+    );
     for person in susceptibles {
-        // We use a random number to determine whether to seed this person.
-        if context.sample_bool(InfectionRng, proportion_to_seed) {
-            seed_fn(context, person);
-        }
+        seed_fn(context, person);
     }
 }
 
