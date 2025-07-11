@@ -39,12 +39,16 @@ def main():
         synth_pop = subexperiment.simulation_bundles[0].baseline_params[
             subexperiment.scenario_key
         ]["synth_population_file"]
+        isolation_probability = subexperiment.simulation_bundles[0].baseline_params[
+            subexperiment.scenario_key
+        ]["intervention_policy_parameters"]["isolation_probability"]
         pop_size = pl.read_csv(synth_pop).height
         average_times.append(
             {
                 "scenario": int(scenario.split("=")[-1]),
                 "average_time": average_time,
                 "pop_size": pop_size,
+                "isolation_probability": isolation_probability,
             }
         )
 
@@ -87,13 +91,17 @@ def read_fn(outputs_dir):
     return df
 
 def plot_runtime(exp_output, experiment):
-    unique_exp_output = exp_output.unique(subset=["pop_size"])
+    unique_exp_output = exp_output.unique(subset=["pop_size", "isolation_probability"])
     plt.figure()
-    plt.plot(
-        unique_exp_output["pop_size"],
-        unique_exp_output["average_time"],
-        marker="o",
-    )
+    for iso_prob in unique_exp_output["isolation_probability"].unique():
+        subset = unique_exp_output.filter(pl.col("isolation_probability") == iso_prob)
+        plt.plot(
+            subset["pop_size"],
+            subset["average_time"],
+            marker="o",
+            label=f"Isolation Probability: {iso_prob}"
+        )
+    plt.legend(title="Isolation Probability")
     plt.xscale("log")
     plt.xlabel("Population Size")
     plt.ylabel("Average Runtime")
