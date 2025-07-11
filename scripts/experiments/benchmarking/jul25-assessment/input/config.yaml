@@ -8,7 +8,7 @@ experiment_conditions:
 local_path:
   default_params_file: /home/xui6/github/ixa-epi-isolation/scripts/experiments/benchmarking/jul25-assessment/input/base.json
   griddle_file: /home/xui6/github/ixa-epi-isolation/scripts/experiments/benchmarking/jul25-assessment/input/griddle.json
-  exe_file: target/release/epi-isolation
+  exe_file: ./target/release/epi-isolation
   sub_experiment_name: jul25-assessment
   super_experiment_name: benchmarking
   target_data_file: null

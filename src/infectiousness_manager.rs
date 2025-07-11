@@ -7,7 +7,6 @@ use statrs::distribution::Exp;
 
 use crate::{
     interventions::ContextTransmissionModifierExt,
-    population_loader::Alive,
     rate_fns::{InfectiousnessRateExt, InfectiousnessRateFn, ScaledRateFn},
     settings::{ContextSettingExt, SettingId, SettingType},
 };
@@ -82,7 +81,7 @@ pub fn infection_attempt<T: SettingType + ?Sized>(
     setting_id: SettingId<T>,
 ) -> Option<PersonId> {
     let next_contact = context
-        .get_contact(person_id, setting_id, (Alive, true))
+        .get_contact(person_id, setting_id, ())
         .unwrap()?;
     match context.get_person_property(next_contact, InfectionStatus) {
         InfectionStatusValue::Susceptible => {

@@ -77,6 +77,22 @@ def main():
     )
     print(exp_output)
 
+    # Reduce to rows with unique pop_size value
+    unique_exp_output = exp_output.unique(subset=["pop_size"])
+
+    import matplotlib.pyplot as plt
+
+    plt.figure()
+    plt.plot(unique_exp_output["pop_size"], unique_exp_output["average_time"], marker="o")
+    plt.xscale("log")
+    plt.xlabel("Population Size")
+    plt.ylabel("Average Runtime")
+    plt.title("Population Size vs Average Runtime")
+    plt.grid(True)
+    plt.tight_layout()
+    plt.savefig(os.path.join(experiment.directory, "popsize_vs_avgtime.png"))
+    plt.close()
+
 
 def read_fn(outputs_dir):
     output_file_path = os.path.join(outputs_dir, "person_property_count.csv")
