@@ -103,6 +103,7 @@ def plot_runtime(exp_output, experiment):
         )
     plt.legend(title="Isolation Probability")
     plt.xscale("log")
+    plt.yscale("log")
     plt.xlabel("Population Size")
     plt.ylabel("Average Runtime")
     plt.title("Population Size vs Average Runtime")
