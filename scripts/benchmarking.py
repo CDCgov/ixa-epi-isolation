@@ -37,15 +37,15 @@ def main():
             experiment=subexperiment, data_preprocessing_fn=read_fn
         )
         end_time = time.time()
-        average_time = (end_time - start_time) / experiment_dict[
+        average_time = (end_time - start_time) / subexperiment.replicates
             "experiment_conditions"
         ]["replicates_per_particle"]
 
-        sim_input = os.path.join(scenarios_dir, scenario, "input", "base.json")
+       with open(subexperiment.default_params_file, "r") as f:
         with open(sim_input, "r") as f:
             sim_data = json.load(f)
         pop_size = pl.read_csv(
-            sim_data[experiment_dict["experiment_conditions"]["scenario_key"]][
+        pop_size = pl.read_csv(sim_data[subexperiment.scenario_key]["synth_population_file"])
                 "synth_population_file"
             ]
         ).height
@@ -67,9 +67,9 @@ def main():
             clean=False,
         )
     experiment.save(
-        os.path.join(experiment.directory, "data", "experiment_history.pkl")
+        experiment.save()
     )
-    exp_output = experiment.parquet_from_path(
+    exp_output = experiment.read_results(filename="scenarios")
         os.path.join(experiment.directory, "data", "scenarios")
     )
     exp_output = exp_output.join(
