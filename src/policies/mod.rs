@@ -6,20 +6,20 @@ use crate::parameters::{ContextParametersExt, Params};
 pub mod updated_guidance;
 
 #[derive(Debug, Serialize, Deserialize, Clone, Copy)]
-pub enum GuidancePolicies {
+pub enum Policies {
     // Struct contain policy parameters for isolation guidance
     // Post-isolation duration, isolation probability, and maximum isolation delay.
-    Updated {
+    RespiratoryVirusGuidanceMarch2024 {
         post_isolation_duration: f64,
         isolation_probability: f64,
         isolation_delay_period: f64,
     },
 }
 
-pub fn validate_guidance_policy(guidance_policy: Option<GuidancePolicies>) -> Result<(), IxaError> {
+pub fn validate_guidance_policy(guidance_policy: Option<Policies>) -> Result<(), IxaError> {
     match guidance_policy {
         None => (),
-        Some(GuidancePolicies::Updated {
+        Some(Policies::RespiratoryVirusGuidanceMarch2024 {
             post_isolation_duration,
             isolation_probability,
             isolation_delay_period,
@@ -51,7 +51,9 @@ pub fn init(context: &mut Context) -> Result<(), IxaError> {
 
     match guidance_policy {
         None => (),
-        Some(GuidancePolicies::Updated { .. }) => updated_guidance::init(context)?,
+        Some(Policies::RespiratoryVirusGuidanceMarch2024 { .. }) => {
+            updated_guidance::init(context)?;
+        }
     }
     Ok(())
 }

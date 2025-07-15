@@ -7,7 +7,7 @@ use crate::{
     infectiousness_manager::InfectionStatusValue,
     interventions::ContextTransmissionModifierExt,
     parameters::{ContextParametersExt, Params},
-    policies::GuidancePolicies,
+    policies::Policies,
     settings::{ContextSettingExt, Home, ItineraryModifiers},
     symptom_progression::{SymptomValue, Symptoms},
 };
@@ -148,7 +148,7 @@ pub fn init(context: &mut Context) -> Result<(), IxaError> {
     }
 
     match guidance_policy {
-        Some(GuidancePolicies::Updated {
+        Some(Policies::RespiratoryVirusGuidanceMarch2024 {
             post_isolation_duration,
             isolation_probability,
             isolation_delay_period,
@@ -179,7 +179,7 @@ mod test {
             CoreSettingsTypes, FacemaskParameters, GlobalParams, ItinerarySpecificationType,
             ProgressionLibraryType,
         },
-        policies::GuidancePolicies,
+        policies::Policies,
         population_loader::Alive,
         rate_fns::load_rate_fns,
         settings::{
@@ -244,7 +244,7 @@ mod test {
                     },
                 ),
             ]),
-            guidance_policy: Some(GuidancePolicies::Updated {
+            guidance_policy: Some(Policies::RespiratoryVirusGuidanceMarch2024 {
                 post_isolation_duration,
                 isolation_probability,
                 isolation_delay_period,

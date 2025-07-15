@@ -3,7 +3,7 @@ use std::{collections::HashMap, fmt::Debug, path::PathBuf};
 use ixa::{define_global_property, ContextGlobalPropertiesExt, IxaError};
 use serde::{Deserialize, Serialize};
 
-use crate::policies::{validate_guidance_policy, GuidancePolicies};
+use crate::policies::{validate_guidance_policy, Policies};
 use crate::settings::SettingProperties;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -79,7 +79,7 @@ pub struct Params {
     // Guidance Policy
     // Specifiies the policy guidance to use for interventions, defaulting to None
     // Enum variants should contain structs with policy-relevant data values
-    pub guidance_policy: Option<GuidancePolicies>,
+    pub guidance_policy: Option<Policies>,
 }
 
 // Any default parameters must be specified here
