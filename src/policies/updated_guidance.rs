@@ -148,7 +148,7 @@ pub fn init(context: &mut Context) -> Result<(), IxaError> {
     }
 
     match guidance_policy {
-        Some(Policies::RespiratoryVirusGuidanceMarch2024 {
+        Some(Policies::UpdatedIsolationGuidance {
             post_isolation_duration,
             isolation_probability,
             isolation_delay_period,
@@ -244,7 +244,7 @@ mod test {
                     },
                 ),
             ]),
-            guidance_policy: Some(Policies::RespiratoryVirusGuidanceMarch2024 {
+            guidance_policy: Some(Policies::UpdatedIsolationGuidance {
                 post_isolation_duration,
                 isolation_probability,
                 isolation_delay_period,

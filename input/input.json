@@ -23,7 +23,7 @@
     "facemask_parameters": {
       "facemask_efficacy": 0.2
     },
-    "guidance_policy": { "RespiratoryVirusGuidanceMarch2024": {
+    "guidance_policy": { "UpdatedIsolationGuidance": {
       "post_isolation_duration": 5.0,
       "isolation_probability": 1.0,
       "isolation_delay_period": 3.0

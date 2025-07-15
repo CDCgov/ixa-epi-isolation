@@ -9,7 +9,7 @@ pub mod updated_guidance;
 pub enum Policies {
     // Struct contain policy parameters for isolation guidance
     // Post-isolation duration, isolation probability, and maximum isolation delay.
-    RespiratoryVirusGuidanceMarch2024 {
+    UpdatedIsolationGuidance {
         post_isolation_duration: f64,
         isolation_probability: f64,
         isolation_delay_period: f64,
@@ -19,7 +19,7 @@ pub enum Policies {
 pub fn validate_guidance_policy(guidance_policy: Option<Policies>) -> Result<(), IxaError> {
     match guidance_policy {
         None => (),
-        Some(Policies::RespiratoryVirusGuidanceMarch2024 {
+        Some(Policies::UpdatedIsolationGuidance {
             post_isolation_duration,
             isolation_probability,
             isolation_delay_period,
@@ -51,7 +51,7 @@ pub fn init(context: &mut Context) -> Result<(), IxaError> {
 
     match guidance_policy {
         None => (),
-        Some(Policies::RespiratoryVirusGuidanceMarch2024 { .. }) => {
+        Some(Policies::UpdatedIsolationGuidance { .. }) => {
             updated_guidance::init(context)?;
         }
     }
