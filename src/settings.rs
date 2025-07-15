@@ -2044,6 +2044,7 @@ mod test {
     // #[should_panic(
     //     expected = "Person 0: Forecasted infectiousness must always be greater than or equal to current infectiousness. Current: 5, Forecasted: 3"
     // )]
+    #[allow(clippy::cast_precision_loss, clippy::cast_lossless)]
     fn test_forecast_during_self_itinerary_modification() {
         let n_replicates = 100;
         let successes = Rc::new(RefCell::new(0usize));
@@ -2078,45 +2079,58 @@ mod test {
 
             context.execute();
         }
-         let avg_successes =
-                *successes.borrow() as f64 / n_replicates as f64;
-        assert_almost_eq!(avg_successes, 0.6, 0.1)
+
+        let avg_successes = *successes.borrow() as f64 / n_replicates as f64;
+        assert_almost_eq!(avg_successes, 3.0 / 5.0, 0.05);
     }
 
     #[test]
-    #[should_panic(
-        expected = "Person 0: Forecasted infectiousness must always be greater than or equal to current infectiousness. Current: 3, Forecasted: 0.5"
-    )]
+    // #[should_panic(
+    //     expected = "Person 0: Forecasted infectiousness must always be greater than or equal to current infectiousness. Current: 3, Forecasted: 0.5"
+    // )]
+    #[allow(clippy::cast_precision_loss, clippy::cast_lossless)]
     fn test_forecast_during_contact_itinerary_modification() {
-        let mut context = setup_transmission_context(0);
+        let n_replicates = 100;
+        let successes = Rc::new(RefCell::new(0usize));
 
-        let mut itinerary = vec![];
-        append_itinerary_entry(&mut itinerary, &context, Home, 1).unwrap();
-        append_itinerary_entry(&mut itinerary, &context, Workplace, 1).unwrap();
+        for seed in 0..n_replicates {
+            let mut context = setup_transmission_context(seed);
+            let successes_clone = Rc::clone(&successes);
 
-        let infector = context.add_person(()).unwrap();
-        context.infect_person(infector, None, None, None);
-        context.add_itinerary(infector, itinerary.clone()).unwrap();
+            let mut itinerary = vec![];
+            append_itinerary_entry(&mut itinerary, &context, Home, 1).unwrap();
+            append_itinerary_entry(&mut itinerary, &context, Workplace, 1).unwrap();
 
-        for _ in 0..5 {
-            let contact = context.add_person(()).unwrap();
-            context.add_itinerary(contact, itinerary.clone()).unwrap();
-            context
-                .modify_itinerary(contact, ItineraryModifiers::Exclude { setting: &Home })
-                .unwrap();
+            let infector = context.add_person(()).unwrap();
+            context.infect_person(infector, None, None, None);
+            context.add_itinerary(infector, itinerary.clone()).unwrap();
+
+            for _ in 0..5 {
+                let contact = context.add_person(()).unwrap();
+                context.add_itinerary(contact, itinerary.clone()).unwrap();
+                context
+                    .modify_itinerary(contact, ItineraryModifiers::Exclude { setting: &Home })
+                    .unwrap();
+            }
+
+            let forecast = get_forecast(&context, infector).unwrap();
+            context.add_plan(forecast.next_time / 2.0, move |context| {
+                for person in
+                    context.query_people((InfectionStatus, InfectionStatusValue::Susceptible))
+                {
+                    context.remove_modified_itinerary(person).unwrap();
+                }
+            });
+            context.add_plan(forecast.next_time, move |context| {
+                if evaluate_forecast(context, infector, forecast.forecasted_total_infectiousness) {
+                    *successes_clone.borrow_mut() += 1;
+                }
+            });
+
+            context.execute();
         }
 
-        let forecast = get_forecast(&context, infector).unwrap();
-        context.add_plan(forecast.next_time / 2.0, move |context| {
-            for person in context.query_people((InfectionStatus, InfectionStatusValue::Susceptible))
-            {
-                context.remove_modified_itinerary(person).unwrap();
-            }
-        });
-        context.add_plan(forecast.next_time, move |context| {
-            evaluate_forecast(context, infector, forecast.forecasted_total_infectiousness);
-        });
-
-        context.execute();
+        let avg_successes = *successes.borrow() as f64 / n_replicates as f64;
+        assert_almost_eq!(avg_successes, 0.5 / 3.0, 0.05);
     }
 }
