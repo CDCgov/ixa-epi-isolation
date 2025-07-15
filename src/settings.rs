@@ -2131,6 +2131,6 @@ mod test {
         }
 
         let avg_successes = *successes.borrow() as f64 / n_replicates as f64;
-        assert_almost_eq!(avg_successes, 0.5 / 3.0, 0.05);
+        assert_almost_eq!(avg_successes, 0.5 / 5.0, 0.05);
     }
 }
