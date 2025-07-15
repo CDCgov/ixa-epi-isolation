@@ -5,7 +5,7 @@ output: html_document
 One of the characteristics of simulated epidemics that can be checked in integration tests is the "final size", i.e., the proportion of persons who have become infected after an SIR-type epidemic has run through a population and there are no longer any infectious persons remaining. The purpose of this document is to briefly review the underlying mathematics and to generate code that can be used to calculate final size.
 
 ### Final size relation for canonical SIR (Kermack and McKendrick) ODE model
-The following is based on Brauer et al. 2019. We begin with the standard formulation of the model.
+The following is based on Brauer et al. 2019. (See also Miller 2012 and Ma and Earn 2006). We begin with the standard formulation of the model.
 
 $$
 \frac{dS(t)}{dt} = -\beta S(t) I(t)
@@ -49,6 +49,7 @@ $$\frac{N-R(\infty)}{S(0)} = \exp\bigg(-\mathscr{R}_0 \frac{R(\infty)}{N}\bigg)$
 Let the final size $Z = \frac{R(\infty)}{N}$ and the initial infected proportion $Y = \frac{I(0)}{N}$. Therefore
 
 $$\frac{1-Z}{1-Y} = \exp(-\mathscr{R}_0 Z)$$
+$$Z = 1-(1-Y)\exp(-\mathscr{R}_0 Z)$$
 
 If we are willing to assume that $I(0)$ is very small relative to $N$, then $Y\approx 0$ and we get the simpler expression $Z = 1-\exp(-\mathscr{R}_0Z)$. We can solve $Z$ numerically if we know $\mathscr{R}_0$ and $Y$.
 
@@ -66,19 +67,27 @@ x_for_y_0_001 <- sapply(X = r0_values, FUN = final_size_fx, Y = 0.001)
 x_for_y_0_01 <- sapply(X = r0_values, FUN = final_size_fx, Y = 0.01)
 x_for_y_0_1 <- sapply(X = r0_values, FUN = final_size_fx, Y = 0.1)
 
-herd_immunity_threshold <- 1 - 1/r0_values[r0_values >= 1]
+herd_immunity_threshold <- 1 - 1 / r0_values[r0_values >= 1]
 
 plot(x = r0_values, y = x_for_y_0, type = "l", col = "black",
-xlab = expression(italic(R[0])), ylab = expression(paste("final size, ", italic(Z))))
+xlab = expression(italic(R[0])),
+ylab = expression(paste("final size, ", italic(Z))))
 points(x = r0_values, y = x_for_y_0_001, type = "l", col = "blue")
 points(x = r0_values, y = x_for_y_0_01, type = "l", col = "purple")
 points(x = r0_values, y = x_for_y_0_1, type = "l", col = "red")
-points(x = r0_values[r0_values >= 1], y = herd_immunity_threshold, type = "l", col = "darkgrey", lty = 2)
+points(x = r0_values[r0_values >= 1],
+y = herd_immunity_threshold, type = "l", col = "darkgrey", lty = 2)
 legend("bottomright",
 legend = c(expression(paste("initial size, ", italic(Y=0))),
            expression(paste("initial size, ", italic(Y=0.001))),
            expression(paste("initial size, ", italic(Y=0.01))),
            expression(paste("initial size, ", italic(Y=0.1))),
-           "herd immunity threshold"), lty = c(1,1,1,1,2), col = c("black", "blue", "purple", "red", "darkgrey"))
+           "herd immunity threshold"), lty = c(1,1,1,1,2),
+           col = c("black", "blue", "purple", "red", "darkgrey"))
 
 ```
+
+### References
+1. Brauer F, Castillo-Chavez C, Feng Z. Mathematical models in epidemiology. New York: Springer; 2019 Feb 20.
+2. Ma J, Earn DJ. Generality of the final size formula for an epidemic of a newly invading infectious disease. Bulletin of mathematical biology. 2006 Apr;68:679-702.
+3. Miller JC. A note on the derivation of epidemic final sizes. Bulletin of mathematical biology. 2012 Sep;74(9):2125-41.

@@ -1,7 +1,7 @@
 azb:
   azure_batch: false
 experiment_conditions:
-  replicates_per_particle: 50
+  replicates_per_particle: 100
   samples_per_step: 1
   seed: 12345
   scenario_key: epi_isolation.GlobalParams

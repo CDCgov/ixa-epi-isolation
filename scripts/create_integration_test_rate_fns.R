@@ -26,7 +26,7 @@ beta <- 1.5
 ### Exponentially distributed infectious period: rate_fns_exp_I ###
 ### empirical rate functions that correspond to SIR or SIS assumptions
 
-num_ids <- 1000 # number of "draws" of rate function to create
+num_ids <- 10000 # number of "draws" of rate function to create
 mean_duration_infectious <- 1 / gamma # mean number of time units infectious
 beta_infectiousness <- beta # expected onward transmissions per unit time
 
