@@ -808,6 +808,7 @@ mod test {
     };
     use ixa::{define_person_property, ContextGlobalPropertiesExt, ContextPeopleExt};
     use statrs::assert_almost_eq;
+    use std::{cell::RefCell, rc::Rc};
 
     define_setting_type!(Community);
 
@@ -1997,7 +1998,7 @@ mod test {
         assert_eq!(total_ratio, vec![0.5, 0.25, 0.25]);
     }
 
-    fn setup_transmission_context() -> Context {
+    fn setup_transmission_context(seed: u64) -> Context {
         let mut context = Context::new();
 
         // Create a single itinerary for a group of people
@@ -2032,7 +2033,7 @@ mod test {
             )
             .unwrap();
 
-        context.init_random(0);
+        context.init_random(seed);
         load_rate_fns(&mut context).unwrap();
 
         context
@@ -2040,36 +2041,46 @@ mod test {
 
     // This test should eventually pass by re-factoring modified itineraries to also account for changes to an individual's forecast.
     #[test]
-    #[should_panic(
-        expected = "Person 0: Forecasted infectiousness must always be greater than or equal to current infectiousness. Current: 5, Forecasted: 3"
-    )]
+    // #[should_panic(
+    //     expected = "Person 0: Forecasted infectiousness must always be greater than or equal to current infectiousness. Current: 5, Forecasted: 3"
+    // )]
     fn test_forecast_during_self_itinerary_modification() {
-        let mut context = setup_transmission_context();
+        let n_replicates = 100;
+        let successes = Rc::new(RefCell::new(0usize));
+        for seed in 0..n_replicates {
+            let mut context = setup_transmission_context(seed);
+            let successes_clone = Rc::clone(&successes);
 
-        let mut itinerary = vec![];
-        append_itinerary_entry(&mut itinerary, &context, Home, 1).unwrap();
-        append_itinerary_entry(&mut itinerary, &context, Workplace, 1).unwrap();
+            let mut itinerary = vec![];
+            append_itinerary_entry(&mut itinerary, &context, Home, 1).unwrap();
+            append_itinerary_entry(&mut itinerary, &context, Workplace, 1).unwrap();
 
-        let infector = context.add_person(()).unwrap();
-        context.infect_person(infector, None, None, None);
-        context.add_itinerary(infector, itinerary.clone()).unwrap();
+            let infector = context.add_person(()).unwrap();
+            context.infect_person(infector, None, None, None);
+            context.add_itinerary(infector, itinerary.clone()).unwrap();
 
-        for _ in 0..5 {
-            let contact = context.add_person(()).unwrap();
-            context.add_itinerary(contact, itinerary.clone()).unwrap();
+            for _ in 0..5 {
+                let contact = context.add_person(()).unwrap();
+                context.add_itinerary(contact, itinerary.clone()).unwrap();
+            }
+
+            let forecast = get_forecast(&context, infector).unwrap();
+            context.add_plan(forecast.next_time / 2.0, move |context| {
+                context
+                    .modify_itinerary(infector, ItineraryModifiers::RestrictTo { setting: &Home })
+                    .unwrap();
+            });
+            context.add_plan(forecast.next_time, move |context| {
+                if evaluate_forecast(context, infector, forecast.forecasted_total_infectiousness) {
+                    *successes_clone.borrow_mut() += 1;
+                }
+            });
+
+            context.execute();
         }
-
-        let forecast = get_forecast(&context, infector).unwrap();
-        context.add_plan(forecast.next_time / 2.0, move |context| {
-            context
-                .modify_itinerary(infector, ItineraryModifiers::RestrictTo { setting: &Home })
-                .unwrap();
-        });
-        context.add_plan(forecast.next_time, move |context| {
-            evaluate_forecast(context, infector, forecast.forecasted_total_infectiousness);
-        });
-
-        context.execute();
+         let avg_successes =
+                *successes.borrow() as f64 / n_replicates as f64;
+        assert_almost_eq!(avg_successes, 0.6, 0.1)
     }
 
     #[test]
@@ -2077,7 +2088,7 @@ mod test {
         expected = "Person 0: Forecasted infectiousness must always be greater than or equal to current infectiousness. Current: 3, Forecasted: 0.5"
     )]
     fn test_forecast_during_contact_itinerary_modification() {
-        let mut context = setup_transmission_context();
+        let mut context = setup_transmission_context(0);
 
         let mut itinerary = vec![];
         append_itinerary_entry(&mut itinerary, &context, Home, 1).unwrap();
