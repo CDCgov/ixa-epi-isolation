@@ -16,9 +16,9 @@ echo "Generating ODE output..."
 
 Rscript scripts/create_ode_output.R
 
-echo "Running the simulations for the SIR-like model..."
+echo "Running simulations for the SIR-like model with small population size..."
 
-poetry run python scripts/call_integration_test.py -f tests/integration/sir/input/config.yaml
+poetry run python scripts/call_integration_test.py -f tests/integration/sir_small/input/config.yaml
 
 echo "Running the simulations for the SEIR-like model..."
 

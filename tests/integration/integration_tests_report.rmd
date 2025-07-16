@@ -162,7 +162,7 @@ $$
 
 
 ## Simple SIR model
-This integration test compares output from ixa with output from a simple SIR ODE model. To recreate the infectious `I` compartment of a classical SIR ODE model, we create the `tests/input/rate_fns_exp_I.csv` in R, which supplies a constant value of $\beta = 1.5$ as the infectiousness for exponentially distributed lengths of time ($\gamma=0.5$, so mean duration of infectiousness is 2 time units).  
+This integration test generates and analyzes simulations in ixa that are expected to align with canonical SIR compartmental model assumptions. To recreate the infectious `I` compartment of a classical SIR ODE model, we create the `tests/input/rate_fns_exp_I.csv` in R, which supplies a constant value of $\beta = 1.5$ as the infectiousness for exponentially distributed lengths of time ($\gamma=0.5$, so mean duration of infectiousness is 2 time units).  
 
 The key part of the file `tests/integration/sir/input/input_simple_SIR.json` that specifies the rate function is as follows:
 
@@ -187,17 +187,113 @@ simple_sir_final_size <- final_size_fx(R0 = 3, Y = 0.01)
 
 With the parameters used here, $\mathscr{R}_{intrinsic} = \beta/\gamma = 1.5/0.5 = 3$ and in the large-sample limit, $\mathscr{R}_{intrinsic}=\mathscr{R}_{0}=3$. For $\mathscr{R}_{0}=3$ and an initial prevalence of infection of 0.01, we expect a final size of `r simple_sir_final_size`.
 
+In the first part of this integration test, we run ixa repeatedly with a small population size $N=100$ and check the output against expectations of the distribution of the number of infected individuals at the start of the simulation and the distribution of the epidemic final size.
+
+In the following plot, the blue histogram bars represent the distribution of the number of initial infections across the simulated outbreaks, and the red dots represent the expected distribution based on a binomial distribution with probability of "success" of 0.01 and $N=100$.
+
 ```{r, echo = FALSE, warning = FALSE, message = FALSE} 
-ixa_sir_df <- as.data.frame(open_dataset("sir/data/simulations"))
+ixa_sir_df <- as.data.frame(open_dataset("sir_small/data/simulations"))
 
 sim_pop_size <- ixa_sir_df |> filter(t == 0 & simulation == 0) |>
   summarize(pop_size = sum(count)) |> as.numeric()
 
-ixa_sir_final_sizes <- ixa_sir_df |> filter(InfectionStatus == "Recovered" & 
-t == max(t))
+ixa_sir_initial_df <- ixa_sir_df |>
+  filter(InfectionStatus == "Susceptible" & t == 0) |>
+  select(simulation, t, count_susceptible = count) |>
+  mutate(count_infectious = sim_pop_size - count_susceptible)
 
-epidemic_sims <- ixa_sir_final_sizes |> 
-filter(count > (sim_pop_size * simple_sir_final_size / 2)) |> pull(simulation)
+inital_infect_vals <- 0:max(ixa_sir_initial_df$count_infectious)
+
+expected_init <- dbinom(x = inital_infect_vals, size = sim_pop_size, prob = 0.01)
+expected_init_df <- data.frame(
+  count_infectious = inital_infect_vals,
+  expected_prop = expected_init)
+
+ggplot(ixa_sir_initial_df, aes(x = count_infectious)) +
+  geom_histogram(aes(y = ..density..), binwidth = 1,
+                 fill = "lightblue", color = "black") +
+  geom_point(data = expected_init_df,
+             aes(x = count_infectious, y = expected_prop),
+             color = "red", size = 3) +
+  scale_x_continuous(breaks = inital_infect_vals) +
+  labs(x = "number of initial infectious persons") +
+  theme_minimal()
+
+```
+
+```{r}
+sims_1_init_infected <- ixa_sir_initial_df |> filter(count_infectious == 1) |>
+  pull(simulation)
+
+ixa_sir_final_df <- ixa_sir_df |>
+  filter(InfectionStatus == "Recovered" & t == max(t)) |>
+  select(simulation, t, final_size = count) |>
+  filter(simulation %in% sims_1_init_infected)
+```
+
+Next, we'll compare the outbreak final size distribution to the distribution we expect for $\mathscr{R}_{0}=3$ and $N=100$ (calculated using the method of Miller 2019). Here we will restrict to the `r nrow(ixa_sir_final_df)` simulations in which the initial number of infected individuals was exactly 1. The blue histogram bars represent the distribution of the epidemic final size across the simulated outbreaks, and the red dots represent the expected distribution. This plot shows that the distributions closely align.
+
+```{r}
+# get the probability of each final size
+
+r_0 <- 3
+N <- sim_pop_size
+
+library(Rmpfr)
+
+precision <- 128 * 4 # necessary precision depends on parameters
+# this should work for N = 1000 and R0 = 3, which runs in a little over 2 mins
+
+NxN_mat <- mpfr(matrix(nrow = N, ncol = N), precision)
+M_vec <- mpfr(seq_len(N), precision)
+r_0 <- mpfr(r_0, precision)
+c_1_m <- 1 + r_0 * (1 - (M_vec - 1) / (N - 1))
+
+NxN_mat[, 1] <- c_1_m
+
+for(k in 2:N){
+    NxN_mat[, k] <- (M_vec - k + 1) / (N - k + 1) * c_1_m * NxN_mat[, k - 1]
+}
+
+L <- NxN_mat
+b <- mpfr(matrix(data = 1, nrow = N, ncol = 1), precision)
+
+x <- mpfr(rep(0, N), precision)
+
+# the following loop is equivalent to the function forwardsolve
+# forwardsolve works with smaller populations, but runs into numerical issues
+for (i in 1:N) {
+  sum_Lx <- mpfr(0, precision)
+  if (i > 1) {
+    sum_Lx <- sum(L[i, 1:(i-1)] * x[1:(i-1)])
+  }
+  x[i] <- (b[i] - sum_Lx) / L[i, i]
+}
+
+expected_final_df <- data.frame(
+  final_size = 1:N,
+  expected_prop = as.numeric(x))
+
+# plot simulated and expected results
+
+ggplot(ixa_sir_final_df, aes(x = final_size)) +
+  geom_histogram(aes(y = ..density..), binwidth = 1,
+                 fill = "lightblue", color = "black") +
+  geom_point(data = expected_final_df,
+             aes(x = final_size, y = expected_prop),
+             color = "red", size = 1) +
+  labs(x = "epidemic final size") +
+  theme_minimal()
+
+```
+
+While the final size of the outbreak is an important property, it is also necessary to test whether the time-course of simulated outbreaks aligns with what we expect from the corresponding deterministic ODE model. We will restrict to the simulated outbreak trajectories with a single initial infected case that "took off" and caused an epidemic. (We somewhat arbitrarily define "epidemics" as those simulations with a final size at least half the expected final size.) The dashed colored lines represent the mean of the simulated epidemics, while the solid colored lines show the deterministic ODE solution. The light grey dashed horizontal line is the expected outbreak final size. The simulated dynamics mirror the ODE dynamics closely, although the mean simulated peak prevalence of infection is lower than expected from the ODE model. 
+
+```{r, echo = FALSE, warning = FALSE, message = FALSE} 
+
+epidemic_sims <- ixa_sir_final_df |> 
+  filter(final_size > (sim_pop_size * simple_sir_final_size / 2)) |>
+  pull(simulation)
 
 ixa_sir_epidemic_df <- ixa_sir_df |> filter(simulation %in% epidemic_sims)
 
@@ -215,13 +311,6 @@ ode_results_sir$InfectionStatus <- factor(ode_results_sir$InfectionStatus,
 
 ixa_sir_epidemic_df |>
   ggplot() +
-  geom_line(
-    aes(
-      x = t, y = count,
-      group = interaction(simulation, InfectionStatus), color = InfectionStatus
-    ),
-    alpha = 0.01, lwd = 0.1
-  ) +
   xlab("Time") +
   ylab("Number of people (prevalence)") +
   theme_minimal() +
@@ -232,14 +321,6 @@ ixa_sir_epidemic_df |>
   geom_line(
     data = ixa_sir_epidemic_summary,
     aes(x = t, y = mean_count, color = InfectionStatus), lty = 2
-  ) +
-  geom_line(
-    data = ixa_sir_epidemic_summary,
-    aes(x = t, y = lower_95_ci, color = InfectionStatus), lty = 3, lwd = 0.5
-  ) +
-  geom_line(
-    data = ixa_sir_epidemic_summary,
-    aes(x = t, y = upper_95_ci, color = InfectionStatus), lty = 3, lwd = 0.5
   ) +
   geom_hline(yintercept = simple_sir_final_size * sim_pop_size,
    col = "grey", lty = 5, lwd = 0.5) +
@@ -263,8 +344,11 @@ The file `tests/integration/seir/input/input_simple_SEIR.json` was modfied as fo
     }
 ```
 Identical to the simple SIR case above, $\mathscr{R}_{intrinsic} = \beta/\gamma = 1.5/0.5 = 3$ and in the large sample limit, $\mathscr{R}_{intrinsic}=\mathscr{R}_{0}=3$.
+
+The following figure shows simulated outbreak trajectories (faint dashed lines) and the ODE results (thick solid lines). The "susceptible" and "recovered" ODE results broadly mirror the corresponding results from ixa simulations. But the dashed red lines representing "infectious" persons in ixa have a much higher peak that the solid red line for "infectious" from the ODE model. This is not an error, but rather illustrates an important conceptual difference between the modeling approaches: In ixa, there is no explicit "exposed" category. Rather, the "exposed" category is implicitly modeled through the time-varying transmission rate functions. The "infectious" category in ixa is effectively the sum of the "exposed" and "infectious" categories in the ODE model.
 ```{r, echo = FALSE}
 ixa_seir_df <- as.data.frame(open_dataset("seir/data/simulations"))
+
 ode_results_seir <- read.csv("../input/ode_results_SEIR.csv")
 
 ode_results_seir$InfectionStatus <- factor(ode_results_seir$InfectionStatus,
@@ -278,14 +362,14 @@ ixa_seir_df |>
       x = t, y = count,
       group = interaction(simulation, InfectionStatus), color = InfectionStatus
     ),
-    alpha = 0.1
+    alpha = 0.1, lty = 2
   ) +
   xlab("Time") +
   ylab("Number of people (prevalence)") +
   theme_minimal() +
   geom_line(
     data = ode_results_seir,
-    aes(x = t, y = count, color = InfectionStatus)
+    aes(x = t, y = count, color = InfectionStatus), lwd = 2
   ) +
   scale_color_manual(values = c(
     "Susceptible" = "blue", "Exposed" = "purple",
