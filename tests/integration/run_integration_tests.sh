@@ -27,3 +27,7 @@ poetry run python scripts/call_integration_test.py -f tests/integration/seir/inp
 echo "Generating report with integration tests to be performed by visual inspection..."
 
 Rscript -e  "rmarkdown::render('tests/integration/integration_tests_report.rmd')"
+
+echo "Generating appendix on final size calculations..."
+
+Rscript -e  "rmarkdown::render('tests/integration/final_size_appendix.rmd')"
