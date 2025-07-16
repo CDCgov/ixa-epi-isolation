@@ -7,9 +7,9 @@ knitr::opts_chunk$set(
   echo = FALSE,
   warning = FALSE,
   message = FALSE,
-  out.width='100%',
+  out.width = "100%",
   fig.width = 10,
-  fig.align = 'center'
+  fig.align = "center"
 )
 ```
 
@@ -46,9 +46,9 @@ id,time,value
 ```
 This example file specifies two empirical rate functions for infectiousness. In the first (`id` = 1), infectiousness occurs from 1 time unit after infection until 5 time units after infection. The `value` for the rate is 3, but note that if `"scale": 2.0` is specified in the input `.json`, then the modeled intrinsic infectiousness will be 6. In the second (`id` = 2), intrinsic infectiousness follows a "triangle" shape, starting at 0.5 time units after infection and linearly increasing to a peak 2 time units after infection, which is followed by a linear decrease until 4 time units after infection, after which there is no more infectiousness. At the peak, the rate value is 1.5, which would be scaled to 3, given the specified `scale` factor. For each infection, an empirical rate function is randomly drawn with replacement from the set of specified functions.
 
-The information stipulated in the `infectiousness_rate_fn` is sufficient to calculate the intrinsic reproduction number $\mathscr{R}_{intrinsic}$. This value can be interpreted as the expected number of onward transmission events that would occur secondary to a typical infection if the infected person was continually in contact with one (and only one) other person, if that other person started out susceptible to infection and, upon infection, instantly reverted to being susceptible (i.e., they were able to be infected repeatedly), and if there are no interventions that might reduce infectiousness or transmission. The infectiousness rate function is best though of as the rate of infection _attempts_ rather than the rate of transmission; infection attempts may fail for reasons including a lack of susceptible contacts or by being blocked by interventions that modify transmission (e.g., mask wearing).  
+The information stipulated in the `infectiousness_rate_fn` is sufficient to calculate the intrinsic reproduction number $\mathscr{R}_{intrinsic}$. This value can be interpreted as the expected number of onward transmission events that would occur secondary to a typical infection if the infected person was continually in contact with one (and only one) other person, if that other person started out susceptible to infection and, upon infection, instantly reverted to being susceptible (i.e., they were able to be infected repeatedly), and if there are no interventions that might reduce infectiousness or transmission. The infectiousness rate function is best though of as the rate of infection _attempts_ rather than the rate of transmission; infection attempts may fail for reasons including a lack of susceptible contacts or by being blocked by interventions that modify transmission (e.g., mask wearing).
 
-For the `Constant` input parameterization, where `rate`=$\beta$ and `duration`=T, 
+For the `Constant` input parameterization, where `rate`=$\beta$ and `duration`=T,
 $$
 \mathscr{R}_{intrinsic} = \beta T
 $$
@@ -75,7 +75,7 @@ The input parameter `synth_population_file` specifies a `.csv` file with one row
 ```
 
 ### `settings_properties`
-The `settings_properties` input parameters define 1) the proportion of time simulated persons spend in each setting and 2) define the relationship between number of persons in a setting and the rate of infection attempts occuring in that setting. Currently, the model supports up to four settings: `Home`, `Workplace`, `School`, and `CensusTract`. For each setting, a value of `alpha` is specified along with the `ratio` in the `itinerary_specification`, as shown in the example below. 
+The `settings_properties` input parameters define 1) the proportion of time simulated persons spend in each setting and 2) define the relationship between number of persons in a setting and the rate of infection attempts occuring in that setting. Currently, the model supports up to four settings: `Home`, `Workplace`, `School`, and `CensusTract`. For each setting, a value of `alpha` is specified along with the `ratio` in the `itinerary_specification`, as shown in the example below.
 
 ```
 "settings_properties": {"Home": {"alpha": 0.0,
@@ -89,10 +89,10 @@ The `settings_properties` input parameters define 1) the proportion of time simu
 ```
 The setting-specific value of `alpha` determines how the rate of infection attempts by an infectious person is affected by the number of people in a setting. Specifically, the rate of infection attempts is $\beta (n-1)^\alpha$, where $\beta$ is the intrinsic infectiousness rate, $n \geq 1$ is the number of people in the setting including the infectious person, and $0 \leq\alpha\leq 1$. To illustrate this concept, imagine two infectious persons, one of whom goes to a workplace with 10 other people and the other goes to a workplace with 20 other people. If we assume that $\alpha = 0$, then, all else equal, these two persons infect others at the same rate. But if $\alpha = 1$, then the latter person infects susceptible persons at twice the rate of the former person.
 
-The value of `ratio` corresponds to the proportion of time that each simulated person spends in that setting. In the above example, time is equally divided across settings. (Time is divided among the settings to which a person is assigned; if neither workplace nor school is specified in the synthentic population file for a person, then that person's time would be evenly divided between "Home" and "CensusTract".) Conceptually, a person can only be in one setting at a time, but the model does not explicitly account for which units of time are spent in which settings (e.g., the model has no notion of which hours of the day a person is at school or work versus at home). 
+The value of `ratio` corresponds to the proportion of time that each simulated person spends in that setting. In the above example, time is equally divided across settings. (Time is divided among the settings to which a person is assigned; if neither workplace nor school is specified in the synthentic population file for a person, then that person's time would be evenly divided between "Home" and "CensusTract".) Conceptually, a person can only be in one setting at a time, but the model does not explicitly account for which units of time are spent in which settings (e.g., the model has no notion of which hours of the day a person is at school or work versus at home).
 
 ### Expected number of secondary infections
-We can use the values specified in `settings_properties` along with $\mathscr{R}_{intrinsic}$ and knowledge about the population structure to estimate $\mathscr{R}_0$ under certain assumptions. Let us first consider a population with size $n$ with homogeneous mixing (e.g., all persons in the population share a single household). The expected number of secondary infections caused by an infected person, assuming all others are susceptible, is   
+We can use the values specified in `settings_properties` along with $\mathscr{R}_{intrinsic}$ and knowledge about the population structure to estimate $\mathscr{R}_0$ under certain assumptions. Let us first consider a population with size $n$ with homogeneous mixing (e.g., all persons in the population share a single household). The expected number of secondary infections caused by an infected person, assuming all others are susceptible, is
 
 $$
 \bigg(1-\exp\bigg(-\frac{\mathscr{R}_{intrinsic}(n-1)^\alpha}{n-1}\bigg)\bigg)(n-1)
@@ -103,7 +103,7 @@ $$
 
 This expression is an application of the formula $cumulative\ incidence = 1 - \exp(-incidence\ rate \times time)$, where $\mathscr{R}_{intrinsic}(n-1)^\alpha/(n-1)$ is the _per capita_ incidence rate of infection among the susceptible people and time is implicitly scaled so that 1 unit of time corresponds to the duration of infectiousness. The cumulative incidence is the _proportion_ of susceptible people who are infected, so we multiply by $(n-1)$ to get the _count_.
 
-The following figure shows how the expected number of secondary infections changes as a function of $\alpha$ and $n$ assuming that $\mathscr{R}_{intrinsic} = 1$. When $n=1$ the number of secondary infections is 0, because there are no susceptible persons to infect. When $n=2$, the expected number of secondary infections is $1-\exp(-\mathscr{R}_{intrinsic})$ and does not depend on $\alpha$. The maximum possible number of secondary infections is $n-1$ (i.e., the total population size minus the initially infected person); therefore, areas of the plot corresponding to more than $n-1$ secondary infections are shaded in grey.    
+The following figure shows how the expected number of secondary infections changes as a function of $\alpha$ and $n$ assuming that $\mathscr{R}_{intrinsic} = 1$. When $n=1$ the number of secondary infections is 0, because there are no susceptible persons to infect. When $n=2$, the expected number of secondary infections is $1-\exp(-\mathscr{R}_{intrinsic})$ and does not depend on $\alpha$. The maximum possible number of secondary infections is $n-1$ (i.e., the total population size minus the initially infected person); therefore, areas of the plot corresponding to more than $n-1$ secondary infections are shaded in grey.
 
 ```{r}
 # load packages
@@ -113,42 +113,51 @@ library(arrow)
 ```
 
 ```{r}
-
 R_intrinsic <- 1 # nolint: object_name_linter.
-alphas <- (0:5)/5
+alphas <- (0:5) / 5
 n <- c(1:99, 10^(2:4))
 
-secondary_infections <- sapply(alphas, function(alpha){
+secondary_infections <- sapply(alphas, function(alpha) {
   (1 - exp(-R_intrinsic * (n - 1)^(alpha - 1))) * (n - 1)
 })
 
 blue_red_palette <- colorRampPalette(c("blue", "red"))
 
-matplot(x = n, y = secondary_infections, type = "l", log = "", lty = 1,
-        col = blue_red_palette(length(alphas)),
-        xlim = c(1, 10), ylim = c(0, 7), xaxs = "i", yaxs = "i",
-        xlab = expression(italic(n) ~ "(population size)"),
-        ylab = "secondary infections")
-polygon(x = c(1, n, 10^4), y = c(10^4, n - 1, 10^4), col = "lightgrey",
-        border = NA)
-legend("topleft", legend = paste("\u03B1 = ", alphas),
-       col = blue_red_palette(length(alphas)), lty = 1)
+matplot(
+  x = n, y = secondary_infections, type = "l", log = "", lty = 1,
+  col = blue_red_palette(length(alphas)),
+  xlim = c(1, 10), ylim = c(0, 7), xaxs = "i", yaxs = "i",
+  xlab = expression(italic(n) ~ "(population size)"),
+  ylab = "secondary infections"
+)
+polygon(
+  x = c(1, n, 10^4), y = c(10^4, n - 1, 10^4), col = "lightgrey",
+  border = NA
+)
+legend("topleft",
+  legend = paste("\u03B1 = ", alphas),
+  col = blue_red_palette(length(alphas)), lty = 1
+)
 ```
 
-The figure below is very similar, but plotting both axes on the log scale and changing the axis ranges helps visualize the expected number of secondary infections in the limit as $n\to\infty$.  
+The figure below is very similar, but plotting both axes on the log scale and changing the axis ranges helps visualize the expected number of secondary infections in the limit as $n\to\infty$.
 
 ```{r}
-
-matplot(x = n, y = secondary_infections, type = "l", log = "xy", lty = 1,
-        col = blue_red_palette(length(alphas)),
-        xlim = c(2, 7000), ylim = c(0.5, 7000), xaxs = "i", yaxs = "i",
-        xlab = expression(italic(n) ~ "(population size)"),
-        ylab = "secondary infections")
-polygon(x = c(n, 10^4, 1), y = c(n - 1, 10^4, 10^4), col = "lightgrey",
-        border = NA)
-legend("topleft", legend = paste("\u03B1 = ", alphas),
-       col = blue_red_palette(length(alphas)), lty = 1)
-
+matplot(
+  x = n, y = secondary_infections, type = "l", log = "xy", lty = 1,
+  col = blue_red_palette(length(alphas)),
+  xlim = c(2, 7000), ylim = c(0.5, 7000), xaxs = "i", yaxs = "i",
+  xlab = expression(italic(n) ~ "(population size)"),
+  ylab = "secondary infections"
+)
+polygon(
+  x = c(n, 10^4, 1), y = c(n - 1, 10^4, 10^4), col = "lightgrey",
+  border = NA
+)
+legend("topleft",
+  legend = paste("\u03B1 = ", alphas),
+  col = blue_red_palette(length(alphas)), lty = 1
+)
 ```
 
 When $\alpha=0$, the expected number of secondary infections plateaus at $\mathscr{R}_{intrinsic}$, whereas when $\alpha=1$, the _proportion_ of susceptible persons that are infected by a single infectious case is a constant $1-\exp(-\mathscr{R}_{intrinsic})$. For $0<\alpha<1$, the _number_ of secondary infections goes to infinity in the limit as $n$ goes to infinity, but the _proportion_ goes to 0.
@@ -162,7 +171,7 @@ $$
 
 
 ## Simple SIR model
-This integration test generates and analyzes simulations in ixa that are expected to align with canonical SIR compartmental model assumptions. To recreate the infectious `I` compartment of a classical SIR ODE model, we create the `tests/input/rate_fns_exp_I.csv` in R, which supplies a constant value of $\beta = 1.5$ as the infectiousness for exponentially distributed lengths of time ($\gamma=0.5$, so mean duration of infectiousness is 2 time units).  
+This integration test generates and analyzes simulations in ixa that are expected to align with canonical SIR compartmental model assumptions. To recreate the infectious `I` compartment of a classical SIR ODE model, we create the `tests/input/rate_fns_exp_I.csv` in R, which supplies a constant value of $\beta = 1.5$ as the infectiousness for exponentially distributed lengths of time ($\gamma=0.5$, so mean duration of infectiousness is 2 time units).
 
 The key part of the file `tests/integration/sir/input/input_simple_SIR.json` that specifies the rate function is as follows:
 
@@ -175,14 +184,16 @@ The key part of the file `tests/integration/sir/input/input_simple_SIR.json` tha
     }
 ```
 ```{r, echo = FALSE, warning = FALSE, message = FALSE}
-
-final_size_fx <- function(R0, Y = 1e-10){
-    uniroot(f = function(Z){exp(-R0 * Z) - (1 - Z) / (1 - Y)},
-    interval = c(Y ,1))$root
+final_size_fx <- function(r0, y = 1e-10) {
+  uniroot(
+    f = function(z) {
+      exp(-r0 * z) - (1 - z) / (1 - y)
+    },
+    interval = c(y, 1)
+  )$root
 }
 
-simple_sir_final_size <- final_size_fx(R0 = 3, Y = 0.01)
-
+simple_sir_final_size <- final_size_fx(r0 = 3, y = 0.01)
 ```
 
 With the parameters used here, $\mathscr{R}_{intrinsic} = \beta/\gamma = 1.5/0.5 = 3$ and in the large-sample limit, $\mathscr{R}_{intrinsic}=\mathscr{R}_{0}=3$. For $\mathscr{R}_{0}=3$ and an initial prevalence of infection of 0.01, we expect a final size of `r simple_sir_final_size`.
@@ -191,11 +202,13 @@ We run ixa repeatedly with a small population size $N=100$ and check the output 
 
 In the following plot, the blue histogram bars represent the distribution of the number of initial infections across the simulated outbreaks, and the red dots represent the expected distribution based on a binomial distribution with probability of "success" of 0.01 and $N=100$.
 
-```{r, echo = FALSE, warning = FALSE, message = FALSE} 
+```{r, echo = FALSE, warning = FALSE, message = FALSE}
 ixa_sir_df <- as.data.frame(open_dataset("sir_small/data/simulations"))
 
-sim_pop_size <- ixa_sir_df |> filter(t == 0 & simulation == 0) |>
-  summarize(pop_size = sum(count)) |> as.numeric()
+sim_pop_size <- ixa_sir_df |>
+  filter(t == 0 & simulation == 0) |>
+  summarize(pop_size = sum(count)) |>
+  as.numeric()
 
 ixa_sir_initial_df <- ixa_sir_df |>
   filter(InfectionStatus == "Susceptible" & t == 0) |>
@@ -204,25 +217,33 @@ ixa_sir_initial_df <- ixa_sir_df |>
 
 inital_infect_vals <- 0:max(ixa_sir_initial_df$count_infectious)
 
-expected_init <- dbinom(x = inital_infect_vals, size = sim_pop_size, prob = 0.01)
+expected_init <- dbinom(
+  x = inital_infect_vals,
+  size = sim_pop_size, prob = 0.01
+)
 expected_init_df <- data.frame(
   count_infectious = inital_infect_vals,
-  expected_prop = expected_init)
+  expected_prop = expected_init
+)
 
 ggplot(ixa_sir_initial_df, aes(x = count_infectious)) +
-  geom_histogram(aes(y = ..density..), binwidth = 1,
-                 fill = "lightblue", color = "black") +
-  geom_point(data = expected_init_df,
-             aes(x = count_infectious, y = expected_prop),
-             color = "red", size = 3) +
+  geom_histogram(aes(y = ..density..),
+    binwidth = 1,
+    fill = "lightblue", color = "black"
+  ) +
+  geom_point(
+    data = expected_init_df,
+    aes(x = count_infectious, y = expected_prop),
+    color = "red", size = 3
+  ) +
   scale_x_continuous(breaks = inital_infect_vals) +
   labs(x = "number of initial infectious persons") +
   theme_minimal()
-
 ```
 
 ```{r}
-sims_1_init_infected <- ixa_sir_initial_df |> filter(count_infectious == 1) |>
+sims_1_init_infected <- ixa_sir_initial_df |>
+  filter(count_infectious == 1) |>
   pull(simulation)
 
 ixa_sir_final_df <- ixa_sir_df |>
@@ -237,72 +258,77 @@ Next, compare the outbreak final size distribution to the distribution we expect
 # get the probability of each final size
 
 r_0 <- 3
-N <- sim_pop_size
+n <- sim_pop_size
 
 library(Rmpfr)
 
 precision <- 128 * 4 # necessary precision depends on parameters
 # this should work for N = 1000 and R0 = 3, which runs in a little over 2 mins
 
-NxN_mat <- mpfr(matrix(nrow = N, ncol = N), precision)
-M_vec <- mpfr(seq_len(N), precision)
+nxn_mat <- mpfr(matrix(nrow = n, ncol = n), precision)
+m_vec <- mpfr(seq_len(n), precision)
 r_0 <- mpfr(r_0, precision)
-c_1_m <- 1 + r_0 * (1 - (M_vec - 1) / (N - 1))
+c_1_m <- 1 + r_0 * (1 - (m_vec - 1) / (n - 1))
 
-NxN_mat[, 1] <- c_1_m
+nxn_mat[, 1] <- c_1_m
 
-for(k in 2:N){
-    NxN_mat[, k] <- (M_vec - k + 1) / (N - k + 1) * c_1_m * NxN_mat[, k - 1]
+for (k in 2:n) {
+  nxn_mat[, k] <- (m_vec - k + 1) / (n - k + 1) * c_1_m * nxn_mat[, k - 1]
 }
 
-L <- NxN_mat
-b <- mpfr(matrix(data = 1, nrow = N, ncol = 1), precision)
+l <- nxn_mat
+b <- mpfr(matrix(data = 1, nrow = n, ncol = 1), precision)
 
-x <- mpfr(rep(0, N), precision)
+x <- mpfr(rep(0, n), precision)
 
 # the following loop is equivalent to the function forwardsolve
 # forwardsolve works with smaller populations, but runs into numerical issues
-for (i in 1:N) {
-  sum_Lx <- mpfr(0, precision)
+for (i in 1:n) {
+  sum_lx <- mpfr(0, precision)
   if (i > 1) {
-    sum_Lx <- sum(L[i, 1:(i-1)] * x[1:(i-1)])
+    sum_lx <- sum(l[i, 1:(i - 1)] * x[1:(i - 1)])
   }
-  x[i] <- (b[i] - sum_Lx) / L[i, i]
+  x[i] <- (b[i] - sum_lx) / l[i, i]
 }
 
 expected_final_df <- data.frame(
-  final_size = 1:N,
-  expected_prop = as.numeric(x))
+  final_size = 1:n,
+  expected_prop = as.numeric(x)
+)
 
 # plot simulated and expected results
 
 ggplot(ixa_sir_final_df, aes(x = final_size)) +
-  geom_histogram(aes(y = ..density..), binwidth = 1,
-                 fill = "lightblue", color = "black") +
-  geom_point(data = expected_final_df,
-             aes(x = final_size, y = expected_prop),
-             color = "red", size = 1) +
+  geom_histogram(aes(y = ..density..),
+    binwidth = 1,
+    fill = "lightblue", color = "black"
+  ) +
+  geom_point(
+    data = expected_final_df,
+    aes(x = final_size, y = expected_prop),
+    color = "red", size = 1
+  ) +
   labs(x = "epidemic final size") +
   theme_minimal()
-
 ```
 
-While the final size of the outbreak is an important property, it is also necessary to test whether the time-course of simulated outbreaks aligns with what we expect from the corresponding deterministic ODE model. We will restrict to the simulated outbreak trajectories with a single initial infected case that "took off" and caused an epidemic. (We somewhat arbitrarily define "epidemics" as those simulations with a final size at least half the expected final size.) The dashed colored lines represent the mean of the simulated epidemics, while the solid colored lines show the deterministic ODE solution. The light grey dashed horizontal line is the expected outbreak final size. The simulated dynamics mirror the ODE dynamics closely, although the mean simulated peak prevalence of infection is lower than expected from the ODE model. 
+While the final size of the outbreak is an important property, it is also necessary to test whether the time-course of simulated outbreaks aligns with what we expect from the corresponding deterministic ODE model. We will restrict to the simulated outbreak trajectories with a single initial infected case that "took off" and caused an epidemic. (We somewhat arbitrarily define "epidemics" as those simulations with a final size at least half the expected final size.) The dashed colored lines represent the mean of the simulated epidemics, while the solid colored lines show the deterministic ODE solution. The light grey dashed horizontal line is the expected outbreak final size. The simulated dynamics mirror the ODE dynamics closely, although the mean simulated peak prevalence of infection is lower than expected from the ODE model.
 
-```{r, echo = FALSE, warning = FALSE, message = FALSE} 
-
-epidemic_sims <- ixa_sir_final_df |> 
+```{r, echo = FALSE, warning = FALSE, message = FALSE}
+epidemic_sims <- ixa_sir_final_df |>
   filter(final_size > (sim_pop_size * simple_sir_final_size / 2)) |>
   pull(simulation)
 
 ixa_sir_epidemic_df <- ixa_sir_df |> filter(simulation %in% epidemic_sims)
 
-ixa_sir_epidemic_summary <- ixa_sir_epidemic_df |> 
-group_by(t, InfectionStatus) |>
-summarize(mean_count = mean(count),
-          error = qnorm(p = 0.975) * sd(count) / sqrt(n()),
-          lower_95_ci = mean_count - error,
-          upper_95_ci = mean_count + error)
+ixa_sir_epidemic_summary <- ixa_sir_epidemic_df |>
+  group_by(t, InfectionStatus) |>
+  summarize(
+    mean_count = mean(count),
+    error = qnorm(p = 0.975) * sd(count) / sqrt(n()),
+    lower_95_ci = mean_count - error,
+    upper_95_ci = mean_count + error
+  )
 
 ode_results_sir <- read.csv("../input/ode_results_SIR.csv")
 ode_results_sir$InfectionStatus <- factor(ode_results_sir$InfectionStatus,
@@ -322,8 +348,10 @@ ixa_sir_epidemic_df |>
     data = ixa_sir_epidemic_summary,
     aes(x = t, y = mean_count, color = InfectionStatus), lty = 2
   ) +
-  geom_hline(yintercept = simple_sir_final_size * sim_pop_size,
-   col = "grey", lty = 5, lwd = 0.5) +
+  geom_hline(
+    yintercept = simple_sir_final_size * sim_pop_size,
+    col = "grey", lty = 5, lwd = 0.5
+  ) +
   scale_color_manual(values = c(
     "Susceptible" = "blue",
     "Infectious" = "red", "Recovered" = "green"

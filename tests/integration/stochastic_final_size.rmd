@@ -8,9 +8,9 @@ knitr::opts_chunk$set(
   echo = FALSE,
   warning = FALSE,
   message = FALSE,
-  out.width='100%',
+  out.width = "100%",
   fig.width = 10,
-  fig.align = 'center'
+  fig.align = "center"
 )
 ```
 
@@ -27,25 +27,24 @@ l_vec <- 0:1000 # would in theory ideally go to infinity
 
 p_l <- dpois(x = l_vec, lambda = r_0)
 
-for(x in x_vec){
-    print(x)
-    print(sum(p_l * x^l_vec))
-    print(exp(r_0 * (x - 1)))
+for (x in x_vec) {
+  print(x)
+  print(sum(p_l * x^l_vec))
+  print(exp(r_0 * (x - 1)))
 }
 
 # trying for the geometric distribution
 
 p_l <- dnbinom(x = l_vec, size = 1, mu = r_0, log = TRUE)
 
-for(x in x_vec){
-    print(x)
-    print(sum(exp(p_l + l_vec * log(x))))
-    print(1 / (1 + r_0 - r_0 * x))
+for (x in x_vec) {
+  print(x)
+  print(sum(exp(p_l + l_vec * log(x))))
+  print(1 / (1 + r_0 - r_0 * x))
 }
-
 ```
 
-Suppose we have a population of size $N$. We want to calculate the probability $q_k$ that a single introduced infection will result in an epidemic final size of $k$, for $k \in \{1, \ldots, N\}$. Values for $q_k$ can be obtained by solving a system of linear equations where the coefficient $c_{k,M}$ is the element in the $k$-th column and $M$-th row in an $N \times N$ lower-triangular matrix. The values for the first column are calculated as 
+Suppose we have a population of size $N$. We want to calculate the probability $q_k$ that a single introduced infection will result in an epidemic final size of $k$, for $k \in \{1, \ldots, N\}$. Values for $q_k$ can be obtained by solving a system of linear equations where the coefficient $c_{k,M}$ is the element in the $k$-th column and $M$-th row in an $N \times N$ lower-triangular matrix. The values for the first column are calculated as
 $$
 c_{1,M} = 1+\mathscr{R}_0\bigg(1-\frac{M-1}{N-1}\bigg)
 $$
@@ -62,51 +61,49 @@ We can calculate the values for $q_k$ and plot the distribution. Shown here is t
 # Floating-Point Reliably" helps solve this issue.
 
 r_0 <- 3
-N <- 100
+n <- 100
 
 library(Rmpfr)
 
 precision <- 128 * 4 # necessary precision depends on parameters
 # this should work for N = 1000 and R0 = 3, which runs in a little over 2 mins
 
-NxN_mat <- mpfr(matrix(nrow = N, ncol = N), precision)
-M_vec <- mpfr(seq_len(N), precision)
+nxn_mat <- mpfr(matrix(nrow = n, ncol = n), precision)
+m_vec <- mpfr(seq_len(n), precision)
 r_0 <- mpfr(r_0, precision)
-c_1_m <- 1 + r_0 * (1 - (M_vec - 1) / (N - 1))
+c_1_m <- 1 + r_0 * (1 - (m_vec - 1) / (n - 1))
 
-NxN_mat[, 1] <- c_1_m
+nxn_mat[, 1] <- c_1_m
 
-for(k in 2:N){
-    NxN_mat[, k] <- (M_vec - k + 1) / (N - k + 1) * c_1_m * NxN_mat[, k - 1]
+for (k in 2:N) {
+  nxn_mat[, k] <- (m_vec - k + 1) / (n - k + 1) * c_1_m * nxn_mat[, k - 1]
 }
 
-L <- NxN_mat
-b <- mpfr(matrix(data = 1, nrow = N, ncol = 1), precision)
+l <- nxn_mat
+b <- mpfr(matrix(data = 1, nrow = n, ncol = 1), precision)
 
-x <- mpfr(rep(0, N), precision)
+x <- mpfr(rep(0, n), precision)
 
 # the following loop is equivalent to the function forwardsolve
-# forwardsolve
-for (i in 1:N) {
-  sum_Lx <- mpfr(0, precision)
+for (i in 1:n) {
+  sum_lx <- mpfr(0, precision)
   if (i > 1) {
-    sum_Lx <- sum(L[i, 1:(i-1)] * x[1:(i-1)])
+    sum_lx <- sum(l[i, 1:(i - 1)] * x[1:(i - 1)])
   }
-  x[i] <- (b[i] - sum_Lx) / L[i, i]
+  x[i] <- (b[i] - sum_lx) / l[i, i]
 }
 
-plot(x = M_vec, y = x, xlab = "k", ylab = "q_k")
+plot(x = m_vec, y = x, xlab = "k", ylab = "q_k")
 ```
 
-To further illustrate this distribution, we can plot $\log(q_k)$ and the cumulative distribution function of $q_k$. 
+To further illustrate this distribution, we can plot $\log(q_k)$ and the cumulative distribution function of $q_k$.
 
 ```{r}
-plot(x = M_vec, y = log(x), xlab = "k", ylab = "log("~q[k]~")")
-plot(x = M_vec, y = cumsum(x), xlab = "k", ylab = "CDF of "~q[k])
+plot(x = m_vec, y = log(x), xlab = "k", ylab = "log(" ~ q[k] ~ ")")
+plot(x = m_vec, y = cumsum(x), xlab = "k", ylab = "CDF of " ~ q[k])
 ```
 
 ### References
 Lloyd-Smith JO, Schreiber SJ, Kopp PE, Getz WM. Superspreading and the effect of individual variation on disease emergence. Nature. 2005 Nov 17;438(7066):355-9.
 
 Miller JC. Distribution of outbreak sizes for SIR disease in finite populations. arXiv preprint arXiv:1907.05138. 2019 Jul 11.
-

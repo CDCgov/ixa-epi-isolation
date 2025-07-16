@@ -54,37 +54,46 @@ $$Z = 1-(1-Y)\exp(-\mathscr{R}_0 Z)$$
 If we are willing to assume that $I(0)$ is very small relative to $N$, then $Y\approx 0$ and we get the simpler expression $Z = 1-\exp(-\mathscr{R}_0Z)$. We can solve $Z$ numerically if we know $\mathscr{R}_0$ and $Y$.
 
 ```{r, echo = FALSE, warning = FALSE, message = FALSE}
-
-final_size_fx <- function(R0, Y = 1e-10){
-    uniroot(f = function(Z){exp(-R0 * Z) - (1 - Z) / (1 - Y)},
-    interval = c(Y ,1))$root
+final_size_fx <- function(r0, y = 1e-10) {
+  uniroot(
+    f = function(z) {
+      exp(-r0 * z) - (1 - z) / (1 - y)
+    },
+    interval = c(y, 1)
+  )$root
 }
 
 r0_values <- seq(from = 0, to = 5, by = 0.01)
 
 x_for_y_0 <- sapply(X = r0_values, FUN = final_size_fx)
-x_for_y_0_001 <- sapply(X = r0_values, FUN = final_size_fx, Y = 0.001)
-x_for_y_0_01 <- sapply(X = r0_values, FUN = final_size_fx, Y = 0.01)
-x_for_y_0_1 <- sapply(X = r0_values, FUN = final_size_fx, Y = 0.1)
+x_for_y_0_001 <- sapply(X = r0_values, FUN = final_size_fx, y = 0.001)
+x_for_y_0_01 <- sapply(X = r0_values, FUN = final_size_fx, y = 0.01)
+x_for_y_0_1 <- sapply(X = r0_values, FUN = final_size_fx, y = 0.1)
 
 herd_immunity_threshold <- 1 - 1 / r0_values[r0_values >= 1]
 
-plot(x = r0_values, y = x_for_y_0, type = "l", col = "black",
-xlab = expression(italic(R[0])),
-ylab = expression(paste("final size, ", italic(Z))))
+plot(
+  x = r0_values, y = x_for_y_0, type = "l", col = "black",
+  xlab = expression(italic(R[0])),
+  ylab = expression(paste("final size, ", italic(Z)))
+)
 points(x = r0_values, y = x_for_y_0_001, type = "l", col = "blue")
 points(x = r0_values, y = x_for_y_0_01, type = "l", col = "purple")
 points(x = r0_values, y = x_for_y_0_1, type = "l", col = "red")
-points(x = r0_values[r0_values >= 1],
-y = herd_immunity_threshold, type = "l", col = "darkgrey", lty = 2)
+points(
+  x = r0_values[r0_values >= 1],
+  y = herd_immunity_threshold, type = "l", col = "darkgrey", lty = 2
+)
 legend("bottomright",
-legend = c(expression(paste("initial size, ", italic(Y=0))),
-           expression(paste("initial size, ", italic(Y=0.001))),
-           expression(paste("initial size, ", italic(Y=0.01))),
-           expression(paste("initial size, ", italic(Y=0.1))),
-           "herd immunity threshold"), lty = c(1,1,1,1,2),
-           col = c("black", "blue", "purple", "red", "darkgrey"))
-
+  legend = c(
+    expression(paste("initial size, ", italic(Y = 0))),
+    expression(paste("initial size, ", italic(Y = 0.001))),
+    expression(paste("initial size, ", italic(Y = 0.01))),
+    expression(paste("initial size, ", italic(Y = 0.1))),
+    "herd immunity threshold"
+  ), lty = c(1, 1, 1, 1, 2),
+  col = c("black", "blue", "purple", "red", "darkgrey")
+)
 ```
 
 ### References
