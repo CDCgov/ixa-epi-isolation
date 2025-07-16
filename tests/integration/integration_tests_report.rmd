@@ -40,9 +40,9 @@ And further suppose that `example_rate_fn.csv` is as follows:
 id,time,value
 1,1,3
 1,5,3
-3,0.5,0
-3,2,1.5
-3,4,0
+2,0.5,0
+2,2,1.5
+2,4,0
 ```
 This example file specifies two empirical rate functions for infectiousness. In the first (`id` = 1), infectiousness occurs from 1 time unit after infection until 5 time units after infection. The `value` for the rate is 3, but note that if `"scale": 2.0` is specified in the input `.json`, then the modeled intrinsic infectiousness will be 6. In the second (`id` = 2), intrinsic infectiousness follows a "triangle" shape, starting at 0.5 time units after infection and linearly increasing to a peak 2 time units after infection, which is followed by a linear decrease until 4 time units after infection, after which there is no more infectiousness. At the peak, the rate value is 1.5, which would be scaled to 3, given the specified `scale` factor. For each infection, an empirical rate function is randomly drawn with replacement from the set of specified functions.
 
@@ -60,7 +60,7 @@ $$
 
 ### `initial_incidence` and `initial_recovered`
 
-These input parameters `initial_incidence` and `initial_recovered` specify the probability a simulated person is, respectively, infected or recovered at the start of the simulation. Note that these are probabilities, so the  number of infections at the start of the simulation is a binomial-distributed random variable. Even for `initial_incidence`>0, it is possible that any given simulation is not seeded with any infections. In the following example inputs, the expected initial prevalence of infection is 1% and there are no persons in the recovered category at the start of the simulation.
+The input parameters `initial_incidence` and `initial_recovered` specify the probability a simulated person is, respectively, infected or recovered at the start of the simulation. Note that these are probabilities, so the  number of infections at the start of the simulation is a binomial-distributed random variable. Even for `initial_incidence`>0, it is possible that any given simulation is not seeded with any infections. In the following example inputs, the expected initial prevalence of infection is 1% and there are no persons in the recovered category at the start of the simulation.
 ```
 "initial_incidence": 0.01,
 "initial_recovered": 0.0
@@ -89,10 +89,10 @@ The `settings_properties` input parameters define 1) the proportion of time simu
 ```
 The setting-specific value of `alpha` determines how the rate of infection attempts by an infectious person is affected by the number of people in a setting. Specifically, the rate of infection attempts is $\beta (n-1)^\alpha$, where $\beta$ is the intrinsic infectiousness rate, $n \geq 1$ is the number of people in the setting including the infectious person, and $0 \leq\alpha\leq 1$. To illustrate this concept, imagine two infectious persons, one of whom goes to a workplace with 10 other people and the other goes to a workplace with 20 other people. If we assume that $\alpha = 0$, then, all else equal, these two persons infect others at the same rate. But if $\alpha = 1$, then the latter person infects susceptible persons at twice the rate of the former person.
 
-The value of `ratio` corresponds to the proportion of time that each simulated person spends in that setting. In the above example, time i s equally divided across settings. (Time is divided among the settings to which a person is assigned; if neither workplace nor school is specified in the synthentic population file for a person, then that person's time would be evenly divided between "Home" and "CensusTract".) Conceptually, a person can only be in one setting at a time, but the model does not explicitly account for which units of time are spent in which settings (e.g., there the model has no notion of which hours of the day a person is at school or work versus at home). 
+The value of `ratio` corresponds to the proportion of time that each simulated person spends in that setting. In the above example, time is equally divided across settings. (Time is divided among the settings to which a person is assigned; if neither workplace nor school is specified in the synthentic population file for a person, then that person's time would be evenly divided between "Home" and "CensusTract".) Conceptually, a person can only be in one setting at a time, but the model does not explicitly account for which units of time are spent in which settings (e.g., the model has no notion of which hours of the day a person is at school or work versus at home). 
 
 ### Expected number of secondary infections
-We can use the values specified in `settings_properties` along with the intrinsic reproduction number and knowledge about the population structure to estimate $\mathscr{R}_0$ under certain assumptions. Let us first consider a population with size $n$ with homogeneous mixing (e.g., all persons in the population share a single household). The expected number of secondary infections caused by an infected person, assuming all others are susceptible, is   
+We can use the values specified in `settings_properties` along with $\mathscr{R}_{intrinsic}$ and knowledge about the population structure to estimate $\mathscr{R}_0$ under certain assumptions. Let us first consider a population with size $n$ with homogeneous mixing (e.g., all persons in the population share a single household). The expected number of secondary infections caused by an infected person, assuming all others are susceptible, is   
 
 $$
 \bigg(1-\exp\bigg(-\frac{\mathscr{R}_{intrinsic}(n-1)^\alpha}{n-1}\bigg)\bigg)(n-1)
@@ -187,7 +187,7 @@ simple_sir_final_size <- final_size_fx(R0 = 3, Y = 0.01)
 
 With the parameters used here, $\mathscr{R}_{intrinsic} = \beta/\gamma = 1.5/0.5 = 3$ and in the large-sample limit, $\mathscr{R}_{intrinsic}=\mathscr{R}_{0}=3$. For $\mathscr{R}_{0}=3$ and an initial prevalence of infection of 0.01, we expect a final size of `r simple_sir_final_size`.
 
-In the first part of this integration test, we run ixa repeatedly with a small population size $N=100$ and check the output against expectations of the distribution of the number of infected individuals at the start of the simulation and the distribution of the epidemic final size.
+We run ixa repeatedly with a small population size $N=100$ and check the output against expectations of the distribution of the number of infected individuals at the start of the simulation and expectations of the distribution of the epidemic final size.
 
 In the following plot, the blue histogram bars represent the distribution of the number of initial infections across the simulated outbreaks, and the red dots represent the expected distribution based on a binomial distribution with probability of "success" of 0.01 and $N=100$.
 
@@ -231,7 +231,7 @@ ixa_sir_final_df <- ixa_sir_df |>
   filter(simulation %in% sims_1_init_infected)
 ```
 
-Next, we'll compare the outbreak final size distribution to the distribution we expect for $\mathscr{R}_{0}=3$ and $N=100$ (calculated using the method of Miller 2019). Here we will restrict to the `r nrow(ixa_sir_final_df)` simulations in which the initial number of infected individuals was exactly 1. The blue histogram bars represent the distribution of the epidemic final size across the simulated outbreaks, and the red dots represent the expected distribution. This plot shows that the distributions closely align.
+Next, compare the outbreak final size distribution to the distribution we expect for $\mathscr{R}_{0}=3$ and $N=100$ (calculated using the method of Miller 2019). Here we will restrict to the `r nrow(ixa_sir_final_df)` simulations in which the initial number of infected individuals was exactly 1. The blue histogram bars represent the distribution of the epidemic final size across the simulated outbreaks, and the red dots represent the expected distribution. This plot shows that the distributions closely align.
 
 ```{r}
 # get the probability of each final size
@@ -345,7 +345,8 @@ The file `tests/integration/seir/input/input_simple_SEIR.json` was modfied as fo
 ```
 Identical to the simple SIR case above, $\mathscr{R}_{intrinsic} = \beta/\gamma = 1.5/0.5 = 3$ and in the large sample limit, $\mathscr{R}_{intrinsic}=\mathscr{R}_{0}=3$.
 
-The following figure shows simulated outbreak trajectories (faint dashed lines) and the ODE results (thick solid lines). The "susceptible" and "recovered" ODE results broadly mirror the corresponding results from ixa simulations. But the dashed red lines representing "infectious" persons in ixa have a much higher peak that the solid red line for "infectious" from the ODE model. This is not an error, but rather illustrates an important conceptual difference between the modeling approaches: In ixa, there is no explicit "exposed" category. Rather, the "exposed" category is implicitly modeled through the time-varying transmission rate functions. The "infectious" category in ixa is effectively the sum of the "exposed" and "infectious" categories in the ODE model.
+The following figure shows simulated outbreak trajectories (faint dashed lines) and the ODE results (thick solid lines). The "susceptible" and "recovered" ODE results broadly mirror the corresponding results from ixa simulations. But the dashed red lines representing "infectious" persons in ixa have a much higher peak that the solid red line for "infectious" from the ODE model. This is not an error, but rather illustrates an important conceptual difference between the modeling approaches: In ixa, there is no explicit "exposed" category. Rather, the "exposed" category is implicitly modeled through the infectiousness rate functions. The "infectious" category in ixa is effectively the sum of the "exposed" and "infectious" categories in the ODE model. Comparing the SIR and SEIR output, we see, as expected, that the final epidemic size is unchanged but that the time course of the epidemic is delayed (e.g., in the SIR model less than half the population is susceptible 5 time units after the start of the epidemic, but in the SEIR model, it takes about twice as long to reach the same state).
+
 ```{r, echo = FALSE}
 ixa_seir_df <- as.data.frame(open_dataset("seir/data/simulations"))
 
