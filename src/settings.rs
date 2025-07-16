@@ -2,8 +2,8 @@ use crate::parameters::{
     ContextParametersExt, CoreSettingsTypes, ItinerarySpecificationType, Params,
 };
 use ixa::{
-    define_data_plugin, define_rng, people::Query, trace, Context, ContextPeopleExt,
-    ContextRandomExt, IxaError, PersonId,
+    define_data_plugin, define_rng, people::Query, prelude_for_plugins::IxaEvent, trace, Context,
+    ContextPeopleExt, ContextRandomExt, IxaError, PersonId,
 };
 use serde::{Deserialize, Serialize};
 
@@ -61,6 +61,16 @@ impl ItineraryEntry {
             ratio,
         }
     }
+}
+
+#[derive(Copy, Clone, IxaEvent)]
+pub struct ItineraryChangeEvent {
+    /// `PersonId` of the individual whose itinerary has changed
+    pub person_id: PersonId,
+    /// Multiplier from previous itinerary
+    pub previous_multiplier: f64,
+    /// Multiplier from current itinerary
+    pub current_multiplier: f64,
 }
 
 #[allow(dead_code)]
@@ -577,7 +587,9 @@ impl ContextSettingExt for Context {
         person_id: PersonId,
         itinerary_modifier: ItineraryModifiers,
     ) -> Result<(), IxaError> {
-        match itinerary_modifier {
+        let previous_multiplier =
+            self.calculate_total_infectiousness_multiplier_for_person(person_id);
+        let result = match itinerary_modifier {
             ItineraryModifiers::ReplaceWith { itinerary } => {
                 trace!("ItineraryModifier::Replace person {person_id} --  {itinerary:?}");
                 self.add_modified_itinerary(person_id, itinerary)
@@ -596,7 +608,17 @@ impl ContextSettingExt for Context {
                 );
                 self.exclude_setting_from_itinerary(person_id, setting)
             }
-        }
+        };
+
+        let current_multiplier =
+            self.calculate_total_infectiousness_multiplier_for_person(person_id);
+        self.emit_event(ItineraryChangeEvent {
+            person_id,
+            previous_multiplier,
+            current_multiplier,
+        });
+
+        result
     }
 
     fn get_setting_ids<T: SettingType>(
@@ -2037,51 +2059,6 @@ mod test {
         load_rate_fns(&mut context).unwrap();
 
         context
-    }
-
-    // This test should eventually pass by re-factoring modified itineraries to also account for changes to an individual's forecast.
-    #[test]
-    // #[should_panic(
-    //     expected = "Person 0: Forecasted infectiousness must always be greater than or equal to current infectiousness. Current: 5, Forecasted: 3"
-    // )]
-    #[allow(clippy::cast_precision_loss, clippy::cast_lossless)]
-    fn test_forecast_during_self_itinerary_modification() {
-        let n_replicates = 100;
-        let successes = Rc::new(RefCell::new(0usize));
-        for seed in 0..n_replicates {
-            let mut context = setup_transmission_context(seed);
-            let successes_clone = Rc::clone(&successes);
-
-            let mut itinerary = vec![];
-            append_itinerary_entry(&mut itinerary, &context, Home, 1).unwrap();
-            append_itinerary_entry(&mut itinerary, &context, Workplace, 1).unwrap();
-
-            let infector = context.add_person(()).unwrap();
-            context.infect_person(infector, None, None, None);
-            context.add_itinerary(infector, itinerary.clone()).unwrap();
-
-            for _ in 0..5 {
-                let contact = context.add_person(()).unwrap();
-                context.add_itinerary(contact, itinerary.clone()).unwrap();
-            }
-
-            let forecast = get_forecast(&context, infector).unwrap();
-            context.add_plan(forecast.next_time / 2.0, move |context| {
-                context
-                    .modify_itinerary(infector, ItineraryModifiers::RestrictTo { setting: &Home })
-                    .unwrap();
-            });
-            context.add_plan(forecast.next_time, move |context| {
-                if evaluate_forecast(context, infector, forecast.forecasted_total_infectiousness) {
-                    *successes_clone.borrow_mut() += 1;
-                }
-            });
-
-            context.execute();
-        }
-
-        let avg_successes = *successes.borrow() as f64 / n_replicates as f64;
-        assert_almost_eq!(avg_successes, 3.0 / 5.0, 0.05);
     }
 
     #[test]

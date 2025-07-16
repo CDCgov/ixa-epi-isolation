@@ -6,7 +6,7 @@ use crate::infectiousness_manager::{
 };
 use crate::parameters::{ContextParametersExt, Params};
 use crate::rate_fns::{load_rate_fns, InfectiousnessRateExt};
-use crate::settings::ContextSettingExt;
+use crate::settings::{ContextSettingExt, ItineraryChangeEvent};
 use ixa::{
     define_rng, trace, Context, ContextPeopleExt, ContextRandomExt, IxaError, PersonId,
     PersonPropertyChangeEvent,
@@ -20,7 +20,7 @@ fn schedule_next_forecasted_infection(context: &mut Context, person: PersonId) {
         forecasted_total_infectiousness,
     }) = get_forecast(context, person)
     {
-        context.add_plan(next_time, move |context| {
+        let infection_plan = context.add_plan(next_time, move |context| {
             if evaluate_forecast(context, person, forecasted_total_infectiousness) {
                 if let Some(setting_id) = context.get_setting_for_contact(person) {
                     let str_setting = setting_id.setting_type.get_name();
@@ -35,6 +35,12 @@ fn schedule_next_forecasted_infection(context: &mut Context, person: PersonId) {
             }
             // Continue scheduling forecasts until the person recovers.
             schedule_next_forecasted_infection(context, person);
+        });
+        context.subscribe_to_event::<ItineraryChangeEvent>(move |context, event| {
+            if event.person_id == person && event.previous_multiplier < event.current_multiplier {
+                context.cancel_plan(&infection_plan);
+                schedule_next_forecasted_infection(context, person);
+            }
         });
     }
 }
@@ -149,8 +155,8 @@ mod test {
         },
         rate_fns::{load_rate_fns, InfectiousnessRateExt},
         settings::{
-            CensusTract, ContextSettingExt, Home, ItineraryEntry, SettingId, SettingProperties,
-            Workplace,
+            append_itinerary_entry, CensusTract, ContextSettingExt, Home, ItineraryEntry,
+            ItineraryModifiers, SettingId, SettingProperties, Workplace,
         },
     };
 
@@ -860,5 +866,87 @@ mod test {
             initial_recovered,
             0.01
         );
+    }
+
+    fn setup_transmission_settings_context(seed: u64) -> Context {
+        let mut context = Context::new();
+
+        // Create a single itinerary for a group of people
+        // Itinerary is pslit 50% at home and 50% at work, but at home transmission potential is density-dependent
+        let parameters = Params {
+            ..Default::default()
+        };
+
+        context
+            .set_global_property_value(GlobalParams, parameters)
+            .unwrap();
+        context
+            .register_setting_type(
+                Home,
+                SettingProperties {
+                    alpha: 1.0,
+                    itinerary_specification: Some(ItinerarySpecificationType::Constant {
+                        ratio: 0.5,
+                    }),
+                },
+            )
+            .unwrap();
+        context
+            .register_setting_type(
+                Workplace,
+                SettingProperties {
+                    alpha: 0.0,
+                    itinerary_specification: Some(ItinerarySpecificationType::Constant {
+                        ratio: 0.5,
+                    }),
+                },
+            )
+            .unwrap();
+
+        context.init_random(seed);
+        load_rate_fns(&mut context).unwrap();
+
+        context
+    }
+
+    #[test]
+    #[allow(clippy::cast_precision_loss, clippy::cast_lossless)]
+    fn test_forecast_during_self_itinerary_modification() {
+        let n_replicates = 100;
+        let mut successes = 0;
+        for seed in 0..n_replicates {
+            let mut context = setup_transmission_settings_context(seed);
+
+            let mut itinerary = vec![];
+            append_itinerary_entry(&mut itinerary, &context, Home, 1).unwrap();
+            append_itinerary_entry(&mut itinerary, &context, Workplace, 1).unwrap();
+
+            let infector = context.add_person(()).unwrap();
+            context.infect_person(infector, None, None, None);
+            context.add_itinerary(infector, itinerary.clone()).unwrap();
+
+            for _ in 0..5 {
+                let contact = context.add_person(()).unwrap();
+                context.add_itinerary(contact, itinerary.clone()).unwrap();
+            }
+
+            // Initialize the schedule for forecasts of infector prior to modifying itinerary
+            schedule_next_forecasted_infection(&mut context, infector);
+
+            // Modify itinerary of infector to increase infectiousness due to isolating at home with alpha > 0
+            context.add_plan(0.0, move |context| {
+                context
+                    .modify_itinerary(infector, ItineraryModifiers::RestrictTo { setting: &Home })
+                    .unwrap();
+            });
+
+            context.execute();
+            successes +=
+                context.query_people_count((InfectionStatus, InfectionStatusValue::Infectious)) - 1;
+        }
+
+        // We generally expect 25 infections with a rate of 5.0 = 1.0*(6 - 1)^1.0 in the home over duration 5.0
+        let avg_successes = successes as f64 / n_replicates as f64;
+        assert_almost_eq!(avg_successes, 5.0, 0.05);
     }
 }
