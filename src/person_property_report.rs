@@ -13,57 +13,46 @@ struct PersonPropertyReport {
     alive: bool,
     age: u8,
     symptoms: Option<SymptomValue>,
-    infection_status: InfectionStatusValue,
+    infection_status: Option<InfectionStatusValue>,
     count: u64,
-}
-#[derive(PartialEq, Eq, Hash, Copy, Clone, Debug, Serialize, Deserialize)]
-struct ReportPropertyValues {
-    alive: bool,
-    age: u8,
-    symptoms: Option<SymptomValue>,
-    infection_status: InfectionStatusValue,
 }
 
 create_report_trait!(PersonPropertyReport);
 
 define_derived_property!(
     ReportProperties,
-    ReportPropertyValues,
+    (bool, u8, Option<SymptomValue>, InfectionStatusValue),
     [Alive, Age, Symptoms, InfectionStatus],
-    |alive, age, symptoms, infection_status| ReportPropertyValues {
-        alive: alive,
-        age: age,
-        symptoms: symptoms,
-        infection_status: infection_status,
-});
+    |alive, age, symptoms, infection_status| (alive, age, symptoms, infection_status));
 
-struct PropertyReportDataContainer {
-    person_property_report_container: HashMap<ReportPropertyValues, usize>,
-}
-
-define_data_plugin!(
-    PropertyReportDataPlugin,
-    PropertyReportDataContainer,
-    PropertyReportDataContainer {
-        person_property_report_container: HashMap::new(),
-    }
-);
 
 fn update_property_change(
     context: &mut Context,
     event: PersonPropertyChangeEvent<ReportProperties>) 
  {
+     let previous_vec = vec![
+         event.previous.0.to_string(),
+         event.previous.1.to_string(),
+         format!("{:?}", event.previous.2),
+         format!("{:?}", event.previous.3)
+     ];
+     let current_vec = vec![
+         event.current.0.to_string(),
+         event.current.1.to_string(),
+         format!("{:?}", event.current.2),
+         format!("{:?}", event.current.3)
+     ];
 
     let mut report_container_mut = context
         .get_data_container_mut(PropertyReportDataPlugin);
 
      *report_container_mut
         .person_property_report_container
-        .entry(event.current).or_insert(0) += 1;
+        .entry(current_vec).or_insert(0) += 1;
 
      *report_container_mut
         .person_property_report_container
-        .entry(event.previous).or_insert(0) -= 1;     
+        .entry(previous_vec).or_insert(0) -= 1;     
 
 }
 
@@ -78,6 +67,18 @@ fn send_report_counts<T: Tabulator + Clone + 'static> (context: &mut Context, _t
         writer.write_record(&row).expect("Failed to write row");
     }
 }
+
+struct PropertyReportDataContainer {
+    person_property_report_container: HashMap<Vec<String>, usize>,
+}
+
+define_data_plugin!(
+    PropertyReportDataPlugin,
+    PropertyReportDataContainer,
+    PropertyReportDataContainer {
+        person_property_report_container: HashMap::new(),
+    }
+);
 
 fn initialize_person_property_report<T: Tabulator + Clone + 'static>(
     context: &mut Context,
@@ -125,53 +126,16 @@ fn initialize_person_property_report<T: Tabulator + Clone + 'static>(
     Ok(())
 }
 
-fn initialize_person_property_report_by_name<T: Tabulator + Clone + 'static>(
-    context: &mut Context,
-    file_name: &str,
-    period: f64,
-    tabulator: T) -> Result<(), IxaError>
-{        
-    // Count initial number of people per property status
-    context.add_report::<PersonPropertyReport>(file_name)?;
-    
-    
-    // Compute initial counts
-    let map_counts: RefCell<HashMap<Vec<String>, usize>> = RefCell::new(HashMap::new());
-    context.tabulate_person_properties(&tabulator,  |context, values, count| {
-        map_counts.borrow_mut().insert(values.to_vec(), count);            
-    });
-    let report_container = context.get_data_container_mut(PropertyReportDataPlugin);
-    report_container.person_property_report_container = map_counts.borrow().clone();
-    
-    context.add_periodic_plan_with_phase(
-        period,
-        move |context: &mut Context| {
-            send_report_counts(context, tabulator.clone());
-        },
-        ExecutionPhase::Last,
-    );
-    
-
-    context.subscribe_to_event::<PersonPropertyChangeEvent<ReportProperties>>(|context, event| {       
-        update_property_change(
-            context,
-            event,
-        );
-    });
-    Ok(())
-}
-
-
 pub fn init(context: &mut Context) -> Result<(), IxaError> {
     let parameters = context.get_params();
     let person_property_report_name = parameters.person_property_report_name.clone();
     let report_period = parameters.report_period.clone();
     match person_property_report_name {
         Some(path_name) => {
-            initialize_person_property_report_by_name(
+            initialize_person_property_report(
                 context,                
                 path_name.as_ref(), report_period,
-                (ReportProperties,),
+                (Alive, Age, Symptoms, InfectionStatus),
             )?;
         }
         None => {
