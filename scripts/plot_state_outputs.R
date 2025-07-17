@@ -9,11 +9,28 @@ ggplot2::theme_set(ggplot2::theme_classic())
 ## Read reports--------
 ## ===============================#
 
+
 person_property_report <- readr::read_csv(file.path(
   "output",
   "1000000",
   "person_property_report.csv"
 ))
+
+person_property_count <- readr::read_csv(file.path(
+  "output",
+  "1000000",
+  "person_property_count.csv"
+))
+
+person_count_dif <- person_property_report |>
+  group_by(t, InfectionStatus) |>
+  summarize(count = sum(count), .groups = "drop") |>
+  left_join(
+    person_property_count |>
+      group_by(t, InfectionStatus) |>
+      summarize(count = sum(count), .groups = "drop")
+  , by = c("t", "InfectionStatus")) |>
+  mutate(difference = count.y - count.x)
 
 ## ===============================#
 ## Plots ------------
