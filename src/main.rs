@@ -10,6 +10,7 @@ pub mod rate_fns;
 mod settings;
 mod symptom_progression;
 mod transmission_report;
+mod person_property_report;
 pub mod utils;
 
 use infectiousness_manager::InfectionStatus;
@@ -42,13 +43,13 @@ fn main() {
             context.shutdown();
         });
 
-        // Report the number of people by age, census tract, symptoms, and infectious status
-        // every report_period.
-        context.add_periodic_report(
-            "person_property_count",
-            report_period,
-            (Age, Symptoms, InfectionStatus),
-        )?;
+        //Report the number of people by age, census tract, symptoms, and infectious status
+        //every report_period.
+        // context.add_periodic_report(
+        //     "person_property_count",
+        //     report_period,
+        //     (Age, Symptoms, InfectionStatus),
+        // )?;
 
         settings::init(context);
 
@@ -59,6 +60,7 @@ fn main() {
 
         infection_propagation_loop::init(context)?;
         transmission_report::init(context)?;
+        person_property_report::init(context)?;
         symptom_progression::init(context)?;
         policies::init(context)?;
 
