@@ -79,6 +79,8 @@ pub struct Params {
     pub synth_population_file: PathBuf,
     /// The path to the transmission report file
     pub transmission_report_name: Option<String>,
+    /// The path to person property report file
+    pub person_property_report_name: Option<String>,
     // Struct contain policy parameters for isolation guidance
     // Post-isolation duration, isolation probability, and maximum isolation delay.
     pub intervention_policy_parameters: Option<InterventionPolicyParameters>,
@@ -110,6 +112,7 @@ impl Default for Params {
             settings_properties: HashMap::new(),
             synth_population_file: PathBuf::new(),
             transmission_report_name: None,
+            person_property_report_name: None,
             intervention_policy_parameters: None,
             facemask_parameters: None,
         }

@@ -2,7 +2,7 @@ use ixa::{
     define_derived_property, define_person_property_with_default, define_rng, trace, Context,
     ContextPeopleExt, ContextRandomExt, PersonId,
 };
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use statrs::distribution::Exp;
 
 use crate::{
@@ -27,7 +27,7 @@ pub enum InfectionDataValue {
     },
 }
 
-#[derive(Serialize, PartialEq, Debug, Clone, Copy, Eq, Hash)]
+#[derive(Serialize, Deserialize, PartialEq, Debug, Clone, Copy, Eq, Hash)]
 pub enum InfectionStatusValue {
     Susceptible,
     Infectious,
@@ -82,7 +82,7 @@ pub fn infection_attempt<T: SettingType + ?Sized>(
     setting_id: SettingId<T>,
 ) -> Option<PersonId> {
     let next_contact = context
-        .get_contact(person_id, setting_id, (Alive, true))
+        .get_contact(person_id, setting_id, ())
         .unwrap()?;
     match context.get_person_property(next_contact, InfectionStatus) {
         InfectionStatusValue::Susceptible => {
