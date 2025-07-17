@@ -37,7 +37,9 @@ fn schedule_next_forecasted_infection(context: &mut Context, person: PersonId) {
             schedule_next_forecasted_infection(context, person);
         });
         context.subscribe_to_event::<ItineraryChangeEvent>(move |context, event| {
-            if event.person_id == person && event.previous_multiplier < event.current_multiplier {
+            if (event.person_id == person && event.previous_multiplier < event.current_multiplier)
+                || event.increase_membership
+            {
                 context.cancel_plan(&infection_plan);
                 schedule_next_forecasted_infection(context, person);
             }
@@ -945,8 +947,52 @@ mod test {
                 context.query_people_count((InfectionStatus, InfectionStatusValue::Infectious)) - 1;
         }
 
-        // We generally expect 25 infections with a rate of 5.0 = 1.0*(6 - 1)^1.0 in the home over duration 5.0
+        // Rate of 5.0 = 1.0*(6 - 1)^1.0 in the home over duration 5.0, failures increase with decreased susceptible count
         let avg_successes = successes as f64 / n_replicates as f64;
         assert_almost_eq!(avg_successes, 5.0, 0.05);
+    }
+
+    #[test]
+    #[allow(clippy::cast_precision_loss, clippy::cast_lossless)]
+    fn test_forecast_during_contact_itinerary_modification() {
+        let n_replicates = 100;
+        let mut successes = 0;
+
+        for seed in 0..n_replicates {
+            let mut context = setup_transmission_settings_context(seed);
+
+            let mut itinerary = vec![];
+            append_itinerary_entry(&mut itinerary, &context, Home, 1).unwrap();
+            append_itinerary_entry(&mut itinerary, &context, Workplace, 1).unwrap();
+
+            let infector = context.add_person(()).unwrap();
+            context.infect_person(infector, None, None, None);
+            context.add_itinerary(infector, itinerary.clone()).unwrap();
+
+            // Introduce contacts that will have a new itinerary as observed by the infector (rejoining a `Home` setting and increasing infectiousness)
+            for _ in 0..5 {
+                let contact = context.add_person(()).unwrap();
+                context.add_itinerary(contact, itinerary.clone()).unwrap();
+                // Modify itinerary of each contact
+                context
+                    .modify_itinerary(contact, ItineraryModifiers::Exclude { setting: &Home })
+                    .unwrap();
+                // Plan to remove the modified itinerary after the forecast is calculated
+                context.add_plan(0.0, move |context| {
+                    context.remove_modified_itinerary(contact).unwrap();
+                });
+            }
+
+            // Initialize the schedule for forecasts of infector prior to modifying itineraries through `context.execute()``
+            schedule_next_forecasted_infection(&mut context, infector);
+
+            context.execute();
+            successes +=
+                context.query_people_count((InfectionStatus, InfectionStatusValue::Infectious)) - 1;
+        }
+
+        // Rate of 3.0 = 0.5*(6 - 1)^1.0 + 0.5*(6 - 1)^0.0 across both settings over duration 5.0, failures increase with decreased susceptible count
+        let avg_successes = successes as f64 / n_replicates as f64;
+        assert_almost_eq!(avg_successes, 4.7, 0.05);
     }
 }
