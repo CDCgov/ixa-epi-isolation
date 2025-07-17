@@ -3,9 +3,8 @@ use crate::{
     parameters::ContextParametersExt,
 };
 use ixa::{
-    create_report_trait, info,
-    report::{ContextReportExt, Report},
-    Context, IxaError, PersonId, PersonPropertyChangeEvent,
+    define_report, info, report::ContextReportExt, Context, IxaError, PersonId,
+    PersonPropertyChangeEvent,
 };
 use serde::{Deserialize, Serialize};
 use std::string::ToString;
@@ -19,7 +18,7 @@ struct TransmissionReport {
     infection_setting_id: Option<usize>,
 }
 
-create_report_trait!(TransmissionReport);
+define_report!(TransmissionReport);
 
 fn record_transmission_event(
     context: &mut Context,
