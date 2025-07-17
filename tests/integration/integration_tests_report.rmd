@@ -422,7 +422,7 @@ $$
 \approx2.2163
 $$
 
-Intuitively, we would expect that because each person spends one fourth of their time alone at home, this is equivalent to reducing $\beta$ by one fourth and so $\mathscr{R}_0$ in this example should be $3/4\times 3=2.25$. Conceptually, the difference between this $\mathscr{R_0}$ value and the expected number of secondary infections ($\approx2.2163$) lies in the finiteness of the population. When $\mathscr{R}_0=2.25$ and in the limit where the initial proportion infected goes to zero, the expected final size proportion is `r final_size_fx(r0 = 3*3/4, y = 0.000000000001)`. 
+Intuitively, we would expect that because each person spends one fourth of their time alone at home, this is equivalent to reducing $\beta$ by one fourth and so $\mathscr{R}_0$ in this example should be $3/4\times 3=2.25$. Conceptually, the difference between this $\mathscr{R_0}$ value and the expected number of secondary infections ($\approx2.2163$) lies in the finiteness of the population. When $\mathscr{R}_0=2.25$ and in the limit where the initial proportion infected goes to zero, the expected final size proportion is `r final_size_fx(r0 = 3*3/4, y = 0.000000000001)`.
 
 ```
 "synth_population_file": "tests/input/pop_unique_hh.csv",
@@ -432,14 +432,14 @@ Intuitively, we would expect that because each person spends one fourth of their
                                         "itinerary_specification": {"Constant": {"ratio": 0.75}}}},
 ```
 
-In the following figure, the dashed colored lines represent the mean of the simulated epidemics that "took off" and had 1 initial infected person, while the solid colored lines show the deterministic ODE solution for $\mathscr{R}_0 = 2.25$. The light grey dashed horizontal line is the expected outbreak final size. The simulated dynamics mirror the ODE dynamics closely, although not exactly. 
+In the following figure, the dashed colored lines represent the mean of the simulated epidemics that "took off" and had 1 initial infected person, while the solid colored lines show the deterministic ODE solution for $\mathscr{R}_0 = 2.25$. The light grey dashed horizontal line is the expected outbreak final size. The simulated dynamics mirror the ODE dynamics closely, although not exactly.
 
 ```{r}
-
-sir_unique_hh_final_size <- final_size_fx(r0 = 3 * 3/4, y = 0.000000000001)
+sir_unique_hh_final_size <- final_size_fx(r0 = 3 * 3 / 4, y = 0.000000000001)
 
 ixa_sir_unique_hh_df <- as.data.frame(
-  open_dataset("sir_unique_hh/data/simulations"))
+  open_dataset("sir_unique_hh/data/simulations")
+)
 
 sim_pop_size <- ixa_sir_unique_hh_df |>
   filter(t == 0 & simulation == 0) |>
@@ -465,7 +465,7 @@ epidemic_sims <- ixa_sir_unique_hh_final_df |>
   pull(simulation)
 
 ixa_sir_unique_hh_epidemic_df <- ixa_sir_unique_hh_df |>
- filter(simulation %in% epidemic_sims)
+  filter(simulation %in% epidemic_sims)
 
 ixa_sir_uni_hh_epi_summary <- ixa_sir_unique_hh_epidemic_df |>
   group_by(t, InfectionStatus) |>
@@ -502,7 +502,4 @@ ixa_sir_unique_hh_epidemic_df |>
     "Susceptible" = "blue",
     "Infectious" = "red", "Recovered" = "green"
   ))
-
-
-
 ```

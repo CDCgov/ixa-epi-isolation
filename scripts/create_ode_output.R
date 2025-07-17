@@ -134,7 +134,7 @@ write.csv(
 # a unique household per person
 
 # Create parameter vectors
-parameters_sir_unique_hh <- c(beta = beta * 3/4, gamma = gamma)
+parameters_sir_unique_hh <- c(beta = beta * 3 / 4, gamma = gamma)
 
 ode_results_sir_unique_hh <- ode(
   y = initial_state_sir,
