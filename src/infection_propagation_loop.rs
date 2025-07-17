@@ -37,11 +37,16 @@ fn schedule_next_forecasted_infection(context: &mut Context, person: PersonId) {
             schedule_next_forecasted_infection(context, person);
         });
         context.subscribe_to_event::<ItineraryChangeEvent>(move |context, event| {
-            if (event.person_id == person && event.previous_multiplier < event.current_multiplier)
-                || event.increase_membership
-            {
-                context.cancel_plan(&infection_plan);
-                schedule_next_forecasted_infection(context, person);
+            // Check if the forecast next_time is still relevant
+            if context.get_current_time() < next_time {
+                // Check if person's infectiousness multiplier is altered without being handled by rejection sampling
+                if (event.person_id == person
+                    && event.previous_multiplier < event.current_multiplier)
+                    || event.increase_membership
+                {
+                    context.cancel_plan(&infection_plan);
+                    schedule_next_forecasted_infection(context, person);
+                }
             }
         });
     }
