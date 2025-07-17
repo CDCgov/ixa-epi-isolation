@@ -79,7 +79,7 @@ parameters_seir <- c(beta = beta, eta = eta, gamma = gamma)
 # Time sequence for simulation output
 time_sequence <- seq(0, max_time, by = time_step)
 
-# Run the ODE solver
+# Run the ODE solver for the base SIR model
 ode_results_sir <- ode(
   y = initial_state_sir,
   times = time_sequence,
@@ -103,6 +103,7 @@ write.csv(
   na = ""
 )
 
+# Run the ODE solver for the base SEIR model
 ode_results_seir <- ode(
   y = initial_state_seir,
   times = time_sequence,
@@ -129,5 +130,31 @@ write.csv(
   na = ""
 )
 
-# Additional ODE output that is needed
-# SIR ODE output, R0 = 2 (beta = 1, mean duration infectiousness 2)
+# Run the ODE solver for the SIR model applicable to 1/4 of time spent in
+# a unique household per person
+
+# Create parameter vectors
+parameters_sir_unique_hh <- c(beta = beta * 3/4, gamma = gamma)
+
+ode_results_sir_unique_hh <- ode(
+  y = initial_state_sir,
+  times = time_sequence,
+  func = sir_model,
+  parms = parameters_sir_unique_hh
+)
+
+ode_results_df_sir_unique_hh <- ode_results_sir_unique_hh |>
+  as.data.frame() |>
+  rename(t = time, Susceptible = s, Infectious = i, Recovered = r) |>
+  pivot_longer(
+    cols = c(Susceptible, Infectious, Recovered),
+    names_to = "InfectionStatus",
+    values_to = "count"
+  )
+
+write.csv(
+  x = ode_results_df_sir_unique_hh,
+  file = "tests/input/ode_results_SIR_unique_hh.csv",
+  row.names = FALSE,
+  na = ""
+)

@@ -1,0 +1,12 @@
+azb:
+  azure_batch: false
+experiment_conditions:
+  replicates_per_particle: 1000
+  samples_per_step: 1
+  seed: 12345
+  scenario_key: epi_isolation.GlobalParams
+local_path:
+  default_params_file: tests/integration/sir_unique_hh/input/input_SIR_unique_hh.json
+  exe_file: target/release/epi-isolation
+  sub_experiment_name: sir_unique_hh
+  super_experiment_name: integration
