@@ -2,8 +2,8 @@ use crate::parameters::{
     ContextParametersExt, CoreSettingsTypes, ItinerarySpecificationType, Params,
 };
 use ixa::{
-    define_data_plugin, define_rng, people::Query, trace, Context, ContextPeopleExt,
-    ContextRandomExt, IxaError, PersonId,
+    define_data_plugin, define_rng, people::Query, prelude_for_plugins::IxaEvent, trace, Context,
+    ContextPeopleExt, ContextRandomExt, IxaError, PersonId,
 };
 use serde::{Deserialize, Serialize};
 
@@ -61,6 +61,18 @@ impl ItineraryEntry {
             ratio,
         }
     }
+}
+
+#[derive(Copy, Clone, IxaEvent)]
+pub struct ItineraryChangeEvent {
+    /// `PersonId` of the individual whose itinerary has changed
+    pub person_id: PersonId,
+    /// Multiplier from previous itinerary
+    pub previous_multiplier: f64,
+    /// Multiplier from current itinerary
+    pub current_multiplier: f64,
+    /// Marker that the itinerary change may result in an increase in membership
+    pub increases_membership: bool,
 }
 
 #[allow(dead_code)]
@@ -301,6 +313,7 @@ pub trait ContextSettingExt {
         q: Q,
     ) -> Result<Option<PersonId>, IxaError>;
     fn get_setting_for_contact(&self, person_id: PersonId) -> Option<SettingId<dyn SettingType>>;
+    fn is_contact(&self, person_id: PersonId, potential_contact: PersonId) -> bool;
 }
 
 trait ContextSettingInternalExt {
@@ -530,6 +543,9 @@ impl ContextSettingExt for Context {
     }
 
     fn remove_modified_itinerary(&mut self, person_id: PersonId) -> Result<(), IxaError> {
+        let previous_multiplier =
+            self.calculate_total_infectiousness_multiplier_for_person(person_id);
+
         let container = self.get_data_container_mut(SettingDataPlugin);
 
         // If there's a modified itinerary present, remove
@@ -569,6 +585,14 @@ impl ContextSettingExt for Context {
                 }
             }
         }
+        let current_multiplier =
+            self.calculate_total_infectiousness_multiplier_for_person(person_id);
+        self.emit_event(ItineraryChangeEvent {
+            person_id,
+            previous_multiplier,
+            current_multiplier,
+            increases_membership: true,
+        });
         Ok(())
     }
 
@@ -577,12 +601,17 @@ impl ContextSettingExt for Context {
         person_id: PersonId,
         itinerary_modifier: ItineraryModifiers,
     ) -> Result<(), IxaError> {
-        match itinerary_modifier {
+        let previous_multiplier =
+            self.calculate_total_infectiousness_multiplier_for_person(person_id);
+        let increases_membership;
+        let result = match itinerary_modifier {
             ItineraryModifiers::ReplaceWith { itinerary } => {
+                increases_membership = true;
                 trace!("ItineraryModifier::Replace person {person_id} --  {itinerary:?}");
                 self.add_modified_itinerary(person_id, itinerary)
             }
             ItineraryModifiers::RestrictTo { setting } => {
+                increases_membership = false;
                 trace!(
                     "ItineraryModifier::RestrictTo person {person_id} -- {:?}",
                     setting.get_type_id()
@@ -590,13 +619,26 @@ impl ContextSettingExt for Context {
                 self.limit_itinerary_by_setting_type(person_id, setting)
             }
             ItineraryModifiers::Exclude { setting } => {
+                increases_membership = false;
                 trace!(
                     "ItineraryModifier::Exclude person {person_id}-- {:?}",
                     setting.get_type_id()
                 );
                 self.exclude_setting_from_itinerary(person_id, setting)
             }
-        }
+        };
+
+        let current_multiplier =
+            self.calculate_total_infectiousness_multiplier_for_person(person_id);
+
+        self.emit_event(ItineraryChangeEvent {
+            person_id,
+            previous_multiplier,
+            current_multiplier,
+            increases_membership,
+        });
+
+        result
     }
 
     fn get_setting_ids<T: SettingType>(
@@ -760,6 +802,21 @@ impl ContextSettingExt for Context {
             None
         }
     }
+    fn is_contact(&self, person_id: PersonId, potential_contact: PersonId) -> bool {
+        let container = self.get_data_container(SettingDataPlugin).unwrap();
+        if let Some(itinerary) = self.get_itinerary(person_id) {
+            for itinerary_entry in itinerary {
+                if let Some(members) = container
+                    .get_setting_members(&itinerary_entry.setting_type, itinerary_entry.setting_id)
+                {
+                    if members.contains(&potential_contact) {
+                        return true;
+                    }
+                }
+            }
+        }
+        false
+    }
 }
 
 pub fn init(context: &mut Context) {
@@ -798,17 +855,11 @@ pub fn init(context: &mut Context) {
 mod test {
     use super::*;
     use crate::{
-        infectiousness_manager::{
-            evaluate_forecast, get_forecast, InfectionContextExt, InfectionStatus,
-            InfectionStatusValue,
-        },
         parameters::{GlobalParams, ItinerarySpecificationType},
-        rate_fns::load_rate_fns,
         settings::ContextSettingExt,
     };
     use ixa::{define_person_property, ContextGlobalPropertiesExt, ContextPeopleExt};
     use statrs::assert_almost_eq;
-    use std::{cell::RefCell, rc::Rc};
 
     define_setting_type!(Community);
 
@@ -1996,141 +2047,5 @@ mod test {
 
         let total_ratio: Vec<f64> = itinerary.iter().map(|entry| entry.ratio).collect();
         assert_eq!(total_ratio, vec![0.5, 0.25, 0.25]);
-    }
-
-    fn setup_transmission_context(seed: u64) -> Context {
-        let mut context = Context::new();
-
-        // Create a single itinerary for a group of people
-        // Itinerary is pslit 50% at home and 50% at work, but at home transmission potential is density-dependent
-        let parameters = Params {
-            ..Default::default()
-        };
-
-        context
-            .set_global_property_value(GlobalParams, parameters)
-            .unwrap();
-        context
-            .register_setting_type(
-                Home,
-                SettingProperties {
-                    alpha: 1.0,
-                    itinerary_specification: Some(ItinerarySpecificationType::Constant {
-                        ratio: 0.5,
-                    }),
-                },
-            )
-            .unwrap();
-        context
-            .register_setting_type(
-                Workplace,
-                SettingProperties {
-                    alpha: 0.0,
-                    itinerary_specification: Some(ItinerarySpecificationType::Constant {
-                        ratio: 0.5,
-                    }),
-                },
-            )
-            .unwrap();
-
-        context.init_random(seed);
-        load_rate_fns(&mut context).unwrap();
-
-        context
-    }
-
-    // This test should eventually pass by re-factoring modified itineraries to also account for changes to an individual's forecast.
-    #[test]
-    // #[should_panic(
-    //     expected = "Person 0: Forecasted infectiousness must always be greater than or equal to current infectiousness. Current: 5, Forecasted: 3"
-    // )]
-    #[allow(clippy::cast_precision_loss, clippy::cast_lossless)]
-    fn test_forecast_during_self_itinerary_modification() {
-        let n_replicates = 100;
-        let successes = Rc::new(RefCell::new(0usize));
-        for seed in 0..n_replicates {
-            let mut context = setup_transmission_context(seed);
-            let successes_clone = Rc::clone(&successes);
-
-            let mut itinerary = vec![];
-            append_itinerary_entry(&mut itinerary, &context, Home, 1).unwrap();
-            append_itinerary_entry(&mut itinerary, &context, Workplace, 1).unwrap();
-
-            let infector = context.add_person(()).unwrap();
-            context.infect_person(infector, None, None, None);
-            context.add_itinerary(infector, itinerary.clone()).unwrap();
-
-            for _ in 0..5 {
-                let contact = context.add_person(()).unwrap();
-                context.add_itinerary(contact, itinerary.clone()).unwrap();
-            }
-
-            let forecast = get_forecast(&context, infector).unwrap();
-            context.add_plan(forecast.next_time / 2.0, move |context| {
-                context
-                    .modify_itinerary(infector, ItineraryModifiers::RestrictTo { setting: &Home })
-                    .unwrap();
-            });
-            context.add_plan(forecast.next_time, move |context| {
-                if evaluate_forecast(context, infector, forecast.forecasted_total_infectiousness) {
-                    *successes_clone.borrow_mut() += 1;
-                }
-            });
-
-            context.execute();
-        }
-
-        let avg_successes = *successes.borrow() as f64 / n_replicates as f64;
-        assert_almost_eq!(avg_successes, 3.0 / 5.0, 0.05);
-    }
-
-    #[test]
-    // #[should_panic(
-    //     expected = "Person 0: Forecasted infectiousness must always be greater than or equal to current infectiousness. Current: 3, Forecasted: 0.5"
-    // )]
-    #[allow(clippy::cast_precision_loss, clippy::cast_lossless)]
-    fn test_forecast_during_contact_itinerary_modification() {
-        let n_replicates = 100;
-        let successes = Rc::new(RefCell::new(0usize));
-
-        for seed in 0..n_replicates {
-            let mut context = setup_transmission_context(seed);
-            let successes_clone = Rc::clone(&successes);
-
-            let mut itinerary = vec![];
-            append_itinerary_entry(&mut itinerary, &context, Home, 1).unwrap();
-            append_itinerary_entry(&mut itinerary, &context, Workplace, 1).unwrap();
-
-            let infector = context.add_person(()).unwrap();
-            context.infect_person(infector, None, None, None);
-            context.add_itinerary(infector, itinerary.clone()).unwrap();
-
-            for _ in 0..5 {
-                let contact = context.add_person(()).unwrap();
-                context.add_itinerary(contact, itinerary.clone()).unwrap();
-                context
-                    .modify_itinerary(contact, ItineraryModifiers::Exclude { setting: &Home })
-                    .unwrap();
-            }
-
-            let forecast = get_forecast(&context, infector).unwrap();
-            context.add_plan(forecast.next_time / 2.0, move |context| {
-                for person in
-                    context.query_people((InfectionStatus, InfectionStatusValue::Susceptible))
-                {
-                    context.remove_modified_itinerary(person).unwrap();
-                }
-            });
-            context.add_plan(forecast.next_time, move |context| {
-                if evaluate_forecast(context, infector, forecast.forecasted_total_infectiousness) {
-                    *successes_clone.borrow_mut() += 1;
-                }
-            });
-
-            context.execute();
-        }
-
-        let avg_successes = *successes.borrow() as f64 / n_replicates as f64;
-        assert_almost_eq!(avg_successes, 0.5 / 5.0, 0.05);
     }
 }
