@@ -110,7 +110,8 @@ impl ContextForecastExtInt for Context {
                     .active_plans
                     .keys()
                     .filter(|&infector| {
-                        (context.is_contact(event.person_id, *infector) && event.increases_membership)
+                        (context.is_contact(event.person_id, *infector)
+                            && event.increases_membership)
                             || (event.person_id == *infector
                                 && event.previous_multiplier < event.current_multiplier)
                     })
