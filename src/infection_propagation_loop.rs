@@ -8,8 +8,8 @@ use crate::parameters::{ContextParametersExt, Params};
 use crate::rate_fns::{load_rate_fns, InfectiousnessRateExt};
 use crate::settings::{ContextSettingExt, ItineraryChangeEvent};
 use ixa::{
-    define_rng, trace, Context, ContextPeopleExt, ContextRandomExt, IxaError, PersonId,
-    PersonPropertyChangeEvent,
+    define_data_plugin, define_rng, plan::PlanId, trace, Context, ContextPeopleExt,
+    ContextRandomExt, HashMap, IxaError, PersonId, PersonPropertyChangeEvent,
 };
 
 define_rng!(InfectionRng);
@@ -36,19 +36,10 @@ fn schedule_next_forecasted_infection(context: &mut Context, person: PersonId) {
             // Continue scheduling forecasts until the person recovers.
             schedule_next_forecasted_infection(context, person);
         });
-        context.subscribe_to_event::<ItineraryChangeEvent>(move |context, event| {
-            // Check if the forecast next_time is still relevant
-            if context.get_current_time() < next_time {
-                // Check if person's infectiousness multiplier is altered without being handled by rejection sampling
-                if (event.person_id == person
-                    && event.previous_multiplier < event.current_multiplier)
-                    || event.increase_membership
-                {
-                    context.cancel_plan(&infection_plan);
-                    schedule_next_forecasted_infection(context, person);
-                }
-            }
-        });
+        // The previous plan needs to be automatcially cancelled inside `add_forecast_plan` to resolve conflicts on recalls of forecast
+        context.add_forecast_plan(person, infection_plan);
+    } else {
+        context.remove_forecast_plan(person);
     }
 }
 
@@ -59,6 +50,74 @@ fn schedule_recovery(context: &mut Context, person: PersonId) {
         trace!("Person {person} has recovered at {recovery_time}");
         context.recover_person(person);
     });
+}
+
+#[derive(Default)]
+struct ForecastDataContainer {
+    active_plans: HashMap<PersonId, PlanId>,
+}
+
+impl ForecastDataContainer {
+    fn add_plan(&mut self, person_id: PersonId, plan_id: PlanId) -> Option<PlanId> {
+        self.active_plans.insert(person_id, plan_id)
+    }
+    fn remove_plan(&mut self, person_id: PersonId) -> Option<PlanId> {
+        self.active_plans.remove(&person_id)
+    }
+}
+
+define_data_plugin!(
+    ForecastDataPlugin,
+    ForecastDataContainer,
+    ForecastDataContainer::default()
+);
+
+trait ContextForecastExtInt {
+    /// Remove person from the data container `HashMap`
+    fn remove_forecast_plan(&mut self, person_id: PersonId);
+    /// Add a new plan to the forecast data plugin and cancel any plan currently associated with that person
+    fn add_forecast_plan(&mut self, person_id: PersonId, plan_id: PlanId);
+    /// Listen to itinerary changes and determine their effect on the current active forecast plans of potential infecotrs
+    fn subscribe_to_itinerary_change(&mut self);
+}
+
+impl ContextForecastExtInt for Context {
+    fn remove_forecast_plan(&mut self, person_id: PersonId) {
+        let container = self.get_data_container_mut(ForecastDataPlugin);
+        if let Some(prev_plan) = container.remove_plan(person_id) {
+            self.cancel_plan(&prev_plan);
+        }
+    }
+    fn add_forecast_plan(&mut self, person_id: PersonId, plan_id: PlanId) {
+        let container = self.get_data_container_mut(ForecastDataPlugin);
+        if let Some(prev_plan) = container.add_plan(person_id, plan_id) {
+            self.cancel_plan(&prev_plan);
+        }
+    }
+    fn subscribe_to_itinerary_change(&mut self) {
+        self.subscribe_to_event::<ItineraryChangeEvent>(move |context, event| {
+            let container = context.get_data_container(ForecastDataPlugin).unwrap();
+
+            // Check for any active forecast associated with person
+            let affected_infectors: Vec<PersonId> = container
+                .active_plans
+                .keys()
+                .filter(|&infector| {
+                    (context.is_contact(event.person_id, *infector) && event.increases_membership)
+                        || (event.person_id == *infector
+                            && event.previous_multiplier < event.current_multiplier)
+                })
+                .copied()
+                .collect();
+
+            // We have to re-evaluate any infectors and infectious contacts that may be new to the person with a changed itinerary,
+            // as their itinerary potentially increased membership across some settings
+            // and therefore potentially increased the infectiousness of the infector
+            for infector in affected_infectors {
+                schedule_next_forecasted_infection(context, infector);
+            }
+        });
+    }
 }
 
 /// Takes susceptible people from the population and changes them according to a provided `seed_fn`.
@@ -127,6 +186,8 @@ pub fn init(context: &mut Context) -> Result<(), IxaError> {
         },
     );
 
+    context.subscribe_to_itinerary_change();
+
     Ok(())
 }
 
@@ -149,7 +210,7 @@ mod test {
         define_setting_type,
         infection_propagation_loop::{
             init, schedule_next_forecasted_infection, schedule_recovery, seed_initial_infections,
-            seed_initial_recovered, InfectionStatus, InfectionStatusValue,
+            seed_initial_recovered, ContextForecastExtInt, InfectionStatus, InfectionStatusValue,
         },
         infectiousness_manager::{
             max_total_infectiousness_multiplier, InfectionContextExt, InfectionData,
@@ -912,6 +973,7 @@ mod test {
 
         context.init_random(seed);
         load_rate_fns(&mut context).unwrap();
+        context.subscribe_to_itinerary_change();
 
         context
     }
@@ -919,9 +981,11 @@ mod test {
     #[test]
     #[allow(clippy::cast_precision_loss, clippy::cast_lossless)]
     fn test_forecast_during_self_itinerary_modification() {
-        let n_replicates = 100;
-        let mut successes = 0;
+        let n_replicates = 1000;
+        let successes = Rc::new(RefCell::new(0));
+
         for seed in 0..n_replicates {
+            let successes_clone = Rc::clone(&successes);
             let mut context = setup_transmission_settings_context(seed);
 
             let mut itinerary = vec![];
@@ -937,6 +1001,20 @@ mod test {
                 context.add_itinerary(contact, itinerary.clone()).unwrap();
             }
 
+            // Create a quasi-infinite pool of susceptibles by reverting status
+            context.subscribe_to_event(
+                move |context, event: PersonPropertyChangeEvent<InfectionStatus>| {
+                    if event.current == InfectionStatusValue::Infectious {
+                        *successes_clone.borrow_mut() += 1;
+                        context.set_person_property(
+                            event.person_id,
+                            InfectionData,
+                            InfectionDataValue::Susceptible,
+                        );
+                    }
+                },
+            );
+
             // Initialize the schedule for forecasts of infector prior to modifying itinerary
             schedule_next_forecasted_infection(&mut context, infector);
 
@@ -948,22 +1026,21 @@ mod test {
             });
 
             context.execute();
-            successes +=
-                context.query_people_count((InfectionStatus, InfectionStatusValue::Infectious)) - 1;
         }
 
-        // Rate of 5.0 = 1.0*(6 - 1)^1.0 in the home over duration 5.0, failures increase with decreased susceptible count
-        let avg_successes = successes as f64 / n_replicates as f64;
-        assert_almost_eq!(avg_successes, 5.0, 0.05);
+        // Rate of 5.0 = 1.0*(6 - 1)^1.0 in the home
+        // For a duration of 5 days, this should yield 25 infections on average.
+        let avg_successes = *successes.borrow() as f64 / n_replicates as f64;
+        assert_almost_eq!(avg_successes, 25.0, 0.5);
     }
 
     #[test]
     #[allow(clippy::cast_precision_loss, clippy::cast_lossless)]
     fn test_forecast_during_contact_itinerary_modification() {
-        let n_replicates = 100;
-        let mut successes = 0;
-
+        let n_replicates = 1000;
+        let successes = Rc::new(RefCell::new(0));
         for seed in 0..n_replicates {
+            let successes_clone = Rc::clone(&successes);
             let mut context = setup_transmission_settings_context(seed);
 
             let mut itinerary = vec![];
@@ -988,16 +1065,29 @@ mod test {
                 });
             }
 
+            // Create a quasi-infinite pool of susceptibles by reverting status
+            context.subscribe_to_event(
+                move |context, event: PersonPropertyChangeEvent<InfectionStatus>| {
+                    if event.current == InfectionStatusValue::Infectious {
+                        *successes_clone.borrow_mut() += 1;
+                        context.set_person_property(
+                            event.person_id,
+                            InfectionData,
+                            InfectionDataValue::Susceptible,
+                        );
+                    }
+                },
+            );
+
             // Initialize the schedule for forecasts of infector prior to modifying itineraries through `context.execute()``
             schedule_next_forecasted_infection(&mut context, infector);
 
             context.execute();
-            successes +=
-                context.query_people_count((InfectionStatus, InfectionStatusValue::Infectious)) - 1;
         }
 
-        // Rate of 3.0 = 0.5*(6 - 1)^1.0 + 0.5*(6 - 1)^0.0 across both settings over duration 5.0, failures increase with decreased susceptible count
-        let avg_successes = successes as f64 / n_replicates as f64;
-        assert_almost_eq!(avg_successes, 4.7, 0.05);
+        // Rate of 3.0 = 0.5*(6 - 1)^1.0 + 0.5*(6 - 1)^0.0 across both settings
+        // For a duration of 5 days, this should yield 15 infections on average.
+        let avg_successes = *successes.borrow() as f64 / n_replicates as f64;
+        assert_almost_eq!(avg_successes, 15.0, 0.5);
     }
 }

@@ -72,7 +72,7 @@ pub struct ItineraryChangeEvent {
     /// Multiplier from current itinerary
     pub current_multiplier: f64,
     /// Marker that the itinerary change may result in an increase in membership
-    pub increase_membership: bool,
+    pub increases_membership: bool,
 }
 
 #[allow(dead_code)]
@@ -313,6 +313,7 @@ pub trait ContextSettingExt {
         q: Q,
     ) -> Result<Option<PersonId>, IxaError>;
     fn get_setting_for_contact(&self, person_id: PersonId) -> Option<SettingId<dyn SettingType>>;
+    fn is_contact(&self, person_id: PersonId, potential_contact: PersonId) -> bool;
 }
 
 trait ContextSettingInternalExt {
@@ -590,7 +591,7 @@ impl ContextSettingExt for Context {
             person_id,
             previous_multiplier,
             current_multiplier,
-            increase_membership: true,
+            increases_membership: true,
         });
         Ok(())
     }
@@ -602,15 +603,15 @@ impl ContextSettingExt for Context {
     ) -> Result<(), IxaError> {
         let previous_multiplier =
             self.calculate_total_infectiousness_multiplier_for_person(person_id);
-        let increase_membership;
+        let increases_membership;
         let result = match itinerary_modifier {
             ItineraryModifiers::ReplaceWith { itinerary } => {
-                increase_membership = true;
+                increases_membership = true;
                 trace!("ItineraryModifier::Replace person {person_id} --  {itinerary:?}");
                 self.add_modified_itinerary(person_id, itinerary)
             }
             ItineraryModifiers::RestrictTo { setting } => {
-                increase_membership = false;
+                increases_membership = false;
                 trace!(
                     "ItineraryModifier::RestrictTo person {person_id} -- {:?}",
                     setting.get_type_id()
@@ -618,7 +619,7 @@ impl ContextSettingExt for Context {
                 self.limit_itinerary_by_setting_type(person_id, setting)
             }
             ItineraryModifiers::Exclude { setting } => {
-                increase_membership = false;
+                increases_membership = false;
                 trace!(
                     "ItineraryModifier::Exclude person {person_id}-- {:?}",
                     setting.get_type_id()
@@ -634,7 +635,7 @@ impl ContextSettingExt for Context {
             person_id,
             previous_multiplier,
             current_multiplier,
-            increase_membership,
+            increases_membership,
         });
 
         result
@@ -800,6 +801,21 @@ impl ContextSettingExt for Context {
         } else {
             None
         }
+    }
+    fn is_contact(&self, person_id: PersonId, potential_contact: PersonId) -> bool {
+        let container = self.get_data_container(SettingDataPlugin).unwrap();
+        if let Some(itinerary) = self.get_itinerary(person_id) {
+            for itinerary_entry in itinerary {
+                if let Some(members) = container
+                    .get_setting_members(&itinerary_entry.setting_type, itinerary_entry.setting_id)
+                {
+                    if members.contains(&potential_contact) {
+                        return true;
+                    }
+                }
+            }
+        }
+        false
     }
 }
 
