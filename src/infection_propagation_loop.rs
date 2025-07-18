@@ -74,7 +74,7 @@ define_data_plugin!(
     ForecastDataContainer::default()
 );
 
-trait ContextForecastExtInt {
+trait ContextForecastInternalExt {
     /// Remove person from the data container `HashMap`
     fn remove_forecast_plan(&mut self, person_id: PersonId);
     /// Add a new plan to the forecast data plugin and cancel any plan currently associated with that person
@@ -85,7 +85,7 @@ trait ContextForecastExtInt {
     fn subscribe_to_itinerary_change(&mut self);
 }
 
-impl ContextForecastExtInt for Context {
+impl ContextForecastInternalExt for Context {
     fn remove_forecast_plan(&mut self, person_id: PersonId) {
         let container = self.get_data_container_mut(ForecastDataPlugin);
         container.remove_plan(person_id);
@@ -222,7 +222,8 @@ mod test {
         define_setting_type,
         infection_propagation_loop::{
             init, schedule_next_forecasted_infection, schedule_recovery, seed_initial_infections,
-            seed_initial_recovered, ContextForecastExtInt, InfectionStatus, InfectionStatusValue,
+            seed_initial_recovered, ContextForecastInternalExt, InfectionStatus,
+            InfectionStatusValue,
         },
         infectiousness_manager::{
             max_total_infectiousness_multiplier, InfectionContextExt, InfectionData,
