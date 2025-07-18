@@ -7,12 +7,47 @@ use crate::infectiousness_manager::{
 use crate::parameters::{ContextParametersExt, Params};
 use crate::rate_fns::{load_rate_fns, InfectiousnessRateExt};
 use crate::settings::{ContextSettingExt, ItineraryChangeEvent};
+use ixa::plan::PlanId;
 use ixa::{
-    define_rng, trace, Context, ContextPeopleExt, ContextRandomExt, IxaError, PersonId,
-    PersonPropertyChangeEvent,
+    define_data_plugin, define_rng, trace, Context, ContextPeopleExt, ContextRandomExt, HashMap, IxaError, PersonId, PersonPropertyChangeEvent
 };
 
 define_rng!(InfectionRng);
+
+
+#[derive(Default)]
+struct InfectionDataContainer {
+    latest_infection_plan: HashMap<PersonId,PlanId>,
+    latest_next_time: HashMap<PersonId, f64>,
+}
+
+impl InfectionDataContainer {
+    fn set_infection_plan_attributes(
+        &mut self,
+        person_id: PersonId,
+        plan_id: PlanId,
+        next_time: f64,
+    ) {
+        self.latest_infection_plan.insert(person_id, plan_id);
+        self.latest_next_time.insert(person_id, next_time);
+    }
+    fn get_latest_infection_plan(
+        &self,
+        person_id: PersonId,
+    ) -> Option<&PlanId> {
+        self.latest_infection_plan.get(&person_id)
+    }
+    fn get_latest_next_time(&self, person_id: PersonId) -> Option<f64> {
+        self.latest_next_time.get(&person_id).copied()
+    }
+}
+
+define_data_plugin!(
+    InfectionPropagationPlugin,
+    InfectionDataContainer,
+    InfectionDataContainer::default()
+);
+
 
 fn schedule_next_forecasted_infection(context: &mut Context, person: PersonId) {
     if let Some(Forecast {
@@ -36,19 +71,8 @@ fn schedule_next_forecasted_infection(context: &mut Context, person: PersonId) {
             // Continue scheduling forecasts until the person recovers.
             schedule_next_forecasted_infection(context, person);
         });
-        context.subscribe_to_event::<ItineraryChangeEvent>(move |context, event| {
-            // Check if the forecast next_time is still relevant
-            if context.get_current_time() < next_time {
-                // Check if person's infectiousness multiplier is altered without being handled by rejection sampling
-                if (event.person_id == person
-                    && event.previous_multiplier < event.current_multiplier)
-                    || event.increase_membership
-                {
-                    context.cancel_plan(&infection_plan);
-                    schedule_next_forecasted_infection(context, person);
-                }
-            }
-        });
+        context.get_data_container_mut(InfectionPropagationPlugin)
+            .set_infection_plan_attributes(person, infection_plan, next_time);
     }
 }
 
@@ -102,6 +126,30 @@ fn seed_initial_recovered(context: &mut Context, initial_recovered: f64) {
     });
 }
 
+fn reschedule_forecast(
+    context: &mut Context,
+    person_id: PersonId, 
+    previous_multiplier: f64,
+    current_multiplier: f64,
+    increase_membership: bool,
+) {
+    if let Some((next_time, infection_plan)) = {
+        let container = context.get_data_container(InfectionPropagationPlugin).unwrap();
+        match (container.get_latest_next_time(person_id), container.get_latest_infection_plan(person_id)) {
+            (Some(next_time), Some(infection_plan)) => Some((next_time, infection_plan.clone())),
+            _ => None,
+        }
+    } {
+        if context.get_current_time() < next_time {
+            // Check if person's infectiousness multiplier is altered without being handled by rejection sampling
+            if (previous_multiplier < current_multiplier) || increase_membership {
+                context.cancel_plan(&infection_plan);
+                schedule_next_forecasted_infection(context, person_id);
+            }
+        }
+    }
+}
+
 pub fn init(context: &mut Context) -> Result<(), IxaError> {
     let &Params {
         initial_incidence,
@@ -127,6 +175,11 @@ pub fn init(context: &mut Context) -> Result<(), IxaError> {
         },
     );
 
+    context.subscribe_to_event::<ItineraryChangeEvent>(move |context, event| {
+            // Check if the forecast next_time is still relevant
+            reschedule_forecast(context, event.person_id, event.previous_multiplier, event.current_multiplier, event.increase_membership);
+        });
+
     Ok(())
 }
 
@@ -148,8 +201,7 @@ mod test {
     use crate::{
         define_setting_type,
         infection_propagation_loop::{
-            init, schedule_next_forecasted_infection, schedule_recovery, seed_initial_infections,
-            seed_initial_recovered, InfectionStatus, InfectionStatusValue,
+            init, reschedule_forecast, schedule_next_forecasted_infection, schedule_recovery, seed_initial_infections, seed_initial_recovered, InfectionStatus, InfectionStatusValue
         },
         infectiousness_manager::{
             max_total_infectiousness_multiplier, InfectionContextExt, InfectionData,
@@ -162,8 +214,7 @@ mod test {
         },
         rate_fns::{load_rate_fns, InfectiousnessRateExt},
         settings::{
-            append_itinerary_entry, CensusTract, ContextSettingExt, Home, ItineraryEntry,
-            ItineraryModifiers, SettingId, SettingProperties, Workplace,
+            append_itinerary_entry, CensusTract, ContextSettingExt, Home, ItineraryChangeEvent, ItineraryEntry, ItineraryModifiers, SettingId, SettingProperties, Workplace
         },
     };
 
@@ -923,7 +974,9 @@ mod test {
         let mut successes = 0;
         for seed in 0..n_replicates {
             let mut context = setup_transmission_settings_context(seed);
-
+            context.subscribe_to_event::<ItineraryChangeEvent>(move |context, event| {
+                reschedule_forecast(context, event.person_id, event.previous_multiplier, event.current_multiplier, event.increase_membership);
+            });
             let mut itinerary = vec![];
             append_itinerary_entry(&mut itinerary, &context, Home, 1).unwrap();
             append_itinerary_entry(&mut itinerary, &context, Workplace, 1).unwrap();
@@ -966,6 +1019,9 @@ mod test {
         for seed in 0..n_replicates {
             let mut context = setup_transmission_settings_context(seed);
 
+            context.subscribe_to_event::<ItineraryChangeEvent>(move |context, event| {
+                reschedule_forecast(context, event.person_id, event.previous_multiplier, event.current_multiplier, event.increase_membership);
+            });
             let mut itinerary = vec![];
             append_itinerary_entry(&mut itinerary, &context, Home, 1).unwrap();
             append_itinerary_entry(&mut itinerary, &context, Workplace, 1).unwrap();
