@@ -284,9 +284,9 @@ mod test {
         );
         let p1 = context.add_person(()).unwrap();
         let itinerary = vec![
-            ItineraryEntry::new(SettingId::new(&Home, 0), 1.0),
-            ItineraryEntry::new(SettingId::new(&CensusTract, 0), 1.0),
-            ItineraryEntry::new(SettingId::new(&Workplace, 0), 1.0),
+            ItineraryEntry::new(SettingId::new(Home, 0), 1.0),
+            ItineraryEntry::new(SettingId::new(CensusTract, 0), 1.0),
+            ItineraryEntry::new(SettingId::new(Workplace, 0), 1.0),
         ];
         context.add_itinerary(p1, itinerary).unwrap();
         crate::symptom_progression::init(&mut context).unwrap();
@@ -390,9 +390,9 @@ mod test {
             context.init_random(seed);
             let first_person = context.add_person(()).unwrap();
             let itinerary = vec![
-                ItineraryEntry::new(SettingId::new(&Home, 0), 1.0),
-                ItineraryEntry::new(SettingId::new(&CensusTract, 0), 1.0),
-                ItineraryEntry::new(SettingId::new(&Workplace, 0), 1.0),
+                ItineraryEntry::new(SettingId::new(Home, 0), 1.0),
+                ItineraryEntry::new(SettingId::new(CensusTract, 0), 1.0),
+                ItineraryEntry::new(SettingId::new(Workplace, 0), 1.0),
             ];
             context
                 .add_itinerary(first_person, itinerary.clone())

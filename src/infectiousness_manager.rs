@@ -8,7 +8,7 @@ use statrs::distribution::Exp;
 use crate::{
     interventions::ContextTransmissionModifierExt,
     rate_fns::{InfectiousnessRateExt, InfectiousnessRateFn, ScaledRateFn},
-    settings::{ContextSettingExt, SettingId, SettingType},
+    settings::ContextSettingExt,
 };
 
 #[derive(Serialize, PartialEq, Debug, Clone, Copy)]
@@ -75,24 +75,37 @@ pub fn max_total_infectiousness_multiplier(context: &Context, person_id: PersonI
 define_rng!(ForecastRng);
 
 // Infection attempt function for a context and given `PersonId`
-pub fn infection_attempt<T: SettingType + ?Sized>(
-    context: &Context,
-    person_id: PersonId,
-    setting_id: SettingId<T>,
-) -> Option<PersonId> {
-    let next_contact = context.get_contact(person_id, setting_id, ()).unwrap()?;
-    match context.get_person_property(next_contact, InfectionStatus) {
-        InfectionStatusValue::Susceptible => {
-            if context.sample_bool(
-                ForecastRng,
-                context.get_relative_total_transmission(next_contact),
-            ) {
-                Some(next_contact)
-            } else {
-                None
+pub fn infection_attempt(context: &mut Context, person_id: PersonId) -> Option<PersonId> {
+    if let Some(setting) = context.sample_setting(person_id) {
+        let next_contact = context.get_contact(person_id, setting, ()).unwrap()?;
+        match context.get_person_property(next_contact, InfectionStatus) {
+            InfectionStatusValue::Susceptible => {
+                if context.sample_bool(
+                    ForecastRng,
+                    context.get_relative_total_transmission(next_contact),
+                ) {
+                    trace!(
+                        "Infection attempt successful. Person {}, setting type {} {}, infecting {}",
+                        person_id,
+                        setting.get_category_id(),
+                        setting.id(),
+                        next_contact
+                    );
+                    context.infect_person(
+                        next_contact,
+                        Some(person_id),
+                        Some(setting.get_category_id()),
+                        Some(setting.id()),
+                    );
+                    Some(next_contact)
+                } else {
+                    None
+                }
             }
+            _ => None,
         }
-        _ => None,
+    } else {
+        None
     }
 }
 
@@ -237,7 +250,7 @@ mod test {
         InfectionContextExt,
     };
     use crate::{
-        define_setting_type,
+        define_setting_category,
         infectiousness_manager::{
             InfectionData, InfectionDataValue, InfectionStatus, InfectionStatusValue,
         },
@@ -251,14 +264,14 @@ mod test {
         ContextRandomExt, IxaError, PersonId,
     };
 
-    define_setting_type!(HomogeneousMixing);
+    define_setting_category!(HomogeneousMixing);
 
     fn set_homogeneous_mixing_itinerary(
         context: &mut Context,
         person_id: PersonId,
     ) -> Result<(), IxaError> {
         let itinerary = vec![ItineraryEntry::new(
-            SettingId::new(&HomogeneousMixing, 0),
+            SettingId::new(HomogeneousMixing, 0),
             1.0,
         )];
         context.add_itinerary(person_id, itinerary)
@@ -279,8 +292,8 @@ mod test {
             .unwrap();
         load_rate_fns(&mut context).unwrap();
         context
-            .register_setting_type(
-                HomogeneousMixing,
+            .register_setting_category(
+                &HomogeneousMixing,
                 SettingProperties {
                     alpha: 1.0,
                     itinerary_specification: Some(ItinerarySpecificationType::Constant {
@@ -483,9 +496,13 @@ mod test {
         set_homogeneous_mixing_itinerary(&mut context, source).unwrap();
 
         for _ in 0..n {
-            if infection_attempt(&context, source, SettingId::new(&HomogeneousMixing, 0)).is_some()
-            {
+            if infection_attempt(&mut context, source).is_some() {
                 count += 1;
+                context.set_person_property(
+                    contact,
+                    InfectionData,
+                    InfectionDataValue::Susceptible,
+                );
             }
         }
         assert_almost_eq!(count as f64 / n as f64, relative_effect, 0.01);
