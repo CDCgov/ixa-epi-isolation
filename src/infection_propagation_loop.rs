@@ -1,4 +1,5 @@
 use core::f64;
+use statrs::distribution::Binomial;
 
 use crate::infectiousness_manager::{
     evaluate_forecast, get_forecast, infection_attempt, Forecast, InfectionContextExt,
@@ -124,19 +125,29 @@ impl ContextForecastInternalExt for Context {
 }
 
 /// Takes susceptible people from the population and changes them according to a provided `seed_fn`.
-/// # Errors
-/// - If the total number of people to seed is greater than the population size.
+/// The total number of people seeded is distributed binomially according to the proportion to seed.
+/// The proportion to seed is calibrated to the population size, not the current number of susceptibles.
+/// This may result in the entire susceptible population being seeded with `seed_fn`
+#[allow(clippy::cast_possible_truncation)]
 fn query_susceptibles_and_seed(
     context: &mut Context,
     proportion_to_seed: f64,
     seed_fn: impl Fn(&mut Context, PersonId),
 ) {
-    let susceptibles = context.query_people((InfectionStatus, InfectionStatusValue::Susceptible));
+    let binom = Binomial::new(
+        proportion_to_seed,
+        context.get_current_population().try_into().unwrap(),
+    )
+    .unwrap();
+    let k: u64 = context.sample_distr(InfectionRng, binom);
+
+    let susceptibles = context.sample_people(
+        InfectionRng,
+        (InfectionStatus, InfectionStatusValue::Susceptible),
+        k as usize,
+    );
     for person in susceptibles {
-        // We use a random number to determine whether to seed this person.
-        if context.sample_bool(InfectionRng, proportion_to_seed) {
-            seed_fn(context, person);
-        }
+        seed_fn(context, person);
     }
 }
 
