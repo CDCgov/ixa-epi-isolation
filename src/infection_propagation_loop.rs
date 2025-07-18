@@ -38,8 +38,6 @@ fn schedule_next_forecasted_infection(context: &mut Context, person: PersonId) {
         });
         // The previous plan needs to be automatcially cancelled inside `add_forecast_plan` to resolve conflicts on recalls of forecast
         context.add_forecast_plan(person, infection_plan);
-    } else {
-        context.remove_forecast_plan(person);
     }
 }
 
@@ -49,6 +47,7 @@ fn schedule_recovery(context: &mut Context, person: PersonId) {
     context.add_plan(recovery_time, move |context| {
         trace!("Person {person} has recovered at {recovery_time}");
         context.recover_person(person);
+        context.remove_forecast_plan(person);
     });
 }
 
@@ -58,6 +57,9 @@ struct ForecastDataContainer {
 }
 
 impl ForecastDataContainer {
+    fn get_plan(&self, person_id: PersonId) -> Option<&PlanId> {
+        self.active_plans.get(&person_id)
+    }
     fn add_plan(&mut self, person_id: PersonId, plan_id: PlanId) -> Option<PlanId> {
         self.active_plans.insert(person_id, plan_id)
     }
@@ -77,16 +79,16 @@ trait ContextForecastExtInt {
     fn remove_forecast_plan(&mut self, person_id: PersonId);
     /// Add a new plan to the forecast data plugin and cancel any plan currently associated with that person
     fn add_forecast_plan(&mut self, person_id: PersonId, plan_id: PlanId);
-    /// Listen to itinerary changes and determine their effect on the current active forecast plans of potential infecotrs
+    /// Cancel forecast but keep infector in the data map
+    fn cancel_forecast(&mut self, person_id: PersonId);
+    /// Listen to itinerary changes and determine their effect on the current active forecast plans of potential infectors
     fn subscribe_to_itinerary_change(&mut self);
 }
 
 impl ContextForecastExtInt for Context {
     fn remove_forecast_plan(&mut self, person_id: PersonId) {
         let container = self.get_data_container_mut(ForecastDataPlugin);
-        if let Some(prev_plan) = container.remove_plan(person_id) {
-            self.cancel_plan(&prev_plan);
-        }
+        container.remove_plan(person_id);
     }
     fn add_forecast_plan(&mut self, person_id: PersonId, plan_id: PlanId) {
         let container = self.get_data_container_mut(ForecastDataPlugin);
@@ -94,27 +96,36 @@ impl ContextForecastExtInt for Context {
             self.cancel_plan(&prev_plan);
         }
     }
+    fn cancel_forecast(&mut self, person_id: PersonId) {
+        let container = self.get_data_container(ForecastDataPlugin).unwrap();
+        if let Some(active_plan) = container.get_plan(person_id) {
+            self.cancel_plan(&active_plan.clone());
+        }
+    }
     fn subscribe_to_itinerary_change(&mut self) {
         self.subscribe_to_event::<ItineraryChangeEvent>(move |context, event| {
-            let container = context.get_data_container(ForecastDataPlugin).unwrap();
+            if let Some(container) = context.get_data_container(ForecastDataPlugin) {
+                // Check for any active forecast associated with person
+                let affected_infectors: Vec<PersonId> = container
+                    .active_plans
+                    .keys()
+                    .filter(|&infector| {
+                        (context.is_contact(event.person_id, *infector) && event.increases_membership)
+                            || (event.person_id == *infector
+                                && event.previous_multiplier < event.current_multiplier)
+                    })
+                    .copied()
+                    .collect();
 
-            // Check for any active forecast associated with person
-            let affected_infectors: Vec<PersonId> = container
-                .active_plans
-                .keys()
-                .filter(|&infector| {
-                    (context.is_contact(event.person_id, *infector) && event.increases_membership)
-                        || (event.person_id == *infector
-                            && event.previous_multiplier < event.current_multiplier)
-                })
-                .copied()
-                .collect();
-
-            // We have to re-evaluate any infectors and infectious contacts that may be new to the person with a changed itinerary,
-            // as their itinerary potentially increased membership across some settings
-            // and therefore potentially increased the infectiousness of the infector
-            for infector in affected_infectors {
-                schedule_next_forecasted_infection(context, infector);
+                // We have to re-evaluate any infectors and infectious contacts that may be new to the person with a changed itinerary,
+                // as their itinerary potentially increased membership across some settings
+                // and therefore potentially increased the infectiousness of the infector
+                for infector in affected_infectors {
+                    // The infector is only removed from the data plugin once they have no more infectious potential
+                    // Otherwise, itinerary changes adding individuals to their settings could lead to infection attempts
+                    context.cancel_forecast(infector);
+                    schedule_next_forecasted_infection(context, infector);
+                }
             }
         });
     }
@@ -1087,7 +1098,8 @@ mod test {
 
         // Rate of 3.0 = 0.5*(6 - 1)^1.0 + 0.5*(6 - 1)^0.0 across both settings
         // For a duration of 5 days, this should yield 15 infections on average.
+        // Because 8.2% of all infectors never initiate a scheduled forecast (dpois(0, 0.5*5.0=2.5)), there is a decrease.
         let avg_successes = *successes.borrow() as f64 / n_replicates as f64;
-        assert_almost_eq!(avg_successes, 15.0, 0.5);
+        assert_almost_eq!(avg_successes, 15.0 * (1.0 - 0.082), 0.5);
     }
 }
