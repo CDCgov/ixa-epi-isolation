@@ -33,14 +33,14 @@
       "mean_delay_to_hospitalization": 1.0,
       "mean_duration_of_hospitalization": 10.0,
       "age_groups": [
-        {"min": 0, "max": 4, "probability": 0.5},
-        {"min": 5, "max": 14, "probability": 0.5},
-        {"min": 15, "max": 24, "probability": 0.5},
-        {"min": 25, "max": 34, "probability": 0.5},
-        {"min": 35, "max": 44, "probability": 0.5},
-        {"min": 45, "max": 54, "probability": 0.5},
-        {"min": 55, "max": 64, "probability": 0.5},
-        {"min": 65, "max": 120, "probability": 0.5}
+        {"min": 0, "probability": 0.5},
+        {"min": 5, "probability": 0.5},
+        {"min": 15, "probability": 0.5},
+        {"min": 25, "probability": 0.5},
+        {"min": 35, "probability": 0.5},
+        {"min": 45, "probability": 0.5},
+        {"min": 55, "probability": 0.5},
+        {"min": 65,"probability": 0.5}
       ],
       "hospital_incidence_report_name": "hospital_incidence_report.csv",
       "report_type": "Prevalence"
