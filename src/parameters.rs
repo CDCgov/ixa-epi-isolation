@@ -266,7 +266,8 @@ fn validate_inputs(parameters: &Params) -> Result<(), IxaError> {
         }
         if hospitalization_parameters.age_groups.is_empty() {
             return Err(IxaError::IxaError(
-                "There must be at least one age group for hospitalization probabilities.".to_string(),
+                "There must be at least one age group for hospitalization probabilities."
+                    .to_string(),
             ));
         }
     }
@@ -284,7 +285,8 @@ fn validate_inputs(parameters: &Params) -> Result<(), IxaError> {
         }
         if hospitalization_parameters.age_groups.is_empty() {
             return Err(IxaError::IxaError(
-                "There must be at least one age group for hospitalization probabilities.".to_string(),
+                "There must be at least one age group for hospitalization probabilities."
+                    .to_string(),
             ));
         }
     }

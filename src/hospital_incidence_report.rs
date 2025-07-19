@@ -4,9 +4,8 @@ use crate::{
     population_loader::Age,
 };
 use ixa::{
-    define_report, info,
-    report::{ContextReportExt},
-    Context, ContextPeopleExt, IxaError, PersonId, PersonPropertyChangeEvent,
+    define_report, info, report::ContextReportExt, Context, ContextPeopleExt, IxaError, PersonId,
+    PersonPropertyChangeEvent,
 };
 use serde::{Deserialize, Serialize};
 
