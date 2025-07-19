@@ -20,14 +20,30 @@
     "report_period": 1.0,
     "synth_population_file": "input/people_test.csv",
     "transmission_report_name": "transmission_report.csv",
-    "facemask_parameters": {
-      "facemask_efficacy": 0.2
-    },
     "guidance_policy": { "UpdatedIsolationGuidance": {
       "post_isolation_duration": 5.0,
       "isolation_probability": 1.0,
       "isolation_delay_period": 3.0
-      }
+    }
+  },
+    "facemask_parameters": {
+      "facemask_efficacy": 0.2
+    },
+    "hospitalization_parameters": {
+      "mean_delay_to_hospitalization": 1.0,
+      "mean_duration_of_hospitalization": 10.0,
+      "age_groups": [
+        {"min": 0, "max": 4, "probability": 0.5},
+        {"min": 5, "max": 14, "probability": 0.5},
+        {"min": 15, "max": 24, "probability": 0.5},
+        {"min": 25, "max": 34, "probability": 0.5},
+        {"min": 35, "max": 44, "probability": 0.5},
+        {"min": 45, "max": 54, "probability": 0.5},
+        {"min": 55, "max": 64, "probability": 0.5},
+        {"min": 65, "max": 120, "probability": 0.5}
+      ],
+      "hospital_incidence_report_name": "hospital_incidence_report.csv",
+      "report_type": "Prevalence"
     }
   }
 }
