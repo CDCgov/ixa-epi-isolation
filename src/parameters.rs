@@ -289,6 +289,37 @@ fn validate_inputs(parameters: &Params) -> Result<(), IxaError> {
                     .to_string(),
             ));
         }
+        for i in 1..hospitalization_parameters.age_groups.len() - 1 {
+            let group = &hospitalization_parameters.age_groups[i - 1];
+
+            let next_group = &hospitalization_parameters.age_groups[i];
+            if group.min >= next_group.min {
+                return Err(IxaError::IxaError(
+                    "Hospitalization age groups must be ordered by minimum age.".to_string(),
+                ));
+            }
+
+            if !(0.0..=1.0).contains(&group.probability) {
+                return Err(IxaError::IxaError(
+                    "The probability of hospitalization in each age group must be between 0 and 1, inclusive."
+                        .to_string(),
+                ));
+            }
+        }
+        if hospitalization_parameters.age_groups[0].min != 0 {
+            return Err(IxaError::IxaError(
+                "The first age group for hospitalization probabilities must start at 0."
+                    .to_string(),
+            ));
+        }
+        if hospitalization_parameters
+            .hospital_incidence_report_name
+            .is_empty()
+        {
+            return Err(IxaError::IxaError(
+                "The hospital incidence report name must not be empty.".to_string(),
+            ));
+        }
     }
     Ok(())
 }
