@@ -5,7 +5,11 @@ use ixa::{
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    infectiousness_manager::InfectionStatusValue, interventions::ContextTransmissionModifierExt, parameters::ContextParametersExt, population_loader::Age, symptom_progression::{SymptomValue, Symptoms}
+    infectiousness_manager::InfectionStatusValue,
+    interventions::ContextTransmissionModifierExt,
+    parameters::ContextParametersExt,
+    population_loader::Age,
+    symptom_progression::{SymptomValue, Symptoms},
 };
 
 define_person_property_with_default!(Hospitalized, bool, false);
