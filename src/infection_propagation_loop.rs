@@ -140,6 +140,9 @@ fn query_susceptibles_and_seed(
     )
     .unwrap();
     let k: u64 = context.sample_distr(InfectionRng, binom);
+    trace!(
+        "Altering {k} susceptibles with a seeding function using proportion {proportion_to_seed}."
+    );
 
     let susceptibles = context.sample_people(
         InfectionRng,
@@ -185,8 +188,12 @@ pub fn init(context: &mut Context) -> Result<(), IxaError> {
     load_rate_fns(context)?;
 
     context.add_plan(0.0, move |context| {
-        seed_initial_infections(context, initial_incidence);
-        seed_initial_recovered(context, initial_recovered);
+        if initial_incidence > 0.0 {
+            seed_initial_infections(context, initial_incidence);
+        }
+        if initial_recovered > 0.0 {
+            seed_initial_recovered(context, initial_recovered);
+        }
     });
 
     // Subscribe to the person becoming infectious to trigger the infection propagation loop
