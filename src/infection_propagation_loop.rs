@@ -10,7 +10,7 @@ use crate::rate_fns::{load_rate_fns, InfectiousnessRateExt};
 use crate::settings::{ContextSettingExt, ItineraryChangeEvent};
 use ixa::{
     define_data_plugin, define_rng, plan::PlanId, trace, Context, ContextPeopleExt,
-    ContextRandomExt, HashMap, IxaError, PersonId, PersonPropertyChangeEvent,
+    ContextRandomExt, HashMap, IxaError, PersonId, PersonPropertyChangeEvent, PluginContext,
 };
 
 define_rng!(InfectionRng);
@@ -66,34 +66,27 @@ define_data_plugin!(
     ForecastDataContainer::default()
 );
 
-trait ContextForecastInternalExt {
+trait ContextForecastInternalExt: PluginContext {
     /// Remove person from the data container `HashMap`
-    fn remove_forecast_plan(&mut self, person_id: PersonId);
-    /// Add a new plan to the forecast data plugin and cancel any plan currently associated with that person
-    fn add_forecast_plan(&mut self, person_id: PersonId, plan_id: PlanId);
-    /// Cancel forecast but keep infector in the data map
-    fn cancel_forecast(&mut self, person_id: PersonId);
-    /// Listen to itinerary changes and determine their effect on the current active forecast plans of potential infectors
-    fn subscribe_to_itinerary_change(&mut self);
-}
-
-impl ContextForecastInternalExt for Context {
     fn remove_forecast_plan(&mut self, person_id: PersonId) {
         let container = self.get_data_container_mut(ForecastDataPlugin);
         container.remove_plan(person_id);
     }
+    /// Add a new plan to the forecast data plugin and cancel any plan currently associated with that person
     fn add_forecast_plan(&mut self, person_id: PersonId, plan_id: PlanId) {
         let container = self.get_data_container_mut(ForecastDataPlugin);
         if let Some(prev_plan) = container.add_plan(person_id, plan_id) {
             self.cancel_plan(&prev_plan);
         }
     }
+    /// Cancel forecast but keep infector in the data map
     fn cancel_forecast(&mut self, person_id: PersonId) {
         let container = self.get_data_container(ForecastDataPlugin).unwrap();
         if let Some(active_plan) = container.get_plan(person_id) {
             self.cancel_plan(&active_plan.clone());
         }
     }
+    /// Listen to itinerary changes and determine their effect on the current active forecast plans of potential infectors
     fn subscribe_to_itinerary_change(&mut self) {
         self.subscribe_to_event::<ItineraryChangeEvent>(move |context, event| {
             if let Some(container) = context.get_data_container(ForecastDataPlugin) {
@@ -123,6 +116,7 @@ impl ContextForecastInternalExt for Context {
         });
     }
 }
+impl ContextForecastInternalExt for Context {}
 
 /// Takes susceptible people from the population and changes them according to a provided `seed_fn`.
 /// The total number of people seeded is distributed binomially according to the proportion to seed.

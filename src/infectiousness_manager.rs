@@ -1,6 +1,6 @@
 use ixa::{
     define_derived_property, define_person_property_with_default, define_rng, trace, Context,
-    ContextPeopleExt, ContextRandomExt, PersonId,
+    ContextPeopleExt, ContextRandomExt, PersonId, PluginContext,
 };
 use serde::Serialize;
 use statrs::distribution::Exp;
@@ -176,19 +176,7 @@ pub fn evaluate_forecast(
     true
 }
 
-pub trait InfectionContextExt {
-    fn infect_person(
-        &mut self,
-        target_id: PersonId,
-        source_id: Option<PersonId>,
-        setting_type: Option<&'static str>,
-        setting_id: Option<usize>,
-    );
-    fn recover_person(&mut self, person_id: PersonId);
-    fn get_elapsed_infection_time(&self, person_id: PersonId) -> f64;
-}
-
-impl InfectionContextExt for Context {
+pub trait InfectionContextExt: PluginContext + ContextPeopleExt {
     // This function should be called from the main loop whenever
     // someone is first infected. It assigns all their properties needed to
     // calculate intrinsic infectiousness
@@ -212,7 +200,6 @@ impl InfectionContextExt for Context {
             },
         );
     }
-
     fn recover_person(&mut self, person_id: PersonId) {
         let recovery_time = self.get_current_time();
         let InfectionDataValue::Infectious { infection_time, .. } =
@@ -229,7 +216,6 @@ impl InfectionContextExt for Context {
             },
         );
     }
-
     fn get_elapsed_infection_time(&self, person_id: PersonId) -> f64 {
         let InfectionDataValue::Infectious { infection_time, .. } =
             self.get_person_property(person_id, InfectionData)
@@ -239,6 +225,7 @@ impl InfectionContextExt for Context {
         self.get_current_time() - infection_time
     }
 }
+impl InfectionContextExt for Context {}
 
 #[cfg(test)]
 mod test {
