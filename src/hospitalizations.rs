@@ -1,6 +1,6 @@
 use ixa::{
-    define_person_property_with_default, define_rng, trace, Context, ContextPeopleExt,
-    ContextRandomExt, PersonId, PersonPropertyChangeEvent,
+    define_data_plugin, define_person_property_with_default, define_rng, trace, Context,
+    ContextPeopleExt, ContextRandomExt, HashMap, PersonId, PersonPropertyChangeEvent,
 };
 use serde::{Deserialize, Serialize};
 
@@ -23,11 +23,48 @@ pub struct HospitalAgeGroups {
     pub probability: f64,
 }
 
+#[derive(Default)]
+struct HospitalDataContainer {
+    age_group_mapping: HashMap<u8, HospitalAgeGroups>,
+}
+
+impl HospitalDataContainer {
+    fn set_age_group_mapping(&mut self, age_groups: &[HospitalAgeGroups]) {
+        for age in 0..=120 {
+            for i in 1..age_groups.len() {
+                let group = &age_groups[i - 1];
+                let next_group = age_groups[i];
+                if (group.min..next_group.min).contains(&age) {
+                    self.age_group_mapping.insert(age, *group);
+                    break;
+                } else if age >= age_groups.last().unwrap().min {
+                    self.age_group_mapping
+                        .insert(age, *age_groups.last().unwrap());
+                    break;
+                }
+            }
+        }
+    }
+
+    fn get_age_group(&self, age: u8) -> &HospitalAgeGroups {
+        self.age_group_mapping
+            .get(&age)
+            .expect("Age group not found")
+    }
+}
+
+define_data_plugin!(
+    HospitalDataPlugin,
+    HospitalDataContainer,
+    HospitalDataContainer::default()
+);
+
 trait ContextHospitalizationInternalExt {
     fn plan_hospital_arrival(&mut self, person_id: PersonId) -> Result<(), ixa::IxaError>;
     fn plan_hospital_departure(&mut self, person_id: PersonId) -> Result<(), ixa::IxaError>;
     fn setup_hospitalization_event_sequence(&mut self);
     fn evaluate_hospitalization_risk(&mut self, person_id: PersonId) -> bool;
+    fn set_age_group_mapping(&mut self);
 }
 
 impl ContextHospitalizationInternalExt for Context {
@@ -95,32 +132,22 @@ impl ContextHospitalizationInternalExt for Context {
 
     fn evaluate_hospitalization_risk(&mut self, person_id: PersonId) -> bool {
         // Evaluate the risk of hospitalization using the age group probabilities
-
         let age = self.get_person_property(person_id, Age);
-        let hospitalization_parameters = self.get_params().hospitalization_parameters.clone();
-        if let Some(hospitalization_parameters) = hospitalization_parameters {
-            for (i, group) in hospitalization_parameters
-                .age_groups
-                .iter()
-                .enumerate()
-                .take(hospitalization_parameters.age_groups.len() - 1)
-            {
-                let next_group = hospitalization_parameters.age_groups.get(i + 1).unwrap();
-                if (group.min..next_group.min).contains(&age) {
-                    return self.sample_bool(HospitalizationRng, group.probability);
-                }
-            }
-            self.sample_bool(
-                HospitalizationRng,
-                hospitalization_parameters
-                    .age_groups
-                    .last()
-                    .unwrap()
-                    .probability,
-            )
-        } else {
-            false
-        }
+        let p = self
+            .get_data_container_mut(HospitalDataPlugin)
+            .get_age_group(age)
+            .probability;
+        self.sample_bool(HospitalizationRng, p)
+    }
+
+    fn set_age_group_mapping(&mut self) {
+        let age_groups = self
+            .get_params()
+            .hospitalization_parameters
+            .as_ref()
+            .map_or(vec![], |params| params.age_groups.clone());
+        let container = self.get_data_container_mut(HospitalDataPlugin);
+        container.set_age_group_mapping(&age_groups);
     }
 }
 
@@ -133,6 +160,7 @@ pub fn init(context: &mut Context) {
                 &[(true, 0.0)],
             )
             .unwrap();
+        context.set_age_group_mapping();
         context.setup_hospitalization_event_sequence();
     } else {
         trace!(
