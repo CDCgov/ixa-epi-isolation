@@ -2,10 +2,6 @@
 # Exclude many data and output file types by default
 poetry.lock
 
-#experiment
-scripts/experiments/benchmarking/jul25-assessment/data/*
-scripts/experiments/benchmarking/jul25-assessment/scenarios/*
-
 # Data
 *.csv
 *.tsv
