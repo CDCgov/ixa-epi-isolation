@@ -138,13 +138,15 @@ fn query_susceptibles_and_seed(
         "Altering {k} susceptibles with a seeding function using proportion {proportion_to_seed}."
     );
 
-    let susceptibles = context.sample_people(
-        InfectionRng,
-        (InfectionStatus, InfectionStatusValue::Susceptible),
-        k as usize,
-    );
-    for person in susceptibles {
-        seed_fn(context, person);
+    if k > 0 {
+        let susceptibles = context.sample_people(
+            InfectionRng,
+            (InfectionStatus, InfectionStatusValue::Susceptible),
+            k as usize,
+        );
+        for person in susceptibles {
+            seed_fn(context, person);
+        }
     }
 }
 
