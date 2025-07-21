@@ -2,7 +2,7 @@ use crate::{
     infectiousness_manager::{InfectionData, InfectionDataValue, InfectionStatus, InfectionStatusValue}, parameters::{ContextParametersExt, Params}, population_loader::{Age, Alive}, symptom_progression::{SymptomValue, Symptoms}
 };
 use ixa::{
-    create_report_trait, define_data_plugin, define_derived_property, info, report::{ContextReportExt, Report}, Context, ContextPeopleExt, ExecutionPhase, HashSet, HashSetExt, IxaError, PersonId, PersonProperty, PersonPropertyChangeEvent, Tabulator
+    define_data_plugin, define_derived_property, define_report, info, report::{ContextReportExt, Report}, Context, ContextPeopleExt, ExecutionPhase, HashSet, HashSetExt, IxaError, PersonId, PersonProperty, PersonPropertyChangeEvent, Tabulator
 };
 use serde::{Deserialize, Serialize};
 use std::{any::{Any, TypeId}, cell::RefCell, collections::HashMap, string::ToString};
@@ -17,7 +17,7 @@ struct PersonPropertyReport {
     count: u64,
 }
 
-create_report_trait!(PersonPropertyReport);
+define_report!(PersonPropertyReport);
 
 define_derived_property!(
     ReportProperties,

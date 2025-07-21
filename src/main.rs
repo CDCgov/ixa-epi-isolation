@@ -11,7 +11,6 @@ mod settings;
 mod symptom_progression;
 mod transmission_report;
 mod person_property_report;
-mod updated_guidance;
 pub mod utils;
 
 use infectiousness_manager::InfectionStatus;
