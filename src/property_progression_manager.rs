@@ -6,7 +6,7 @@ use std::{
 
 use ixa::{
     define_data_plugin, Context, ContextPeopleExt, IxaError, PersonProperty,
-    PersonPropertyChangeEvent,
+    PersonPropertyChangeEvent, PluginContext,
 };
 use serde::Deserialize;
 
@@ -41,28 +41,9 @@ define_data_plugin!(
     PropertyProgressionsContainer::default()
 );
 
-pub trait ContextPropertyProgressionExt {
+pub trait ContextPropertyProgressionExt: PluginContext {
     /// Registers a method that provides a sequence of person property values and times, and
     /// automatically changes the values of person properties according to that sequence.
-    fn register_property_progression<P: PersonProperty + 'static>(
-        &mut self,
-        property: P,
-        tracer: impl Progression<P> + 'static,
-    );
-}
-
-impl<P> NaturalHistoryParameterLibrary for P
-where
-    P: PersonProperty + 'static,
-{
-    fn library_size(&self, context: &Context) -> usize {
-        let container = context.get_data_container(PropertyProgressions).unwrap();
-        let progressions = container.progressions.get(&TypeId::of::<P>()).unwrap();
-        progressions.len()
-    }
-}
-
-impl ContextPropertyProgressionExt for Context {
     fn register_property_progression<P: PersonProperty + 'static>(
         &mut self,
         property: P,
@@ -92,6 +73,18 @@ impl ContextPropertyProgressionExt for Context {
                 }
             });
         }
+    }
+}
+impl ContextPropertyProgressionExt for Context {}
+
+impl<P> NaturalHistoryParameterLibrary for P
+where
+    P: PersonProperty + 'static,
+{
+    fn library_size(&self, context: &Context) -> usize {
+        let container = context.get_data_container(PropertyProgressions).unwrap();
+        let progressions = container.progressions.get(&TypeId::of::<P>()).unwrap();
+        progressions.len()
     }
 }
 

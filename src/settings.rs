@@ -3,7 +3,7 @@ use crate::parameters::{
 };
 use ixa::{
     define_data_plugin, define_rng, people::Query, prelude_for_plugins::IxaEvent, trace, Context,
-    ContextPeopleExt, ContextRandomExt, IxaError, PersonId,
+    ContextPeopleExt, ContextRandomExt, IxaError, PersonId, PluginContext,
 };
 use serde::{Deserialize, Serialize};
 
@@ -274,135 +274,10 @@ define_data_plugin!(
     SettingDataContainer::default()
 );
 
-#[allow(dead_code)]
-pub trait ContextSettingExt {
-    fn get_setting_properties(
-        &self,
-        setting: &dyn SettingCategory,
-    ) -> Result<SettingProperties, IxaError>;
-    fn register_setting_category(
-        &mut self,
-        setting: &dyn SettingCategory,
-        setting_props: SettingProperties,
-    ) -> Result<(), IxaError>;
-    fn add_itinerary(
-        &mut self,
-        person_id: PersonId,
-        itinerary: Vec<ItineraryEntry>,
-    ) -> Result<(), IxaError>;
-    fn modify_itinerary(
-        &mut self,
-        person_id: PersonId,
-        itinerary_modifier: ItineraryModifiers,
-    ) -> Result<(), IxaError>;
-    fn remove_modified_itinerary(&mut self, person_id: PersonId) -> Result<(), IxaError>;
-    fn validate_itinerary(&self, itinerary: &[ItineraryEntry]) -> Result<(), IxaError>;
-
-    /// `get_setting_ids` returns a vector of the numerical values of the ID for a setting type
-    fn get_setting_ids(
-        &mut self,
-        person_id: PersonId,
-        setting_category: &dyn SettingCategory,
-    ) -> Vec<usize>;
-    fn get_setting_members(&self, setting: &dyn AnySettingId) -> Option<&Vec<PersonId>>;
-    /// Get the total infectiousness multiplier for a person
-    /// This is the sum of the infectiousness multipliers for each setting derived from the itinerary
-    /// These are generated without modification from the general formula of ratio * (N - 1) ^ alpha
-    /// where N is the number of members in the setting
-    fn calculate_total_infectiousness_multiplier_for_person(&self, person_id: PersonId) -> f64;
-
-    fn get_itinerary(&self, person_id: PersonId) -> Option<&Vec<ItineraryEntry>>;
-    fn get_contact<Q: Query + 'static>(
-        &self,
-        person_id: PersonId,
-        setting: &dyn AnySettingId,
-        q: Q,
-    ) -> Result<Option<PersonId>, IxaError>;
-    fn draw_contact_from_transmitter_itinerary<Q: Query>(
-        &self,
-        person_id: PersonId,
-        q: Q,
-    ) -> Result<Option<PersonId>, IxaError>;
-    fn sample_setting(&self, person_id: PersonId) -> Option<&dyn AnySettingId>;
-    fn is_contact(&self, person_id: PersonId, potential_contact: PersonId) -> bool;
-}
-
-trait ContextSettingInternalExt {
-    fn get_contact_internal<T: Query>(
-        &self,
-        person_id: PersonId,
-        setting: &dyn AnySettingId,
-        q: T,
-    ) -> Result<Option<PersonId>, IxaError>;
+trait ContextSettingInternalExt: PluginContext + ContextRandomExt {
     /// Takes an itinerary and adds makes it the modified itinerary of `person id`
     /// This modified itinerary is used as the person's itinerary instead of default itinerary
     /// for as long as modified itinerary exists in the container.
-    fn add_modified_itinerary(
-        &mut self,
-        person_id: PersonId,
-        itinerary: Vec<ItineraryEntry>,
-    ) -> Result<(), IxaError>;
-    /// Limit the current itinerary to a specified setting type (e.g., Home)
-    /// The proportion of the rest of the settings remains unchanged
-    fn limit_itinerary_by_setting_category(
-        &mut self,
-        person_id: PersonId,
-        setting_category: &dyn SettingCategory,
-    ) -> Result<(), IxaError>;
-    fn exclude_setting_from_itinerary(
-        &mut self,
-        person_id: PersonId,
-        setting_category: &dyn SettingCategory,
-    ) -> Result<(), IxaError>;
-}
-
-impl ContextSettingInternalExt for Context {
-    fn get_contact_internal<T: Query>(
-        &self,
-        person_id: PersonId,
-        setting: &dyn AnySettingId,
-        q: T,
-    ) -> Result<Option<PersonId>, IxaError> {
-        let members = self.get_setting_members(setting);
-        if let Some(members) = members {
-            if !members.contains(&person_id) {
-                return Err(IxaError::from(
-                    "Attempting contact outside of group membership",
-                ));
-            }
-            // The setting has one person in it -- this person
-            if members.len() == 1 {
-                return Ok(None);
-            }
-            let member_iter = members.iter().filter(|&x| *x != person_id);
-
-            let mut contacts = vec![];
-            if q.get_query().is_empty() {
-                // If the query is empty we push members directly to the vector
-                for contact in member_iter {
-                    contacts.push(*contact);
-                }
-            } else {
-                // If the query is not empty, we match setting members to the query
-                for contact in member_iter {
-                    if self.match_person(*contact, q) {
-                        contacts.push(*contact);
-                    }
-                }
-            }
-
-            if contacts.is_empty() {
-                return Ok(None);
-            }
-
-            Ok(Some(
-                contacts[self.sample_range(SettingsRng, 0..contacts.len())],
-            ))
-        } else {
-            Err(IxaError::from("Group membership is None"))
-        }
-    }
-
     fn add_modified_itinerary(
         &mut self,
         person_id: PersonId,
@@ -471,6 +346,8 @@ impl ContextSettingInternalExt for Context {
             }
         }
     }
+    /// Limit the current itinerary to a specified setting type (e.g., Home)
+    /// The proportion of the rest of the settings remains unchanged
     fn limit_itinerary_by_setting_category(
         &mut self,
         person_id: PersonId,
@@ -497,9 +374,39 @@ impl ContextSettingInternalExt for Context {
             }
         }
     }
-}
 
-impl ContextSettingExt for Context {
+    fn validate_itinerary(&self, itinerary: &[ItineraryEntry]) -> Result<(), IxaError> {
+        let mut setting_counts: HashMap<TypeId, HashSet<usize>> = HashMap::new();
+        for itinerary_entry in itinerary {
+            let setting_id = itinerary_entry.setting.id();
+            let setting_type = itinerary_entry.setting.get_type_id();
+            if let Some(setting_count_set) = setting_counts.get(&setting_type) {
+                if setting_count_set.contains(&setting_id) {
+                    return Err(IxaError::from("Duplicated setting".to_string()));
+                }
+            }
+            setting_counts
+                .entry(setting_type)
+                .or_default()
+                .insert(setting_id);
+
+            let setting_ratio = itinerary_entry.ratio;
+            if setting_ratio < 0.0 {
+                return Err(IxaError::from(
+                    "Setting ratio must be greater than or equal to 0".to_string(),
+                ));
+            }
+        }
+        Ok(())
+    }
+}
+impl ContextSettingInternalExt for Context {}
+
+#[allow(private_bounds)]
+pub trait ContextSettingExt:
+    PluginContext + ContextSettingInternalExt + ContextRandomExt + ContextPeopleExt
+{
+    #[allow(dead_code)]
     fn get_setting_properties(
         &self,
         setting: &dyn SettingCategory,
@@ -625,6 +532,8 @@ impl ContextSettingExt for Context {
         result
     }
 
+    #[allow(dead_code)]
+    /// `get_setting_ids` returns a vector of the numerical values of the ID for a setting type
     fn get_setting_ids(
         &mut self,
         person_id: PersonId,
@@ -674,36 +583,15 @@ impl ContextSettingExt for Context {
         Ok(())
     }
 
-    fn validate_itinerary(&self, itinerary: &[ItineraryEntry]) -> Result<(), IxaError> {
-        let mut setting_counts: HashMap<TypeId, HashSet<usize>> = HashMap::new();
-        for itinerary_entry in itinerary {
-            let setting_id = itinerary_entry.setting.id();
-            let setting_type = itinerary_entry.setting.get_type_id();
-            if let Some(setting_count_set) = setting_counts.get(&setting_type) {
-                if setting_count_set.contains(&setting_id) {
-                    return Err(IxaError::from("Duplicated setting".to_string()));
-                }
-            }
-            setting_counts
-                .entry(setting_type)
-                .or_default()
-                .insert(setting_id);
-
-            let setting_ratio = itinerary_entry.ratio;
-            if setting_ratio < 0.0 {
-                return Err(IxaError::from(
-                    "Setting ratio must be greater than or equal to 0".to_string(),
-                ));
-            }
-        }
-        Ok(())
-    }
-
     fn get_setting_members(&self, setting: &dyn AnySettingId) -> Option<&Vec<PersonId>> {
         self.get_data_container(SettingDataPlugin)?
             .get_setting_members(setting)
     }
 
+    /// Get the total infectiousness multiplier for a person
+    /// This is the sum of the infectiousness multipliers for each setting derived from the itinerary
+    /// These are generated without modification from the general formula of ratio * (N - 1) ^ alpha
+    /// where N is the number of members in the setting
     fn calculate_total_infectiousness_multiplier_for_person(&self, person_id: PersonId) -> f64 {
         let container = self.get_data_container(SettingDataPlugin).unwrap();
         let mut collector = 0.0;
@@ -721,15 +609,53 @@ impl ContextSettingExt for Context {
             .get_itinerary(person_id)
     }
 
-    fn get_contact<Q: Query + 'static>(
+    fn get_contact<T: Query>(
         &self,
         person_id: PersonId,
         setting: &dyn AnySettingId,
-        q: Q,
+        q: T,
     ) -> Result<Option<PersonId>, IxaError> {
-        // let container: &SettingDataContainer = self.get_data_container(SettingDataPlugin).unwrap();
-        self.get_contact_internal(person_id, setting, q)
+        let members = self.get_setting_members(setting);
+        if let Some(members) = members {
+            if !members.contains(&person_id) {
+                return Err(IxaError::from(
+                    "Attempting contact outside of group membership",
+                ));
+            }
+            // The setting has one person in it -- this person
+            if members.len() == 1 {
+                return Ok(None);
+            }
+            let member_iter = members.iter().filter(|&x| *x != person_id);
+
+            let mut contacts = vec![];
+            if q.get_query().is_empty() {
+                // If the query is empty we push members directly to the vector
+                for contact in member_iter {
+                    contacts.push(*contact);
+                }
+            } else {
+                // If the query is not empty, we match setting members to the query
+                for contact in member_iter {
+                    if self.match_person(*contact, q) {
+                        contacts.push(*contact);
+                    }
+                }
+            }
+
+            if contacts.is_empty() {
+                return Ok(None);
+            }
+
+            Ok(Some(
+                contacts[self.sample_range(SettingsRng, 0..contacts.len())],
+            ))
+        } else {
+            Err(IxaError::from("Group membership is None"))
+        }
     }
+
+    #[allow(dead_code)]
     fn draw_contact_from_transmitter_itinerary<Q: Query>(
         &self,
         person_id: PersonId,
@@ -746,7 +672,7 @@ impl ContextSettingExt for Context {
 
         if let Some(itinerary) = self.get_itinerary(person_id) {
             let itinerary_entry = &itinerary[setting_index];
-            self.get_contact_internal(person_id, itinerary_entry.setting.as_ref(), q)
+            self.get_contact(person_id, itinerary_entry.setting.as_ref(), q)
         } else {
             Ok(None)
         }
@@ -784,6 +710,7 @@ impl ContextSettingExt for Context {
         false
     }
 }
+impl ContextSettingExt for Context {}
 
 pub fn init(context: &mut Context) {
     let Params {

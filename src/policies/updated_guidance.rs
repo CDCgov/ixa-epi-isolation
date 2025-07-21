@@ -1,6 +1,7 @@
 use ixa::{
     define_derived_property, define_person_property_with_default, define_rng, trace, Context,
     ContextPeopleExt, ContextRandomExt, IxaError, PersonId, PersonPropertyChangeEvent,
+    PluginContext,
 };
 
 use crate::{
@@ -29,29 +30,9 @@ struct InterventionPolicyParameters {
     isolation_delay_period: f64,
 }
 
-trait ContextIsolationGuidanceInternalExt {
-    fn modify_isolation_status(
-        &mut self,
-        person: PersonId,
-        isolation_status: bool,
-    ) -> Result<(), IxaError>;
-    fn isolation(
-        &mut self,
-        person_id: PersonId,
-        intervention_policy_parameters: InterventionPolicyParameters,
-    );
-    fn post_isolation(
-        &mut self,
-        person_id: PersonId,
-        intervention_policy_parameters: InterventionPolicyParameters,
-    );
-    fn setup_isolation_guidance_event_sequence(
-        &mut self,
-        intervention_policy_parameters: InterventionPolicyParameters,
-    );
-}
-
-impl ContextIsolationGuidanceInternalExt for Context {
+trait ContextIsolationGuidanceInternalExt:
+    PluginContext + ContextRandomExt + ContextPeopleExt + ContextSettingExt
+{
     fn modify_isolation_status(
         &mut self,
         person: PersonId,
@@ -124,6 +105,7 @@ impl ContextIsolationGuidanceInternalExt for Context {
         );
     }
 }
+impl ContextIsolationGuidanceInternalExt for Context {}
 
 pub fn init(context: &mut Context) -> Result<(), IxaError> {
     let &Params {

@@ -1,6 +1,8 @@
 use std::path::PathBuf;
 
-use ixa::{define_data_plugin, define_rng, Context, ContextRandomExt, IxaError, PersonId};
+use ixa::{
+    define_data_plugin, define_rng, Context, ContextRandomExt, IxaError, PersonId, PluginContext,
+};
 use serde::Deserialize;
 
 use crate::{
@@ -36,12 +38,7 @@ define_data_plugin!(
     RateFnContainer { rates: Vec::new() }
 );
 
-pub trait InfectiousnessRateExt {
-    fn add_rate_fn(&mut self, dist: impl InfectiousnessRateFn + 'static);
-    fn get_person_rate_fn(&self, person_id: PersonId) -> &dyn InfectiousnessRateFn;
-}
-
-impl InfectiousnessRateExt for Context {
+pub trait InfectiousnessRateExt: PluginContext + ContextNaturalHistoryParameterExt {
     fn add_rate_fn(&mut self, dist: impl InfectiousnessRateFn + 'static) {
         let container = self.get_data_container_mut(RateFnPlugin);
         container.rates.push(Box::new(dist));
@@ -55,6 +52,7 @@ impl InfectiousnessRateExt for Context {
             .as_ref()
     }
 }
+impl InfectiousnessRateExt for Context {}
 
 #[allow(clippy::missing_panics_doc)]
 /// Turn the information specified in the global parameter `infectiousness_rate_fn` into actual

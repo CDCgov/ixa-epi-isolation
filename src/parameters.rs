@@ -1,6 +1,6 @@
 use std::{collections::HashMap, fmt::Debug, path::PathBuf};
 
-use ixa::{define_global_property, ContextGlobalPropertiesExt, IxaError};
+use ixa::{define_global_property, Context, ContextGlobalPropertiesExt, IxaError, PluginContext};
 use serde::{Deserialize, Serialize};
 
 use crate::policies::{validate_guidance_policy, Policies};
@@ -233,16 +233,13 @@ fn validate_inputs(parameters: &Params) -> Result<(), IxaError> {
 
 define_global_property!(GlobalParams, Params, validate_inputs);
 
-pub trait ContextParametersExt {
-    fn get_params(&self) -> &Params;
-}
-
-impl ContextParametersExt for ixa::Context {
+pub trait ContextParametersExt: PluginContext + ContextGlobalPropertiesExt {
     fn get_params(&self) -> &Params {
         self.get_global_property_value(GlobalParams)
             .expect("Expected GlobalParams to be set")
     }
 }
+impl ContextParametersExt for Context {}
 
 #[cfg(test)]
 mod test {

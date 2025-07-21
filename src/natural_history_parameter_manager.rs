@@ -4,7 +4,9 @@ use std::{
     collections::{hash_map::Entry, HashMap},
 };
 
-use ixa::{define_data_plugin, define_rng, Context, ContextRandomExt, IxaError, PersonId};
+use ixa::{
+    define_data_plugin, define_rng, Context, ContextRandomExt, IxaError, PersonId, PluginContext,
+};
 
 define_rng!(NaturalHistoryParameterRng);
 
@@ -30,7 +32,7 @@ define_data_plugin!(
 );
 
 /// Provides methods for specifying relationships between libraries of natural history parameters.
-pub trait ContextNaturalHistoryParameterExt {
+pub trait ContextNaturalHistoryParameterExt: PluginContext + ContextRandomExt {
     /// Register the function used to assign a particular index from a natural history parameter
     /// // library `T` to a person. The function is evaluated when the id is requested, so it can
     /// depend on other parameters and takes `&Context` and `PersonId` as arguments. Values from
@@ -39,29 +41,6 @@ pub trait ContextNaturalHistoryParameterExt {
     /// - If an assignment function for the parameter has already been registered
     /// - If an id for the parameter has been queried for a person (i.e., defaulting to random
     ///   assignment) prior to registering an assignment function.
-    fn register_parameter_id_assigner<T, S>(
-        &mut self,
-        parameter: T,
-        assignment_fn: S,
-    ) -> Result<(), IxaError>
-    where
-        T: NaturalHistoryParameterLibrary + 'static,
-        S: Fn(&Context, PersonId) -> usize + 'static;
-
-    /// Get the id for a natural history parameter for a person. If an id for the parameter has
-    /// already been assigned for this person, returns that id. If no id has been assigned, first
-    /// checks whether an assignment function has been registered for the parameter. If so, evaluates
-    /// the assignment function and returns the computed id. Otherwise, returns a random id between
-    /// 0 (inclusive) and the parameter's library size (exclusive). Stores the assigned id so that
-    /// calling this function again with the same parameter and person will return the same id.
-    /// Does not check whether the id returned from an assignment function is in the range of the
-    /// library size.
-    fn get_parameter_id<T>(&self, parameter: T, person_id: PersonId) -> usize
-    where
-        T: NaturalHistoryParameterLibrary + 'static;
-}
-
-impl ContextNaturalHistoryParameterExt for Context {
     fn register_parameter_id_assigner<T, S>(
         &mut self,
         _parameter: T,
@@ -99,6 +78,19 @@ impl ContextNaturalHistoryParameterExt for Context {
         }
     }
 
+    /// Get the id for a natural history parameter for a person. If an id for the parameter has
+    /// already been assigned for this person, returns that id. If no id has been assigned, first
+    /// checks whether an assignment function has been registered for the parameter. If so, evaluates
+    /// the assignment function and returns the computed id. Otherwise, returns a random id between
+    /// 0 (inclusive) and the parameter's library size (exclusive). Stores the assigned id so that
+    /// calling this function again with the same parameter and person will return the same id.
+    /// Does not check whether the id returned from an assignment function is in the range of the
+    /// library size.
+    fn get_parameter_id<T>(&self, parameter: T, person_id: PersonId) -> usize
+    where
+        T: NaturalHistoryParameterLibrary + 'static;
+}
+impl ContextNaturalHistoryParameterExt for Context {
     fn get_parameter_id<T>(&self, parameter: T, person_id: PersonId) -> usize
     where
         T: NaturalHistoryParameterLibrary + 'static,

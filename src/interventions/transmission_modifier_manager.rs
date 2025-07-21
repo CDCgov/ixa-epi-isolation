@@ -1,5 +1,6 @@
 use ixa::{
     define_data_plugin, trace, Context, ContextPeopleExt, IxaError, PersonId, PersonProperty,
+    PluginContext,
 };
 use std::{any::TypeId, collections::HashMap};
 
@@ -60,46 +61,8 @@ define_data_plugin!(
     TransmissionModifierContainer::default()
 );
 
-pub trait ContextTransmissionModifierExt {
+pub trait ContextTransmissionModifierExt: PluginContext {
     /// Register a generic transmission modifier for a specific infection status.
-    fn register_transmission_modifier_fn<T: TransmissionModifier>(
-        &mut self,
-        infection_status: InfectionStatusValue,
-        transmission_modifier: T,
-    );
-
-    /// Register a transmission modifier that depends solely on the value of one person property.
-    /// The function accepts a relative transmission potential key, which is a slice of tuples that
-    /// associate values of a specified person property with the relativ etransmission potential of
-    /// a person with that property value. All floats declared in this fashion must be between zero
-    /// and one and represent the proportion of infectiousness or susceptiblity remaining if a
-    /// modifier is active.
-    ///
-    /// Any modifiers based on efficacy (e.g. facemask transmission prevention) should be
-    /// subtracted from 1.0 for effect on relative transmission potential.
-    ///
-    /// Internally, this method registers a transmission modifier function that returns the float
-    /// value associated the person's property value in the
-    /// `relative_transmission_potential_multipliers` key.
-    #[allow(dead_code)]
-    fn store_transmission_modifier_values<P: PersonProperty + std::fmt::Debug + 'static>(
-        &mut self,
-        infection_status: InfectionStatusValue,
-        person_property: P,
-        relative_transmission_potential_multipliers: &[(P::Value, f64)],
-    ) -> Result<(), IxaError>
-    where
-        P::Value: std::hash::Hash + Eq;
-
-    /// Get the relative potential for infection (infectiousness or susceptibility) for a person
-    /// based on their infection status based on all registered modifiers. Queries all registered
-    /// modifier functions and evaluates them based on the person's properties. Multiplies them
-    /// together to get the total relative transmission modifier for the person.
-    /// Returns 1.0 if no modifiers are registered for the person's infection status.
-    fn get_relative_total_transmission(&self, person_id: PersonId) -> f64;
-}
-
-impl ContextTransmissionModifierExt for Context {
     fn register_transmission_modifier_fn<T: TransmissionModifier>(
         &mut self,
         infection_status: InfectionStatusValue,
@@ -122,6 +85,20 @@ impl ContextTransmissionModifierExt for Context {
         }
     }
 
+    /// Register a transmission modifier that depends solely on the value of one person property.
+    /// The function accepts a relative transmission potential key, which is a slice of tuples that
+    /// associate values of a specified person property with the relativ etransmission potential of
+    /// a person with that property value. All floats declared in this fashion must be between zero
+    /// and one and represent the proportion of infectiousness or susceptiblity remaining if a
+    /// modifier is active.
+    ///
+    /// Any modifiers based on efficacy (e.g. facemask transmission prevention) should be
+    /// subtracted from 1.0 for effect on relative transmission potential.
+    ///
+    /// Internally, this method registers a transmission modifier function that returns the float
+    /// value associated the person's property value in the
+    /// `relative_transmission_potential_multipliers` key.
+    #[allow(dead_code)]
     fn store_transmission_modifier_values<P: PersonProperty + std::fmt::Debug + 'static>(
         &mut self,
         infection_status: InfectionStatusValue,
@@ -154,6 +131,15 @@ impl ContextTransmissionModifierExt for Context {
         Ok(())
     }
 
+    /// Get the relative potential for infection (infectiousness or susceptibility) for a person
+    /// based on their infection status based on all registered modifiers. Queries all registered
+    /// modifier functions and evaluates them based on the person's properties. Multiplies them
+    /// together to get the total relative transmission modifier for the person.
+    /// Returns 1.0 if no modifiers are registered for the person's infection status.
+    fn get_relative_total_transmission(&self, person_id: PersonId) -> f64;
+}
+
+impl ContextTransmissionModifierExt for Context {
     fn get_relative_total_transmission(&self, person_id: PersonId) -> f64 {
         let infection_status = self.get_person_property(person_id, InfectionStatus);
 
