@@ -138,13 +138,15 @@ fn query_susceptibles_and_seed(
         "Altering {k} susceptibles with a seeding function using proportion {proportion_to_seed}."
     );
 
-    let susceptibles = context.sample_people(
-        InfectionRng,
-        (InfectionStatus, InfectionStatusValue::Susceptible),
-        k as usize,
-    );
-    for person in susceptibles {
-        seed_fn(context, person);
+    if k > 0 {
+        let susceptibles = context.sample_people(
+            InfectionRng,
+            (InfectionStatus, InfectionStatusValue::Susceptible),
+            k as usize,
+        );
+        for person in susceptibles {
+            seed_fn(context, person);
+        }
     }
 }
 
@@ -339,6 +341,67 @@ mod test {
             context.get_person_property(initial_recovered, InfectionStatus),
             InfectionStatusValue::Recovered
         );
+    }
+
+    #[test]
+    fn test_seed_initial_conditions_empty() {
+        let mut context = setup_context(0, 1.0, 1.0, 5.0, 0.0);
+        let person = context.add_person(()).unwrap();
+        seed_initial_infections(&mut context, 0.0);
+        assert_eq!(
+            context.get_person_property(person, InfectionStatus),
+            InfectionStatusValue::Susceptible
+        );
+
+        seed_initial_recovered(&mut context, 0.0);
+        assert_eq!(
+            context.get_person_property(person, InfectionStatus),
+            InfectionStatusValue::Susceptible
+        );
+    }
+
+    fn seed_initial_conditions_binomial(incidence: f64, recovered: f64, pop_size: i32) -> usize {
+        let mut context = setup_context(0, 1.0, 1.0, 5.0, 0.0);
+        for _ in 0..pop_size {
+            context.add_person(()).unwrap();
+        }
+        seed_initial_infections(&mut context, incidence);
+        seed_initial_recovered(&mut context, recovered);
+        context.query_people_count((InfectionStatus, InfectionStatusValue::Infectious))
+    }
+
+    #[test]
+    fn test_binomial_incidence() {
+        let reps = 1000;
+        let incidence = 0.01;
+        let recovered = 0.0;
+        let pop_size = 100;
+
+        let mut infections = 0;
+        for _ in 0..reps {
+            let i = seed_initial_conditions_binomial(incidence, recovered, pop_size);
+            infections += i;
+        }
+        #[allow(clippy::cast_precision_loss, clippy::cast_lossless)]
+        let observed = infections as f64 / (reps as f64 * pop_size as f64);
+        assert_almost_eq!(incidence, observed, 0.01);
+    }
+
+    #[test]
+    fn test_binomial_incidence_and_recovery() {
+        let reps = 1000;
+        let incidence = 0.01;
+        let recovered = 0.99;
+        let pop_size = 100;
+
+        let mut infections = 0;
+        for _ in 0..reps {
+            let i = seed_initial_conditions_binomial(incidence, recovered, pop_size);
+            infections += i;
+        }
+        #[allow(clippy::cast_precision_loss, clippy::cast_lossless)]
+        let observed = infections as f64 / (reps as f64 * pop_size as f64);
+        assert_almost_eq!(incidence, observed, 0.01);
     }
 
     #[test]
