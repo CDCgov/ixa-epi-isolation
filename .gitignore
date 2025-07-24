@@ -1,6 +1,9 @@
 #####
 # Exclude many data and output file types by default
 poetry.lock
+tests/integration/**/data/
+experiments/**/data/
+config.toml
 
 # Data
 *.csv
