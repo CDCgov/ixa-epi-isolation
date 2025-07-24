@@ -28,7 +28,7 @@ fn schedule_next_forecasted_infection(context: &mut Context, person: PersonId) {
             // Continue scheduling forecasts until the person recovers.
             schedule_next_forecasted_infection(context, person);
         });
-        // The previous plan needs to be automatcially cancelled inside `add_forecast_plan` to resolve conflicts on recalls of forecast
+        // The forecast plan is added to the data container for tracking
         context.add_forecast_plan(person, infection_plan);
     }
 }
@@ -75,9 +75,7 @@ trait ContextForecastInternalExt: PluginContext {
     /// Add a new plan to the forecast data plugin and cancel any plan currently associated with that person
     fn add_forecast_plan(&mut self, person_id: PersonId, plan_id: PlanId) {
         let container = self.get_data_container_mut(ForecastDataPlugin);
-        if let Some(prev_plan) = container.add_plan(person_id, plan_id) {
-            self.cancel_plan(&prev_plan);
-        }
+        container.add_plan(person_id, plan_id);
     }
     /// Cancel forecast but keep infector in the data map
     fn cancel_forecast(&mut self, person_id: PersonId) {
