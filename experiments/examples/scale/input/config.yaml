@@ -10,7 +10,7 @@ azb:
     max_autoscale_nodes: 3
     n_nodes: 2
     pool_mode: autoscale
-    pool_name: 
+    pool_name:
     registry_name: cfaprdbatchcr
     task_slots_per_node: 8
   azb_config_path: input/azure_config.yaml
@@ -29,6 +29,6 @@ experiment_conditions:
 local_path:
   default_params_file: experiments/examples/scale/input/base.json
   exe_file: target/release/epi-isolation
-  sub_experiment_name: scale 
+  sub_experiment_name: scale
   super_experiment_name: examples
   target_data_file:  experiments/examples/scale/input/ode_results_SIR.csv

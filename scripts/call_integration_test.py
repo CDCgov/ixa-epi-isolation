@@ -22,9 +22,8 @@ def main(config_file, verbose):
     experiment = Experiment(
         experiments_directory="tests", config_file=config_file
     )
-    experiment.run_step(
-        data_filename="person_property_count.csv"
-    )
+    experiment.run_step(data_filename="person_property_count.csv")
+
 
 parser = argparse.ArgumentParser()
 parser.add_argument(
