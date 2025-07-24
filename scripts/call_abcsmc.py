@@ -1,64 +1,59 @@
 import argparse
 import os
+from math import log
 
 import polars as pl
-from scipy.stats import gamma, norm, poisson
-from math import log
 from abmwrappers import wrappers
 from abmwrappers.experiment_class import Experiment
+from scipy.stats import gamma, norm, poisson
+
 
 def main(config_file: str, keep: bool):
-
     # Misspecified prior for scale that should be 1.0
     prior = {
         "infectiousness_rate_fn": {
-            "EmpiricalFromFile": {
-                "scale": gamma(
-                    a=1, scale=0.5
-                )
-            }
+            "EmpiricalFromFile": {"scale": gamma(a=1, scale=0.5)}
         }
     }
 
     perturbation = {
         "infectiousness_rate_fn": {
-            "EmpiricalFromFile": {
-                "scale": norm(0, 0.05)
-            }
+            "EmpiricalFromFile": {"scale": norm(0, 0.05)}
         }
     }
 
     # Initialize experiment object
     experiment = Experiment(
-        experiments_directory="experiments", 
+        experiments_directory="experiments",
         config_file=config_file,
         prior_distribution_dict=prior,
-        perturbation_kernel_dict=perturbation
+        perturbation_kernel_dict=perturbation,
     )
 
     # Run experiment object
     wrappers.run_abcsmc(
         experiment=experiment,
         distance_fn=ode_lhood,
-        data_processing_fn=output_processing_function,
-        keep_all_sims=keep
+        data_read_fn=output_processing_function,
+        keep_all_sims=keep,
     )
+
 
 def ode_lhood(results_data: pl.DataFrame, target_data: pl.DataFrame):
     def poisson_lhood(model, data):
         return -log(poisson.pmf(model, data))
-    
+
     # upper precision bound for neg log, P(results) = 0
     if results_data.is_empty():
         return 750.0
     else:
         min_t_target = target_data.select(pl.col("t").min())
 
-        target_data = target_data.filter(
-            pl.col("InfectionStatus") == "Infectious"
-        ).with_columns(
-            pl.col("t") - min_t_target.item()
-        ).rename({"count": "target_count"})
+        target_data = (
+            target_data.filter(pl.col("InfectionStatus") == "Infectious")
+            .with_columns(pl.col("t") - min_t_target.item())
+            .rename({"count": "target_count"})
+        )
 
         joint_set = results_data.select(pl.col(["t", "result_count"])).join(
             target_data.select(pl.col(["t", "target_count"])), on="t"
@@ -75,58 +70,45 @@ def ode_lhood(results_data: pl.DataFrame, target_data: pl.DataFrame):
 
         return joint_set.select(pl.col("negloglikelihood").sum()).item()
 
+
 def output_processing_function(outputs_dir):
-    fp = os.path.join(outputs_dir, "person_property_count.csv")
-    
-    if os.path.exists(fp):
-        df = pl.read_csv(fp)
-    else:
-        raise FileNotFoundError(f"{fp} does not exist.")
+    print("Requires hospitalization")
 
-    min_t_results = df.select(pl.col("t").min())
-    df = df.filter(
-        pl.col("InfectionStatus") == "Infectious"
-    ).with_columns(
-        pl.col("t") - min_t_results.item()
-    ).group_by("t").agg(
-        pl.col("count").sum()
-    ).rename({"count": "result_count"})
-
-    return df
 
 argparser = argparse.ArgumentParser()
 argparser.add_argument("-x", "--execute", type=str, default="main")
 argparser.add_argument("-c", "--config-file", type=str, required=False)
 argparser.add_argument("-i", "--img-file", type=str, required=False)
 argparser.add_argument(
-    "-d", "--products-path", 
-    type=str, 
-    required=False, 
-    help="Output directory for products. Typically the data path of an experiment."
+    "-d",
+    "--products-path",
+    type=str,
+    required=False,
+    help="Output directory for products. Typically the data path of an experiment.",
 )
 
 argparser.add_argument(
-    "--index", 
-    type=int, 
-    help="Simulation index to be called for writing and returning products"
+    "--index",
+    type=int,
+    help="Simulation index to be called for writing and returning products",
 )
 argparser.add_argument(
     "--products",
     nargs="*",
     help="List of products to process (distances, simulations)",
-    required=False
+    required=False,
 )
 argparser.add_argument(
     "--clean",
     action="store_true",
     help="Clean up raw output files after processing into products",
-    required=False
+    required=False,
 )
 argparser.add_argument(
     "--keep",
     action="store_true",
     help="Keep all the simulation parquet parts from results",
-    required=False
+    required=False,
 )
 
 args = argparser.parse_args()
