@@ -27,7 +27,7 @@ repos:
 #####
 # R
 -   repo: https://github.com/lorenzwalthert/precommit
-    rev: v0.4.3
+    rev: v0.4.3.9009
     hooks:
     -   id: style-files
     -   id: lintr

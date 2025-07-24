@@ -1,0 +1,33 @@
+azb:
+  azb_config:
+    blob_container_name: wtk-ixa-epi
+    config_path: config.toml
+    debug_mode: false
+    docker_image: ./Dockerfile
+    docker_repo_name: null
+    docker_tag: latest
+    job_prefix: null
+    max_autoscale_nodes: 3
+    n_nodes: 2
+    pool_mode: autoscale
+    pool_name: wtk-ixa-epi
+    registry_name: cfaprdbatchcr
+    task_slots_per_node: 8
+  azb_config_path: input/azure_config.yaml
+  azure_batch: false
+  benchmark_test: false
+  create_pool: true
+experiment_conditions:
+  replicates_per_particle: 2
+  samples_per_step: 5
+  seed: 12345
+  scenario_key: epi_isolation.GlobalParams
+  tolerance:
+    '0': 350
+    '1': 290
+local_path:
+  default_params_file: experiments/simple-fits/wyoming-constant-rate/input/base.json
+  exe_file: target/release/epi-isolation
+  sub_experiment_name: wyoming-constant-rate
+  super_experiment_name: simple-fits
+  target_data_file: experiments/simple-fits/wyoming-constant-rate/input/target_data.csv

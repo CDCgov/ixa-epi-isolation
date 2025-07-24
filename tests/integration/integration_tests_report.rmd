@@ -1,0 +1,105 @@
+---
+title: "Ixa-epi-isolation integration tests and documentation"
+output: html_document
+---
+
+# Preface
+
+This report is intended to serve three purposes:
+
+1) To generate figures and other output that, by visual inspection, serve as integration tests that demonstrate that ixa-epi-isolation is performing as expected. The primary conceptual basis for these tests is to compare output from ixa with output from ordinary differential equation models.
+2) To document how to perform various modeling tasks in ixa-epi-isolation, with a focus on the specifications set in the input `.json` files.
+3) To compare and contrast agent-based and ODE modeling approaches, demonstrating how ODE assumptions can be encoded in ixa.
+
+```{r, echo = FALSE, warning = FALSE, message = FALSE}
+# load packages
+
+library(tidyverse)
+library(arrow)
+```
+
+## Simple SIR model
+This integration test compares output from ixa with output from a simple SIR ODE model. In ixa-epi-isolation, infectious individuals create "infection attempts", which have some probability of infecting a susceptible individual in the population. The rate at which infection attempts occur is determined by that infectious individual's `infectiousness_rate_fn`, which can either be a `Constant` rate or defined by an `EmpiricalFromFile` that specifies the rate at given time points since infection. To recreate the infectious `I` compartment of a classical SIR ODE model, we create the `tests/input/rate_fns_exp_I.csv` in R, which supplies a fixed value of $\beta_I$ as the infectiousness for exponentially distributed lengths of time.
+
+The key part of the file `tests/integration/sir/input/input_simple_SIR.json` that specifies the rate function is as follows:
+
+```
+    "infectiousness_rate_fn": {
+      "EmpiricalFromFile": {
+        "file": "tests/input/rate_fns_exp_I.csv",
+        "scale": 1.0
+      }
+    }
+```
+```{r, echo = FALSE}
+ixa_sir_df <- as.data.frame(open_dataset("sir/data/simulations"))
+ode_results_sir <- read.csv("../input/ode_results_SIR.csv")
+
+ode_results_sir$InfectionStatus <- factor(ode_results_sir$InfectionStatus,
+  levels = c("Susceptible", "Infectious", "Recovered")
+)
+
+ixa_sir_df |>
+  ggplot() +
+  geom_line(
+    aes(
+      x = t, y = count,
+      group = interaction(simulation, InfectionStatus), color = InfectionStatus
+    ),
+    alpha = 0.1
+  ) +
+  xlab("Day") +
+  ylab("Number of people (prevalence)") +
+  theme_minimal() +
+  geom_line(
+    data = ode_results_sir,
+    aes(x = t, y = count, color = InfectionStatus)
+  ) +
+  scale_color_manual(values = c(
+    "Susceptible" = "blue",
+    "Infectious" = "red", "Recovered" = "green"
+  ))
+```
+
+## Simple SEIR model
+This integration test compares output from ixa with output from a simple SEIR ODE model. The approach here is very similar as in the SIR example; the only difference is that empirical infectiousness rate function is constructed so there is an exponentially distributed period from when infection occurs to when infectiousness begins. During that period the infectiousness rate is set to zero.
+
+The file `tests/integration/seir/input/input_simple_SEIR.json` was modfied as follows to specify a different rate function.
+
+```
+    "infectiousness_rate_fn": {
+      "EmpiricalFromFile": {
+        "file": "tests/input/rate_fns_exp_E_exp_I.csv",
+        "scale": 1.0
+      }
+    }
+```
+```{r, echo = FALSE}
+ixa_seir_df <- as.data.frame(open_dataset("seir/data/simulations"))
+ode_results_seir <- read.csv("../input/ode_results_SEIR.csv")
+
+ode_results_seir$InfectionStatus <- factor(ode_results_seir$InfectionStatus,
+  levels = c("Susceptible", "Exposed", "Infectious", "Recovered")
+)
+
+ixa_seir_df |>
+  ggplot() +
+  geom_line(
+    aes(
+      x = t, y = count,
+      group = interaction(simulation, InfectionStatus), color = InfectionStatus
+    ),
+    alpha = 0.1
+  ) +
+  xlab("Day") +
+  ylab("Number of people (prevalence)") +
+  theme_minimal() +
+  geom_line(
+    data = ode_results_seir,
+    aes(x = t, y = count, color = InfectionStatus)
+  ) +
+  scale_color_manual(values = c(
+    "Susceptible" = "blue", "Exposed" = "purple",
+    "Infectious" = "red", "Recovered" = "green"
+  ))
+```

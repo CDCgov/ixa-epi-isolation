@@ -1,0 +1,12 @@
+azb:
+  azure_batch: false
+experiment_conditions:
+  replicates_per_particle: 50
+  samples_per_step: 1
+  seed: 12345
+  scenario_key: epi_isolation.GlobalParams
+local_path:
+  default_params_file: tests/integration/seir/input/input_simple_SEIR.json
+  exe_file: target/release/epi-isolation
+  sub_experiment_name: seir
+  super_experiment_name: integration

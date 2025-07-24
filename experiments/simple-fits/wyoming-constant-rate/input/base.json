@@ -1,0 +1,31 @@
+{
+  "epi_isolation.GlobalParams": {
+    "max_time": 50.0,
+    "seed": 123,
+    "infectiousness_rate_fn": {"Constant": {"rate": 1.0, "duration": 2.0}},
+    "initial_incidence": 0.01,
+    "initial_recovered": 0.0001,
+    "proportion_asymptomatic": 0.3,
+    "relative_infectiousness_asymptomatics": 0.7,
+    "settings_properties": {"Home": {"alpha": 1.0,
+                                     "itinerary_specification": {"Constant": {"ratio": 0.25}}},
+                            "Workplace": {"alpha": 0.1,
+                                          "itinerary_specification": {"Constant": {"ratio": 0.25}}},
+                            "School": {"alpha": 0.1,
+                                       "itinerary_specification": {"Constant": {"ratio": 0.25}}},
+                            "CensusTract": {"alpha": 0.0,
+                                            "itinerary_specification": {"Constant": {"ratio": 0.25}}}},
+    "symptom_progression_library" : {"EmpiricalFromFile": {"file": "input/library_symptom_parameters.csv"}},
+    "report_period": 1.0,
+    "synth_population_file": "simple-fits/wyoming-constant-rate/input/synth_pop_people_WY.csv",
+    "facemask_parameters": {
+      "facemask_efficacy": 0.2
+    },
+    "guidance_policy": { "UpdatedIsolationGuidance": {
+      "post_isolation_duration": 5.0,
+      "isolation_probability": 1.0,
+      "isolation_delay_period": 3.0
+      }
+    }
+  }
+}
