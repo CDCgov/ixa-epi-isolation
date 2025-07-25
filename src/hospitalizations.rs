@@ -1,5 +1,7 @@
 use ixa::{
-    define_data_plugin, define_derived_property, define_global_property, define_person_property_with_default, define_rng, trace, Context, ContextGlobalPropertiesExt, ContextPeopleExt, ContextRandomExt, HashMap, PersonId, PersonPropertyChangeEvent, PluginContext
+    define_data_plugin, define_person_property_with_default, define_rng, trace, Context,
+    ContextPeopleExt, ContextRandomExt, HashMap, PersonId, PersonPropertyChangeEvent,
+    PluginContext,
 };
 use serde::{Deserialize, Serialize};
 
@@ -21,23 +23,6 @@ pub struct HospitalAgeGroups {
     pub probability: f64,
 }
 
-define_global_property!(AgeStructure, HashMap<u8, HospitalAgeGroups>);
-define_derived_property!(
-  HospitalAgeGroup,
-  HospitalAgeGroups,
-  [Age],
-  [AgeStructure],
-    |age, age_structure| {
-        let age_structure: HashMap<u8, HospitalAgeGroups> = age_structure;
-        age_structure
-            .get(&age)
-            .cloned()
-            .unwrap_or_else(|| HospitalAgeGroups { min: 0, probability: 0.0 })
-    }
-
-);
-
-
 #[derive(Default)]
 struct HospitalDataContainer {
     age_group_mapping: HashMap<u8, HospitalAgeGroups>,
@@ -46,7 +31,7 @@ struct HospitalDataContainer {
 impl HospitalDataContainer {
     fn set_age_group_mapping(&mut self, age_groups: &[HospitalAgeGroups]) {
         for i in 1..=(age_groups.len()) {
-            let grp = &age_groups[i-1];
+            let grp = &age_groups[i - 1];
             let max = if i == age_groups.len() {
                 121u8
             } else {
@@ -71,14 +56,13 @@ define_data_plugin!(
     HospitalDataContainer::default()
 );
 
-trait ContextHospitalizationInternalExt: PluginContext + ContextRandomExt + ContextPeopleExt + ContextParametersExt {
+trait ContextHospitalizationInternalExt:
+    PluginContext + ContextRandomExt + ContextPeopleExt + ContextParametersExt
+{
     fn plan_hospital_arrival(&mut self, person_id: PersonId) -> Result<(), ixa::IxaError> {
         // get hospital parameters
         // evaluate hospitalization risk
         // plan a delay to enter the hospital
-        let temp = self.get_person_property(person_id, HospitalAgeGroup);
-        let temp_age = self.get_person_property(person_id, Age);
-        println!("Planning hospital arrival for person {person_id}, {temp:?}, {temp_age}");
         let mean_delay_to_hospitalization = self
             .get_params()
             .hospitalization_parameters
@@ -154,11 +138,6 @@ trait ContextHospitalizationInternalExt: PluginContext + ContextRandomExt + Cont
             },
         );
     }
-    fn get_age_group_mapping(&self) -> HashMap<u8, HospitalAgeGroups> {
-        self.get_data_container(HospitalDataPlugin)
-        .unwrap()
-        .age_group_mapping.clone()
-    }   
 }
 impl ContextHospitalizationInternalExt for Context {}
 
@@ -172,7 +151,6 @@ pub fn init(context: &mut Context) {
             )
             .unwrap();
         context.set_age_group_mapping();
-        context.set_global_property_value(AgeStructure, context.get_age_group_mapping()).unwrap();
         context.setup_hospitalization_event_sequence();
     } else {
         trace!(
@@ -351,7 +329,7 @@ mod test {
             },
         ]
         .to_vec();
-        let num_sim = 1;
+        let num_sim = 10000;
         let children_hospital_counter = Rc::new(RefCell::new(0usize));
         let adult_hospital_counter = Rc::new(RefCell::new(0usize));
         let eldery_hospital_counter = Rc::new(RefCell::new(0usize));
