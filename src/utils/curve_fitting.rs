@@ -12,7 +12,7 @@ pub fn linear_interpolation(x1: f64, x2: f64, y1: f64, y2: f64, xp: f64) -> f64 
 }
 #[cfg(test)]
 mod test {
-    use statrs::assert_almost_eq;
+    use ixa::assert_almost_eq;
 
     use super::linear_interpolation;
 
