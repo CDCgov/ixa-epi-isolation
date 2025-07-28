@@ -1,6 +1,6 @@
-use std::{collections::HashMap, fmt::Debug, path::PathBuf};
+use std::{fmt::Debug, path::PathBuf};
 
-use ixa::{define_global_property, Context, ContextGlobalPropertiesExt, IxaError, PluginContext};
+use ixa::{define_global_property, Context, ContextGlobalPropertiesExt, IxaError, PluginContext, HashMap};
 use serde::{Deserialize, Serialize};
 
 use crate::policies::{validate_guidance_policy, Policies};
@@ -102,7 +102,7 @@ impl Default for Params {
             relative_infectiousness_asymptomatics: 1.0,
             // If reports are called for some reason and not specified, 0.0 could lead to large memory errors
             report_period: 1.0,
-            settings_properties: HashMap::new(),
+            settings_properties: HashMap::default(),
             synth_population_file: PathBuf::new(),
             transmission_report_name: None,
             facemask_parameters: None,
@@ -243,15 +243,13 @@ impl ContextParametersExt for Context {}
 
 #[cfg(test)]
 mod test {
-    use ixa::{Context, ContextGlobalPropertiesExt, IxaError};
-    use statrs::assert_almost_eq;
+    use ixa::{Context, ContextGlobalPropertiesExt, IxaError, HashMap, assert_almost_eq};
 
     use super::{validate_inputs, CoreSettingsTypes, ItinerarySpecificationType};
     use crate::{
         parameters::{ContextParametersExt, GlobalParams, Params, RateFnType},
         settings::SettingProperties,
     };
-    use std::collections::HashMap;
 
     #[test]
     fn test_standard_input_file() {

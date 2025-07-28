@@ -82,7 +82,7 @@ impl<T: ?Sized + InfectiousnessRateFn> InfectiousnessRateFn for ScaledRateFn<'_,
 
 #[cfg(test)]
 mod test {
-    use statrs::assert_almost_eq;
+    use ixa::assert_almost_eq;
 
     use crate::rate_fns::{
         rate_fn::{InfectiousnessRateFn, ScaledRateFn},

@@ -1,12 +1,11 @@
 use std::{
     any::{Any, TypeId},
-    collections::HashMap,
     path::PathBuf,
 };
 
 use ixa::{
     define_data_plugin, Context, ContextPeopleExt, IxaError, PersonProperty,
-    PersonPropertyChangeEvent, PluginContext,
+    PersonPropertyChangeEvent, PluginContext, HashMap
 };
 use serde::Deserialize;
 
@@ -183,9 +182,8 @@ mod test {
 
     use ixa::{
         define_person_property_with_default, Context, ContextPeopleExt, ContextRandomExt,
-        ExecutionPhase, IxaError, PersonPropertyChangeEvent,
+        ExecutionPhase, IxaError, PersonPropertyChangeEvent, assert_almost_eq
     };
-    use statrs::assert_almost_eq;
 
     use crate::{
         natural_history_parameter_manager::ContextNaturalHistoryParameterExt,

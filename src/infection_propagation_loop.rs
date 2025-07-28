@@ -209,15 +209,14 @@ pub fn init(context: &mut Context) -> Result<(), IxaError> {
 #[cfg(test)]
 mod test {
     use serde::{Deserialize, Serialize};
-    use std::{cell::RefCell, collections::HashMap, rc::Rc};
+    use std::{cell::RefCell, rc::Rc};
 
     use ixa::{
         define_person_property_with_default, Context, ContextGlobalPropertiesExt, ContextPeopleExt,
-        ContextRandomExt, ExecutionPhase, IxaError, PersonId, PersonPropertyChangeEvent,
+        ContextRandomExt, ExecutionPhase, IxaError, PersonId, PersonPropertyChangeEvent, HashMap, assert_almost_eq
     };
 
     use statrs::{
-        assert_almost_eq,
         distribution::{ContinuousCDF, Discrete, Poisson, Uniform},
     };
 

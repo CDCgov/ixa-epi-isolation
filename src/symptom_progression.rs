@@ -1,9 +1,7 @@
-use std::collections::HashMap;
-
 use ixa::rand::Rng;
 use ixa::{
     define_person_property_with_default, define_rng, Context, ContextPeopleExt, ContextRandomExt,
-    IxaError, PersonPropertyChangeEvent,
+    IxaError, PersonPropertyChangeEvent, HashMap
 };
 use serde::{Deserialize, Serialize};
 use statrs::distribution::Weibull;
@@ -288,9 +286,8 @@ mod test {
 
     use ixa::{
         Context, ContextGlobalPropertiesExt, ContextPeopleExt, ContextRandomExt, IxaError,
-        PersonPropertyChangeEvent,
+        PersonPropertyChangeEvent, assert_almost_eq
     };
-    use statrs::assert_almost_eq;
 
     fn setup(proportion_asymptomatic: f64) -> Context {
         let mut context = Context::new();

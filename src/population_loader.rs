@@ -97,8 +97,7 @@ mod test {
     use super::*;
     use crate::parameters::{CoreSettingsTypes, GlobalParams, ItinerarySpecificationType};
     use crate::settings::{CensusTract, Home, School, SettingId, SettingProperties, Workplace};
-    use ixa::{ContextGlobalPropertiesExt, ContextPeopleExt};
-    use std::collections::HashMap;
+    use ixa::{ContextGlobalPropertiesExt, ContextPeopleExt, HashMap};
     use std::io::Write;
     use std::path::PathBuf;
     use tempfile::NamedTempFile;

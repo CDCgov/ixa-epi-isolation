@@ -1,8 +1,8 @@
 use ixa::{
     define_data_plugin, trace, Context, ContextPeopleExt, IxaError, PersonId, PersonProperty,
-    PluginContext,
+    PluginContext, HashMap
 };
-use std::{any::TypeId, collections::HashMap};
+use std::any::TypeId;
 
 use crate::infectiousness_manager::{InfectionStatus, InfectionStatusValue};
 
@@ -109,7 +109,7 @@ pub trait ContextTransmissionModifierExt: PluginContext {
         P::Value: std::hash::Hash + Eq,
     {
         // Convert modifiers to HashMap
-        let mut modifier_map = HashMap::new();
+        let mut modifier_map = HashMap::default();
         for &(key, value) in relative_transmission_potential_multipliers {
             if !(0.0..=1.0).contains(&value) {
                 return Err(IxaError::IxaError(
@@ -173,11 +173,9 @@ impl ContextTransmissionModifierExt for Context {
 mod test {
     use ixa::{
         define_person_property, define_person_property_with_default, Context,
-        ContextGlobalPropertiesExt, ContextPeopleExt, ContextRandomExt, IxaError, PersonId,
+        ContextGlobalPropertiesExt, ContextPeopleExt, ContextRandomExt, IxaError, PersonId, assert_almost_eq
     };
     use serde::{Deserialize, Serialize};
-    use statrs::assert_almost_eq;
-
     use super::{
         ContextTransmissionModifierExt, PersonPropertyModifier, TransmissionModifier,
         TransmissionModifierPlugin,

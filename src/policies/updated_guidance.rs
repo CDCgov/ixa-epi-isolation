@@ -170,16 +170,14 @@ mod test {
         },
         Params,
     };
-    use std::{cell::RefCell, collections::HashMap, path::PathBuf, rc::Rc};
+    use std::{cell::RefCell, path::PathBuf, rc::Rc};
 
     use ixa::{
         define_person_property_with_default, Context, ContextGlobalPropertiesExt, ContextPeopleExt,
-        ContextRandomExt, IxaError, PersonPropertyChangeEvent,
+        ContextRandomExt, IxaError, PersonPropertyChangeEvent, HashMap, assert_almost_eq
     };
 
     use super::{IsolatingStatus, MaskingStatus};
-
-    use statrs::assert_almost_eq;
 
     fn setup_context(
         post_isolation_duration: f64,

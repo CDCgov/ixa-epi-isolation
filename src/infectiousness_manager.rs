@@ -230,7 +230,6 @@ impl InfectionContextExt for Context {}
 #[cfg(test)]
 mod test {
     use serde::{Deserialize, Serialize};
-    use statrs::assert_almost_eq;
 
     use super::{
         evaluate_forecast, get_forecast, infection_attempt, max_total_infectiousness_multiplier,
@@ -248,7 +247,7 @@ mod test {
     };
     use ixa::{
         define_person_property, Context, ContextGlobalPropertiesExt, ContextPeopleExt,
-        ContextRandomExt, IxaError, PersonId,
+        ContextRandomExt, IxaError, PersonId, assert_almost_eq
     };
 
     define_setting_category!(HomogeneousMixing);

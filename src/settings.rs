@@ -3,13 +3,12 @@ use crate::parameters::{
 };
 use ixa::{
     define_data_plugin, define_rng, people::Query, prelude_for_plugins::IxaEvent, trace, Context,
-    ContextPeopleExt, ContextRandomExt, IxaError, PersonId, PluginContext,
+    ContextPeopleExt, ContextRandomExt, IxaError, PersonId, PluginContext, HashMap, HashSet
 };
 use serde::{Deserialize, Serialize};
 
 use std::{
     any::TypeId,
-    collections::{HashMap, HashSet},
     hash::Hash,
 };
 
@@ -376,7 +375,7 @@ trait ContextSettingInternalExt: PluginContext + ContextRandomExt {
     }
 
     fn validate_itinerary(&self, itinerary: &[ItineraryEntry]) -> Result<(), IxaError> {
-        let mut setting_counts: HashMap<TypeId, HashSet<usize>> = HashMap::new();
+        let mut setting_counts: HashMap<TypeId, HashSet<usize>> = HashMap::default();
         for itinerary_entry in itinerary {
             let setting_id = itinerary_entry.setting.id();
             let setting_type = itinerary_entry.setting.get_type_id();
@@ -751,8 +750,7 @@ mod test {
         parameters::{GlobalParams, ItinerarySpecificationType},
         settings::ContextSettingExt,
     };
-    use ixa::{define_person_property, ContextGlobalPropertiesExt, ContextPeopleExt};
-    use statrs::assert_almost_eq;
+    use ixa::{define_person_property, ContextGlobalPropertiesExt, ContextPeopleExt, assert_almost_eq};
 
     define_setting_category!(Community);
 
