@@ -1,10 +1,8 @@
 use crate::{
-    hospitalizations::Hospitalized,
-    parameters::{ContextParametersExt, HospitalizationReportType},
-    population_loader::Age,
+    hospitalizations::Hospitalized, parameters::ContextParametersExt, population_loader::Age,
 };
 use ixa::{
-    define_report, info, report::ContextReportExt, Context, ContextPeopleExt, IxaError, PersonId,
+    define_report, report::ContextReportExt, Context, ContextPeopleExt, IxaError, PersonId,
     PersonPropertyChangeEvent,
 };
 use serde::{Deserialize, Serialize};
@@ -14,72 +12,29 @@ struct HospitalIncidenceReport {
     time: f64,
     person_id: PersonId,
     age: u8,
-    status: String,
 }
 
 define_report!(HospitalIncidenceReport);
 
-fn record_hospital_incidence_event(
-    context: &mut Context,
-    person_id: PersonId,
-    age: u8,
-    status: String,
-) {
+fn record_hospital_incidence_event(context: &mut Context, person_id: PersonId, age: u8) {
     context.send_report(HospitalIncidenceReport {
         time: context.get_current_time(),
         person_id,
         age,
-        status,
     });
 }
 
 fn create_hospital_incidence_report(
     context: &mut Context,
     file_name: &str,
-    report_type: HospitalizationReportType,
 ) -> Result<(), IxaError> {
-    match report_type {
-        HospitalizationReportType::Incidence => {
-            context.add_report::<HospitalIncidenceReport>(file_name)?;
-            context.subscribe_to_event::<PersonPropertyChangeEvent<Hospitalized>>(
-                |context, event| {
-                    let age = context.get_person_property(event.person_id, Age);
-                    if event.current {
-                        record_hospital_incidence_event(
-                            context,
-                            event.person_id,
-                            age,
-                            "Arrival".to_string(),
-                        );
-                    }
-                },
-            );
+    context.add_report::<HospitalIncidenceReport>(file_name)?;
+    context.subscribe_to_event::<PersonPropertyChangeEvent<Hospitalized>>(|context, event| {
+        let age = context.get_person_property(event.person_id, Age);
+        if event.current {
+            record_hospital_incidence_event(context, event.person_id, age);
         }
-        HospitalizationReportType::Prevalence => {
-            context.add_report::<HospitalIncidenceReport>(file_name)?;
-            context.subscribe_to_event::<PersonPropertyChangeEvent<Hospitalized>>(
-                |context, event| {
-                    let age = context.get_person_property(event.person_id, Age);
-                    if event.current {
-                        record_hospital_incidence_event(
-                            context,
-                            event.person_id,
-                            age,
-                            "Arrival".to_string(),
-                        );
-                    } else {
-                        record_hospital_incidence_event(
-                            context,
-                            event.person_id,
-                            age,
-                            "Departure".to_string(),
-                        );
-                    }
-                },
-            );
-        }
-        HospitalizationReportType::None => (),
-    }
+    });
     Ok(())
 }
 
@@ -87,20 +42,9 @@ pub fn init(context: &mut Context) -> Result<(), IxaError> {
     let report_name = context
         .get_params()
         .hospitalization_parameters
-        .as_ref()
-        .map(|hospital_parameters| hospital_parameters.hospital_incidence_report_name.clone());
-    let report_type = context
-        .get_params()
-        .hospitalization_parameters
-        .as_ref()
-        .map_or(HospitalizationReportType::None, |hospital_parameters| {
-            hospital_parameters.report_type
-        });
-    if let Some(report) = report_name {
-        create_hospital_incidence_report(context, &report, report_type)?;
-    } else {
-        info!("No hospital incidence report name provided. Skipping hospital incidence report creation");
-    }
+        .hospital_incidence_report_name
+        .clone();
+    create_hospital_incidence_report(context, &report_name)?;
     Ok(())
 }
 
@@ -136,29 +80,6 @@ mod test {
     }
 
     #[test]
-    fn test_empty_hospital_incidence_report() {
-        let params_json = r#"
-            {
-                "epi_isolation.GlobalParams": {
-                "max_time": 200.0,
-                "seed": 123,
-                "infectiousness_rate_fn": {"Constant": {"rate": 1.0, "duration": 5.0}},
-                "initial_incidence": 0.01,
-                "initial_recovered": 0.0,
-                "report_period": 1.0,
-                "proportion_asymptomatic": 0.0,
-                "relative_infectiousness_asymptomatics": 0.0,
-                "settings_properties": {},
-                "synth_population_file": "input/people_test.csv"
-                }
-            }
-        "#;
-        let context = setup_context_from_str(params_json);
-        let report_name = context.get_params().transmission_report_name.clone();
-        assert!(report_name.is_none());
-    }
-
-    #[test]
     fn test_filled_hospital_incidence_report() {
         let params_json = r#"
             {
@@ -175,27 +96,23 @@ mod test {
                 "synth_population_file": "input/people_test.csv",
                 "hospitalization_parameters": {
                     "age_groups": [
-                        {"min": 0, "max": 18, "probability": 0.0001},
-                        {"min": 19, "max": 64, "probability": 0.0001},
-                        {"min": 65, "max": 120, "probability": 0.0001}
+                        {"min": 0, "max": 18, "probability": 0.0},
+                        {"min": 19, "max": 64, "probability": 0.0},
+                        {"min": 65, "max": 120, "probability": 0.0}
                     ],
                     "mean_delay_to_hospitalization": 1.0,
                     "mean_duration_of_hospitalization": 1.0,
-                    "hospital_incidence_report_name": "hospital_incidence_report.csv",
-                    "report_type": "Incidence"
+                    "hospital_incidence_report_name": "hospital_incidence_report.csv"
                 }
                 }
             }
         "#;
         let context = setup_context_from_str(params_json);
-        let report_name = context
+        let report_name = &context
             .get_params()
             .hospitalization_parameters
-            .as_ref()
-            .unwrap()
-            .hospital_incidence_report_name
-            .clone();
-        assert_eq!(report_name, "hospital_incidence_report.csv".to_string());
+            .hospital_incidence_report_name;
+        assert_eq!(*report_name, "hospital_incidence_report.csv".to_string());
     }
 
     #[test]
@@ -215,14 +132,13 @@ mod test {
                 "synth_population_file": "input/people_test.csv",
                 "hospitalization_parameters": {
                     "age_groups": [
-                        {"min": 0, "max": 18, "probability": 0.0001},
-                        {"min": 19, "max": 64, "probability": 0.0001},
-                        {"min": 65, "max": 120, "probability": 0.0001}
+                        {"min": 0, "max": 18, "probability": 0.5},
+                        {"min": 19, "max": 64, "probability": 0.5},
+                        {"min": 65, "max": 120, "probability": 0.5}
                     ],
                     "mean_delay_to_hospitalization": 1.0,
                     "mean_duration_of_hospitalization": 1.0,
-                    "hospital_incidence_report_name": "hospital_incidence_report.csv",
-                    "report_type": "Incidence"
+                    "hospital_incidence_report_name": "hospital_incidence_report.csv"
                 }
                 }
             }

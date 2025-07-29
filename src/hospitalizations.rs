@@ -66,8 +66,7 @@ trait ContextHospitalizationInternalExt:
         let mean_delay_to_hospitalization = self
             .get_params()
             .hospitalization_parameters
-            .as_ref()
-            .map_or(0.0, |params| params.mean_delay_to_hospitalization);
+            .mean_delay_to_hospitalization;
 
         trace!(
             "Planning hospital arrival for person {person_id} at {}",
@@ -89,8 +88,7 @@ trait ContextHospitalizationInternalExt:
         let mean_duration_of_hospitalization = self
             .get_params()
             .hospitalization_parameters
-            .as_ref()
-            .map_or(0.0, |params| params.mean_duration_of_hospitalization);
+            .mean_duration_of_hospitalization;
 
         self.add_plan(
             self.get_current_time() + mean_duration_of_hospitalization,
@@ -115,8 +113,9 @@ trait ContextHospitalizationInternalExt:
         let age_groups = self
             .get_params()
             .hospitalization_parameters
-            .as_ref()
-            .map_or(vec![], |params| params.age_groups.clone());
+            .age_groups
+            .clone();
+
         let container = self.get_data_container_mut(HospitalDataPlugin);
         container.set_age_group_mapping(&age_groups);
     }
@@ -142,7 +141,13 @@ trait ContextHospitalizationInternalExt:
 impl ContextHospitalizationInternalExt for Context {}
 
 pub fn init(context: &mut Context) {
-    if let Some(_hospitalization_parameters) = &context.get_params().hospitalization_parameters {
+    let hospitalization_parameters = &context.get_params().hospitalization_parameters;
+    let initialization_check = hospitalization_parameters
+        .age_groups
+        .iter()
+        .any(|grp| grp.probability > 0.0);
+    println!("initialization_check: {}", initialization_check);
+    if initialization_check {
         context
             .store_transmission_modifier_values(
                 InfectionStatusValue::Infectious,
@@ -154,7 +159,7 @@ pub fn init(context: &mut Context) {
         context.setup_hospitalization_event_sequence();
     } else {
         trace!(
-            "No hospitalization parameters provided. They are required for the hospitalizations."
+            "All hospitalization probabilities are zero. Hospitalizations module is not initialized."
         );
     }
 }
@@ -164,10 +169,7 @@ mod test {
     use super::Hospitalized;
     use crate::{
         hospitalizations::HospitalAgeGroups,
-        parameters::{
-            GlobalParams, HospitalizationParameters, HospitalizationReportType,
-            ProgressionLibraryType,
-        },
+        parameters::{GlobalParams, HospitalizationParameters, ProgressionLibraryType},
         population_loader::Age,
         rate_fns::load_rate_fns,
         symptom_progression::{SymptomValue, Symptoms},
@@ -196,13 +198,12 @@ mod test {
             symptom_progression_library: Some(ProgressionLibraryType::EmpiricalFromFile {
                 file: PathBuf::from("./input/library_symptom_parameters.csv"),
             }),
-            hospitalization_parameters: Some(HospitalizationParameters {
+            hospitalization_parameters: HospitalizationParameters {
                 mean_delay_to_hospitalization,
                 mean_duration_of_hospitalization,
                 age_groups,
                 hospital_incidence_report_name: "hospital_incidence_report.csv".to_string(),
-                report_type: HospitalizationReportType::Incidence,
-            }),
+            },
             ..Default::default()
         };
         context

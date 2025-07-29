@@ -20,6 +20,8 @@ use ixa::{ContextPeopleExt, ContextRandomExt, ContextReportExt};
 use parameters::{ContextParametersExt, Params};
 use population_loader::Age;
 use symptom_progression::Symptoms;
+
+use crate::hospitalizations::Hospitalized;
 // You must run this with a parameters file:
 // cargo run -- --config input/input.json
 // Try enabling logs to see some output about infections:
@@ -48,7 +50,7 @@ fn main() {
         context.add_periodic_report(
             "person_property_count",
             report_period,
-            (Symptoms, InfectionStatus),
+            (Age, Symptoms, InfectionStatus, Hospitalized),
         )?;
 
         settings::init(context);

@@ -46,12 +46,6 @@ pub struct FacemaskParameters {
     pub facemask_efficacy: f64,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq)]
-pub enum HospitalizationReportType {
-    Incidence,
-    Prevalence,
-    None,
-}
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct HospitalizationParameters {
     /// The mean of the delay distribution to hospitalization.
@@ -62,8 +56,6 @@ pub struct HospitalizationParameters {
     pub age_groups: Vec<HospitalAgeGroups>,
     /// The path to the hospitalization incidence report file.
     pub hospital_incidence_report_name: String,
-    /// Report type
-    pub report_type: HospitalizationReportType,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -98,7 +90,7 @@ pub struct Params {
     pub facemask_parameters: Option<FacemaskParameters>,
     //Hospitalization parameters contain the probability of hospitalization by age group
     // the mean of the delay distribution to hospitalization, and the mean of the duration of hospitalization.
-    pub hospitalization_parameters: Option<HospitalizationParameters>,
+    pub hospitalization_parameters: HospitalizationParameters,
     // Guidance Policy
     // Specifiies the policy guidance to use for interventions, defaulting to None
     // Enum variants should contain structs with policy-relevant data values
@@ -129,7 +121,15 @@ impl Default for Params {
             synth_population_file: PathBuf::new(),
             transmission_report_name: None,
             facemask_parameters: None,
-            hospitalization_parameters: None,
+            hospitalization_parameters: HospitalizationParameters {
+                mean_delay_to_hospitalization: 0.0,
+                mean_duration_of_hospitalization: 0.0,
+                age_groups: vec![HospitalAgeGroups {
+                    min: 0,
+                    probability: 0.0,
+                }],
+                hospital_incidence_report_name: "hospital_incidence_report.csv".to_string(),
+            },
             guidance_policy: None,
         }
     }
@@ -253,74 +253,53 @@ fn validate_inputs(parameters: &Params) -> Result<(), IxaError> {
         }
     }
 
-    if let Some(hospitalization_parameters) = &parameters.hospitalization_parameters {
-        if hospitalization_parameters.mean_delay_to_hospitalization < 0.0 {
+    let hospitalization_parameters = &parameters.hospitalization_parameters;
+    if hospitalization_parameters.mean_delay_to_hospitalization < 0.0 {
+        return Err(IxaError::IxaError(
+            "The mean delay to hospitalization must be non-negative.".to_string(),
+        ));
+    }
+    if hospitalization_parameters.mean_duration_of_hospitalization < 0.0 {
+        return Err(IxaError::IxaError(
+            "The mean duration of hospitalization must be non-negative.".to_string(),
+        ));
+    }
+    if hospitalization_parameters.age_groups.is_empty() {
+        return Err(IxaError::IxaError(
+            "There must be at least one age group for hospitalization probabilities.".to_string(),
+        ));
+    }
+    for i in 1..hospitalization_parameters.age_groups.len() - 1 {
+        let group = &hospitalization_parameters.age_groups[i - 1];
+
+        let next_group = &hospitalization_parameters.age_groups[i];
+        if group.min >= next_group.min {
             return Err(IxaError::IxaError(
-                "The mean delay to hospitalization must be non-negative.".to_string(),
+                "Hospitalization age groups must be ordered by minimum age.".to_string(),
             ));
         }
-        if hospitalization_parameters.mean_duration_of_hospitalization < 0.0 {
+
+        if !(0.0..=1.0).contains(&group.probability) {
             return Err(IxaError::IxaError(
-                "The mean duration of hospitalization must be non-negative.".to_string(),
-            ));
-        }
-        if hospitalization_parameters.age_groups.is_empty() {
-            return Err(IxaError::IxaError(
-                "There must be at least one age group for hospitalization probabilities."
+                "The probability of hospitalization in each age group must be between 0 and 1, inclusive."
                     .to_string(),
             ));
         }
     }
-
-    if let Some(hospitalization_parameters) = &parameters.hospitalization_parameters {
-        if hospitalization_parameters.mean_delay_to_hospitalization < 0.0 {
-            return Err(IxaError::IxaError(
-                "The mean delay to hospitalization must be non-negative.".to_string(),
-            ));
-        }
-        if hospitalization_parameters.mean_duration_of_hospitalization < 0.0 {
-            return Err(IxaError::IxaError(
-                "The mean duration of hospitalization must be non-negative.".to_string(),
-            ));
-        }
-        if hospitalization_parameters.age_groups.is_empty() {
-            return Err(IxaError::IxaError(
-                "There must be at least one age group for hospitalization probabilities."
-                    .to_string(),
-            ));
-        }
-        for i in 1..hospitalization_parameters.age_groups.len() - 1 {
-            let group = &hospitalization_parameters.age_groups[i - 1];
-
-            let next_group = &hospitalization_parameters.age_groups[i];
-            if group.min >= next_group.min {
-                return Err(IxaError::IxaError(
-                    "Hospitalization age groups must be ordered by minimum age.".to_string(),
-                ));
-            }
-
-            if !(0.0..=1.0).contains(&group.probability) {
-                return Err(IxaError::IxaError(
-                    "The probability of hospitalization in each age group must be between 0 and 1, inclusive."
-                        .to_string(),
-                ));
-            }
-        }
-        if hospitalization_parameters.age_groups[0].min != 0 {
-            return Err(IxaError::IxaError(
-                "The first age group for hospitalization probabilities must start at 0."
-                    .to_string(),
-            ));
-        }
-        if hospitalization_parameters
-            .hospital_incidence_report_name
-            .is_empty()
-        {
-            return Err(IxaError::IxaError(
-                "The hospital incidence report name must not be empty.".to_string(),
-            ));
-        }
+    if hospitalization_parameters.age_groups[0].min != 0 {
+        return Err(IxaError::IxaError(
+            "The first age group for hospitalization probabilities must start at 0.".to_string(),
+        ));
     }
+    if hospitalization_parameters
+        .hospital_incidence_report_name
+        .is_empty()
+    {
+        return Err(IxaError::IxaError(
+            "The hospital incidence report name must not be empty.".to_string(),
+        ));
+    }
+
     Ok(())
 }
 
