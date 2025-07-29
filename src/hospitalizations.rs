@@ -146,7 +146,6 @@ pub fn init(context: &mut Context) {
         .age_groups
         .iter()
         .any(|grp| grp.probability > 0.0);
-    println!("initialization_check: {}", initialization_check);
     if initialization_check {
         context
             .store_transmission_modifier_values(
