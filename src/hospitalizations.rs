@@ -4,6 +4,7 @@ use ixa::{
     PluginContext,
 };
 use serde::{Deserialize, Serialize};
+use statrs::distribution::Exp;
 
 use crate::{
     infectiousness_manager::InfectionStatusValue,
@@ -57,7 +58,7 @@ define_data_plugin!(
 );
 
 trait ContextHospitalizationInternalExt:
-    PluginContext + ContextRandomExt + ContextPeopleExt + ContextParametersExt
+    PluginContext + ContextRandomExt + ContextPeopleExt + ContextParametersExt + ContextRandomExt
 {
     fn plan_hospital_arrival(&mut self, person_id: PersonId) -> Result<(), ixa::IxaError> {
         // get hospital parameters
@@ -67,17 +68,15 @@ trait ContextHospitalizationInternalExt:
             .get_params()
             .hospitalization_parameters
             .mean_delay_to_hospitalization;
-
+        let exp = Exp::new(1.0 / mean_delay_to_hospitalization).unwrap();
+        let duration = self.sample_distr(HospitalizationRng, exp);
         trace!(
             "Planning hospital arrival for person {person_id} at {}",
-            self.get_current_time() + mean_delay_to_hospitalization
+            self.get_current_time() + duration
         );
-        self.add_plan(
-            self.get_current_time() + mean_delay_to_hospitalization,
-            move |context| {
-                context.set_person_property(person_id, Hospitalized, true);
-            },
-        );
+        self.add_plan(self.get_current_time() + duration, move |context| {
+            context.set_person_property(person_id, Hospitalized, true);
+        });
         Ok(())
     }
     fn plan_hospital_departure(&mut self, person_id: PersonId) -> Result<(), ixa::IxaError> {
@@ -89,13 +88,11 @@ trait ContextHospitalizationInternalExt:
             .get_params()
             .hospitalization_parameters
             .mean_duration_of_hospitalization;
-
-        self.add_plan(
-            self.get_current_time() + mean_duration_of_hospitalization,
-            move |context| {
-                context.set_person_property(person_id, Hospitalized, false);
-            },
-        );
+        let exp = Exp::new(1.0 / mean_duration_of_hospitalization).unwrap();
+        let duration = self.sample_distr(HospitalizationRng, exp);
+        self.add_plan(self.get_current_time() + duration, move |context| {
+            context.set_person_property(person_id, Hospitalized, false);
+        });
         Ok(())
     }
 
@@ -236,7 +233,7 @@ mod test {
             },
         ]
         .to_vec();
-        let num_sim = 1;
+        let num_sim = 10000;
         let delay_times = Rc::new(RefCell::new(Vec::<f64>::new()));
         let duration_times = Rc::new(RefCell::new(Vec::<f64>::new()));
         for seed in 0..num_sim {
