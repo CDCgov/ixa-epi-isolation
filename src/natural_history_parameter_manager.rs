@@ -177,7 +177,8 @@ mod test {
         context
             .register_parameter_id_assigner(ViralLoad, |_context, _person_id| 0)
             .unwrap();
-        let container = context.get_data(NaturalHistoryParameters);
+        let container = context
+            .get_data(NaturalHistoryParameters);
         assert_eq!(container.parameter_id_assigners.len(), 1);
         let assigner = container
             .parameter_id_assigners
@@ -200,7 +201,7 @@ mod test {
                 assert_eq!(msg, "An assignment function for this parameter has already been registered.".to_string());
             }
             Some(ue) => panic!(
-                "Expected an error that an assignment function for this parameter has already been registered. Instead got {:?}",
+                "Expected an error that an assignment function for this parameter has already been registered.. Instead got {:?}",
                 ue.to_string()
             ),
             None => panic!("Expected an error. Instead, function registration passed with no errors."),
