@@ -7,8 +7,6 @@ use serde::{Deserialize, Serialize};
 use statrs::distribution::Exp;
 
 use crate::{
-    infectiousness_manager::InfectionStatusValue,
-    interventions::ContextTransmissionModifierExt,
     parameters::ContextParametersExt,
     population_loader::Age,
     symptom_progression::{SymptomValue, Symptoms},
@@ -144,13 +142,6 @@ pub fn init(context: &mut Context) {
         .iter()
         .any(|grp| grp.probability > 0.0);
     if initialization_check {
-        context
-            .store_transmission_modifier_values(
-                InfectionStatusValue::Infectious,
-                Hospitalized,
-                &[(true, 0.0)],
-            )
-            .unwrap();
         context.set_age_group_mapping();
         context.setup_hospitalization_event_sequence();
     } else {
