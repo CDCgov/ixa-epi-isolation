@@ -12,6 +12,7 @@ use ixa::{
     define_data_plugin, define_rng, plan::PlanId, trace, Context, ContextPeopleExt,
     ContextRandomExt, HashMap, IxaError, PersonId, PersonPropertyChangeEvent, PluginContext,
 };
+use crate::profiling::ContextProfilingExt;
 
 define_rng!(InfectionRng);
 
@@ -22,7 +23,9 @@ fn schedule_next_forecasted_infection(context: &mut Context, person: PersonId) {
     }) = get_forecast(context, person)
     {
         let infection_plan = context.add_plan(next_time, move |context| {
+            context.increment_named_count("forecasted infection");
             if evaluate_forecast(context, person, forecasted_total_infectiousness) {
+                context.increment_named_count("accepted infection");
                 let _ = infection_attempt(context, person);
             }
             // Continue scheduling forecasts until the person recovers.
@@ -37,6 +40,7 @@ fn schedule_recovery(context: &mut Context, person: PersonId) {
     let infection_duration = context.get_person_rate_fn(person).infection_duration();
     let recovery_time = context.get_current_time() + infection_duration;
     context.add_plan(recovery_time, move |context| {
+        context.increment_named_count("recovery");
         trace!("Person {person} has recovered at {recovery_time}");
         context.recover_person(person);
         context.remove_forecast_plan(person);
@@ -93,9 +97,10 @@ trait ContextForecastInternalExt: PluginContext {
                 .active_plans
                 .keys()
                 .filter(|&infector| {
-                    (context.is_contact(event.person_id, *infector) && event.increases_membership)
+                    (context.is_contact(event.person_id, *infector)
+                        && event.increases_membership)
                         || (event.person_id == *infector
-                            && event.previous_multiplier < event.current_multiplier)
+                        && event.previous_multiplier < event.current_multiplier)
                 })
                 .copied()
                 .collect();
