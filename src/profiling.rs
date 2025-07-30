@@ -74,10 +74,10 @@
 //! ```
 //!
 
-use std::cell::RefCell;
-use ixa::{define_data_plugin, Context, HashMap, PluginContext};
-use std::time::{Duration, Instant};
 use humantime::format_duration;
+use ixa::{define_data_plugin, Context, HashMap, PluginContext};
+use std::cell::RefCell;
+use std::time::{Duration, Instant};
 
 #[derive(Default)]
 struct ProfilingDataContainer {
@@ -111,7 +111,10 @@ pub struct Span {
 
 impl Span {
     pub fn new(label: &'static str) -> Self {
-        Self{label, start_time: Instant::now()}
+        Self {
+            label,
+            start_time: Instant::now(),
+        }
     }
 }
 
@@ -154,7 +157,12 @@ pub trait ContextProfilingExt: PluginContext {
             // nothing to report
             return;
         }
-        let elapsed = container.start_time.borrow().unwrap().elapsed().as_secs_f64();
+        let elapsed = container
+            .start_time
+            .borrow()
+            .unwrap()
+            .elapsed()
+            .as_secs_f64();
 
         let mut rows = vec![
             // The header row
@@ -172,7 +180,7 @@ pub trait ContextProfilingExt: PluginContext {
             rows.push(vec![
                 (*key).to_string(),
                 format_with_commas(*count),
-                format!("{:.2}", rate),
+                format_with_commas_f64(rate),
             ]);
         }
 
@@ -186,23 +194,26 @@ pub trait ContextProfilingExt: PluginContext {
             // nothing to report
             return;
         }
-        let elapsed = container.start_time.borrow().unwrap().elapsed().as_secs_f64();
+        let elapsed = container
+            .start_time
+            .borrow()
+            .unwrap()
+            .elapsed()
+            .as_secs_f64();
 
-        let mut rows = vec![
-            vec![
-                "Span Label".to_string(),
-                "Duration".to_string(),
-                "% runtime".to_string(),
-            ],
-        ];
+        let mut rows = vec![vec![
+            "Span Label".to_string(),
+            "Duration".to_string(),
+            "% runtime".to_string(),
+        ]];
 
         for (key, duration) in container.spans.borrow().iter() {
             let percent_runtime = duration.as_secs_f64() / elapsed * 100.0;
             rows.push(vec![
                 (*key).to_string(),
                 format!("{}", format_duration(*duration)),
-                format_with_commas_f64(percent_runtime),
-                // format!("{:.2}%", percent_runtime),
+                // format_with_commas_f64(percent_runtime),
+                format!("{:.2}%", percent_runtime),
             ]);
         }
 
@@ -301,32 +312,6 @@ fn format_with_commas(value: usize) -> String {
     result
 }
 
-// fn format_with_commas_f64(value: f64) -> String {
-//     let formatted = format!("{:.2}", value);
-//     let mut parts = formatted.splitn(2, '.');
-//
-//     let int_part = parts.next().unwrap_or("");
-//     let frac_part = parts.next(); // optional
-//
-//     let mut result = String::new();
-//     let bytes = int_part.as_bytes();
-//     let len = bytes.len();
-//
-//     for (i, &b) in bytes.iter().enumerate() {
-//         result.push(b as char);
-//         let digits_left = len - i - 1;
-//         if digits_left > 0 && digits_left % 3 == 0 {
-//             result.push(',');
-//         }
-//     }
-//
-//     if let Some(frac) = frac_part {
-//         result.push('.');
-//         result.push_str(frac);
-//     }
-//
-//     result
-// }
 fn format_with_commas_f64(value: f64) -> String {
     // Format to two decimal places
     let formatted = format!("{:.2}", value.abs()); // format positive part only
@@ -364,6 +349,7 @@ fn format_with_commas_f64(value: f64) -> String {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unreadable_literal)]
     use super::*;
     use std::time::Duration;
 
@@ -398,7 +384,8 @@ mod tests {
 
         // Inject a fixed start time 1 second ago
         let data = ctx.get_data_mut(ProfilingDataPlugin);
-        *data.start_time.borrow_mut() = Some(Instant::now().checked_sub(Duration::from_secs(1)).unwrap());
+        *data.start_time.borrow_mut() =
+            Some(Instant::now().checked_sub(Duration::from_secs(1)).unwrap());
         data.counts.borrow_mut().insert("event1", 5);
 
         ctx.print_named_counts(); // should print " event1  5  5.00 per second"
@@ -409,7 +396,8 @@ mod tests {
         let mut ctx = Context::new();
 
         let data = ctx.get_data_mut(ProfilingDataPlugin);
-        *data.start_time.borrow_mut() = Some(Instant::now().checked_sub(Duration::from_secs(2)).unwrap());
+        *data.start_time.borrow_mut() =
+            Some(Instant::now().checked_sub(Duration::from_secs(2)).unwrap());
         data.counts.borrow_mut().insert("forecasted infection", 10);
         data.counts.borrow_mut().insert("accepted infection", 4);
 
@@ -473,6 +461,7 @@ mod tests {
 
     #[test]
     fn formats_small_decimal() {
+        #![allow(clippy::approx_constant)]
         assert_eq!(format_with_commas_f64(3.14), "3.14");
         assert_eq!(format_with_commas_f64(0.99), "0.99");
     }
