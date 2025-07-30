@@ -96,9 +96,9 @@ mod test {
                 "synth_population_file": "input/people_test.csv",
                 "hospitalization_parameters": {
                     "age_groups": [
-                        {"min": 0, "max": 18, "probability": 0.0},
-                        {"min": 19, "max": 64, "probability": 0.0},
-                        {"min": 65, "max": 120, "probability": 0.0}
+                        {"min": 0, "probability": 0.0},
+                        {"min": 19, "probability": 0.0},
+                        {"min": 65, "probability": 0.0}
                     ],
                     "mean_delay_to_hospitalization": 1.0,
                     "mean_duration_of_hospitalization": 1.0,
@@ -132,9 +132,9 @@ mod test {
                 "synth_population_file": "input/people_test.csv",
                 "hospitalization_parameters": {
                     "age_groups": [
-                        {"min": 0, "max": 18, "probability": 0.5},
-                        {"min": 19, "max": 64, "probability": 0.5},
-                        {"min": 65, "max": 120, "probability": 0.5}
+                        {"min": 0, "probability": 0.5},
+                        {"min": 19, "probability": 0.5},
+                        {"min": 65, "probability": 0.5}
                     ],
                     "mean_delay_to_hospitalization": 1.0,
                     "mean_duration_of_hospitalization": 1.0,
