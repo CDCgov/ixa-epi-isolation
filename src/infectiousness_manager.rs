@@ -5,6 +5,7 @@ use ixa::{
 use serde::Serialize;
 use statrs::distribution::Exp;
 
+use crate::profiling::{ContextProfilingExt, Span};
 use crate::{
     interventions::ContextTransmissionModifierExt,
     rate_fns::{InfectiousnessRateExt, InfectiousnessRateFn, ScaledRateFn},
@@ -76,35 +77,37 @@ define_rng!(ForecastRng);
 
 // Infection attempt function for a context and given `PersonId`
 pub fn infection_attempt(context: &mut Context, person_id: PersonId) -> Option<PersonId> {
+    let span = Span::new("infection_attempt");
     if let Some(setting) = context.sample_setting(person_id) {
         let next_contact = context.get_contact(person_id, setting, ()).unwrap()?;
-        match context.get_person_property(next_contact, InfectionStatus) {
-            InfectionStatusValue::Susceptible => {
-                if context.sample_bool(
-                    ForecastRng,
-                    context.get_relative_total_transmission(next_contact),
-                ) {
-                    trace!(
-                        "Infection attempt successful. Person {}, setting type {} {}, infecting {}",
-                        person_id,
-                        setting.get_category_id(),
-                        setting.id(),
-                        next_contact
-                    );
-                    context.infect_person(
-                        next_contact,
-                        Some(person_id),
-                        Some(setting.get_category_id()),
-                        Some(setting.id()),
-                    );
-                    Some(next_contact)
-                } else {
-                    None
-                }
-            }
-            _ => None,
+        if context.get_person_property(next_contact, InfectionStatus)
+            == InfectionStatusValue::Susceptible
+            && context.sample_bool(
+                ForecastRng,
+                context.get_relative_total_transmission(next_contact),
+            )
+        {
+            trace!(
+                "Infection attempt successful. Person {}, setting type {} {}, infecting {}",
+                person_id,
+                setting.get_category_id(),
+                setting.id(),
+                next_contact
+            );
+            context.infect_person(
+                next_contact,
+                Some(person_id),
+                Some(setting.get_category_id()),
+                Some(setting.id()),
+            );
+            context.add_span(span);
+            Some(next_contact)
+        } else {
+            context.add_span(span);
+            None
         }
     } else {
+        context.add_span(span);
         None
     }
 }

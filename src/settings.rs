@@ -256,8 +256,8 @@ macro_rules! define_setting_category {
         }
     };
 }
-pub use define_setting_category;
 use crate::profiling::{ContextProfilingExt, Span};
+pub use define_setting_category;
 
 define_setting_category!(Home);
 define_setting_category!(CensusTract);
@@ -438,6 +438,7 @@ pub trait ContextSettingExt:
     }
 
     fn remove_modified_itinerary(&mut self, person_id: PersonId) -> Result<(), IxaError> {
+        let span = Span::new("remove_modified_itinerary");
         let previous_multiplier =
             self.calculate_total_infectiousness_multiplier_for_person(person_id);
 
@@ -476,6 +477,8 @@ pub trait ContextSettingExt:
             current_multiplier,
             increases_membership: true,
         });
+
+        self.add_span(span);
         Ok(())
     }
 
@@ -484,6 +487,7 @@ pub trait ContextSettingExt:
         person_id: PersonId,
         itinerary_modifier: ItineraryModifiers,
     ) -> Result<(), IxaError> {
+        let span = Span::new("modify_itinerary");
         let previous_multiplier =
             self.calculate_total_infectiousness_multiplier_for_person(person_id);
         let increases_membership;
@@ -521,6 +525,7 @@ pub trait ContextSettingExt:
             increases_membership,
         });
 
+        self.add_span(span);
         result
     }
 
@@ -551,6 +556,7 @@ pub trait ContextSettingExt:
         person_id: PersonId,
         itinerary: Vec<ItineraryEntry>,
     ) -> Result<(), IxaError> {
+        let span = Span::new("add_itinerary");
         // Normalize itinerary ratios
         self.validate_itinerary(&itinerary)?;
 
@@ -572,6 +578,7 @@ pub trait ContextSettingExt:
         container.add_member_to_itinerary_setting(person_id, &itinerary)?;
         container.itineraries.insert(person_id, itinerary);
 
+        self.add_span(span);
         Ok(())
     }
 
@@ -605,6 +612,7 @@ pub trait ContextSettingExt:
         setting: &dyn AnySettingId,
         q: T,
     ) -> Result<Option<PersonId>, IxaError> {
+        let span = Span::new("get_contact");
         let members = self.get_setting_members(setting);
         if let Some(members) = members {
             if !members.contains(&person_id) {
@@ -614,6 +622,7 @@ pub trait ContextSettingExt:
             }
             // The setting has one person in it -- this person
             if members.len() == 1 {
+                self.add_span(span);
                 return Ok(None);
             }
             let member_iter = members.iter().filter(|&x| *x != person_id);
@@ -634,12 +643,15 @@ pub trait ContextSettingExt:
             }
 
             if contacts.is_empty() {
+                self.add_span(span);
                 return Ok(None);
             }
 
-            Ok(Some(
+            let result = Ok(Some(
                 contacts[self.sample_range(SettingsRng, 0..contacts.len())],
-            ))
+            ));
+            self.add_span(span);
+            result
         } else {
             Err(IxaError::from("Group membership is None"))
         }
@@ -661,8 +673,7 @@ pub trait ContextSettingExt:
 
         let setting_index = self.sample_weighted(SettingsRng, &itinerary_multiplier);
 
-        let result =
-        if let Some(itinerary) = self.get_itinerary(person_id) {
+        let result = if let Some(itinerary) = self.get_itinerary(person_id) {
             let itinerary_entry = &itinerary[setting_index];
             self.get_contact(person_id, itinerary_entry.setting.as_ref(), q)
         } else {
@@ -673,6 +684,7 @@ pub trait ContextSettingExt:
         result
     }
     fn sample_setting(&self, person_id: PersonId) -> Option<&dyn AnySettingId> {
+        let span = Span::new("sample_setting");
         let container = self.get_data(SettingDataPlugin);
         let mut itinerary_multiplier = Vec::new();
         container.with_itinerary(person_id, |setting, setting_props, members, ratio| {
@@ -682,12 +694,14 @@ pub trait ContextSettingExt:
 
         let setting_index = self.sample_weighted(SettingsRng, &itinerary_multiplier);
 
-        if let Some(itinerary) = self.get_itinerary(person_id) {
+        let result = if let Some(itinerary) = self.get_itinerary(person_id) {
             let itinerary_entry = &itinerary[setting_index];
             Some(itinerary_entry.setting.as_ref())
         } else {
             None
-        }
+        };
+        self.add_span(span);
+        result
     }
     fn is_contact(&self, person_id: PersonId, potential_contact: PersonId) -> bool {
         let container = self.get_data(SettingDataPlugin);
