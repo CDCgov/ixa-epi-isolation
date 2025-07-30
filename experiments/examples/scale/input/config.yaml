@@ -18,14 +18,13 @@ azb:
   benchmark_test: false
   create_pool: false
 experiment_conditions:
-  replicates_per_particle: 10
-  samples_per_step: 150
+  replicates_per_particle: 5
+  samples_per_step: 3
   seed: 12345
   scenario_key: epi_isolation.GlobalParams
   tolerance:
-    '0': 50
-    '1': 40
-    '2': 35
+    '0': 120
+    '1': 100
 local_path:
   default_params_file: experiments/examples/scale/input/base.json
   exe_file: target/release/epi-isolation
