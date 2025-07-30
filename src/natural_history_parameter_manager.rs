@@ -177,8 +177,7 @@ mod test {
         context
             .register_parameter_id_assigner(ViralLoad, |_context, _person_id| 0)
             .unwrap();
-        let container = context
-            .get_data(NaturalHistoryParameters);
+        let container = context.get_data(NaturalHistoryParameters);
         assert_eq!(container.parameter_id_assigners.len(), 1);
         let assigner = container
             .parameter_id_assigners
