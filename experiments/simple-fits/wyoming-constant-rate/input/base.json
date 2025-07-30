@@ -17,7 +17,7 @@
                                             "itinerary_specification": {"Constant": {"ratio": 0.25}}}},
     "symptom_progression_library" : {"EmpiricalFromFile": {"file": "input/library_symptom_parameters.csv"}},
     "report_period": 1.0,
-    "synth_population_file": "simple-fits/wyoming-constant-rate/input/synth_pop_people_WY.csv",
+    "synth_population_file": "experiments/simple-fits/wyoming-constant-rate/input/synth_pop_people_WY.csv",
     "facemask_parameters": {
       "facemask_efficacy": 0.2
     },
