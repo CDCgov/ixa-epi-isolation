@@ -78,7 +78,8 @@ pub fn init(context: &mut Context) -> Result<(), IxaError> {
 mod test {
 
     use crate::{
-        infectiousness_manager::InfectionContextExt, parameters::ContextParametersExt,
+        infectiousness_manager::{InfectionContextExt, InfectionStatus, InfectionStatusValue},
+        parameters::ContextParametersExt,
         rate_fns::load_rate_fns,
     };
     use ixa::{
@@ -161,7 +162,7 @@ mod test {
                 "max_time": 200.0,
                 "seed": 123,
                 "infectiousness_rate_fn": {"Constant": {"rate": 1.0, "duration": 5.0}},
-                "initial_incidence": 0.01,
+                "initial_incidence": 0.0,
                 "initial_recovered": 0.0,
                 "proportion_asymptomatic": 0.0,
                 "relative_infectiousness_asymptomatics": 0.0,
@@ -179,8 +180,6 @@ mod test {
         let config = context.report_options();
         config.directory(path.clone());
 
-        crate::transmission_report::init(&mut context).unwrap();
-
         let source = context.add_person(()).unwrap();
         let target = context.add_person(()).unwrap();
         let setting_type = Some("test_setting");
@@ -192,22 +191,38 @@ mod test {
         context.add_plan(infection_time, move |context| {
             context.infect_person(target, Some(source), setting_type, setting_id);
         });
+        assert_eq!(
+            context.query_people_count((InfectionStatus, InfectionStatusValue::Infectious)),
+            1
+        );
+
+        crate::transmission_report::init(&mut context).unwrap();
         context.execute();
 
-        let file_path = path.join("output.csv");
+        assert_eq!(
+            context.query_people_count((InfectionStatus, InfectionStatusValue::Infectious)),
+            2
+        );
 
+        let file_path = path.join("output.csv");
         assert!(file_path.exists());
         let mut reader = csv::Reader::from_path(file_path).unwrap();
-        for result in reader.deserialize() {
-            let record: TransmissionReport = result.unwrap();
-            assert_almost_eq!(record.time, infection_time, 0.0);
-            assert_eq!(record.target_id, target);
-            assert_eq!(record.infected_by.unwrap(), source);
+        let mut raw_record = csv::ByteRecord::new();
+        let headers = reader.byte_headers().unwrap().clone();
+        let mut nlines = 0;
+
+        while reader.read_byte_record(&mut raw_record).unwrap() {
+            let result: TransmissionReport = raw_record.deserialize(Some(&headers)).unwrap();
+            assert_almost_eq!(result.time, infection_time, 0.0);
+            assert_eq!(result.target_id, target);
+            assert_eq!(result.infected_by.unwrap(), source);
             assert_eq!(
-                record.infection_setting_type,
+                result.infection_setting_type,
                 Some("test_setting".to_string())
             );
-            assert_eq!(record.infection_setting_id, Some(1));
+            assert_eq!(result.infection_setting_id, Some(1));
+            nlines += 1;
         }
+        assert_eq!(nlines, 1, "Expected exactly one transmission report entry");
     }
 }
