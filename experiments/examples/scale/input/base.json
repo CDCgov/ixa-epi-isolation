@@ -4,7 +4,7 @@
     "seed": 123,
     "infectiousness_rate_fn": {"EmpiricalFromFile": {"file": "tests/input/rate_fns_exp_I.csv",
                                                      "scale": 1.0}},
-    "initial_incidence": 0.01,
+    "initial_incidence": 0.2,
     "initial_recovered": 0.0,
     "proportion_asymptomatic": 0.0,
     "relative_infectiousness_asymptomatics": 1.0,
