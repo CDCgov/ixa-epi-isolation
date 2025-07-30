@@ -257,6 +257,7 @@ macro_rules! define_setting_category {
     };
 }
 pub use define_setting_category;
+use crate::profiling::{ContextProfilingExt, Span};
 
 define_setting_category!(Home);
 define_setting_category!(CensusTract);
@@ -269,7 +270,7 @@ define_data_plugin!(
     SettingDataContainer::default()
 );
 
-trait ContextSettingInternalExt: PluginContext + ContextRandomExt {
+trait ContextSettingInternalExt: PluginContext + ContextRandomExt + ContextProfilingExt {
     /// Takes an itinerary and adds makes it the modified itinerary of `person id`
     /// This modified itinerary is used as the person's itinerary instead of default itinerary
     /// for as long as modified itinerary exists in the container.
@@ -650,6 +651,7 @@ pub trait ContextSettingExt:
         person_id: PersonId,
         q: Q,
     ) -> Result<Option<PersonId>, IxaError> {
+        let span = Span::new("draw_contact_from_transmitter_itinerary");
         let container = self.get_data(SettingDataPlugin);
         let mut itinerary_multiplier = Vec::new();
         container.with_itinerary(person_id, |setting, setting_props, members, ratio| {
@@ -659,12 +661,16 @@ pub trait ContextSettingExt:
 
         let setting_index = self.sample_weighted(SettingsRng, &itinerary_multiplier);
 
+        let result =
         if let Some(itinerary) = self.get_itinerary(person_id) {
             let itinerary_entry = &itinerary[setting_index];
             self.get_contact(person_id, itinerary_entry.setting.as_ref(), q)
         } else {
             Ok(None)
-        }
+        };
+
+        self.add_span(span);
+        result
     }
     fn sample_setting(&self, person_id: PersonId) -> Option<&dyn AnySettingId> {
         let container = self.get_data(SettingDataPlugin);

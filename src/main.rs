@@ -74,5 +74,5 @@ fn main() {
     })
     .unwrap();
 
-    context.print_named_counts();
+    context.print_profiling_data();
 }
