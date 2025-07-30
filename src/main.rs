@@ -1,3 +1,5 @@
+mod hospital_incidence_report;
+mod hospitalizations;
 mod infection_propagation_loop;
 mod infectiousness_manager;
 mod interventions;
@@ -19,6 +21,7 @@ use parameters::{ContextParametersExt, Params};
 use population_loader::Age;
 use symptom_progression::Symptoms;
 
+use crate::hospitalizations::Hospitalized;
 // You must run this with a parameters file:
 // cargo run -- --config input/input.json
 // Try enabling logs to see some output about infections:
@@ -47,7 +50,7 @@ fn main() {
         context.add_periodic_report(
             "person_property_count",
             report_period,
-            (Age, Symptoms, InfectionStatus),
+            (Age, Symptoms, InfectionStatus, Hospitalized),
         )?;
 
         settings::init(context);
@@ -61,6 +64,8 @@ fn main() {
         transmission_report::init(context)?;
         symptom_progression::init(context)?;
         policies::init(context)?;
+        hospitalizations::init(context);
+        hospital_incidence_report::init(context)?;
 
         Ok(())
     })

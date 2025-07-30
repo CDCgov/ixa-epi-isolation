@@ -120,7 +120,17 @@ mod test {
                 "proportion_asymptomatic": 0.0,
                 "relative_infectiousness_asymptomatics": 0.0,
                 "settings_properties": {},
-                "synth_population_file": "input/people_test.csv"
+                "synth_population_file": "input/people_test.csv",
+                "hospitalization_parameters": {
+                    "age_groups": [
+                        {"min": 0, "probability": 0.0},
+                        {"min": 19, "probability": 0.0},
+                        {"min": 65, "probability": 0.0}
+                    ],
+                    "mean_delay_to_hospitalization": 1.0,
+                    "mean_duration_of_hospitalization": 1.0,
+                    "hospital_incidence_report_name": "hospital_incidence_report.csv"
+                }
                 }
             }
         "#;
@@ -144,7 +154,17 @@ mod test {
                 "relative_infectiousness_asymptomatics": 0.0,
                 "settings_properties": {},
                 "synth_population_file": "input/people_test.csv",
-                "transmission_report_name": "output.csv"
+                "transmission_report_name": "output.csv",
+                "hospitalization_parameters": {
+                    "age_groups": [
+                        {"min": 0, "probability": 0.0},
+                        {"min": 19, "probability": 0.0},
+                        {"min": 65, "probability": 0.0}
+                    ],
+                    "mean_delay_to_hospitalization": 1.0,
+                    "mean_duration_of_hospitalization": 1.0,
+                    "hospital_incidence_report_name": "hospital_incidence_report.csv"
+                }
                 }
             }
         "#;
@@ -168,7 +188,17 @@ mod test {
                 "report_period": 1.0,
                 "settings_properties": {},
                 "synth_population_file": "input/people_test.csv",
-                "transmission_report_name": "output.csv"
+                "transmission_report_name": "output.csv",
+                "hospitalization_parameters": {
+                    "age_groups": [
+                        {"min": 0, "probability": 0.0},
+                        {"min": 19, "probability": 0.0},
+                        {"min": 65, "probability": 0.0}
+                    ],
+                    "mean_delay_to_hospitalization": 1.0,
+                    "mean_duration_of_hospitalization": 1.0,
+                    "hospital_incidence_report_name": "hospital_incidence_report.csv"
+                }
                 }
             }
         "#;
