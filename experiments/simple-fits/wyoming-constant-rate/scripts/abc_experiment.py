@@ -13,7 +13,7 @@ def main(config_file: str, keep: bool):
     prior = {
         "infectiousness_rate_fn": {
             "Constant": {
-                "rate": gamma(a=1, scale=1.0),
+                "rate": gamma(a=1, scale=0.4),
                 "duration": gamma(a=10, scale=0.5),
             }
         },
@@ -45,12 +45,13 @@ def main(config_file: str, keep: bool):
 
 def hosp_lhood(results_data: pl.DataFrame, target_data: pl.DataFrame):
     def poisson_lhood(model, data):
-        return -log(poisson.pmf(model, data))
+        return -log(poisson.pmf(model, data)+1e-12)
 
     # upper precision bound for neg log, P(results) = 0
     if results_data.is_empty():
         return 750.0
     else:
+        print(results_data.sort("t"))
         joint_set = results_data.select(pl.col(["t", "count"])).join(
             target_data.select(pl.col(["t", "total_admissions"])),
             on="t",
@@ -67,7 +68,7 @@ def hosp_lhood(results_data: pl.DataFrame, target_data: pl.DataFrame):
             )
             .alias("negloglikelihood")
         )
-
+        print(joint_set.sort("t"))
         return joint_set.select(pl.col("negloglikelihood").sum()).item()
 
 
@@ -80,9 +81,10 @@ def output_processing_function(outputs_dir):
         raise FileNotFoundError(f"{fp} does not exist.")
 
     df = (
-        df.with_columns((pl.col("time") / 7.0).floor().cast(pl.Int64).alias("t"))
-        .group_by("t")
+        df.with_columns((pl.col("time") / 7.0).ceil().cast(pl.Int64).alias("week"))
+        .group_by("week")
         .agg(pl.len().alias("count"))
+        .with_columns((pl.col("week") * 7 - 1).alias("t"))
     )
 
     return df
