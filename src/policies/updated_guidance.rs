@@ -21,7 +21,7 @@ define_derived_property!(PresentingWithSymptoms, bool, [Symptoms], |symptom_valu
         Some(_) => true,
     }
 });
-define_rng!(PolicyRng);
+define_rng!(UpdatedPolicyRng);
 
 #[derive(Debug, Clone, Copy)]
 struct InterventionPolicyParameters {
@@ -55,7 +55,7 @@ trait ContextIsolationGuidanceInternalExt:
         intervention_policy_parameters: InterventionPolicyParameters,
     ) {
         if self.sample_bool(
-            PolicyRng,
+            UpdatedPolicyRng,
             intervention_policy_parameters.isolation_probability,
         ) {
             self.add_plan(

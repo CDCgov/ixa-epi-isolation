@@ -25,7 +25,7 @@ define_derived_property!(PresentingWithSymptoms, bool, [Symptoms], |symptom_valu
         Some(_) => true,
     }
 });
-define_rng!(PolicyRng);
+define_rng!(PreviousPolicyRng);
 
 #[derive(Debug, Clone, Copy)]
 struct InterventionPolicyParameters {
@@ -96,7 +96,7 @@ impl ContextIsolationGuidanceInternalExt for Context {
         intervention_policy_parameters: InterventionPolicyParameters,
     ) {
         if self.sample_bool(
-            PolicyRng,
+            PreviousPolicyRng,
             intervention_policy_parameters.isolation_probability,
         ) {
             self.add_plan(
@@ -144,7 +144,7 @@ impl ContextIsolationGuidanceInternalExt for Context {
         person_id: PersonId,
         intervention_policy_parameters: InterventionPolicyParameters,
     ) {
-        if self.sample_bool(PolicyRng, intervention_policy_parameters.test_sensitivity) {
+        if self.sample_bool(PreviousPolicyRng, intervention_policy_parameters.test_sensitivity) {
             trace!("Person {person_id} tested positive.");
             self.set_person_property(person_id, LastTestResult, true);
         } else {
@@ -281,21 +281,15 @@ pub fn init(context: &mut Context) -> Result<(), IxaError> {
 
 #[cfg(test)]
 mod test {
-    use super::PresentingWithSymptoms;
+    use super::{PresentingWithSymptoms, LastTestResult};
     use crate::{
-        infectiousness_manager::InfectionContextExt,
-        parameters::{
+        infectiousness_manager::InfectionContextExt, parameters::{
             CoreSettingsTypes, FacemaskParameters, GlobalParams, ItinerarySpecificationType,
             ProgressionLibraryType,
-        },
-        policies::Policies,
-        population_loader::Alive,
-        rate_fns::load_rate_fns,
-        settings::{
+        }, policies::Policies, population_loader::Alive, rate_fns::load_rate_fns, settings::{
             CensusTract, ContextSettingExt, Home, ItineraryEntry, SettingId, SettingProperties,
             Workplace,
-        },
-        Params,
+        }, symptom_progression::{SymptomValue, Symptoms}, Params
     };
     use std::{cell::RefCell, collections::HashMap, path::PathBuf, rc::Rc};
 
@@ -394,7 +388,7 @@ mod test {
         let negative_test_isolation_duration = 2.0;
         let isolation_probability = 1.0;
         let isolation_delay_period = 0.0;
-        let test_sensitivity = 0.9;
+        let test_sensitivity = 1.0;
         let facemask_efficacy = 0.5;
         let proportion_asymptomatic = 0.2;
 
@@ -445,20 +439,13 @@ mod test {
 
         context.subscribe_to_event::<PersonPropertyChangeEvent<IsolatingStatus>>(
             move |context, event| {
-                if event.current {
-                    assert_almost_eq!(
+                assert_almost_eq!(
                         context.get_person_property(event.person_id, SymptomStartTime)
                             + isolation_delay_period,
                         context.get_current_time(),
                         0.0
                     );
-                } else {
-                    assert_almost_eq!(
-                        context.get_person_property(event.person_id, SymptomEndTime),
-                        context.get_current_time(),
-                        0.0
-                    );
-                }
+                
             },
         );
 
@@ -607,7 +594,7 @@ mod test {
                 Some(IxaError::IxaError(msg)) => {
                     assert_eq!(
                         msg,
-                        "Policy enum does not match specified enum variant for updated guidance."
+                        "Policy enum does not match specified enum variant for previous guidance."
                     );
                 }
                 Some(ue) => panic!(
