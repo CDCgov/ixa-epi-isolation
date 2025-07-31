@@ -13,12 +13,10 @@ mod transmission_report;
 mod person_property_report;
 pub mod utils;
 
-use infectiousness_manager::InfectionStatus;
 use ixa::runner::run_with_args;
-use ixa::{ContextPeopleExt, ContextRandomExt, ContextReportExt};
+use ixa::{ContextPeopleExt, ContextRandomExt};
 use parameters::{ContextParametersExt, Params};
 use population_loader::Age;
-use symptom_progression::Symptoms;
 
 // You must run this with a parameters file:
 // cargo run -- --config input/input.json
@@ -30,7 +28,6 @@ fn main() {
         let &Params {
             max_time,
             seed,
-            report_period,
             ..
         } = context.get_params();
 
@@ -42,14 +39,6 @@ fn main() {
         context.add_plan(max_time, |context| {
             context.shutdown();
         });
-
-        //Report the number of people by age, census tract, symptoms, and infectious status
-        //every report_period.
-        // context.add_periodic_report(
-        //     "person_property_count",
-        //     report_period,
-        //     (Age, Symptoms, InfectionStatus),
-        // )?;
 
         settings::init(context);
 
