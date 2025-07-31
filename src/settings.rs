@@ -617,11 +617,11 @@ pub trait ContextSettingExt:
     ) -> Result<Option<PersonId>, IxaError> {
         let members = self.get_setting_members(setting);
         if let Some(members) = members {
-            if !members.contains(&person_id) {
-                return Err(IxaError::from(
-                    "Attempting contact outside of group membership",
-                ));
-            }
+            // if !members.contains(&person_id) {
+            //     return Err(IxaError::from(
+            //         "Attempting contact outside of group membership",
+            //     ));
+            // }
             // The setting has one person in it -- this person
             if members.len() == 1 {
                 return Ok(None);
