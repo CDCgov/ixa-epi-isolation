@@ -134,10 +134,7 @@ pub fn append_itinerary_entry(
     // people in the core setting types, but sometimes we don't want all the core setting types
     // (we didn't specify them). So, first check that the setting in question exists.
     if context
-        .get_data_container(SettingDataPlugin)
-        .ok_or(IxaError::IxaError(
-            "Settings must be initialized prior to making itineraries.".to_string(),
-        ))?
+        .get_data(SettingDataPlugin)
         .setting_properties
         .contains_key(&setting.get_type_id())
     {
@@ -154,9 +151,7 @@ pub fn append_itinerary_entry(
 // itineraries.
 fn get_itinerary_ratio(context: &Context, setting: &dyn AnySettingId) -> Result<f64, IxaError> {
     let setting_properties = context
-        .get_data_container(SettingDataPlugin)
-        .unwrap() // We can unwrap here because we would have already propagated an error in the
-        // calling code if the settings data container did not exist.
+        .get_data(SettingDataPlugin)
         .setting_properties
         .get(&setting.get_type_id())
         .unwrap(); // We can unwrap here because we already checked that this setting type exists
@@ -292,7 +287,7 @@ trait ContextSettingInternalExt: PluginContext + ContextRandomExt {
         for entry in &mut itinerary {
             entry.ratio /= total_ratio;
         }
-        let container = self.get_data_container_mut(SettingDataPlugin);
+        let container = self.get_data_mut(SettingDataPlugin);
 
         // If there's a modified itinerary present, replace with this
         if container.modified_itineraries.contains_key(&person_id) {
@@ -325,7 +320,7 @@ trait ContextSettingInternalExt: PluginContext + ContextRandomExt {
         person_id: PersonId,
         setting: &dyn SettingCategory,
     ) -> Result<(), IxaError> {
-        let container = self.get_data_container_mut(SettingDataPlugin);
+        let container = self.get_data_mut(SettingDataPlugin);
         match container.itineraries.get(&person_id) {
             None => Err(IxaError::from("Can't find itinerary for person")),
             Some(itinerary_vector) => {
@@ -353,7 +348,7 @@ trait ContextSettingInternalExt: PluginContext + ContextRandomExt {
         person_id: PersonId,
         setting: &dyn SettingCategory,
     ) -> Result<(), IxaError> {
-        let container = self.get_data_container_mut(SettingDataPlugin);
+        let container = self.get_data_mut(SettingDataPlugin);
         match container.itineraries.get(&person_id) {
             None => Err(IxaError::from("Can't find itinerary for person")),
             Some(itineraries) => {
@@ -411,11 +406,7 @@ pub trait ContextSettingExt:
         &self,
         setting: &dyn SettingCategory,
     ) -> Result<SettingProperties, IxaError> {
-        let data_container =
-            self.get_data_container(SettingDataPlugin)
-                .ok_or(IxaError::IxaError(
-                    "Setting plugin data is none".to_string(),
-                ))?;
+        let data_container = self.get_data(SettingDataPlugin);
 
         match data_container
             .setting_properties
@@ -432,7 +423,7 @@ pub trait ContextSettingExt:
         setting: &dyn SettingCategory,
         setting_props: SettingProperties,
     ) -> Result<(), IxaError> {
-        let container = self.get_data_container_mut(SettingDataPlugin);
+        let container = self.get_data_mut(SettingDataPlugin);
 
         if !container.setting_categories.insert(setting.get_type_id()) {
             return Err(IxaError::from("Setting type is already registered"));
@@ -449,7 +440,7 @@ pub trait ContextSettingExt:
         let previous_multiplier =
             self.calculate_total_infectiousness_multiplier_for_person(person_id);
 
-        let container = self.get_data_container_mut(SettingDataPlugin);
+        let container = self.get_data_mut(SettingDataPlugin);
 
         // If there's a modified itinerary present, remove
         if let Some(previous_mod_itinerary) = container.modified_itineraries.get(&person_id) {
@@ -539,7 +530,7 @@ pub trait ContextSettingExt:
         person_id: PersonId,
         setting_category: &dyn SettingCategory,
     ) -> Vec<usize> {
-        let container = self.get_data_container_mut(SettingDataPlugin);
+        let container = self.get_data_mut(SettingDataPlugin);
         match container.itineraries.get(&person_id) {
             None => Vec::new(),
             Some(itineraries) => {
@@ -569,7 +560,7 @@ pub trait ContextSettingExt:
         for entry in &mut itinerary {
             entry.ratio /= total_ratio;
         }
-        let container = self.get_data_container_mut(SettingDataPlugin);
+        let container = self.get_data_mut(SettingDataPlugin);
 
         // Clean up settings that from previous itinerary, if there is one
 
@@ -584,7 +575,7 @@ pub trait ContextSettingExt:
     }
 
     fn get_setting_members(&self, setting: &dyn AnySettingId) -> Option<&Vec<PersonId>> {
-        self.get_data_container(SettingDataPlugin)?
+        self.get_data(SettingDataPlugin)
             .get_setting_members(setting)
     }
 
@@ -593,7 +584,7 @@ pub trait ContextSettingExt:
     /// These are generated without modification from the general formula of ratio * (N - 1) ^ alpha
     /// where N is the number of members in the setting
     fn calculate_total_infectiousness_multiplier_for_person(&self, person_id: PersonId) -> f64 {
-        let container = self.get_data_container(SettingDataPlugin).unwrap();
+        let container = self.get_data(SettingDataPlugin);
         let mut collector = 0.0;
         container.with_itinerary(person_id, |setting, setting_props, members, ratio| {
             let multiplier = setting.calculate_multiplier(members, *setting_props);
@@ -604,9 +595,7 @@ pub trait ContextSettingExt:
 
     // Perhaps setting ids should include type and id so that one can have a vector of setting ids
     fn get_itinerary(&self, person_id: PersonId) -> Option<&Vec<ItineraryEntry>> {
-        self.get_data_container(SettingDataPlugin)
-            .expect("Person should be added to settings")
-            .get_itinerary(person_id)
+        self.get_data(SettingDataPlugin).get_itinerary(person_id)
     }
 
     fn sample_from_setting_with_exclusion(
@@ -641,7 +630,7 @@ pub trait ContextSettingExt:
     }
 
     fn sample_setting(&self, person_id: PersonId) -> Option<&dyn AnySettingId> {
-        let container = self.get_data_container(SettingDataPlugin).unwrap();
+        let container = self.get_data(SettingDataPlugin);
         let mut itinerary_multiplier = Vec::new();
         container.with_itinerary(person_id, |setting, setting_props, members, ratio| {
             let multiplier = setting.calculate_multiplier(members, *setting_props);
@@ -658,7 +647,7 @@ pub trait ContextSettingExt:
         }
     }
     fn is_contact(&self, person_id: PersonId, potential_contact: PersonId) -> bool {
-        let container = self.get_data_container(SettingDataPlugin).unwrap();
+        let container = self.get_data(SettingDataPlugin);
         if let Some(itinerary) = self.get_itinerary(person_id) {
             for itinerary_entry in itinerary {
                 if let Some(members) =
@@ -805,7 +794,10 @@ mod test {
         let e = context.get_setting_properties(&Home).err();
         match e {
             Some(IxaError::IxaError(msg)) => {
-                assert_eq!(msg, "Setting plugin data is none");
+                assert_eq!(
+                    msg,
+                    "Attempting to get properties of unregistered setting type"
+                );
             }
             Some(ue) => panic!(
                 "Expected an error setting plugin data is none. Instead got: {:?}",
