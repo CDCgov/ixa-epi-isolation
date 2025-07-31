@@ -8,12 +8,14 @@ mod parameters;
 mod policies;
 mod population_loader;
 mod property_progression_manager;
+mod person_property_report;
 pub mod rate_fns;
 mod settings;
 mod symptom_progression;
 mod transmission_report;
 pub mod utils;
 
+use hospitalizations::Hospitalized;
 use infectiousness_manager::InfectionStatus;
 use ixa::runner::run_with_args;
 use ixa::{ContextPeopleExt, ContextRandomExt, ContextReportExt};
@@ -21,7 +23,6 @@ use parameters::{ContextParametersExt, Params};
 use population_loader::Age;
 use symptom_progression::Symptoms;
 
-use crate::hospitalizations::Hospitalized;
 // You must run this with a parameters file:
 // cargo run -- --config input/input.json
 // Try enabling logs to see some output about infections:
@@ -32,7 +33,6 @@ fn main() {
         let &Params {
             max_time,
             seed,
-            report_period,
             ..
         } = context.get_params();
 
@@ -45,14 +45,14 @@ fn main() {
             context.shutdown();
         });
 
-        // Report the number of people by age, census tract, symptoms, and infectious status
-        // every report_period.
-        context.add_periodic_report(
-            "person_property_count",
-            report_period,
-            (Age, Symptoms, InfectionStatus, Hospitalized),
-        )?;
-
+        // // Report the number of people by age, census tract, symptoms, and infectious status
+        // // every report_period.
+        // context.add_periodic_report(
+        //     "person_property_count",
+        //     report_period,
+        //     (Age, Symptoms, InfectionStatus, Hospitalized),
+        // )?;
+        
         settings::init(context);
 
         // Load the synthetic population from the `synthetic_population_file`
@@ -62,6 +62,7 @@ fn main() {
 
         infection_propagation_loop::init(context)?;
         transmission_report::init(context)?;
+        person_property_report::init(context)?;
         symptom_progression::init(context)?;
         policies::init(context)?;
         hospitalizations::init(context);
