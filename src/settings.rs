@@ -622,6 +622,8 @@ pub trait ContextSettingExt:
                     return Ok(None);
                 }
                 return Ok(Some(members[0]));
+            } else if members.is_empty() {
+                return Ok(None);
             }
 
             let mut contact_id;
