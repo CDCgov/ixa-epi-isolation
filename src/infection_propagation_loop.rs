@@ -6,6 +6,7 @@ use crate::infectiousness_manager::{
     InfectionData, InfectionDataValue, InfectionStatus, InfectionStatusValue,
 };
 use crate::parameters::{ContextParametersExt, Params};
+use crate::profiling::{ContextProfilingExt, Span};
 use crate::rate_fns::{load_rate_fns, InfectiousnessRateExt};
 use crate::settings::{ContextSettingExt, ItineraryChangeEvent};
 use ixa::{
@@ -22,11 +23,15 @@ fn schedule_next_forecasted_infection(context: &mut Context, person: PersonId) {
     }) = get_forecast(context, person)
     {
         let infection_plan = context.add_plan(next_time, move |context| {
+            let span = Span::new("schedule_next_forecasted_infection");
+            context.increment_named_count("forecasted infection");
             if evaluate_forecast(context, person, forecasted_total_infectiousness) {
+                context.increment_named_count("accepted infection");
                 let _ = infection_attempt(context, person);
             }
             // Continue scheduling forecasts until the person recovers.
             schedule_next_forecasted_infection(context, person);
+            context.add_span(span);
         });
         // The forecast plan is added to the data container for tracking
         context.add_forecast_plan(person, infection_plan);
@@ -37,6 +42,7 @@ fn schedule_recovery(context: &mut Context, person: PersonId) {
     let infection_duration = context.get_person_rate_fn(person).infection_duration();
     let recovery_time = context.get_current_time() + infection_duration;
     context.add_plan(recovery_time, move |context| {
+        context.increment_named_count("recovery");
         trace!("Person {person} has recovered at {recovery_time}");
         context.recover_person(person);
         context.remove_forecast_plan(person);
@@ -69,17 +75,17 @@ define_data_plugin!(
 trait ContextForecastInternalExt: PluginContext {
     /// Remove person from the data container `HashMap`
     fn remove_forecast_plan(&mut self, person_id: PersonId) {
-        let container = self.get_data_container_mut(ForecastDataPlugin);
+        let container = self.get_data_mut(ForecastDataPlugin);
         container.remove_plan(person_id);
     }
     /// Add a new plan to the forecast data plugin and cancel any plan currently associated with that person
     fn add_forecast_plan(&mut self, person_id: PersonId, plan_id: PlanId) {
-        let container = self.get_data_container_mut(ForecastDataPlugin);
+        let container = self.get_data_mut(ForecastDataPlugin);
         container.add_plan(person_id, plan_id);
     }
     /// Cancel forecast but keep infector in the data map
     fn cancel_forecast(&mut self, person_id: PersonId) {
-        let container = self.get_data_container(ForecastDataPlugin).unwrap();
+        let container = self.get_data(ForecastDataPlugin);
         if let Some(active_plan) = container.get_plan(person_id) {
             self.cancel_plan(&active_plan.clone());
         }
@@ -87,30 +93,30 @@ trait ContextForecastInternalExt: PluginContext {
     /// Listen to itinerary changes and determine their effect on the current active forecast plans of potential infectors
     fn subscribe_to_itinerary_change(&mut self) {
         self.subscribe_to_event::<ItineraryChangeEvent>(move |context, event| {
-            if let Some(container) = context.get_data_container(ForecastDataPlugin) {
-                // Check for any active forecast associated with person
-                let affected_infectors: Vec<PersonId> = container
-                    .active_plans
-                    .keys()
-                    .filter(|&infector| {
-                        (context.is_contact(event.person_id, *infector)
-                            && event.increases_membership)
-                            || (event.person_id == *infector
-                                && event.previous_multiplier < event.current_multiplier)
-                    })
-                    .copied()
-                    .collect();
+            let span = Span::new("itinerary_change");
+            let container = context.get_data(ForecastDataPlugin);
+            // Check for any active forecast associated with person
+            let affected_infectors: Vec<PersonId> = container
+                .active_plans
+                .keys()
+                .filter(|&infector| {
+                    (context.is_contact(event.person_id, *infector) && event.increases_membership)
+                        || (event.person_id == *infector
+                            && event.previous_multiplier < event.current_multiplier)
+                })
+                .copied()
+                .collect();
 
-                // We have to re-evaluate any infectors and infectious contacts that may be new to the person with a changed itinerary,
-                // as their itinerary potentially increased membership across some settings
-                // and therefore potentially increased the infectiousness of the infector
-                for infector in affected_infectors {
-                    // The infector is only removed from the data plugin once they have no more infectious potential
-                    // Otherwise, itinerary changes adding individuals to their settings could lead to infection attempts
-                    context.cancel_forecast(infector);
-                    schedule_next_forecasted_infection(context, infector);
-                }
+            // We have to re-evaluate any infectors and infectious contacts that may be new to the person with a changed itinerary,
+            // as their itinerary potentially increased membership across some settings
+            // and therefore potentially increased the infectiousness of the infector
+            for infector in affected_infectors {
+                // The infector is only removed from the data plugin once they have no more infectious potential
+                // Otherwise, itinerary changes adding individuals to their settings could lead to infection attempts
+                context.cancel_forecast(infector);
+                schedule_next_forecasted_infection(context, infector);
             }
+            context.add_span(span);
         });
     }
 }
