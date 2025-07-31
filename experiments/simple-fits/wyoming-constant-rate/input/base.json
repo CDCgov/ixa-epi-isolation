@@ -31,14 +31,7 @@
       "mean_delay_to_hospitalization": 1.0,
       "mean_duration_of_hospitalization": 10.0,
       "age_groups": [
-        {"min": 0, "probability": 0.0},
-        {"min": 5, "probability": 0.001},
-        {"min": 15, "probability": 0.001},
-        {"min": 25, "probability": 0.01},
-        {"min": 35, "probability": 0.01},
-        {"min": 45, "probability": 0.01},
-        {"min": 55, "probability": 0.02},
-        {"min": 65,"probability": 0.05}
+        {"min": 0, "probability": 0.02}
       ],
       "hospital_incidence_report_name": "hospital_incidence_report.csv"
     }

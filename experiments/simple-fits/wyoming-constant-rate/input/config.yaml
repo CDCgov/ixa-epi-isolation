@@ -14,7 +14,7 @@ azb:
     registry_name: cfaprdbatchcr
     task_slots_per_node: 8
   azb_config_path: input/azure_config.yaml
-  azure_batch: true
+  azure_batch: false
   benchmark_test: false
   create_pool: false
 experiment_conditions:
