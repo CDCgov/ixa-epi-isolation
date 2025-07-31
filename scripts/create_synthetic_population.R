@@ -199,16 +199,24 @@ region_df <- synth_pop_region_df |>
 ## =================================#
 write_csv(
   region_df,
-  file.path("input",
-            sprintf("synth_pop_region_%s_%d.csv",
-                    state_synth, population_size)),
+  file.path(
+    "input",
+    sprintf(
+      "synth_pop_region_%s_%d.csv",
+      state_synth, population_size
+    )
+  ),
   na = ""
 )
 write_csv(
   people_df,
-  file.path("input",
-            sprintf("synth_pop_people_%s_%d.csv",
-                    state_synth, population_size)),
+  file.path(
+    "input",
+    sprintf(
+      "synth_pop_people_%s_%d.csv",
+      state_synth, population_size
+    )
+  ),
   na = ""
 )
 
