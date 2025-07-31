@@ -619,10 +619,9 @@ pub trait ContextSettingExt:
                 // Because sample_from_setting_with_exclusion doesn't check for membership
                 // if there's one person and it's not person_id, it should return that person
                 if members[0] == person_id {
-                    return Ok(None)
-                } else {
-                    return Ok(Some(members[0]));
+                    return Ok(None);
                 }
+                return Ok(Some(members[0]));
             }
 
             let mut contact_id;
@@ -631,8 +630,8 @@ pub trait ContextSettingExt:
                 if contact_id != person_id {
                     break;
                 }
-            } 
-            
+            }
+
             Ok(Some(contact_id))
         } else {
             Err(IxaError::from("Group membership is None"))
@@ -1535,7 +1534,9 @@ mod test {
         let setting_id = context.sample_setting(person_a).unwrap();
         assert_eq!(
             Some(person_b),
-            context.sample_from_setting_with_exclusion(person_a, setting_id).unwrap()
+            context
+                .sample_from_setting_with_exclusion(person_a, setting_id)
+                .unwrap()
         );
 
         assert!(context
@@ -1547,7 +1548,8 @@ mod test {
         let itinerary_c = vec![ItineraryEntry::new(SettingId::new(CensusTract, 0), 0.5)];
         context.add_itinerary(person_c, itinerary_c).unwrap();
 
-        let e = context.sample_from_setting_with_exclusion(person_a, &SettingId::new(CensusTract, 10));
+        let e =
+            context.sample_from_setting_with_exclusion(person_a, &SettingId::new(CensusTract, 10));
         match e {
             Err(IxaError::IxaError(msg)) => {
                 assert_eq!(msg, "Group membership is None");

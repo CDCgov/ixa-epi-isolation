@@ -77,7 +77,9 @@ define_rng!(ForecastRng);
 // Infection attempt function for a context and given `PersonId`
 pub fn infection_attempt(context: &mut Context, person_id: PersonId) -> Option<PersonId> {
     if let Some(setting) = context.sample_setting(person_id) {
-        let next_contact = context.sample_from_setting_with_exclusion(person_id, setting).unwrap()?;
+        let next_contact = context
+            .sample_from_setting_with_exclusion(person_id, setting)
+            .unwrap()?;
         match context.get_person_property(next_contact, InfectionStatus) {
             InfectionStatusValue::Susceptible => {
                 if context.sample_bool(
