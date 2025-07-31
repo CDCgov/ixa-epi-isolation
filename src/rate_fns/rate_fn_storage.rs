@@ -24,11 +24,7 @@ pub struct RateFn;
 
 impl NaturalHistoryParameterLibrary for RateFn {
     fn library_size(&self, context: &Context) -> usize {
-        context
-            .get_data_container(RateFnPlugin)
-            .unwrap()
-            .rates
-            .len()
+        context.get_data(RateFnPlugin).rates.len()
     }
 }
 
@@ -40,16 +36,13 @@ define_data_plugin!(
 
 pub trait InfectiousnessRateExt: PluginContext + ContextNaturalHistoryParameterExt {
     fn add_rate_fn(&mut self, dist: impl InfectiousnessRateFn + 'static) {
-        let container = self.get_data_container_mut(RateFnPlugin);
+        let container = self.get_data_mut(RateFnPlugin);
         container.rates.push(Box::new(dist));
     }
 
     fn get_person_rate_fn(&self, person_id: PersonId) -> &dyn InfectiousnessRateFn {
         let id = self.get_parameter_id(RateFn, person_id);
-        self.get_data_container(RateFnPlugin)
-            .expect("Expected rate functions to be loaded.")
-            .rates[id]
-            .as_ref()
+        self.get_data(RateFnPlugin).rates[id].as_ref()
     }
 }
 impl InfectiousnessRateExt for Context {}
@@ -169,7 +162,7 @@ mod test {
         context.init_random(0);
         context
             .register_parameter_id_assigner(RateFn, |context, _person_id| {
-                let container = context.get_data_container(RateFnPlugin).unwrap();
+                let container = context.get_data(RateFnPlugin);
                 let len = container.rates.len();
                 context.sample_range(InfectiousnessRng, 0..len)
             })
@@ -184,7 +177,7 @@ mod test {
 
         let rate_fn = TestRateFn {};
         context.add_rate_fn(rate_fn);
-        let rate_fns = context.get_data_container(RateFnPlugin).unwrap();
+        let rate_fns = context.get_data(RateFnPlugin);
         assert_eq!(rate_fns.rates.len(), 1);
 
         assert_almost_eq!(context.get_person_rate_fn(person).rate(0.0), 1.0, 0.0);
@@ -204,7 +197,7 @@ mod test {
             .set_global_property_value(GlobalParams, parameters)
             .unwrap();
         load_rate_fns(&mut context).unwrap();
-        let rate_fns = context.get_data_container(RateFnPlugin).unwrap();
+        let rate_fns = context.get_data(RateFnPlugin);
         assert_eq!(rate_fns.rates.len(), 1);
         let rate_fn = rate_fns.rates[0].as_ref();
         assert_almost_eq!(rate_fn.rate(0.0), 1.0, 0.0);
@@ -227,7 +220,7 @@ mod test {
             .set_global_property_value(GlobalParams, parameters)
             .unwrap();
         load_rate_fns(&mut context).unwrap();
-        let rate_fns = context.get_data_container(RateFnPlugin).unwrap();
+        let rate_fns = context.get_data(RateFnPlugin);
         // Make sure we load two rate functions as expected
         assert_eq!(rate_fns.rates.len(), 2);
         // Check that rate function 1 is what we expect it to be
@@ -264,7 +257,7 @@ mod test {
                 assert_eq!(msg, "Ids are not contiguous: expected 2, got 3".to_string());
             }
             Some(ue) => panic!(
-                "Expected an error that the the ids are not contiguous. Instead got {:?}",
+                "Expected an error that the ids are not contiguous. Instead got {:?}",
                 ue.to_string()
             ),
             None => panic!(
@@ -292,7 +285,7 @@ mod test {
                 assert_eq!(msg, "First id in the file should be 1, got 2.".to_string());
             }
             Some(ue) => panic!(
-                "Expected an error that the the ids do not start at 1. Instead got {:?}",
+                "Expected an error that the ids do not start at 1. Instead got {:?}",
                 ue.to_string()
             ),
             None => panic!(

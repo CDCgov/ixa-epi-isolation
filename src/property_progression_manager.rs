@@ -50,7 +50,7 @@ pub trait ContextPropertyProgressionExt: PluginContext {
         tracer: impl Progression<P> + 'static,
     ) {
         // Add tracer to data container
-        let container = self.get_data_container_mut(PropertyProgressions);
+        let container = self.get_data_mut(PropertyProgressions);
         let progressions = container.progressions.entry(TypeId::of::<P>()).or_default();
         let boxxed_tracer = Box::new(tracer) as Box<dyn Progression<P>>;
         progressions.push(Box::new(boxxed_tracer));
@@ -58,7 +58,7 @@ pub trait ContextPropertyProgressionExt: PluginContext {
         // if we have not yet been made aware that we should track progressions for this property
         if progressions.len() == 1 {
             self.subscribe_to_event(move |context, event: PersonPropertyChangeEvent<P>| {
-                let container = context.get_data_container(PropertyProgressions).unwrap();
+                let container = context.get_data(PropertyProgressions);
                 let progressions = container.progressions.get(&TypeId::of::<P>()).unwrap();
                 let id = context.get_parameter_id(property, event.person_id);
                 let tcr = progressions[id]
@@ -82,7 +82,7 @@ where
     P: PersonProperty + 'static,
 {
     fn library_size(&self, context: &Context) -> usize {
-        let container = context.get_data_container(PropertyProgressions).unwrap();
+        let container = context.get_data(PropertyProgressions);
         let progressions = container.progressions.get(&TypeId::of::<P>()).unwrap();
         progressions.len()
     }
@@ -303,7 +303,7 @@ mod test {
         context.register_property_progression(Age, one_yr_progression);
         context.register_property_progression(Age, two_yr_progression);
         // Get out the registered progressions.
-        let container = context.get_data_container(PropertyProgressions).unwrap();
+        let container = context.get_data(PropertyProgressions);
         let progressions = container.progressions.get(&TypeId::of::<Age>()).unwrap();
         assert_eq!(progressions.len(), 2);
         // Inspect the first progression
@@ -361,7 +361,7 @@ mod test {
         context.register_property_progression(Age, age_progression);
         context.register_property_progression(NumberRunningShoes, shoe_progression);
         // Get out the registered progressions.
-        let container = context.get_data_container(PropertyProgressions).unwrap();
+        let container = context.get_data(PropertyProgressions);
         let age_progressions = container.progressions.get(&TypeId::of::<Age>()).unwrap();
         assert_eq!(age_progressions.len(), 1);
         let shoes_progressions = container
@@ -474,7 +474,7 @@ mod test {
         // and then drop it to mutate context.
         {
             // Get out the registered progressions.
-            let container = context.get_data_container(PropertyProgressions).unwrap();
+            let container = context.get_data(PropertyProgressions);
             let shoes_progressions = container
                 .progressions
                 .get(&TypeId::of::<NumberRunningShoes>())
@@ -498,7 +498,7 @@ mod test {
         // Show that when we change the person property, the behavior of the progression changes.
         context.set_person_property(person_id, NumberRunningShoes, 5);
         // Get the tracer back out
-        let container = context.get_data_container(PropertyProgressions).unwrap();
+        let container = context.get_data(PropertyProgressions);
         let shoes_progressions = container
             .progressions
             .get(&TypeId::of::<NumberRunningShoes>())
@@ -518,8 +518,8 @@ mod test {
         let mut context = Context::new();
         load_progressions(&mut context, None).unwrap();
         // Check that we have nothing in the progression data container
-        let container = context.get_data_container(PropertyProgressions);
-        assert!(container.is_none());
+        let container = context.get_data(PropertyProgressions);
+        assert!(container.progressions.is_empty());
     }
 
     #[test]
@@ -540,7 +540,7 @@ mod test {
                 );
             }
             Some(ue) => panic!(
-                "Expected an error that the the progression types should not match. Instead got {:?}",
+                "Expected an error that the progression types should not match. Instead got {:?}",
                 ue.to_string()
             ),
             None => panic!("Expected an error. Instead, loading the progression library passed with no errors."),
@@ -565,7 +565,7 @@ mod test {
         )
         .unwrap();
         // Get out the registered progressions.
-        let container = context.get_data_container(PropertyProgressions).unwrap();
+        let container = context.get_data(PropertyProgressions);
         let progressions = container
             .progressions
             .get(&TypeId::of::<Symptoms>())
