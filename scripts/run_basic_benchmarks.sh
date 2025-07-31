@@ -1,7 +1,7 @@
 #!/bin/bash
 input_base=$1
 
-pop_sizes=("250000" "500000")
+pop_sizes=("250000" "500000" "1000000")
 
 for p in ${pop_sizes[@]}; do
     echo $p

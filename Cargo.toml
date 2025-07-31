@@ -15,7 +15,7 @@ dyn-clone = "1.0.19"
 [profile.release]
 opt-level = 3
 lto = true
-codegen-utnits = 1
+codegen-units = 1
 
 [profile.profiling]
 inherits = "release"

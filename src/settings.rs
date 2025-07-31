@@ -626,30 +626,32 @@ pub trait ContextSettingExt:
             if members.len() == 1 {
                 return Ok(None);
             }
-            let member_iter = members.iter().filter(|&x| *x != person_id);
 
-            let mut contacts = vec![];
+            let mut contact_id;
             if q.get_query().is_empty() {
-                // If the query is empty we push members directly to the vector
-                for contact in member_iter {
-                    contacts.push(*contact);
-                }
+                loop {
+                    contact_id = members[self.sample_range(SettingsRng, 0..members.len())];
+                    if contact_id != person_id {
+                        break;
+                    }
+                }           
             } else {
+                let member_iter = members.iter().filter(|&x| *x != person_id);
+                let mut contacts = vec![];
+            
                 // If the query is not empty, we match setting members to the query
                 for contact in member_iter {
                     if self.match_person(*contact, q) {
                         contacts.push(*contact);
                     }
                 }
+                if contacts.is_empty() {
+                    return Ok(None);
+                }
+                contact_id = contacts[self.sample_range(SettingsRng, 0..contacts.len())];
             }
 
-            if contacts.is_empty() {
-                return Ok(None);
-            }
-
-            Ok(Some(
-                contacts[self.sample_range(SettingsRng, 0..contacts.len())],
-            ))
+            Ok(Some(contact_id))
         } else {
             Err(IxaError::from("Group membership is None"))
         }
