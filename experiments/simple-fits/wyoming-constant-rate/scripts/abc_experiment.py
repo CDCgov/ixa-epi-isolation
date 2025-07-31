@@ -87,6 +87,29 @@ def output_processing_function(outputs_dir):
 
     return df
 
+def task(
+    simulation_index: int,
+    img_file: str,
+    clean: bool = False,
+    products_path: str = None,
+    products: list = None,
+):
+    experiment = Experiment(img_file=img_file)
+    experiment.run_index(
+        simulation_index=simulation_index,
+        distance_fn=hosp_lhood,
+        data_read_fn=output_processing_function,
+        products=products,
+        products_output_dir=products_path,
+        clean=clean,
+    )
+
+def gather(
+    img_file: str,
+    products_path: str,
+):
+    wrappers.update_abcsmc_img(img_file, products_path)
+
 
 argparser = argparse.ArgumentParser()
 argparser.add_argument("-x", "--execute", type=str, default="main")
@@ -127,3 +150,13 @@ argparser.add_argument(
 args = argparser.parse_args()
 if args.execute == "main":
     main(config_file=args.config_file, keep=args.keep)
+elif args.execute == "gather":
+    gather(img_file=args.img_file, products_path=args.products_path)
+elif args.execute == "run":
+    task(
+        simulation_index=args.index,
+        img_file=args.img_file,
+        clean=args.clean,
+        products_path=args.products_path,
+        products=args.products,
+    )
