@@ -116,13 +116,13 @@ synth_pop_list <- vector("list", population_size)
 house_counter <- 1
 list_counter <- 1
 sampled_pop <- 0
+household_sample_cap <- 2000
 while (sampled_pop < population_size) {
-  # Sample up to 2,000 households so as not to take whole data set
   if (sampled_pop > 0) {
-    households_remaining <- (population_size - sampled_pop) / 
+    households_remaining <- (population_size - sampled_pop) /
       (sampled_pop / house_counter)
     preferred_batch_size <- max(1, floor(0.95 * households_remaining))
-    batch_size <- min(2000, preferred_batch_size)
+    batch_size <- min(household_sample_cap, preferred_batch_size)
   } else {
     batch_size <- 30
   }
