@@ -7,19 +7,19 @@ azb:
     docker_repo_name: null
     docker_tag: latest
     job_prefix: null
-    max_autoscale_nodes: 10
+    max_autoscale_nodes: 3
     n_nodes: 2
     pool_mode: autoscale
     pool_name: wtk-ixa-epi
     registry_name: cfaprdbatchcr
     task_slots_per_node: 8
   azb_config_path: input/azure_config.yaml
-  azure_batch: false
+  azure_batch: true
   benchmark_test: false
-  create_pool: true
+  create_pool: false
 experiment_conditions:
   replicates_per_particle: 3
-  samples_per_step: 100
+  samples_per_step: 3
   seed: 12345
   scenario_key: epi_isolation.GlobalParams
   tolerance:
