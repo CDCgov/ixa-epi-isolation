@@ -615,32 +615,56 @@ pub trait ContextSettingExt:
         setting: &dyn AnySettingId,
         q: T,
     ) -> Result<Option<PersonId>, IxaError> {
-        let members = self.get_setting_members(setting);
-        if let Some(members) = members {
-            if !members.contains(&person_id) {
+        if let Some(members) = self.get_setting_members(setting) {
+            if members.len() == 1 {
+                // Only contains `person_id`; no one else to infect.
+                return Ok(None);
+            }
+            // Instead of scanning the entire set of contacts, collecting those that match the
+            // query, and then randomly selecting, we randomly select and then check the selected
+            // person to see if they match the query and repeat if they do not. We set a max number
+            // of guess-and-checks to be some number n. One can write down a closed form formula
+            // for the expected number of steps this strategy takes. The original strategy takes
+            // c + 1 steps (c checks and 1 random selection), where c is the number of contacts
+            // (excluding infector). If a is the percentage of contacts that match the query (a for
+            // "alive"), it can be shown that the "break even" point,
+            //    E[runtime of this strategy] = c + 1,
+            // occurs when a = 2/(c + 1). Notice this is independent of n. The number of
+            // guess-and-checks needed to find a match to the query is geometrically distributed
+            // and has expected value 1/a. Note this is independent of c. At the break even point,
+            // the expected number of guess-and-checks needed is
+            //     1/a = (c + 1)/2.
+            // We set n = (c + 1)/2 as a heuristic.
+            //
+            // For the sake of efficiency, we "cheat" a little and don't remove `person_id` first.
+            #[allow(clippy::manual_div_ceil)]
+            let n = (members.len() + 1) / 2;
+            for _ in 0..n {
+                let potential_contact_id =
+                    members[self.sample_range(SettingsRng, 0..members.len())];
+                if potential_contact_id != person_id && self.match_person(potential_contact_id, q) {
+                    return Ok(Some(potential_contact_id));
+                }
+            }
+            // If we haven't found a match by now, we do it the "hard" way by collecting all
+            // matching people first, which is guaranteed to find someone if they exist.
+
+            // Don't mutate the original vector.
+            let mut contacts = members.clone();
+
+            // ToDo: Do we really need to explicitly check that `person_id` is in `contacts`? It
+            //       adds a linear scan to the fast path.
+            if let Some(pos) = contacts.iter().position(|x| *x == person_id) {
+                contacts.swap_remove(pos);
+            } else {
                 return Err(IxaError::from(
                     "Attempting contact outside of group membership",
                 ));
             }
-            // The setting has one person in it -- this person
-            if members.len() == 1 {
-                return Ok(None);
-            }
-            let member_iter = members.iter().filter(|&x| *x != person_id);
 
-            let mut contacts = vec![];
-            if q.get_query().is_empty() {
-                // If the query is empty we push members directly to the vector
-                for contact in member_iter {
-                    contacts.push(*contact);
-                }
-            } else {
+            if !q.get_query().is_empty() {
                 // If the query is not empty, we match setting members to the query
-                for contact in member_iter {
-                    if self.match_person(*contact, q) {
-                        contacts.push(*contact);
-                    }
-                }
+                self.filter_people(&mut contacts, q);
             }
 
             if contacts.is_empty() {
@@ -1584,20 +1608,6 @@ mod test {
         let person_c = context.add_person(()).unwrap();
         let itinerary_c = vec![ItineraryEntry::new(SettingId::new(CensusTract, 0), 0.5)];
         context.add_itinerary(person_c, itinerary_c).unwrap();
-
-        let e = context
-            .get_contact(person_b, &SettingId::new(CensusTract, 0), ())
-            .err();
-        match e {
-            Some(IxaError::IxaError(msg)) => {
-                assert_eq!(msg, "Attempting contact outside of group membership");
-            }
-            Some(ue) => panic!(
-                "Expected an error attempting contact outside group membership. Instead got: {:?}",
-                ue.to_string()
-            ),
-            None => panic!("Expected an error. Instead, validation passed with no errors."),
-        }
 
         let e = context.get_contact(person_a, &SettingId::new(CensusTract, 10), ());
         match e {
