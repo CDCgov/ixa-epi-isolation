@@ -1,78 +1,85 @@
-//! A simple mechanism to count events during a simulation and report on total simple
-//! mechanism to count events during a simulation and report on total accumulated counts
-//! and per-second rates.
+//! This module provides a lightweight profiling interface for simulations, tracking
+//! event counts and measuring elapsed time for named operations (“spans”). It supports:
 //!
-//! ```
-//! Event                   Count  Rate (per sec)
-//! ---------------------------------------------
-//! property progression   12,888         2428.00
-//! recovery                9,091         1712.67
-//! accepted infection      8,988         1693.27
-//! forecasted infection   27,171         5118.81
+//! - **Event counting** – Track how often named events occur during a run.
+//! - **Rate calculation** – Compute rates (events per second) since the first count.
+//! - **Span timing** – Measure time intervals between span creation and reporting.
+//! - **Efficiency reporting** – Report forecasting efficiency when "forecasted infection" and
+//!   "accepted infection" counts are available.
 //!
-//! Infection Forecasting Efficiency: 33.08% (8,988 accepted of 27,171 forecasted)
-//! ```
-//!
-//! This module provides an interface for collecting statistics on how frequently
-//! certain events occur during a simulation. It is designed to track both the total
-//! count of events and the event rate (count per second) over time.
-//!
-//! Although originally intended for measuring how often plans are processed,
-//! the mechanism is general-purpose and can be used to track any discrete event
-//! in the simulation, for example:
-//!
-//! - Monitoring the frequency of specific agent behaviors
-//! - Tracking usage patterns of system resources
-//! - Measuring throughput of scheduling or processing queues
-//!
-//! The mechanism is very simple:
-//!
-//! - **Count accumulation**: Keep track of how many times an event has occurred by calling
-//!   `context.increment_named_count()` with the name of the event (a `&'static str`).
-//! - **Rate estimation**: The first time `context.increment_named_count()` with **any** name
-//!   the global start time is recorded. Display the count and computed rate (e.g., plans per
-//!   second) with `context.print_named_counts()`.
-//!
-//!
-//! The names `"forecasted infection"` and `"accepted infection"` are treated specially by
-//! `print_named_counts()` in that the forecast efficiency, defined as
+//! ## Example Output
 //!
 //! ```ignore
-//! accepted_forecast_count / forecast_count * 100.0
+//! Span Label                                       Duration  % runtime
+//! --------------------------------------------------------------------
+//! add_itinerary                            48ms 366us 300ns      0.94%
+//! load_synth_population                    89ms 345us 833ns      1.73%
+//! transmission_report                      26ms 758us 668ns      0.52%
+//! sample_setting                           30ms 268us 858ns      0.59%
+//! get_contact                          1s 440ms 483us 937ns     27.95%
+//! infection_attempt                    1s 539ms 507us 163ns     29.87%
+//! schedule_next_forecasted_infection   1s 723ms 370us 609ns     33.44%
+//!
+//! Event Label              Count  Rate (per sec)
+//! ----------------------------------------------
+//! property progression    94,956       18,422.71
+//! recovery                67,758       13,145.94
+//! accepted infection     132,133       25,635.53
+//! forecasted infection   144,778       28,088.82
+//!
+//! Infection Forecasting Efficiency: 91.27% (132,133 accepted of 144,778 forecasted)
 //! ```
 //!
-//! is also computed and printed.
+//! ## How to Use
 //!
-//! # Usage
+//! **Count an event** by calling:
 //!
-//! To use this module, increment the counter in your simulation loop, plan, or event handler.
-//! Here is an example with
+//! ```rust,ignore
+//! context.increment_named_count("forecasted infection");
+//! ```
 //!
-//! ```rust
+//! **Time an operation** using:
+//!
+//! ```rust,ignore
+//! let span = Span::new("forecast loop");
+//! // operation code here (algorithm, function call, etc.)
+//! context.add_span(span);
+//! ```
+//!
+//! **Print all profiling data** (counts, rates, spans, and forecast efficiency):
+//!
+//! ```rust,ignore
+//! context.print_profiling_data();
+//! ```
+//!
+//! This function delegates to:
+//!
+//! - `print_named_counts()` – Shows counts and rates.
+//! - `print_named_spans()` – Shows elapsed times for spans.
+//! - `print_forecast_efficiency()` – Prints efficiency if special counts are available.
+//!
+//! ### Special Event Names
+//!
+//! If you track both `"forecasted infection"` and `"accepted infection"`, an additional efficiency percentage will be reported automatically.
+//!
+//! ### Example
+//!
+//! ```rust,ignore
 //! context.add_plan(next_time, move |context| {
-//!
-//!     // Increment the count for the "forecasted infection" event
 //!     context.increment_named_count("forecasted infection");
 //!
 //!     if evaluate_forecast(context, person, forecasted_total_infectiousness) {
 //!         if let Some(setting_id) = context.get_setting_for_contact(person) {
-//!             let str_setting = setting_id.setting_type.get_name();
-//!             let id = setting_id.id;
-//!             if let Some(next_contact) =
-//!                 infection_attempt(context, person, setting_id)
-//!             {
-//!                 // Increment the count for "accepted infection"
+//!             if let Some(next_contact) = infection_attempt(context, person, setting_id) {
 //!                 context.increment_named_count("accepted infection");
-//!
-//!                 context.infect_person(next_contact, Some(person), Some(str_setting), Some(id));
+//!                 context.infect_person(next_contact, Some(person), None, None);
 //!             }
 //!         }
 //!     }
-//!     // Continue scheduling forecasts until the person recovers.
+//!
 //!     schedule_next_forecasted_infection(context, person);
 //! });
 //! ```
-//!
 
 use humantime::format_duration;
 use ixa::{define_data_plugin, Context, HashMap, PluginContext};
