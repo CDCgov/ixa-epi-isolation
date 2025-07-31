@@ -58,6 +58,22 @@ pub struct HospitalizationParameters {
     pub hospital_incidence_report_name: String,
 }
 
+#[derive(Debug, Serialize, Deserialize, Clone, Copy)]
+pub struct InterventionPolicyParameters {
+    pub duration_from_symptom_onset: f64,
+    pub mild_symptom_isolation_duration: f64,
+    pub moderate_symptom_isolation_duration: f64,
+    pub negative_test_isolation_duration: f64,
+    pub isolation_probability: f64,
+    pub isolation_delay_period: f64,
+    pub test_sensitivity: f64,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, Copy)]
+pub struct FacemaskParameters {
+    pub facemask_efficacy: f64,
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Params {
     /// The proportion of initial people who are infectious when we seed the population.
@@ -85,6 +101,13 @@ pub struct Params {
     pub synth_population_file: PathBuf,
     /// The path to the transmission report file
     pub transmission_report_name: Option<String>,
+    // Struct contain policy parameters for isolation guidance
+    // duration from symptom onset, isolation probability, isolation delay,
+    // mild and moderate symptom isolation durations.
+    pub intervention_policy_parameters: Option<InterventionPolicyParameters>,
+    // Facemask parameters
+    // facemask_efficacy the reduction in tranmission associated with wearing a facemask.
+    pub facemask_parameters: Option<FacemaskParameters>,
     // Facemask parameters
     // facemask_efficacy the reduction in tranmission associated with wearing a facemask.
     pub facemask_parameters: Option<FacemaskParameters>,
