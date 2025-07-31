@@ -7,7 +7,7 @@ azb:
     docker_repo_name: null
     docker_tag: latest
     job_prefix: null
-    max_autoscale_nodes: 3
+    max_autoscale_nodes: 10
     n_nodes: 2
     pool_mode: autoscale
     pool_name: wtk-ixa-epi
@@ -18,13 +18,13 @@ azb:
   benchmark_test: false
   create_pool: true
 experiment_conditions:
-  replicates_per_particle: 2
-  samples_per_step: 5
+  replicates_per_particle: 3
+  samples_per_step: 100
   seed: 12345
   scenario_key: epi_isolation.GlobalParams
   tolerance:
-    '0': 350
-    '1': 290
+    '0': 3300
+    '1': 3250
 local_path:
   default_params_file: experiments/simple-fits/wyoming-constant-rate/input/base.json
   exe_file: target/release/epi-isolation

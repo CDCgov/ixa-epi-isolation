@@ -5,7 +5,7 @@ from math import log
 import polars as pl
 from abmwrappers import wrappers
 from abmwrappers.experiment_class import Experiment
-from scipy.stats import gamma, norm, poisson
+from scipy.stats import gamma, norm, poisson, beta
 
 
 def main(config_file: str, keep: bool):
@@ -16,13 +16,15 @@ def main(config_file: str, keep: bool):
                 "rate": gamma(a=1, scale=1.0),
                 "duration": gamma(a=10, scale=0.5),
             }
-        }
+        },
+        "proportion_asymptomatic": beta(3, 3)
     }
 
     perturbation = {
         "infectiousness_rate_fn": {
             "Constant": {"rate": norm(0, 0.01), "duration": norm(0, 0.05)}
-        }
+        },
+        "proportion_asymptomatic": norm(0, 0.01)
     }
 
     # Initialize experiment object
@@ -37,8 +39,7 @@ def main(config_file: str, keep: bool):
     wrappers.run_abcsmc(
         experiment=experiment,
         distance_fn=hosp_lhood,
-        data_processing_fn=output_processing_function,
-        keep_all_sims=keep,
+        data_read_fn=output_processing_function,
     )
 
 
@@ -53,6 +54,9 @@ def hosp_lhood(results_data: pl.DataFrame, target_data: pl.DataFrame):
         joint_set = results_data.select(pl.col(["t", "count"])).join(
             target_data.select(pl.col(["t", "total_admissions"])),
             on="t",
+            how="right",
+        ).with_columns(
+            pl.col("count").fill_null(strategy="zero")
         )
 
         joint_set = joint_set.with_columns(
@@ -68,19 +72,17 @@ def hosp_lhood(results_data: pl.DataFrame, target_data: pl.DataFrame):
 
 
 def output_processing_function(outputs_dir):
-    fp = os.path.join(outputs_dir, "person_property_count.csv")
+    fp = os.path.join(outputs_dir, "hospital_incidence_report.csv")
 
     if os.path.exists(fp):
         df = pl.read_csv(fp)
     else:
         raise FileNotFoundError(f"{fp} does not exist.")
 
-    min_t_results = df.select(pl.col("t").min())
     df = (
-        df.filter(pl.col("InfectionStatus") == "Infectious")
-        .with_columns(pl.col("t") - min_t_results.item())
+        df.with_columns((pl.col("time") / 7.0).floor().cast(pl.Int64).alias("t"))
         .group_by("t")
-        .agg(pl.col("count").sum())
+        .agg(pl.len().alias("count"))
     )
 
     return df
@@ -88,7 +90,7 @@ def output_processing_function(outputs_dir):
 
 argparser = argparse.ArgumentParser()
 argparser.add_argument("-x", "--execute", type=str, default="main")
-argparser.add_argument("-c", "--config-file", type=str, required=False)
+argparser.add_argument("-c", "--config-file", type=str, required=False, default="experiments/simple-fits/wyoming-constant-rate/input/config.yaml")
 argparser.add_argument("-i", "--img-file", type=str, required=False)
 argparser.add_argument(
     "-d",
