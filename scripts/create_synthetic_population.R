@@ -117,7 +117,15 @@ house_counter <- 1
 list_counter <- 1
 sampled_pop <- 0
 while (sampled_pop < population_size) {
-  batch_size <- min(100, population_size - sampled_pop)
+  # Sample up to 2,000 households so as not to take whole data set
+  if (sampled_pop > 0) {
+    households_remaining <- (population_size - sampled_pop) / 
+      (sampled_pop / house_counter)
+    preferred_batch_size <- max(1, floor(0.95 * households_remaining))
+    batch_size <- min(2000, preferred_batch_size)
+  } else {
+    batch_size <- 30
+  }
   house_sample <- household_pums |>
     sample_n(batch_size, weight = WGTP) |>
     mutate(house_number = house_counter:(house_counter + batch_size - 1)) |>
