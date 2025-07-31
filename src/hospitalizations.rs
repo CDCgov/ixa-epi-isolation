@@ -98,7 +98,7 @@ trait ContextHospitalizationInternalExt:
         // Evaluate the risk of hospitalization using the age group probabilities
         let age = self.get_person_property(person_id, Age);
         let p = self
-            .get_data_container_mut(HospitalDataPlugin)
+            .get_data_mut(HospitalDataPlugin)
             .get_age_group(age)
             .probability;
         self.sample_bool(HospitalizationRng, p)
@@ -111,7 +111,7 @@ trait ContextHospitalizationInternalExt:
             .age_groups
             .clone();
 
-        let container = self.get_data_container_mut(HospitalDataPlugin);
+        let container = self.get_data_mut(HospitalDataPlugin);
         container.set_age_group_mapping(&age_groups);
     }
     fn setup_hospitalization_event_sequence(&mut self) {

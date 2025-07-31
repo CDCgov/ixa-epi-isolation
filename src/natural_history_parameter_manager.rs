@@ -50,7 +50,7 @@ pub trait ContextNaturalHistoryParameterExt: PluginContext + ContextRandomExt {
         T: NaturalHistoryParameterLibrary + 'static,
         S: Fn(&Context, PersonId) -> usize + 'static,
     {
-        let container = self.get_data_container_mut(NaturalHistoryParameters);
+        let container = self.get_data_mut(NaturalHistoryParameters);
 
         // We shouldn't be registering assignment functions for parameters where we've already been
         // asked to provide an id and defaulted to random assignment. In this case, the assignment
@@ -95,9 +95,7 @@ impl ContextNaturalHistoryParameterExt for Context {
     where
         T: NaturalHistoryParameterLibrary + 'static,
     {
-        let container = self
-        .get_data_container(NaturalHistoryParameters)
-        .expect("Natural history parameter ids cannot be queried unless at least one parameter assignment is registered.");
+        let container = self.get_data(NaturalHistoryParameters);
         // Is there already an id for this person for this parameter?
         if let Some(potential_id) = container
             .ids
@@ -179,9 +177,7 @@ mod test {
         context
             .register_parameter_id_assigner(ViralLoad, |_context, _person_id| 0)
             .unwrap();
-        let container = context
-            .get_data_container(NaturalHistoryParameters)
-            .unwrap();
+        let container = context.get_data(NaturalHistoryParameters);
         assert_eq!(container.parameter_id_assigners.len(), 1);
         let assigner = container
             .parameter_id_assigners
@@ -204,7 +200,7 @@ mod test {
                 assert_eq!(msg, "An assignment function for this parameter has already been registered.".to_string());
             }
             Some(ue) => panic!(
-                "Expected an error that an assignment function for this parameter has already been registered.. Instead got {:?}",
+                "Expected an error that an assignment function for this parameter has already been registered. Instead got {:?}",
                 ue.to_string()
             ),
             None => panic!("Expected an error. Instead, function registration passed with no errors."),
@@ -249,16 +245,6 @@ mod test {
     }
 
     #[test]
-    #[should_panic(
-        expected = "Natural history parameter ids cannot be queried unless at least one parameter assignment is registered."
-    )]
-    fn test_error_query_property_id_before_registration() {
-        let mut context = init_context();
-        let person = context.add_person(()).unwrap();
-        context.get_parameter_id(ViralLoad, person);
-    }
-
-    #[test]
     fn test_get_parameter_id_registered_assignment() {
         let mut context = init_context();
         let person = context.add_person(()).unwrap();
@@ -273,7 +259,7 @@ mod test {
     fn test_get_parameter_id_already_set() {
         let mut context = init_context();
         let person = context.add_person(()).unwrap();
-        let container = context.get_data_container_mut(NaturalHistoryParameters);
+        let container = context.get_data_mut(NaturalHistoryParameters);
         container.ids.borrow_mut().insert(
             TypeId::of::<ViralLoad>(),
             vec![(person, 0)].into_iter().collect(),
