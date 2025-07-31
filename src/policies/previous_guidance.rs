@@ -8,7 +8,8 @@ use ixa::{
 use crate::{
     infectiousness_manager::InfectionStatusValue,
     interventions::ContextTransmissionModifierExt,
-    parameters::{ContextParametersExt, InterventionPolicyParameters, Params},
+    parameters::{ContextParametersExt, Params},
+    policies::Policies,
     settings::{ContextSettingExt, Home, ItineraryModifiers},
     symptom_progression::{SymptomValue, Symptoms},
 };
@@ -25,6 +26,17 @@ define_derived_property!(PresentingWithSymptoms, bool, [Symptoms], |symptom_valu
     }
 });
 define_rng!(PolicyRng);
+
+#[derive(Debug, Clone, Copy)]
+struct InterventionPolicyParameters {
+    duration_from_symptom_onset: f64,
+    mild_symptom_isolation_duration: f64,
+    moderate_symptom_isolation_duration: f64,
+    negative_test_isolation_duration: f64,
+    isolation_probability: f64,
+    isolation_delay_period: f64,
+    test_sensitivity: f64,
+}
 
 trait ContextIsolationGuidanceInternalExt {
     fn modify_isolation_status(
@@ -214,9 +226,9 @@ impl ContextIsolationGuidanceInternalExt for Context {
     }
 }
 
-pub fn init(context: &mut Context) {
+pub fn init(context: &mut Context) -> Result<(), IxaError> {
     let &Params {
-        intervention_policy_parameters,
+        guidance_policy,
         facemask_parameters,
         ..
     } = context.get_params();
@@ -230,14 +242,41 @@ pub fn init(context: &mut Context) {
             )
             .unwrap();
     } else {
-        trace!("No facemask parameters provided. Facemasks will have no impact.");
+        return Err(IxaError::IxaError(
+            "No facemask parameters provided. They are required for the intervention policy."
+                .to_string(),
+        ));
     }
 
-    if let Some(intervention_policy_parameters) = intervention_policy_parameters {
-        context.setup_isolation_guidance_event_sequence(intervention_policy_parameters);
-    } else {
-        trace!("No isolation policy parameters provided. Skipping isolation guidance setup.");
+    match guidance_policy {
+        Some(Policies::PreviousIsolationGuidance {
+            duration_from_symptom_onset,
+            mild_symptom_isolation_duration,
+            moderate_symptom_isolation_duration,
+            negative_test_isolation_duration,
+            isolation_probability,
+            isolation_delay_period,
+            test_sensitivity,
+        }) => {
+            let intervention_policy_parameters = InterventionPolicyParameters {
+                duration_from_symptom_onset,
+                mild_symptom_isolation_duration,
+                moderate_symptom_isolation_duration,
+                negative_test_isolation_duration,
+                isolation_probability,
+                isolation_delay_period,
+                test_sensitivity,
+            };
+            context.setup_isolation_guidance_event_sequence(intervention_policy_parameters);
+        }
+        _ => {
+            return Err(IxaError::IxaError(
+                "Policy enum does not match specified enum variant for previous guidance."
+                    .to_string(),
+            ))
+        }
     }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -246,11 +285,11 @@ mod test {
     use crate::{
         infectiousness_manager::InfectionContextExt,
         parameters::{
-            CoreSettingsTypes, FacemaskParameters, GlobalParams, InterventionPolicyParameters,
-            ItinerarySpecificationType, ProgressionLibraryType, RateFnType,
+            CoreSettingsTypes, FacemaskParameters, GlobalParams, ItinerarySpecificationType,
+            ProgressionLibraryType,
         },
+        policies::Policies,
         population_loader::Alive,
-        previous_guidance::test,
         rate_fns::load_rate_fns,
         settings::{
             CensusTract, ContextSettingExt, Home, ItineraryEntry, SettingId, SettingProperties,
@@ -262,13 +301,12 @@ mod test {
 
     use ixa::{
         define_person_property_with_default, Context, ContextGlobalPropertiesExt, ContextPeopleExt,
-        ContextRandomExt, PersonPropertyChangeEvent,
+        ContextRandomExt, IxaError, PersonPropertyChangeEvent,
     };
 
     use super::{IsolatingStatus, MaskingStatus};
 
     use statrs::assert_almost_eq;
-
     #[allow(clippy::too_many_arguments)]
     fn setup_context(
         duration_from_symptom_onset: f64,
@@ -279,25 +317,17 @@ mod test {
         isolation_delay_period: f64,
         test_sensitivity: f64,
         facemask_efficacy: f64,
+        proportion_asymptomatic: f64,
     ) -> Context {
         let mut context = Context::new();
         let parameters = Params {
             initial_incidence: 0.1,
             initial_recovered: 0.35,
-            proportion_asymptomatic: 0.0,
-            relative_infectiousness_asymptomatics: 0.0,
+            proportion_asymptomatic,
             max_time: 100.0,
-            seed: 0,
-            infectiousness_rate_fn: RateFnType::Constant {
-                rate: 1.0,
-                duration: 5.0,
-            },
             symptom_progression_library: Some(ProgressionLibraryType::EmpiricalFromFile {
                 file: PathBuf::from("./input/library_symptom_parameters.csv"),
             }),
-            report_period: 1.0,
-            synth_population_file: PathBuf::from("."),
-            transmission_report_name: None,
             settings_properties: HashMap::from([
                 (
                     CoreSettingsTypes::Home,
@@ -327,7 +357,7 @@ mod test {
                     },
                 ),
             ]),
-            intervention_policy_parameters: Some(InterventionPolicyParameters {
+            guidance_policy: Some(Policies::PreviousIsolationGuidance {
                 duration_from_symptom_onset,
                 mild_symptom_isolation_duration,
                 moderate_symptom_isolation_duration,
@@ -337,6 +367,7 @@ mod test {
                 test_sensitivity,
             }),
             facemask_parameters: Some(FacemaskParameters { facemask_efficacy }),
+            ..Default::default()
         };
         context.init_random(parameters.seed);
         context
@@ -352,17 +383,20 @@ mod test {
         // 1. Create a new person
         // 2. Keep track of the time of symptom onset and duration
         // 3. Assert that start of isolation is the same as symptom onset + isolation delay
-        // 4. Assert that end of isolation is end of symptoms
-        // 5. Assert that start of facemask is end of symptoms
-        // 6. Assert that end of facemask is end of symptoms + post isolation days
+        // 4. Assert that end of isolation is at the max(end of symptoms, end of isolation duration)
+        //   and correctly account for symtpom severity
+        // 5. Assert that start of facemask is end of isolation and occurs for correct symptom severity
+        // 6. Assert that end of facemask is end of isolation + post isolation days
+
         let duration_from_symptom_onset = 10.0;
         let mild_symptom_isolation_duration = 5.0;
         let moderate_symptom_isolation_duration = 10.0;
         let negative_test_isolation_duration = 2.0;
         let isolation_probability = 1.0;
-        let isolation_delay_period = 1.0;
+        let isolation_delay_period = 0.0;
         let test_sensitivity = 0.9;
         let facemask_efficacy = 0.5;
+        let proportion_asymptomatic = 0.2;
 
         let mut context = setup_context(
             duration_from_symptom_onset,
@@ -373,16 +407,20 @@ mod test {
             isolation_delay_period,
             test_sensitivity,
             facemask_efficacy,
+            proportion_asymptomatic,
         );
         let p1 = context.add_person(()).unwrap();
         let itinerary = vec![
-            ItineraryEntry::new(SettingId::new(&Home, 0), 1.0),
-            ItineraryEntry::new(SettingId::new(&CensusTract, 0), 1.0),
-            ItineraryEntry::new(SettingId::new(&Workplace, 0), 1.0),
+            ItineraryEntry::new(SettingId::new(Home, 0), 1.0),
+            ItineraryEntry::new(SettingId::new(CensusTract, 0), 1.0),
+            ItineraryEntry::new(SettingId::new(Workplace, 0), 1.0),
         ];
         context.add_itinerary(p1, itinerary).unwrap();
         crate::symptom_progression::init(&mut context).unwrap();
-        super::init(&mut context);
+        super::init(&mut context).unwrap();
+
+        let policy_ran_flag = Rc::new(RefCell::new(false));
+        let policy_ran_flag_clone = Rc::clone(&policy_ran_flag);
 
         define_person_property_with_default!(SymptomStartTime, f64, 0.0);
         define_person_property_with_default!(SymptomEndTime, f64, 0.0);
@@ -435,16 +473,19 @@ mod test {
                     );
                 } else {
                     assert_almost_eq!(
-                        context.get_person_property(event.person_id, SymptomEndTime)
-                            + mild_symptom_isolation_duration,
+                        context.get_person_property(event.person_id, SymptomEndTime),
                         context.get_current_time(),
                         0.0
                     );
+                    *policy_ran_flag_clone.borrow_mut() = true;
                 }
             },
         );
         context.infect_person(p1, None, None, None);
         context.execute();
+
+        // Check that the policy ran
+        assert!(*policy_ran_flag.borrow());
     }
 
     #[test]
@@ -458,9 +499,10 @@ mod test {
         let moderate_symptom_isolation_duration = 10.0;
         let negative_test_isolation_duration = 2.0;
         let isolation_probability = 1.0;
-        let isolation_delay_period = 1.0;
+        let isolation_delay_period = 0.0;
         let test_sensitivity = 0.9;
         let facemask_efficacy = 0.5;
+        let proportion_asymptomatic = 0.2;
 
         let num_people_isolating = Rc::new(RefCell::new(0usize));
 
@@ -477,19 +519,20 @@ mod test {
                 isolation_delay_period,
                 test_sensitivity,
                 facemask_efficacy,
+                proportion_asymptomatic,
             );
             context.init_random(seed);
             let first_person = context.add_person(()).unwrap();
             let itinerary = vec![
-                ItineraryEntry::new(SettingId::new(&Home, 0), 1.0),
-                ItineraryEntry::new(SettingId::new(&CensusTract, 0), 1.0),
-                ItineraryEntry::new(SettingId::new(&Workplace, 0), 1.0),
+                ItineraryEntry::new(SettingId::new(Home, 0), 1.0),
+                ItineraryEntry::new(SettingId::new(CensusTract, 0), 1.0),
+                ItineraryEntry::new(SettingId::new(Workplace, 0), 1.0),
             ];
             context
                 .add_itinerary(first_person, itinerary.clone())
                 .unwrap();
             crate::symptom_progression::init(&mut context).unwrap();
-            super::init(&mut context);
+            super::init(&mut context).unwrap();
 
             // Add our people
             for _ in 1..num_people {
@@ -516,6 +559,62 @@ mod test {
         #[allow(clippy::cast_precision_loss)]
         let proportion_isolating =
             *num_people_isolating.borrow() as f64 / (num_people * num_sims) as f64;
-        assert_almost_eq!(proportion_isolating, isolation_probability, 0.01);
+        assert_almost_eq!(
+            proportion_isolating,
+            isolation_probability * (1.0 - proportion_asymptomatic),
+            0.01
+        );
+    }
+
+    #[test]
+    fn test_isolation_guidance_input_validation() {
+        // this test checks that the correct errors are raised when the input parameters
+        // are not provided
+        let mut context = Context::new();
+        context.init_random(0);
+        context
+            .set_global_property_value(GlobalParams, Params::default())
+            .unwrap();
+        let e = super::init(&mut context).err();
+        match e {
+                Some(IxaError::IxaError(msg)) => {
+                    assert_eq!(
+                        msg,
+                        "No facemask parameters provided. They are required for the intervention policy."
+                    );
+                }
+                Some(ue) => panic!(
+                    "Expected an error that initialization should fail due to unsupplied parameters. Instead got {:?}",
+                    ue.to_string()
+                ),
+                None => panic!("Expected an error. Instead, policy initialized with no errors."),
+            }
+
+        let mut context = Context::new();
+        context
+            .set_global_property_value(
+                GlobalParams,
+                Params {
+                    facemask_parameters: Some(FacemaskParameters {
+                        facemask_efficacy: 0.5,
+                    }),
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+        let e = super::init(&mut context).err();
+        match e {
+                Some(IxaError::IxaError(msg)) => {
+                    assert_eq!(
+                        msg,
+                        "Policy enum does not match specified enum variant for updated guidance."
+                    );
+                }
+                Some(ue) => panic!(
+                    "Expected an error that initialization should fail due to unsupplied parameters. Instead got {:?}",
+                    ue.to_string()
+                ),
+                None => panic!("Expected an error. Instead, policy initialized with no errors."),
+            }
     }
 }

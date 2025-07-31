@@ -7,7 +7,6 @@ mod natural_history_parameter_manager;
 mod parameters;
 mod policies;
 mod population_loader;
-mod previous_guidance;
 mod property_progression_manager;
 pub mod rate_fns;
 mod settings;
