@@ -1,4 +1,3 @@
-
 ## =================================#
 ## Setup ---------------
 ## =================================#
@@ -75,7 +74,7 @@ synth_school_df <- as_tibble(pumas_st) |>
   dplyr::mutate(
     lat = as.numeric(INTPTLAT20),
     lon = as.numeric(INTPTLON20)
-  )|>
+  ) |>
   dplyr::select(school_id, lat, lon) |>
   mutate(enrolled = 0)
 
@@ -103,7 +102,7 @@ synth_workplace_df <- as_tibble(pumas_st) |>
   dplyr::mutate(
     lat = as.numeric(INTPTLAT20),
     lon = as.numeric(INTPTLON20)
-  )|>
+  ) |>
   dplyr::select(workplace_id, lat, lon) |>
   mutate(enrolled = 0)
 
@@ -123,7 +122,7 @@ while (sampled_pop < population_size) {
     sample_n(batch_size, weight = WGTP) |>
     mutate(house_number = house_counter:(house_counter + batch_size - 1)) |>
     left_join(sample_pums, by = (c("SERIALNO", "WGTP", "NP")))
-  
+
   ## Assign workplaces
   work_id_list <- map_chr(house_sample$WRK, function(x) {
     if (x %in% c("1")) {
@@ -140,10 +139,12 @@ while (sampled_pop < population_size) {
       NA
     }
   })
-  
+
   synth_pop_list[[list_counter]] <- house_sample |>
-    mutate(school_id = school_id_list,
-           workplace_id = work_id_list)
+    mutate(
+      school_id = school_id_list,
+      workplace_id = work_id_list
+    )
   sampled_pop <- sampled_pop + nrow(house_sample)
   house_counter <- house_counter + batch_size
   list_counter <- list_counter + 1
