@@ -1,7 +1,8 @@
+use std::f64;
+
 use ixa::{
     define_derived_property, define_person_property_with_default, define_rng, trace, Context,
     ContextPeopleExt, ContextRandomExt, IxaError, PersonId, PersonPropertyChangeEvent,
-    PluginContext,
 };
 
 use crate::{
@@ -15,36 +16,76 @@ use crate::{
 
 define_person_property_with_default!(MaskingStatus, bool, false);
 define_person_property_with_default!(IsolatingStatus, bool, false);
+define_person_property_with_default!(LastTestResult, bool, false);
+define_person_property_with_default!(SymptomStartTime, f64, 0.0);
+
 define_derived_property!(PresentingWithSymptoms, bool, [Symptoms], |symptom_value| {
     match symptom_value {
         Some(SymptomValue::Presymptomatic) | None => false,
         Some(_) => true,
     }
 });
-define_rng!(UpdatedPolicyRng);
+define_rng!(PreviousPolicyRng);
 
 #[derive(Debug, Clone, Copy)]
 struct InterventionPolicyParameters {
-    post_isolation_duration: f64,
+    duration_from_symptom_onset: f64,
+    mild_symptom_isolation_duration: f64,
+    moderate_symptom_isolation_duration: f64,
+    negative_test_isolation_duration: f64,
     isolation_probability: f64,
     isolation_delay_period: f64,
+    test_sensitivity: f64,
 }
 
-trait ContextIsolationGuidanceInternalExt:
-    PluginContext + ContextRandomExt + ContextPeopleExt + ContextSettingExt
-{
+trait ContextIsolationGuidanceInternalExt {
+    fn modify_isolation_status(
+        &mut self,
+        person: PersonId,
+        isolation_status: bool,
+    ) -> Result<(), IxaError>;
+    fn isolation(
+        &mut self,
+        person_id: PersonId,
+        intervention_policy_parameters: InterventionPolicyParameters,
+    );
+    fn post_isolation(
+        &mut self,
+        person_id: PersonId,
+        intervention_policy_parameters: InterventionPolicyParameters,
+    );
+    fn administer_test(
+        &mut self,
+        person_id: PersonId,
+        intervention_policy_parameters: InterventionPolicyParameters,
+    );
+    fn handle_symptom_resolution(
+        &mut self,
+        person_id: PersonId,
+        intervention_policy_parameters: InterventionPolicyParameters,
+    );
+    fn setup_isolation_guidance_event_sequence(
+        &mut self,
+        intervention_policy_parameters: InterventionPolicyParameters,
+    );
+}
+
+// Previous isolation policy edge case questions:
+// 1. What happens if a person's symptoms end before their second test? Do they follow post-isolation precautions?
+// 2. What happens if a person's delay to start isolation is greater than 2 and their first test is negative?
+// 3. What happens if a person never isolations
+
+impl ContextIsolationGuidanceInternalExt for Context {
     fn modify_isolation_status(
         &mut self,
         person: PersonId,
         isolation_status: bool,
     ) -> Result<(), IxaError> {
-        if self.get_person_property(person, IsolatingStatus) != isolation_status {
-            self.set_person_property(person, IsolatingStatus, isolation_status);
-            if isolation_status {
-                self.modify_itinerary(person, ItineraryModifiers::RestrictTo { setting: &Home })?;
-            } else {
-                self.remove_modified_itinerary(person)?;
-            }
+        self.set_person_property(person, IsolatingStatus, isolation_status);
+        if isolation_status {
+            self.modify_itinerary(person, ItineraryModifiers::RestrictTo { setting: &Home })?;
+        } else {
+            self.remove_modified_itinerary(person)?;
         }
         Ok(())
     }
@@ -55,18 +96,28 @@ trait ContextIsolationGuidanceInternalExt:
         intervention_policy_parameters: InterventionPolicyParameters,
     ) {
         if self.sample_bool(
-            UpdatedPolicyRng,
+            PreviousPolicyRng,
             intervention_policy_parameters.isolation_probability,
         ) {
             self.add_plan(
                 self.get_current_time() + intervention_policy_parameters.isolation_delay_period,
                 move |context| {
-                    if context.get_person_property(person_id, PresentingWithSymptoms) {
-                        context.modify_isolation_status(person_id, true).unwrap();
-                        trace!("Person {person_id} is now isolating");
-                    }
+                    context.modify_isolation_status(person_id, true).unwrap();
+                    trace!("Person {person_id} is now isolating");
                 },
             );
+            if !self.get_person_property(person_id, LastTestResult) {
+                self.add_plan(
+                    self.get_current_time()
+                        + intervention_policy_parameters.negative_test_isolation_duration,
+                    move |context| {
+                        if context.get_person_property(person_id, PresentingWithSymptoms) {
+                            context.administer_test(person_id, intervention_policy_parameters);
+                            trace!("Person {person_id} was tested");
+                        }
+                    },
+                );
+            }
         }
     }
 
@@ -75,17 +126,76 @@ trait ContextIsolationGuidanceInternalExt:
         person_id: PersonId,
         intervention_policy_parameters: InterventionPolicyParameters,
     ) {
-        if self.get_person_property(person_id, IsolatingStatus) {
-            self.modify_isolation_status(person_id, false).unwrap();
+        let proposed_masking_end_time = self.get_person_property(person_id, SymptomStartTime)
+            + intervention_policy_parameters.duration_from_symptom_onset;
+        if proposed_masking_end_time > self.get_current_time() {
             self.set_person_property(person_id, MaskingStatus, true);
             trace!("Person {person_id} is now masking and no longer isolating");
-            self.add_plan(
-                self.get_current_time() + intervention_policy_parameters.post_isolation_duration,
-                move |context| {
-                    context.set_person_property(person_id, MaskingStatus, false);
-                    trace!("Person {person_id} is now no longer masking");
-                },
-            );
+
+            self.add_plan(proposed_masking_end_time, move |context| {
+                context.set_person_property(person_id, MaskingStatus, false);
+                trace!("Person {person_id} is now no longer masking");
+            });
+        }
+    }
+
+    fn administer_test(
+        &mut self,
+        person_id: PersonId,
+        intervention_policy_parameters: InterventionPolicyParameters,
+    ) {
+        if self.sample_bool(PreviousPolicyRng, intervention_policy_parameters.test_sensitivity) {
+            trace!("Person {person_id} tested positive.");
+            self.set_person_property(person_id, LastTestResult, true);
+        } else {
+            trace!("Person {person_id} tested negative.");
+            self.set_person_property(person_id, LastTestResult, false);
+        }
+    }
+
+    fn handle_symptom_resolution(
+        &mut self,
+        person_id: PersonId,
+        intervention_policy_parameters: InterventionPolicyParameters,
+    ) {
+        if self.get_person_property(person_id, IsolatingStatus) {
+            let symptoms = self.get_person_property(person_id, Symptoms);
+            let current_duration_isolation =
+                self.get_current_time() - self.get_person_property(person_id, SymptomStartTime);
+            if self.get_person_property(person_id, LastTestResult) {
+                if symptoms == Some(SymptomValue::Category1)
+                    || symptoms == Some(SymptomValue::Category2)
+                {
+                    let remaining_isolation_duration = f64::max(
+                        intervention_policy_parameters.mild_symptom_isolation_duration
+                            - current_duration_isolation,
+                        0.0,
+                    );
+                    self.add_plan(
+                        self.get_current_time() + remaining_isolation_duration,
+                        move |context| {
+                            context.modify_isolation_status(person_id, false).unwrap();
+                            trace!("Person {person_id} is now no longer isolating");
+                            context.post_isolation(person_id, intervention_policy_parameters);
+                        },
+                    );
+                } else if symptoms == Some(SymptomValue::Category3)
+                    || symptoms == Some(SymptomValue::Category4)
+                {
+                    let remaining_isolation_duration = f64::max(
+                        intervention_policy_parameters.moderate_symptom_isolation_duration
+                            - current_duration_isolation,
+                        0.0,
+                    );
+                    self.add_plan(
+                        self.get_current_time() + remaining_isolation_duration,
+                        move |context| {
+                            context.modify_isolation_status(person_id, false).unwrap();
+                            trace!("Person {person_id} is now no longer isolating");
+                        },
+                    );
+                }
+            }
         }
     }
 
@@ -96,16 +206,25 @@ trait ContextIsolationGuidanceInternalExt:
         self.subscribe_to_event(
             move |context, event: PersonPropertyChangeEvent<PresentingWithSymptoms>| {
                 if event.current {
+                    context.administer_test(event.person_id, intervention_policy_parameters);
                     context.isolation(event.person_id, intervention_policy_parameters);
                 } else if event.previous {
-                    //individuals transition from presenting with symptoms to not presenting with symptoms
-                    context.post_isolation(event.person_id, intervention_policy_parameters);
+                    context
+                        .handle_symptom_resolution(event.person_id, intervention_policy_parameters);
+                }
+            },
+        );
+        self.subscribe_to_event(
+            move |context, event: PersonPropertyChangeEvent<LastTestResult>| {
+                if event.current {
+                    context.isolation(event.person_id, intervention_policy_parameters);
+                } else {
+                    trace!("Person {} tested negative, no isolation.", event.person_id);
                 }
             },
         );
     }
 }
-impl ContextIsolationGuidanceInternalExt for Context {}
 
 pub fn init(context: &mut Context) -> Result<(), IxaError> {
     let &Params {
@@ -130,21 +249,29 @@ pub fn init(context: &mut Context) -> Result<(), IxaError> {
     }
 
     match guidance_policy {
-        Some(Policies::UpdatedIsolationGuidance {
-            post_isolation_duration,
+        Some(Policies::PreviousIsolationGuidance {
+            duration_from_symptom_onset,
+            mild_symptom_isolation_duration,
+            moderate_symptom_isolation_duration,
+            negative_test_isolation_duration,
             isolation_probability,
             isolation_delay_period,
+            test_sensitivity,
         }) => {
             let intervention_policy_parameters = InterventionPolicyParameters {
-                post_isolation_duration,
+                duration_from_symptom_onset,
+                mild_symptom_isolation_duration,
+                moderate_symptom_isolation_duration,
+                negative_test_isolation_duration,
                 isolation_probability,
                 isolation_delay_period,
+                test_sensitivity,
             };
             context.setup_isolation_guidance_event_sequence(intervention_policy_parameters);
         }
         _ => {
             return Err(IxaError::IxaError(
-                "Policy enum does not match specified enum variant for updated guidance."
+                "Policy enum does not match specified enum variant for previous guidance."
                     .to_string(),
             ))
         }
@@ -154,21 +281,15 @@ pub fn init(context: &mut Context) -> Result<(), IxaError> {
 
 #[cfg(test)]
 mod test {
-    use super::PresentingWithSymptoms;
+    use super::{PresentingWithSymptoms, LastTestResult};
     use crate::{
-        infectiousness_manager::InfectionContextExt,
-        parameters::{
+        infectiousness_manager::InfectionContextExt, parameters::{
             CoreSettingsTypes, FacemaskParameters, GlobalParams, ItinerarySpecificationType,
             ProgressionLibraryType,
-        },
-        policies::Policies,
-        population_loader::Alive,
-        rate_fns::load_rate_fns,
-        settings::{
+        }, policies::Policies, population_loader::Alive, rate_fns::load_rate_fns, settings::{
             CensusTract, ContextSettingExt, Home, ItineraryEntry, SettingId, SettingProperties,
             Workplace,
-        },
-        Params,
+        }, symptom_progression::{SymptomValue, Symptoms}, Params
     };
     use std::{cell::RefCell, collections::HashMap, path::PathBuf, rc::Rc};
 
@@ -180,11 +301,15 @@ mod test {
     use super::{IsolatingStatus, MaskingStatus};
 
     use statrs::assert_almost_eq;
-
+    #[allow(clippy::too_many_arguments)]
     fn setup_context(
-        post_isolation_duration: f64,
+        duration_from_symptom_onset: f64,
+        mild_symptom_isolation_duration: f64,
+        moderate_symptom_isolation_duration: f64,
+        negative_test_isolation_duration: f64,
         isolation_probability: f64,
         isolation_delay_period: f64,
+        test_sensitivity: f64,
         facemask_efficacy: f64,
         proportion_asymptomatic: f64,
     ) -> Context {
@@ -226,10 +351,14 @@ mod test {
                     },
                 ),
             ]),
-            guidance_policy: Some(Policies::UpdatedIsolationGuidance {
-                post_isolation_duration,
+            guidance_policy: Some(Policies::PreviousIsolationGuidance {
+                duration_from_symptom_onset,
+                mild_symptom_isolation_duration,
+                moderate_symptom_isolation_duration,
+                negative_test_isolation_duration,
                 isolation_probability,
                 isolation_delay_period,
+                test_sensitivity,
             }),
             facemask_parameters: Some(FacemaskParameters { facemask_efficacy }),
             ..Default::default()
@@ -248,19 +377,29 @@ mod test {
         // 1. Create a new person
         // 2. Keep track of the time of symptom onset and duration
         // 3. Assert that start of isolation is the same as symptom onset + isolation delay
-        // 4. Assert that end of isolation is end of symptoms
-        // 5. Assert that start of facemask is end of symptoms
-        // 6. Assert that end of facemask is end of symptoms + post isolation days
-        let post_isolation_duration = 5.0;
+        // 4. Assert that end of isolation is at the max(end of symptoms, end of isolation duration)
+        //   and correctly account for symtpom severity
+        // 5. Assert that start of facemask is end of isolation and occurs for correct symptom severity
+        // 6. Assert that end of facemask is end of isolation + post isolation days
+
+        let duration_from_symptom_onset = 10.0;
+        let mild_symptom_isolation_duration = 5.0;
+        let moderate_symptom_isolation_duration = 10.0;
+        let negative_test_isolation_duration = 2.0;
         let isolation_probability = 1.0;
-        let isolation_delay_period = 1.0;
+        let isolation_delay_period = 0.0;
+        let test_sensitivity = 1.0;
         let facemask_efficacy = 0.5;
-        let proportion_asymptomatic = 0.0;
+        let proportion_asymptomatic = 0.2;
 
         let mut context = setup_context(
-            post_isolation_duration,
+            duration_from_symptom_onset,
+            mild_symptom_isolation_duration,
+            moderate_symptom_isolation_duration,
+            negative_test_isolation_duration,
             isolation_probability,
             isolation_delay_period,
+            test_sensitivity,
             facemask_efficacy,
             proportion_asymptomatic,
         );
@@ -300,20 +439,13 @@ mod test {
 
         context.subscribe_to_event::<PersonPropertyChangeEvent<IsolatingStatus>>(
             move |context, event| {
-                if event.current {
-                    assert_almost_eq!(
+                assert_almost_eq!(
                         context.get_person_property(event.person_id, SymptomStartTime)
                             + isolation_delay_period,
                         context.get_current_time(),
                         0.0
                     );
-                } else {
-                    assert_almost_eq!(
-                        context.get_person_property(event.person_id, SymptomEndTime),
-                        context.get_current_time(),
-                        0.0
-                    );
-                }
+                
             },
         );
 
@@ -328,8 +460,7 @@ mod test {
                     );
                 } else {
                     assert_almost_eq!(
-                        context.get_person_property(event.person_id, SymptomEndTime)
-                            + post_isolation_duration,
+                        context.get_person_property(event.person_id, SymptomEndTime),
                         context.get_current_time(),
                         0.0
                     );
@@ -350,11 +481,15 @@ mod test {
         // expect. This proportion is determined by the isolation probability parameter.
         // Note this requires an isolation delay period of 0.
 
-        let post_isolation_duration = 5.0;
-        let isolation_probability = 0.75;
+        let duration_from_symptom_onset = 10.0;
+        let mild_symptom_isolation_duration = 5.0;
+        let moderate_symptom_isolation_duration = 10.0;
+        let negative_test_isolation_duration = 2.0;
+        let isolation_probability = 1.0;
         let isolation_delay_period = 0.0;
+        let test_sensitivity = 0.9;
         let facemask_efficacy = 0.5;
-        let proportion_asymptomatic = 0.3;
+        let proportion_asymptomatic = 0.2;
 
         let num_people_isolating = Rc::new(RefCell::new(0usize));
 
@@ -363,9 +498,13 @@ mod test {
         for seed in 0..num_sims {
             let num_people_isolating_clone = Rc::clone(&num_people_isolating);
             let mut context = setup_context(
-                post_isolation_duration,
+                duration_from_symptom_onset,
+                mild_symptom_isolation_duration,
+                moderate_symptom_isolation_duration,
+                negative_test_isolation_duration,
                 isolation_probability,
                 isolation_delay_period,
+                test_sensitivity,
                 facemask_efficacy,
                 proportion_asymptomatic,
             );
@@ -455,7 +594,7 @@ mod test {
                 Some(IxaError::IxaError(msg)) => {
                     assert_eq!(
                         msg,
-                        "Policy enum does not match specified enum variant for updated guidance."
+                        "Policy enum does not match specified enum variant for previous guidance."
                     );
                 }
                 Some(ue) => panic!(
