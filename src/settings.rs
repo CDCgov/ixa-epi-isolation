@@ -1534,6 +1534,9 @@ mod test {
         context.add_itinerary(person_a, itinerary_a).unwrap();
         context.add_itinerary(person_b, itinerary_b).unwrap();
         let setting_id = context.sample_setting(person_a).unwrap();
+        let members = context.get_setting_members(setting_id).unwrap();
+        assert!(members.contains(&person_a));
+        
         assert_eq!(
             Some(person_b),
             context
