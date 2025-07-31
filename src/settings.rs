@@ -2,7 +2,7 @@ use crate::parameters::{
     ContextParametersExt, CoreSettingsTypes, ItinerarySpecificationType, Params,
 };
 use ixa::{
-    define_data_plugin, define_rng, people::Query, prelude_for_plugins::IxaEvent, trace, Context,
+    define_data_plugin, define_rng, prelude_for_plugins::IxaEvent, trace, Context,
     ContextPeopleExt, ContextRandomExt, IxaError, PersonId, PluginContext,
 };
 use serde::{Deserialize, Serialize};
@@ -609,98 +609,36 @@ pub trait ContextSettingExt:
             .get_itinerary(person_id)
     }
 
-    fn get_contact<T: Query>(
+    fn sample_from_setting_with_exclusion(
         &self,
         person_id: PersonId,
         setting: &dyn AnySettingId,
-        q: T,
     ) -> Result<Option<PersonId>, IxaError> {
         if let Some(members) = self.get_setting_members(setting) {
             if members.len() == 1 {
-                // Only contains `person_id`; no one else to infect.
-                return Ok(None);
-            }
-            // Instead of scanning the entire set of contacts, collecting those that match the
-            // query, and then randomly selecting, we randomly select and then check the selected
-            // person to see if they match the query and repeat if they do not. We set a max number
-            // of guess-and-checks to be some number n. One can write down a closed form formula
-            // for the expected number of steps this strategy takes. The original strategy takes
-            // c + 1 steps (c checks and 1 random selection), where c is the number of contacts
-            // (excluding infector). If a is the percentage of contacts that match the query (a for
-            // "alive"), it can be shown that the "break even" point,
-            //    E[runtime of this strategy] = c + 1,
-            // occurs when a = 2/(c + 1). Notice this is independent of n. The number of
-            // guess-and-checks needed to find a match to the query is geometrically distributed
-            // and has expected value 1/a. Note this is independent of c. At the break even point,
-            // the expected number of guess-and-checks needed is
-            //     1/a = (c + 1)/2.
-            // We set n = (c + 1)/2 as a heuristic.
-            //
-            // For the sake of efficiency, we "cheat" a little and don't remove `person_id` first.
-            #[allow(clippy::manual_div_ceil)]
-            let n = (members.len() + 1) / 2;
-            for _ in 0..n {
-                let potential_contact_id =
-                    members[self.sample_range(SettingsRng, 0..members.len())];
-                if potential_contact_id != person_id && self.match_person(potential_contact_id, q) {
-                    return Ok(Some(potential_contact_id));
+                // Because sample_from_setting_with_exclusion doesn't check for membership
+                // if there's one person and it's not person_id, it should return that person
+                if members[0] == person_id {
+                    return Ok(None)
+                } else {
+                    return Ok(Some(members[0]));
                 }
             }
-            // If we haven't found a match by now, we do it the "hard" way by collecting all
-            // matching people first, which is guaranteed to find someone if they exist.
 
-            // Don't mutate the original vector.
-            let mut contacts = members.clone();
-
-            // ToDo: Do we really need to explicitly check that `person_id` is in `contacts`? It
-            //       adds a linear scan to the fast path.
-            if let Some(pos) = contacts.iter().position(|x| *x == person_id) {
-                contacts.swap_remove(pos);
-            } else {
-                return Err(IxaError::from(
-                    "Attempting contact outside of group membership",
-                ));
-            }
-
-            if !q.get_query().is_empty() {
-                // If the query is not empty, we match setting members to the query
-                self.filter_people(&mut contacts, q);
-            }
-
-            if contacts.is_empty() {
-                return Ok(None);
-            }
-
-            Ok(Some(
-                contacts[self.sample_range(SettingsRng, 0..contacts.len())],
-            ))
+            let mut contact_id;
+            loop {
+                contact_id = members[self.sample_range(SettingsRng, 0..members.len())];
+                if contact_id != person_id {
+                    break;
+                }
+            } 
+            
+            Ok(Some(contact_id))
         } else {
             Err(IxaError::from("Group membership is None"))
         }
     }
 
-    #[allow(dead_code)]
-    fn draw_contact_from_transmitter_itinerary<Q: Query>(
-        &self,
-        person_id: PersonId,
-        q: Q,
-    ) -> Result<Option<PersonId>, IxaError> {
-        let container = self.get_data_container(SettingDataPlugin).unwrap();
-        let mut itinerary_multiplier = Vec::new();
-        container.with_itinerary(person_id, |setting, setting_props, members, ratio| {
-            let multiplier = setting.calculate_multiplier(members, *setting_props);
-            itinerary_multiplier.push(ratio * multiplier);
-        });
-
-        let setting_index = self.sample_weighted(SettingsRng, &itinerary_multiplier);
-
-        if let Some(itinerary) = self.get_itinerary(person_id) {
-            let itinerary_entry = &itinerary[setting_index];
-            self.get_contact(person_id, itinerary_entry.setting.as_ref(), q)
-        } else {
-            Ok(None)
-        }
-    }
     fn sample_setting(&self, person_id: PersonId) -> Option<&dyn AnySettingId> {
         let container = self.get_data_container(SettingDataPlugin).unwrap();
         let mut itinerary_multiplier = Vec::new();
@@ -1597,11 +1535,11 @@ mod test {
         let setting_id = context.sample_setting(person_a).unwrap();
         assert_eq!(
             Some(person_b),
-            context.get_contact(person_a, setting_id, ()).unwrap()
+            context.sample_from_setting_with_exclusion(person_a, setting_id).unwrap()
         );
 
         assert!(context
-            .get_contact(person_a, &SettingId::new(CensusTract, 0), ())
+            .sample_from_setting_with_exclusion(person_a, &SettingId::new(CensusTract, 0))
             .unwrap()
             .is_none());
 
@@ -1609,7 +1547,7 @@ mod test {
         let itinerary_c = vec![ItineraryEntry::new(SettingId::new(CensusTract, 0), 0.5)];
         context.add_itinerary(person_c, itinerary_c).unwrap();
 
-        let e = context.get_contact(person_a, &SettingId::new(CensusTract, 10), ());
+        let e = context.sample_from_setting_with_exclusion(person_a, &SettingId::new(CensusTract, 10));
         match e {
             Err(IxaError::IxaError(msg)) => {
                 assert_eq!(msg, "Group membership is None");
@@ -1622,172 +1560,7 @@ mod test {
         }
     }
 
-    #[test]
-    fn test_draw_contact_from_transmitter_itinerary() {
-        /*
-        Run 100 times
-        - Create 3 people at home, and 3 people at censustract
-        - Create 7th person with itinerary at home and census tract
-        - Call "draw contact from itinerary":
-          + Compute total infectiousness
-          + Draw a setting weighted by total infectiousness
-          + Sample contact from chosen setting
-         - Test 1 Itinerary with 0 proportion at census tract, contacts drawn should be from home (0-2)
-         - Test 2 Itinerary with 0 proportion at home, contacts should be drawn from census tract (3-6)
-         */
-        for seed in 0..100 {
-            let mut context = Context::new();
-            context.init_random(seed);
-            context
-                .register_setting_category(
-                    &Home,
-                    SettingProperties {
-                        alpha: 0.1,
-                        itinerary_specification: None,
-                    },
-                )
-                .unwrap();
-            context
-                .register_setting_category(
-                    &CensusTract,
-                    SettingProperties {
-                        alpha: 0.01,
-                        itinerary_specification: None,
-                    },
-                )
-                .unwrap();
-
-            for _ in 0..3 {
-                let person = context.add_person(()).unwrap();
-                let itinerary = vec![ItineraryEntry::new(SettingId::new(Home, 0), 1.0)];
-                context.add_itinerary(person, itinerary).unwrap();
-            }
-
-            for _ in 0..3 {
-                let person = context.add_person(()).unwrap();
-                let itinerary = vec![ItineraryEntry::new(SettingId::new(CensusTract, 0), 1.0)];
-                context.add_itinerary(person, itinerary).unwrap();
-            }
-
-            let person = context.add_person(()).unwrap();
-            let itinerary_home = vec![
-                ItineraryEntry::new(SettingId::new(Home, 0), 1.0),
-                ItineraryEntry::new(SettingId::new(CensusTract, 0), 0.0),
-            ];
-            let itinerary_censustract = vec![
-                ItineraryEntry::new(SettingId::new(Home, 0), 0.0),
-                ItineraryEntry::new(SettingId::new(CensusTract, 0), 1.0),
-            ];
-            let home_members = context
-                .get_setting_members(&SettingId::new(Home, 0))
-                .unwrap()
-                .clone();
-            let tract_members = context
-                .get_setting_members(&SettingId::new(CensusTract, 0))
-                .unwrap()
-                .clone();
-
-            context.add_itinerary(person, itinerary_home).unwrap();
-            let contact_id_home = context.draw_contact_from_transmitter_itinerary(person, ());
-            assert!(home_members.contains(&contact_id_home.unwrap().unwrap()));
-
-            context
-                .add_itinerary(person, itinerary_censustract)
-                .unwrap();
-            let contact_id_tract = context.draw_contact_from_transmitter_itinerary(person, ());
-            assert!(tract_members.contains(&contact_id_tract.unwrap().unwrap()));
-        }
-    }
-
     define_person_property!(Age, usize);
-
-    #[test]
-    fn test_draw_contact_from_transmitter_itinerary_with_query() {
-        /*
-        Run 100 times
-        - Create 3 people at home, and 3 people at censustract
-        - Create 7th person with itinerary at home and census tract
-        - Assign Age property to people and query for only Age = 42
-        - Call "draw contact from itinerary":
-          + Compute total infectiousness
-          + Draw a setting weighted by total infectiousness
-          + Sample contact from chosen setting
-         - Test 1 Itinerary with 0 proportion at census tract, contacts drawn should be from home (0-2)
-         - Test 2 Itinerary with 0 proportion at home, contacts should be drawn from census tract (3-6)
-         */
-        let mut context = Context::new();
-        context.init_random(1234);
-        context
-            .register_setting_category(
-                &Home,
-                SettingProperties {
-                    alpha: 0.1,
-                    itinerary_specification: None,
-                },
-            )
-            .unwrap();
-        context
-            .register_setting_category(
-                &CensusTract,
-                SettingProperties {
-                    alpha: 0.01,
-                    itinerary_specification: None,
-                },
-            )
-            .unwrap();
-
-        for i in 0..3 {
-            let person = context.add_person((Age, 42 + i)).unwrap();
-            let itinerary = vec![ItineraryEntry::new(SettingId::new(Home, 0), 1.0)];
-            context.add_itinerary(person, itinerary).unwrap();
-        }
-
-        for i in 3..6 {
-            let person = context.add_person((Age, 39 + i)).unwrap();
-            let itinerary = vec![ItineraryEntry::new(SettingId::new(CensusTract, 0), 1.0)];
-            context.add_itinerary(person, itinerary).unwrap();
-        }
-
-        let person = context.add_person((Age, 42)).unwrap();
-        let itinerary_home = vec![
-            ItineraryEntry::new(SettingId::new(Home, 0), 1.0),
-            ItineraryEntry::new(SettingId::new(CensusTract, 0), 0.0),
-        ];
-        let itinerary_censustract = vec![
-            ItineraryEntry::new(SettingId::new(Home, 0), 0.0),
-            ItineraryEntry::new(SettingId::new(CensusTract, 0), 1.0),
-        ];
-        let home_members = context
-            .get_setting_members(&SettingId::new(Home, 0))
-            .unwrap()
-            .clone();
-        let tract_members = context
-            .get_setting_members(&SettingId::new(CensusTract, 0))
-            .unwrap()
-            .clone();
-
-        context.add_itinerary(person, itinerary_home).unwrap();
-        let contact_id_home = context
-            .draw_contact_from_transmitter_itinerary(person, (Age, 42))
-            .unwrap();
-        assert!(home_members.contains(&contact_id_home.unwrap()));
-        assert_eq!(
-            context.get_person_property(contact_id_home.unwrap(), Age),
-            42
-        );
-
-        context
-            .add_itinerary(person, itinerary_censustract)
-            .unwrap();
-        let contact_id_tract = context
-            .draw_contact_from_transmitter_itinerary(person, (Age, 42))
-            .unwrap();
-        assert!(tract_members.contains(&contact_id_tract.unwrap()));
-        assert_eq!(
-            context.get_person_property(contact_id_tract.unwrap(), Age),
-            42
-        );
-    }
 
     #[test]
     fn test_itinerary_specification_none() {
