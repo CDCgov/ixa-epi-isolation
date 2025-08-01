@@ -10,4 +10,3 @@ for p in ${pop_sizes[@]}; do
     mkdir -p output/$p
     samply record --save-only --output profile_$p.json.gz -- ./target/profiling/epi-isolation -c input/input_state_$p.json -o output/$p -f
 done
-
