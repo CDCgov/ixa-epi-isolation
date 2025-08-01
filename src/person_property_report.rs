@@ -22,6 +22,16 @@ struct PersonPropertyReport {
     count: usize,
 }
 
+#[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
+struct PersonPropertyIncidenceReport {
+    t: f64,
+    age: String,
+    symptoms: String,
+    infection_status: String,
+    hospitalized: String,
+    count: usize,
+}
+
 #[derive(Eq, Hash, PartialEq, Serialize, Deserialize, Copy, Clone, Debug)]
 pub struct PersonPropertyReportValues {
     age: u8,
@@ -31,6 +41,7 @@ pub struct PersonPropertyReportValues {
 }
 
 define_report!(PersonPropertyReport);
+define_report!(PersonPropertyIncidenceReport);
 
 define_derived_property!(
     PersonReportProperties,
@@ -48,6 +59,7 @@ define_derived_property!(
 
 struct PropertyReportDataContainer {
     person_property_report_map_container: HashMap<Vec<String>, usize>,
+    person_property_report_incidence_container: HashMap<Vec<String>, usize>,
 }
 
 define_data_plugin!(
@@ -55,6 +67,7 @@ define_data_plugin!(
     PropertyReportDataContainer,
     PropertyReportDataContainer {
         person_property_report_map_container: HashMap::new(),
+        person_property_report_incidence_container: HashMap::new(),
     }
 );
 
@@ -78,6 +91,11 @@ fn update_property_change_counts(
 
     *report_container_mut
         .person_property_report_map_container
+        .entry(current_vec.clone())
+        .or_insert(0) += 1;
+
+    *report_container_mut
+        .person_property_report_incidence_container
         .entry(current_vec)
         .or_insert(0) += 1;
 
@@ -100,7 +118,23 @@ fn send_property_counts(context: &mut Context) {
             infection_status: values[2].clone(),
             hospitalized: values[3].clone(),
             count: *count_property,
-        });
+        });        
+    }
+
+    for (values, count_property) in &report_container.person_property_report_incidence_container {
+        context.send_report(PersonPropertyIncidenceReport {
+            t: context.get_current_time(),
+            age: values[0].clone(),
+            symptoms: values[1].clone(),
+            infection_status: values[2].clone(),
+            hospitalized: values[3].clone(),
+            count: *count_property,
+        });        
+    }
+    let report_container_mut = context
+        .get_data_container_mut(PropertyReportDataPlugin);
+    for value in report_container_mut.person_property_report_incidence_container.values_mut() {
+        *value = 0;
     }
 }
 
@@ -111,19 +145,26 @@ fn create_person_property_report(
 ) -> Result<(), IxaError> {
     // Count initial number of people per property status
     context.add_report::<PersonPropertyReport>(file_name)?;
+    context.add_report::<PersonPropertyIncidenceReport>(("incidence_".to_owned() + file_name).as_ref())?;
 
     // Compute initial counts
     let map_counts: RefCell<HashMap<Vec<String>, usize>> = RefCell::new(HashMap::new());
+    let incidence_counts: RefCell<HashMap<Vec<String>, usize>> = RefCell::new(HashMap::new());
     context.tabulate_person_properties(
         &(Age, Symptoms, InfectionStatus, Hospitalized),
         |_context, values, count| {
             map_counts.borrow_mut().insert(values.to_vec(), count);
+            incidence_counts.borrow_mut().insert(values.to_vec(), 0);
         },
     );
     let report_container = context.get_data_container_mut(PropertyReportDataPlugin);
     report_container
         .person_property_report_map_container
         .clone_from(&map_counts.borrow());
+
+    report_container
+        .person_property_report_incidence_container
+        .clone_from(&incidence_counts.borrow());
 
     context.add_periodic_plan_with_phase(
         period,
