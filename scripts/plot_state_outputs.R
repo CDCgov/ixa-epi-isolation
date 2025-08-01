@@ -46,6 +46,19 @@ person_property_report |>
   ))
 
 # Infectious curves
+person_property_report |>
+  group_by(t, hospitalized) |>
+  summarise(count = sum(count), .groups = "drop") |>
+  ggplot(aes(x = t, y = count)) +
+  geom_line(aes(color = hospitalized)) +
+  xlab("Day") +
+  ylab("Number of people") +
+  ggtitle(sprintf(
+    "R0 = %.2f - Population = %d",
+    -log(1 - max_inf / pop_size) / (max_inf / pop_size), pop_size
+  ))
+
+# Infectious curves
 person_property_incidence |>
   group_by(t, infection_status) |>
   summarise(count = sum(count), .groups = "drop") |>

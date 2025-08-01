@@ -26,8 +26,8 @@ struct PersonPropertyReport {
 struct PersonPropertyIncidenceReport {
     t: f64,
     age: String,
-    symptoms: String,
     infection_status: String,
+    symptoms: String,
     hospitalized: String,
     count: usize,
 }
@@ -35,8 +35,8 @@ struct PersonPropertyIncidenceReport {
 #[derive(Eq, Hash, PartialEq, Serialize, Deserialize, Copy, Clone, Debug)]
 pub struct PersonPropertyReportValues {
     age: u8,
-    symptoms: Option<SymptomValue>,
     infection_status: InfectionStatusValue,
+    symptoms: Option<SymptomValue>,
     hospitalized: bool,
 }
 
@@ -46,12 +46,12 @@ define_report!(PersonPropertyIncidenceReport);
 define_derived_property!(
     PersonReportProperties,
     PersonPropertyReportValues,
-    [Age, Symptoms, InfectionStatus, Hospitalized],
-    |age, symptoms, infection_status, hospitalized| {
+    [Age, InfectionStatus, Symptoms, Hospitalized],
+    |age, infection_status, symptoms,hospitalized| {
         PersonPropertyReportValues {
             age,
-            symptoms,
             infection_status,
+            symptoms,
             hospitalized,
         }
     }
@@ -77,14 +77,14 @@ fn update_property_change_counts(
 ) {
     let previous_vec = vec![
         format!("{:?}", event.previous.age),
-        format!("{:?}", event.previous.symptoms),
         format!("{:?}", event.previous.infection_status),
+        format!("{:?}", event.previous.symptoms),
         format!("{:?}", event.previous.hospitalized),
     ];
     let current_vec = vec![
         format!("{:?}", event.current.age),
-        format!("{:?}", event.current.symptoms),
         format!("{:?}", event.current.infection_status),
+        format!("{:?}", event.current.symptoms),
         format!("{:?}", event.current.hospitalized),
     ];
     let report_container_mut = context.get_data_container_mut(PropertyReportDataPlugin);
@@ -114,8 +114,8 @@ fn send_property_counts(context: &mut Context) {
         context.send_report(PersonPropertyReport {
             t: context.get_current_time(),
             age: values[0].clone(),
-            symptoms: values[1].clone(),
-            infection_status: values[2].clone(),
+            infection_status: values[1].clone(),
+            symptoms: values[2].clone(),
             hospitalized: values[3].clone(),
             count: *count_property,
         });        
@@ -125,8 +125,8 @@ fn send_property_counts(context: &mut Context) {
         context.send_report(PersonPropertyIncidenceReport {
             t: context.get_current_time(),
             age: values[0].clone(),
-            symptoms: values[1].clone(),
-            infection_status: values[2].clone(),
+            infection_status: values[1].clone(),
+            symptoms: values[2].clone(),
             hospitalized: values[3].clone(),
             count: *count_property,
         });        
@@ -151,7 +151,7 @@ fn create_person_property_report(
     let map_counts: RefCell<HashMap<Vec<String>, usize>> = RefCell::new(HashMap::new());
     let incidence_counts: RefCell<HashMap<Vec<String>, usize>> = RefCell::new(HashMap::new());
     context.tabulate_person_properties(
-        &(Age, Symptoms, InfectionStatus, Hospitalized),
+        &(Age, InfectionStatus, Symptoms, Hospitalized),
         |_context, values, count| {
             map_counts.borrow_mut().insert(values.to_vec(), count);
             incidence_counts.borrow_mut().insert(values.to_vec(), 0);
