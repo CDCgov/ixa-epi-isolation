@@ -85,6 +85,8 @@ pub struct Params {
     pub synth_population_file: PathBuf,
     /// The path to the transmission report file
     pub transmission_report_name: Option<String>,
+    /// The path to the person property report file
+    pub person_property_report_name: Option<String>,
     // Facemask parameters
     // facemask_efficacy the reduction in tranmission associated with wearing a facemask.
     pub facemask_parameters: Option<FacemaskParameters>,
@@ -120,6 +122,7 @@ impl Default for Params {
             settings_properties: HashMap::new(),
             synth_population_file: PathBuf::new(),
             transmission_report_name: None,
+            person_property_report_name: None,
             facemask_parameters: None,
             hospitalization_parameters: HospitalizationParameters {
                 mean_delay_to_hospitalization: 0.0,

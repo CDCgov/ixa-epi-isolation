@@ -5,6 +5,7 @@ mod infectiousness_manager;
 mod interventions;
 mod natural_history_parameter_manager;
 mod parameters;
+mod person_property_report;
 mod policies;
 mod population_loader;
 mod property_progression_manager;
@@ -14,14 +15,11 @@ mod symptom_progression;
 mod transmission_report;
 pub mod utils;
 
-use infectiousness_manager::InfectionStatus;
 use ixa::runner::run_with_args;
-use ixa::{ContextPeopleExt, ContextRandomExt, ContextReportExt};
+use ixa::{ContextPeopleExt, ContextRandomExt};
 use parameters::{ContextParametersExt, Params};
 use population_loader::Age;
-use symptom_progression::Symptoms;
 
-use crate::hospitalizations::Hospitalized;
 // You must run this with a parameters file:
 // cargo run -- --config input/input.json
 // Try enabling logs to see some output about infections:
@@ -29,12 +27,7 @@ use crate::hospitalizations::Hospitalized;
 fn main() {
     run_with_args(|context, _, _| {
         // Read the global properties.
-        let &Params {
-            max_time,
-            seed,
-            report_period,
-            ..
-        } = context.get_params();
+        let &Params { max_time, seed, .. } = context.get_params();
 
         // Set the random seed.
         context.init_random(seed);
@@ -45,14 +38,6 @@ fn main() {
             context.shutdown();
         });
 
-        // Report the number of people by age, census tract, symptoms, and infectious status
-        // every report_period.
-        context.add_periodic_report(
-            "person_property_count",
-            report_period,
-            (Age, Symptoms, InfectionStatus, Hospitalized),
-        )?;
-
         settings::init(context);
 
         // Load the synthetic population from the `synthetic_population_file`
@@ -62,6 +47,7 @@ fn main() {
 
         infection_propagation_loop::init(context)?;
         transmission_report::init(context)?;
+        person_property_report::init(context)?;
         symptom_progression::init(context)?;
         policies::init(context)?;
         hospitalizations::init(context);
