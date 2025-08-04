@@ -75,7 +75,7 @@ pub trait ContextTransmissionModifierExt: PluginContext {
 
         // Insert the boxed function into the transmission modifier map, using entry to handle unititialized keys
         if let Some(_modifier_fxn) = self
-            .get_data_container_mut(TransmissionModifierPlugin)
+            .get_data_mut(TransmissionModifierPlugin)
             .transmission_modifier_map
             .entry(infection_status)
             .or_default()
@@ -143,27 +143,20 @@ impl ContextTransmissionModifierExt for Context {
     fn get_relative_total_transmission(&self, person_id: PersonId) -> f64 {
         let infection_status = self.get_person_property(person_id, InfectionStatus);
 
-        if let Some(transmission_modifier_plugin) =
-            self.get_data_container(TransmissionModifierPlugin)
+        let transmission_modifier_plugin = self.get_data(TransmissionModifierPlugin);
+        if let Some(transmission_modifier_map) = transmission_modifier_plugin
+            .transmission_modifier_map
+            .get(&infection_status)
         {
-            if let Some(transmission_modifier_map) = transmission_modifier_plugin
-                .transmission_modifier_map
-                .get(&infection_status)
-            {
-                // Calculate the relative modifier for each registered function and multiply them
-                // together to get the total relative transmission modifier for the person
-                transmission_modifier_map.iter().fold(
-                    1.0,
-                    |agg, (_type_id, transmission_modifier)| {
-                        agg * transmission_modifier.get_relative_transmission(self, person_id)
-                    },
-                )
-            } else {
-                // If the infection status is not found in the map, return 1.0
-                1.0
-            }
+            // Calculate the relative modifier for each registered function and multiply them
+            // together to get the total relative transmission modifier for the person
+            transmission_modifier_map
+                .iter()
+                .fold(1.0, |agg, (_type_id, transmission_modifier)| {
+                    agg * transmission_modifier.get_relative_transmission(self, person_id)
+                })
         } else {
-            // If the plugin is not initialized, return 1.0
+            // If the infection status is not found in the map, return 1.0
             1.0
         }
     }
@@ -278,9 +271,7 @@ mod test {
             .unwrap();
 
         // Container should now be initialized, safe to unwrap()
-        let modifier_container = context
-            .get_data_container(TransmissionModifierPlugin)
-            .unwrap();
+        let modifier_container = context.get_data(TransmissionModifierPlugin);
         let modifier_map = modifier_container
             .transmission_modifier_map
             .get(&InfectionStatusValue::Susceptible)
@@ -346,9 +337,7 @@ mod test {
             .unwrap();
 
         // Container should now be initialized, safe to unwrap()
-        let modifier_container = context
-            .get_data_container(TransmissionModifierPlugin)
-            .unwrap();
+        let modifier_container = context.get_data(TransmissionModifierPlugin);
         let modifier_map = modifier_container
             .transmission_modifier_map
             .get(&InfectionStatusValue::Susceptible)
@@ -462,9 +451,7 @@ mod test {
         );
 
         // Container should now be initialized, safe to unwrap()
-        let modifier_container = context
-            .get_data_container(TransmissionModifierPlugin)
-            .unwrap();
+        let modifier_container = context.get_data(TransmissionModifierPlugin);
         let modifier_map = modifier_container
             .transmission_modifier_map
             .get(&InfectionStatusValue::Susceptible)

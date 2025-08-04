@@ -69,17 +69,17 @@ define_data_plugin!(
 trait ContextForecastInternalExt: PluginContext {
     /// Remove person from the data container `HashMap`
     fn remove_forecast_plan(&mut self, person_id: PersonId) {
-        let container = self.get_data_container_mut(ForecastDataPlugin);
+        let container = self.get_data_mut(ForecastDataPlugin);
         container.remove_plan(person_id);
     }
     /// Add a new plan to the forecast data plugin and cancel any plan currently associated with that person
     fn add_forecast_plan(&mut self, person_id: PersonId, plan_id: PlanId) {
-        let container = self.get_data_container_mut(ForecastDataPlugin);
+        let container = self.get_data_mut(ForecastDataPlugin);
         container.add_plan(person_id, plan_id);
     }
     /// Cancel forecast but keep infector in the data map
     fn cancel_forecast(&mut self, person_id: PersonId) {
-        let container = self.get_data_container(ForecastDataPlugin).unwrap();
+        let container = self.get_data(ForecastDataPlugin);
         if let Some(active_plan) = container.get_plan(person_id) {
             self.cancel_plan(&active_plan.clone());
         }
@@ -87,29 +87,27 @@ trait ContextForecastInternalExt: PluginContext {
     /// Listen to itinerary changes and determine their effect on the current active forecast plans of potential infectors
     fn subscribe_to_itinerary_change(&mut self) {
         self.subscribe_to_event::<ItineraryChangeEvent>(move |context, event| {
-            if let Some(container) = context.get_data_container(ForecastDataPlugin) {
-                // Check for any active forecast associated with person
-                let affected_infectors: Vec<PersonId> = container
-                    .active_plans
-                    .keys()
-                    .filter(|&infector| {
-                        (context.is_contact(event.person_id, *infector)
-                            && event.increases_membership)
-                            || (event.person_id == *infector
-                                && event.previous_multiplier < event.current_multiplier)
-                    })
-                    .copied()
-                    .collect();
+            let container = context.get_data(ForecastDataPlugin);
+            // Check for any active forecast associated with person
+            let affected_infectors: Vec<PersonId> = container
+                .active_plans
+                .keys()
+                .filter(|&infector| {
+                    (context.is_contact(event.person_id, *infector) && event.increases_membership)
+                        || (event.person_id == *infector
+                            && event.previous_multiplier < event.current_multiplier)
+                })
+                .copied()
+                .collect();
 
-                // We have to re-evaluate any infectors and infectious contacts that may be new to the person with a changed itinerary,
-                // as their itinerary potentially increased membership across some settings
-                // and therefore potentially increased the infectiousness of the infector
-                for infector in affected_infectors {
-                    // The infector is only removed from the data plugin once they have no more infectious potential
-                    // Otherwise, itinerary changes adding individuals to their settings could lead to infection attempts
-                    context.cancel_forecast(infector);
-                    schedule_next_forecasted_infection(context, infector);
-                }
+            // We have to re-evaluate any infectors and infectious contacts that may be new to the person with a changed itinerary,
+            // as their itinerary potentially increased membership across some settings
+            // and therefore potentially increased the infectiousness of the infector
+            for infector in affected_infectors {
+                // The infector is only removed from the data plugin once they have no more infectious potential
+                // Otherwise, itinerary changes adding individuals to their settings could lead to infection attempts
+                context.cancel_forecast(infector);
+                schedule_next_forecasted_infection(context, infector);
             }
         });
     }
