@@ -35,11 +35,35 @@ def main(config_file: str, keep: bool):
         perturbation_kernel_dict=perturbation,
     )
 
+    if experiment.azure_batch:
+        # Identifying file locations wihtin blob storage
+        blob_experiment_directory = os.path.join(
+            experiment.blob_container_name, experiment.sub_experiment_name
+        )
+        defaults = experiment.get_default_params()
+        symptom_params_file = defaults["symptom_progression_library"]["EmpiricalFromFile"]["file"]
+        synth_pop_file = defaults["synth_population_file"]
+        experiment.changed_baseline_params = {
+            "symptom_progression_library": {
+                "EmpiricalFromFile": {
+                    "file": f"/{blob_experiment_directory}/{os.path.basename(symptom_params_file)}"
+                }
+            },
+            "synth_population_file": f"/{blob_experiment_directory}/{os.path.basename(synth_pop_file)}"
+        }
+        fps = [synth_pop_file, symptom_params_file]
+        use_existing = True
+    else:
+        fps = []
+        use_existing=False
+
     # Run experiment object
     wrappers.run_abcsmc(
         experiment=experiment,
         distance_fn=hosp_lhood,
         data_read_fn=output_processing_function,
+        files_to_upload = fps,
+        use_existing_distances=use_existing,
     )
 
 
@@ -49,9 +73,15 @@ def hosp_lhood(results_data: pl.DataFrame, target_data: pl.DataFrame):
 
     # upper precision bound for neg log, P(results) = 0
     if results_data.is_empty():
-        return 750.0
+        joint_set = target_data.with_columns(
+            pl.struct(["count", "total_admissions"])
+            .map_elements(
+                lambda x: poisson_lhood(0, x["total_admissions"]),
+                return_dtype=pl.Float64,
+            )
+            .alias("negloglikelihood")
+        )
     else:
-        print(results_data.sort("t"))
         joint_set = results_data.select(pl.col(["t", "count"])).join(
             target_data.select(pl.col(["t", "total_admissions"])),
             on="t",
@@ -68,26 +98,25 @@ def hosp_lhood(results_data: pl.DataFrame, target_data: pl.DataFrame):
             )
             .alias("negloglikelihood")
         )
-        print(joint_set.sort("t"))
-        return joint_set.select(pl.col("negloglikelihood").sum()).item()
+    return joint_set.select(pl.col("negloglikelihood").sum()).item()
 
 
 def output_processing_function(outputs_dir):
     fp = os.path.join(outputs_dir, "hospital_incidence_report.csv")
 
-    if os.path.exists(fp):
+    try:
         df = pl.read_csv(fp)
-    else:
-        raise FileNotFoundError(f"{fp} does not exist.")
 
-    df = (
-        df.with_columns((pl.col("time") / 7.0).ceil().cast(pl.Int64).alias("week"))
-        .group_by("week")
-        .agg(pl.len().alias("count"))
-        .with_columns((pl.col("week") * 7 - 1).alias("t"))
-    )
+        df = (
+            df.with_columns((pl.col("time") / 7.0).ceil().cast(pl.Int64).alias("week"))
+            .group_by("week")
+            .agg(pl.len().alias("count"))
+            .with_columns((pl.col("week") * 7 - 1).alias("t"))
+        )
 
-    return df
+        return df
+    except:
+        return pl.DataFrame(None, ["time", "person_id", "age"])
 
 def task(
     simulation_index: int,
