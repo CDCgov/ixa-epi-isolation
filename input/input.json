@@ -3,7 +3,7 @@
     "max_time": 200.0,
     "seed": 123,
     "infectiousness_rate_fn": {"EmpiricalFromFile": {"file": "input/library_empirical_rate_fns.csv",
-                                                     "scale": 1.0}},
+                                                     "scale": 0.05}},
     "initial_incidence": 0.1,
     "initial_recovered": 0.35,
     "proportion_asymptomatic": 0.3,
