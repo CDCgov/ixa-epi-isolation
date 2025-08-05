@@ -8,7 +8,7 @@ experiment_conditions:
 local_path:
   default_params_file: ./scripts/experiments/benchmarking/parameter-sweep/input/base.json
   griddle_file: ./scripts/experiments/benchmarking/parameter-sweep/input/griddle.json
-  exe_file: ./target/release/epi-isolation
+  exe_file: target/release/epi-isolation
   sub_experiment_name: parameter-sweep
   super_experiment_name: benchmarking
   target_data_file: null
