@@ -22,7 +22,10 @@ def main(config_file: str, keep: bool):
 
     perturbation = {
         "infectiousness_rate_fn": {
-            "Constant": {"rate": norm(0, 0.01), "duration": norm(0, 0.05)}
+            "Constant": {
+                "rate": norm(0, 0.01), 
+                "duration": norm(0, 0.05)
+            }
         },
         "proportion_asymptomatic": norm(0, 0.01)
     }
@@ -71,12 +74,11 @@ def hosp_lhood(results_data: pl.DataFrame, target_data: pl.DataFrame):
     def poisson_lhood(model, data):
         return -log(poisson.pmf(model, data)+1e-12)
 
-    # upper precision bound for neg log, P(results) = 0
-    if results_data.is_empty():
+    if "t" not in results_data.columns:
         joint_set = target_data.with_columns(
-            pl.struct(["count", "total_admissions"])
+            pl.col("total_admissions")
             .map_elements(
-                lambda x: poisson_lhood(0, x["total_admissions"]),
+                lambda x: poisson_lhood(0, x),
                 return_dtype=pl.Float64,
             )
             .alias("negloglikelihood")
@@ -116,7 +118,7 @@ def output_processing_function(outputs_dir):
 
         return df
     except:
-        return pl.DataFrame(None, ["time", "person_id", "age"])
+        return pl.DataFrame()
 
 def task(
     simulation_index: int,
