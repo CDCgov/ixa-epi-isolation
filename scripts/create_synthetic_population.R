@@ -11,7 +11,7 @@ set.seed(1234)
 
 state_synth <- "WY"
 year_synth <- 2023
-population_size <- 1000000
+population_size <- 50000
 school_per_pop_ratio <- 0.002
 work_per_pop_ratio <- 0.1
 
