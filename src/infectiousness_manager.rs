@@ -5,12 +5,12 @@ use ixa::{
 use serde::Serialize;
 use statrs::distribution::Exp;
 
+use crate::profiling::open_span;
 use crate::{
     interventions::ContextTransmissionModifierExt,
     rate_fns::{InfectiousnessRateExt, InfectiousnessRateFn, ScaledRateFn},
     settings::ContextSettingExt,
 };
-use crate::profiling::open_span;
 
 #[derive(Serialize, PartialEq, Debug, Clone, Copy)]
 pub enum InfectionDataValue {
