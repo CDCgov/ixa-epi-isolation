@@ -9,11 +9,10 @@ from scipy.stats import gamma, norm, poisson, beta
 
 
 def main(config_file: str, keep: bool):
-    # Misspecified prior for scale that should be 1.0
     prior = {
         "infectiousness_rate_fn": {
             "Constant": {
-                "rate": gamma(a=1, scale=0.4),
+                "rate": gamma(a=1, scale=0.1),
                 "duration": gamma(a=10, scale=0.5),
             }
         },
@@ -55,7 +54,7 @@ def main(config_file: str, keep: bool):
             "synth_population_file": f"/{blob_experiment_directory}/{os.path.basename(synth_pop_file)}"
         }
         fps = [synth_pop_file, symptom_params_file]
-        use_existing = True
+        use_existing = False
     else:
         fps = []
         use_existing=False

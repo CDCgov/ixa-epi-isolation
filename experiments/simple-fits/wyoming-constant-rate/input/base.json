@@ -7,7 +7,7 @@
     "initial_recovered": 0.0,
     "proportion_asymptomatic": 0.3,
     "relative_infectiousness_asymptomatics": 0.7,
-    "settings_properties": {"Home": {"alpha": 0.5,
+    "settings_properties": {"Home": {"alpha": 0.2,
                                      "itinerary_specification": {"Constant": {"ratio": 0.25}}},
                             "Workplace": {"alpha": 0.05,
                                           "itinerary_specification": {"Constant": {"ratio": 0.25}}},
@@ -17,7 +17,7 @@
                                             "itinerary_specification": {"Constant": {"ratio": 0.25}}}},
     "symptom_progression_library" : {"EmpiricalFromFile": {"file": "input/library_symptom_parameters.csv"}},
     "report_period": 10.0,
-    "synth_population_file": "experiments/simple-fits/wyoming-constant-rate/input/synth_pop_people_WY_100k.csv",
+    "synth_population_file": "experiments/simple-fits/wyoming-constant-rate/input/synth_pop_people_WY_589000.csv",
     "facemask_parameters": {
       "facemask_efficacy": 0.2
     },
@@ -28,10 +28,10 @@
       }
     },
     "hospitalization_parameters": {
-      "mean_delay_to_hospitalization": 1.0,
+      "mean_delay_to_hospitalization": 3.0,
       "mean_duration_of_hospitalization": 10.0,
       "age_groups": [
-        {"min": 0, "probability": 0.02}
+        {"min": 0, "probability": 0.03}
       ],
       "hospital_incidence_report_name": "hospital_incidence_report.csv"
     }
