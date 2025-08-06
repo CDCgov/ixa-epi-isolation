@@ -257,8 +257,8 @@ macro_rules! define_setting_category {
     };
 }
 
-use crate::profiling::{ContextProfilingExt, Span};
 pub use define_setting_category;
+use crate::profiling::open_span;
 
 define_setting_category!(Home);
 define_setting_category!(CensusTract);
@@ -439,7 +439,7 @@ pub trait ContextSettingExt:
     }
 
     fn remove_modified_itinerary(&mut self, person_id: PersonId) -> Result<(), IxaError> {
-        let span = Span::new("remove_modified_itinerary");
+        let _span = open_span("remove_modified_itinerary");
         let previous_multiplier =
             self.calculate_total_infectiousness_multiplier_for_person(person_id);
 
@@ -478,6 +478,7 @@ pub trait ContextSettingExt:
             current_multiplier,
             increases_membership: true,
         });
+
         Ok(())
     }
 
@@ -486,7 +487,7 @@ pub trait ContextSettingExt:
         person_id: PersonId,
         itinerary_modifier: ItineraryModifiers,
     ) -> Result<(), IxaError> {
-        let span = Span::new("modify_itinerary");
+        let _span = open_span("modify_itinerary");
         let previous_multiplier =
             self.calculate_total_infectiousness_multiplier_for_person(person_id);
         let increases_membership;
@@ -554,7 +555,7 @@ pub trait ContextSettingExt:
         person_id: PersonId,
         itinerary: Vec<ItineraryEntry>,
     ) -> Result<(), IxaError> {
-        let span = Span::new("add_itinerary");
+        let _span = open_span("add_itinerary");
         // Normalize itinerary ratios
         self.validate_itinerary(&itinerary)?;
 
@@ -608,7 +609,7 @@ pub trait ContextSettingExt:
         person_id: PersonId,
         setting: &dyn AnySettingId,
     ) -> Result<Option<PersonId>, IxaError> {
-        let span = Span::new("get_contact");
+        let _span = open_span("get_contact");
         if let Some(members) = self.get_setting_members(setting) {
             if members.len() == 1 {
                 // Because sample_from_setting_with_exclusion doesn't check for membership
@@ -636,7 +637,7 @@ pub trait ContextSettingExt:
     }
 
     fn sample_setting(&self, person_id: PersonId) -> Option<&dyn AnySettingId> {
-        let span = Span::new("sample_setting");
+        let _span = open_span("sample_setting");
         let container = self.get_data(SettingDataPlugin);
         let mut itinerary_multiplier = Vec::new();
         container.with_itinerary(person_id, |setting, setting_props, members, ratio| {

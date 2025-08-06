@@ -6,13 +6,13 @@ use crate::infectiousness_manager::{
     InfectionData, InfectionDataValue, InfectionStatus, InfectionStatusValue,
 };
 use crate::parameters::{ContextParametersExt, Params};
-use crate::profiling::{ContextProfilingExt, Span};
 use crate::rate_fns::{load_rate_fns, InfectiousnessRateExt};
 use crate::settings::{ContextSettingExt, ItineraryChangeEvent};
 use ixa::{
     define_data_plugin, define_rng, plan::PlanId, trace, Context, ContextPeopleExt,
     ContextRandomExt, HashMap, IxaError, PersonId, PersonPropertyChangeEvent, PluginContext,
 };
+use crate::profiling::{increment_named_count, open_span};
 
 define_rng!(InfectionRng);
 
@@ -23,15 +23,14 @@ fn schedule_next_forecasted_infection(context: &mut Context, person: PersonId) {
     }) = get_forecast(context, person)
     {
         let infection_plan = context.add_plan(next_time, move |context| {
-            let span = Span::new("schedule_next_forecasted_infection");
-            context.increment_named_count("forecasted infection");
+            let _span = open_span("schedule_next_forecasted_infection");
+            increment_named_count("forecasted infection");
             if evaluate_forecast(context, person, forecasted_total_infectiousness) {
-                context.increment_named_count("accepted infection");
+                increment_named_count("accepted infection");
                 let _ = infection_attempt(context, person);
             }
             // Continue scheduling forecasts until the person recovers.
             schedule_next_forecasted_infection(context, person);
-            context.add_span(span);
         });
         // The forecast plan is added to the data container for tracking
         context.add_forecast_plan(person, infection_plan);
@@ -42,7 +41,7 @@ fn schedule_recovery(context: &mut Context, person: PersonId) {
     let infection_duration = context.get_person_rate_fn(person).infection_duration();
     let recovery_time = context.get_current_time() + infection_duration;
     context.add_plan(recovery_time, move |context| {
-        context.increment_named_count("recovery");
+        increment_named_count("recovery");
         trace!("Person {person} has recovered at {recovery_time}");
         context.recover_person(person);
         context.remove_forecast_plan(person);
@@ -93,7 +92,7 @@ trait ContextForecastInternalExt: PluginContext {
     /// Listen to itinerary changes and determine their effect on the current active forecast plans of potential infectors
     fn subscribe_to_itinerary_change(&mut self) {
         self.subscribe_to_event::<ItineraryChangeEvent>(move |context, event| {
-            let span = Span::new("itinerary_change");
+            let _span = open_span("itinerary_change");
             let container = context.get_data(ForecastDataPlugin);
             // Check for any active forecast associated with person
             let affected_infectors: Vec<PersonId> = container
@@ -116,7 +115,6 @@ trait ContextForecastInternalExt: PluginContext {
                 context.cancel_forecast(infector);
                 schedule_next_forecasted_infection(context, infector);
             }
-            context.add_span(span);
         });
     }
 }

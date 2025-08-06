@@ -7,7 +7,7 @@ use serde::Deserialize;
 use std::path::PathBuf;
 
 use crate::parameters::{ContextParametersExt, Params};
-use crate::profiling::{ContextProfilingExt, Span};
+use crate::profiling::open_span;
 use crate::settings::{
     append_itinerary_entry, CensusTract, ContextSettingExt, Home, School, SettingId, Workplace,
 };
@@ -85,13 +85,12 @@ fn load_synth_population(context: &mut Context, synth_input_file: PathBuf) -> Re
 }
 
 pub fn init(context: &mut Context) -> Result<(), IxaError> {
-    let span = Span::new("load_synth_population");
+    let _span = open_span("load_synth_population");
     let Params {
         synth_population_file,
         ..
     } = context.get_params();
     load_synth_population(context, synth_population_file.clone())?;
-    context.add_span(span);
     Ok(())
 }
 
