@@ -5,12 +5,12 @@ use ixa::{
 use serde::Serialize;
 use statrs::distribution::Exp;
 
-use crate::profiling::{ContextProfilingExt, Span};
 use crate::{
     interventions::ContextTransmissionModifierExt,
     rate_fns::{InfectiousnessRateExt, InfectiousnessRateFn, ScaledRateFn},
     settings::ContextSettingExt,
 };
+use crate::profiling::open_span;
 
 #[derive(Serialize, PartialEq, Debug, Clone, Copy)]
 pub enum InfectionDataValue {
@@ -77,7 +77,7 @@ define_rng!(ForecastRng);
 
 // Infection attempt function for a context and given `PersonId`
 pub fn infection_attempt(context: &mut Context, person_id: PersonId) -> Option<PersonId> {
-    let span = Span::new("infection_attempt");
+    let _span = open_span("infection_attempt");
     if let Some(setting) = context.sample_setting(person_id) {
         let next_contact = context
             .sample_from_setting_with_exclusion(person_id, setting)
@@ -101,8 +101,10 @@ pub fn infection_attempt(context: &mut Context, person_id: PersonId) -> Option<P
                         Some(setting.get_category_id()),
                         Some(setting.id()),
                     );
+            context.add_span(span);
                     Some(next_contact)
                 } else {
+            context.add_span(span);
                     None
                 }
             }

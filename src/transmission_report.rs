@@ -1,4 +1,3 @@
-use crate::profiling::{ContextProfilingExt, Span};
 use crate::{
     infectiousness_manager::{InfectionData, InfectionDataValue},
     parameters::ContextParametersExt,
@@ -9,6 +8,7 @@ use ixa::{
 };
 use serde::{Deserialize, Serialize};
 use std::string::ToString;
+use crate::profiling::open_span;
 
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
 struct TransmissionReport {
@@ -42,7 +42,7 @@ fn record_transmission_event(
 fn create_transmission_report(context: &mut Context, file_name: &str) -> Result<(), IxaError> {
     context.add_report::<TransmissionReport>(file_name)?;
     context.subscribe_to_event::<PersonPropertyChangeEvent<InfectionData>>(|context, event| {
-        let span = Span::new("transmission_report");
+        let _span = open_span("transmission_report");
         if let InfectionDataValue::Infectious {
             infected_by,
             infection_setting_type,
@@ -58,7 +58,6 @@ fn create_transmission_report(context: &mut Context, file_name: &str) -> Result<
                 infection_setting_id,
             );
         }
-        context.add_span(span);
     });
     Ok(())
 }
