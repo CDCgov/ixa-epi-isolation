@@ -76,7 +76,7 @@ fn update_infection_incidence(
     event: PersonPropertyChangeEvent<InfectionStatus>,
 ) {
     let age = context.get_person_property(event.person_id, Age);
-    let report_container_mut = context.get_data_container_mut(PropertyReportDataPlugin);
+    let report_container_mut = context.get_data_mut(PropertyReportDataPlugin);
     report_container_mut
         .person_property_report_incidence_container
         .entry(age)
@@ -91,7 +91,7 @@ fn update_infection_incidence(
 
 fn update_symptoms_incidence(context: &mut Context, event: PersonPropertyChangeEvent<Symptoms>) {
     let age = context.get_person_property(event.person_id, Age);
-    let report_container_mut = context.get_data_container_mut(PropertyReportDataPlugin);
+    let report_container_mut = context.get_data_mut(PropertyReportDataPlugin);
     report_container_mut
         .person_property_report_incidence_container
         .entry(age)
@@ -109,7 +109,7 @@ fn update_hospitalization_incidence(
     event: PersonPropertyChangeEvent<Hospitalized>,
 ) {
     let age = context.get_person_property(event.person_id, Age);
-    let report_container_mut = context.get_data_container_mut(PropertyReportDataPlugin);
+    let report_container_mut = context.get_data_mut(PropertyReportDataPlugin);
     report_container_mut
         .person_property_report_incidence_container
         .entry(age)
@@ -138,7 +138,7 @@ fn update_property_change_counts(
         format!("{:?}", event.current.symptoms),
         format!("{:?}", event.current.hospitalized),
     ];
-    let report_container_mut = context.get_data_container_mut(PropertyReportDataPlugin);
+    let report_container_mut = context.get_data_mut(PropertyReportDataPlugin);
 
     *report_container_mut
         .person_property_report_map_container
@@ -152,7 +152,7 @@ fn update_property_change_counts(
 }
 
 fn reset_incidence_map(context: &mut Context) {
-    let report_container = context.get_data_container_mut(PropertyReportDataPlugin);
+    let report_container = context.get_data_mut(PropertyReportDataPlugin);
 
     #[allow(clippy::explicit_iter_loop)]
     for (_, map_incidence) in report_container
@@ -169,8 +169,7 @@ fn reset_incidence_map(context: &mut Context) {
 
 fn send_property_counts(context: &mut Context) {
     let report_container = context
-        .get_data_container(PropertyReportDataPlugin)
-        .unwrap();
+        .get_data(PropertyReportDataPlugin);
 
     for (values, count_property) in &report_container.person_property_report_map_container {
         context.send_report(PersonPropertyReport {
@@ -186,8 +185,8 @@ fn send_property_counts(context: &mut Context) {
 
 fn send_incidence_counts(context: &mut Context) {
     let report_container = context
-        .get_data_container(PropertyReportDataPlugin)
-        .unwrap();
+        .get_data(PropertyReportDataPlugin);
+    
     for (age, map_incidence) in &report_container.person_property_report_incidence_container {
         for (property_name, property_map) in map_incidence {
             for (value, count_property) in property_map {
@@ -220,7 +219,7 @@ fn create_prevalence_report(
             map_counts.borrow_mut().insert(values.to_vec(), count);
         },
     );
-    let report_container = context.get_data_container_mut(PropertyReportDataPlugin);
+    let report_container = context.get_data_mut(PropertyReportDataPlugin);
     report_container
         .person_property_report_map_container
         .clone_from(&map_counts.borrow());
@@ -294,7 +293,7 @@ fn create_incidence_report(
         }
     }
 
-    let report_container = context.get_data_container_mut(PropertyReportDataPlugin);
+    let report_container = context.get_data_mut(PropertyReportDataPlugin);
 
     report_container
         .person_property_report_incidence_container
