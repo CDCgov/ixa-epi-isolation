@@ -101,10 +101,8 @@ pub fn infection_attempt(context: &mut Context, person_id: PersonId) -> Option<P
                         Some(setting.get_category_id()),
                         Some(setting.id()),
                     );
-            context.add_span(span);
                     Some(next_contact)
                 } else {
-            context.add_span(span);
                     None
                 }
             }

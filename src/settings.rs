@@ -2,7 +2,7 @@ use crate::parameters::{
     ContextParametersExt, CoreSettingsTypes, ItinerarySpecificationType, Params,
 };
 use ixa::{
-    define_data_plugin, define_rng, people::Query, prelude_for_plugins::IxaEvent, trace, Context,
+    define_data_plugin, define_rng, prelude_for_plugins::IxaEvent, trace, Context,
     ContextPeopleExt, ContextRandomExt, IxaError, PersonId, PluginContext,
 };
 use serde::{Deserialize, Serialize};
@@ -257,8 +257,8 @@ macro_rules! define_setting_category {
     };
 }
 
-pub use define_setting_category;
 use crate::profiling::open_span;
+pub use define_setting_category;
 
 define_setting_category!(Home);
 define_setting_category!(CensusTract);
@@ -478,7 +478,6 @@ pub trait ContextSettingExt:
             current_multiplier,
             increases_membership: true,
         });
-
         Ok(())
     }
 
