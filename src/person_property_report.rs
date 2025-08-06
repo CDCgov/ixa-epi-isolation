@@ -168,8 +168,7 @@ fn reset_incidence_map(context: &mut Context) {
 }
 
 fn send_property_counts(context: &mut Context) {
-    let report_container = context
-        .get_data(PropertyReportDataPlugin);
+    let report_container = context.get_data(PropertyReportDataPlugin);
 
     for (values, count_property) in &report_container.person_property_report_map_container {
         context.send_report(PersonPropertyReport {
@@ -184,9 +183,8 @@ fn send_property_counts(context: &mut Context) {
 }
 
 fn send_incidence_counts(context: &mut Context) {
-    let report_container = context
-        .get_data(PropertyReportDataPlugin);
-    
+    let report_container = context.get_data(PropertyReportDataPlugin);
+
     for (age, map_incidence) in &report_container.person_property_report_incidence_container {
         for (property_name, property_map) in map_incidence {
             for (value, count_property) in property_map {
