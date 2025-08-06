@@ -1,3 +1,4 @@
+use crate::profiling::open_span;
 use crate::{
     infectiousness_manager::{InfectionData, InfectionDataValue},
     parameters::ContextParametersExt,
@@ -8,7 +9,6 @@ use ixa::{
 };
 use serde::{Deserialize, Serialize};
 use std::string::ToString;
-use crate::profiling::open_span;
 
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
 struct TransmissionReport {

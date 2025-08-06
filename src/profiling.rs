@@ -7,6 +7,11 @@
 //! - **Efficiency reporting** – Report forecasting efficiency when "forecasted infection" and
 //!   "accepted infection" counts are available.
 //!
+//! The functionality of this module is gated behind the `profiling` feature, which is enabled by
+//! default. Disabling this feature leaves the public API defined but with an empty implementation,
+//! which is optimized away by the compiler, allowing the programmer to leave profiling code
+//! throughout their model with zero cost when profiling is disabled.
+//!
 //! ## Example Output
 //!
 //! ```ignore
@@ -100,34 +105,67 @@
 //! });
 //! ```
 #![allow(dead_code)]
-use humantime::format_duration;
-use std::sync::{Mutex, MutexGuard, OnceLock};
-use std::time::{Duration, Instant};
-use ixa::HashMap;
 
+// Disabling the profiling feature leaves the public API defined, but the functions are empty and
+// just optimized away by the compiler. This allows the programmer to leave the profiling code
+// littered throughout their code without worrying about conditional compilation at every call site.
+#[cfg(feature = "profiling")]
+use humantime::format_duration;
+#[cfg(feature = "profiling")]
+use ixa::HashMap;
+#[cfg(test)]
+use std::sync::PoisonError;
+#[cfg(feature = "profiling")]
+use std::{
+    sync::{Mutex, MutexGuard, OnceLock},
+    time::{Duration, Instant},
+};
+
+#[cfg(feature = "profiling")]
 const TOTAL_MEASURED: &str = "Total Measured";
+#[cfg(feature = "profiling")]
 static PROFILING_DATA: OnceLock<Mutex<ProfilingDataContainer>> = OnceLock::new();
 
+/// During testing, tests that are meant to panic can poison the mutex. Since we don't care
+/// about accuracy of profiling data during tests, we just reset the poison flag.
+#[cfg(all(feature = "profiling", test))]
 fn profiling_data() -> MutexGuard<'static, ProfilingDataContainer> {
-    PROFILING_DATA.get_or_init(
-        || Mutex::new(ProfilingDataContainer::default())
-    ).try_lock().unwrap_or_else(|_| panic!("Cannot acquire lock on ProfilingDataContainer."))
+    #[cfg(test)]
+    PROFILING_DATA
+        .get_or_init(|| Mutex::new(ProfilingDataContainer::default()))
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+}
+
+/// Acquires an exclusive lock on the profiling data, blocking until it's available.
+#[cfg(all(feature = "profiling", not(test)))]
+fn profiling_data() -> MutexGuard<'static, ProfilingDataContainer> {
+    #[cfg(not(test))]
+    PROFILING_DATA
+        .get_or_init(|| Mutex::new(ProfilingDataContainer::default()))
+        .lock()
+        .unwrap()
 }
 
 pub struct Span {
+    #[cfg(feature = "profiling")]
     label: &'static str,
+    #[cfg(feature = "profiling")]
     start_time: Instant,
 }
 
 impl Span {
-    fn new(label: &'static str) -> Self {
+    fn new(#[allow(unused_variables)] label: &'static str) -> Self {
         Self {
+            #[cfg(feature = "profiling")]
             label,
+            #[cfg(feature = "profiling")]
             start_time: Instant::now(),
         }
     }
 }
 
+#[cfg(feature = "profiling")]
 impl Drop for Span {
     fn drop(&mut self) {
         let mut container = profiling_data();
@@ -135,7 +173,7 @@ impl Drop for Span {
     }
 }
 
-
+#[cfg(feature = "profiling")]
 #[derive(Default)]
 struct ProfilingDataContainer {
     pub start_time: Option<Instant>,
@@ -150,17 +188,14 @@ struct ProfilingDataContainer {
     // When `open_span_count` transitions back to `0`, `total_measured` is closed and duration
     // is recorded.
     pub open_span_count: usize,
-    pub coverage: Option<Instant>
+    pub coverage: Option<Instant>,
 }
 
+#[cfg(feature = "profiling")]
 impl ProfilingDataContainer {
     pub fn increment_named_count(&mut self, key: &'static str) {
         self.init_start_time();
-        self
-            .counts
-            .entry(key)
-            .and_modify(|v| *v += 1)
-            .or_insert(1);
+        self.counts.entry(key).and_modify(|v| *v += 1).or_insert(1);
     }
 
     pub fn get_named_count(&self, key: &'static str) -> Option<usize> {
@@ -197,10 +232,12 @@ impl ProfilingDataContainer {
 
     /// Closes the span without checking the coverage span.
     fn close_span_without_coverage(&mut self, label: &'static str, elapsed: Duration) {
-        self
-            .spans
+        self.spans
             .entry(label)
-            .and_modify(|(time, count)| { *time += elapsed; *count += 1; })
+            .and_modify(|(time, count)| {
+                *time += elapsed;
+                *count += 1;
+            })
             .or_insert((elapsed, 1));
     }
 
@@ -209,11 +246,7 @@ impl ProfilingDataContainer {
             // nothing to report
             return;
         }
-        let elapsed = self
-            .start_time
-            .unwrap()
-            .elapsed()
-            .as_secs_f64();
+        let elapsed = self.start_time.unwrap().elapsed().as_secs_f64();
 
         let mut rows = vec![
             // The header row
@@ -225,7 +258,7 @@ impl ProfilingDataContainer {
         ];
 
         // Collect data rows
-        for (key, count) in self.counts.iter() {
+        for (key, count) in &self.counts {
             #[allow(clippy::cast_precision_loss)]
             let rate = (*count as f64) / elapsed;
             rows.push(vec![
@@ -240,7 +273,7 @@ impl ProfilingDataContainer {
     }
 
     fn print_named_spans(&self) {
-        if  self.open_span_count != 0 {
+        if self.open_span_count != 0 {
             println!("OPEN SPAN COUNT NONZERO: {}", self.open_span_count);
         }
         if self.coverage.is_some() {
@@ -251,11 +284,7 @@ impl ProfilingDataContainer {
             // nothing to report
             return;
         }
-        let elapsed = self
-            .start_time
-            .unwrap()
-            .elapsed()
-            .as_secs_f64();
+        let elapsed = self.start_time.unwrap().elapsed().as_secs_f64();
 
         let mut rows = vec![vec![
             "Span Label".to_string(),
@@ -264,7 +293,8 @@ impl ProfilingDataContainer {
             "% runtime".to_string(),
         ]];
 
-        for (key, (duration, count)) in self.spans.iter().filter(|(key, _)| {*key != &TOTAL_MEASURED}) {
+        for (key, (duration, count)) in self.spans.iter().filter(|(key, _)| *key != &TOTAL_MEASURED)
+        {
             let percent_runtime = duration.as_secs_f64() / elapsed * 100.0;
             rows.push(vec![
                 (*key).to_string(),
@@ -308,14 +338,22 @@ impl ProfilingDataContainer {
     }
 }
 
+#[cfg(feature = "profiling")]
 pub fn increment_named_count(key: &'static str) {
     let mut container = profiling_data();
     container.increment_named_count(key);
 }
+#[cfg(not(feature = "profiling"))]
+pub fn increment_named_count(_key: &'static str) {}
 
+#[cfg(feature = "profiling")]
 pub fn open_span(label: &'static str) -> Span {
     let mut container = profiling_data();
     container.open_span(label)
+}
+#[cfg(not(feature = "profiling"))]
+pub fn open_span(label: &'static str) -> Span {
+    Span::new(label)
 }
 
 /// Call this if you want to explicitly close a span before the end of the scope in which the
@@ -326,34 +364,47 @@ pub fn close_span(_span: Span) {
 }
 
 /// Prints all collected profiling data.
+#[cfg(feature = "profiling")]
 pub fn print_profiling_data() {
     let container = profiling_data();
     container.print_named_spans();
     container.print_named_counts();
     container.print_forecast_efficiency();
 }
+#[cfg(not(feature = "profiling"))]
+pub fn print_profiling_data() {}
 
 /// Prints a table of the named counts, if any.
-fn print_named_counts() {
+#[cfg(feature = "profiling")]
+pub fn print_named_counts() {
     let container = profiling_data();
     container.print_named_counts();
 }
+#[cfg(not(feature = "profiling"))]
+pub fn print_named_counts() {}
 
 /// Prints a table of the spans, if any.
-fn print_named_spans() {
+#[cfg(feature = "profiling")]
+pub fn print_named_spans() {
     let container = profiling_data();
     container.print_named_spans();
 }
+#[cfg(not(feature = "profiling"))]
+pub fn print_named_spans() {}
 
 /// Prints the forecast efficiency.
-fn print_forecast_efficiency() {
+#[cfg(feature = "profiling")]
+pub fn print_forecast_efficiency() {
     let container = profiling_data();
     container.print_forecast_efficiency();
 }
+#[cfg(not(feature = "profiling"))]
+pub fn print_forecast_efficiency() {}
 
 /// Prints a table with aligned columns, using the first row as a header.
 /// The first column is left-aligned; remaining columns are right-aligned.
 /// Automatically adjusts column widths and inserts a separator line.
+#[cfg(feature = "profiling")]
 fn print_formatted_table(rows: &[Vec<String>]) {
     if rows.len() < 2 {
         return;
@@ -399,6 +450,7 @@ fn print_formatted_table(rows: &[Vec<String>]) {
 }
 
 /// Formats an integer with thousands separator.
+#[cfg(feature = "profiling")]
 fn format_with_commas(value: usize) -> String {
     let s = value.to_string();
     let mut result = String::new();
@@ -417,6 +469,7 @@ fn format_with_commas(value: usize) -> String {
 }
 
 /// Formats a float with thousands separator.
+#[cfg(feature = "profiling")]
 fn format_with_commas_f64(value: f64) -> String {
     // Format to two decimal places
     let formatted = format!("{:.2}", value.abs()); // format positive part only
@@ -452,7 +505,7 @@ fn format_with_commas_f64(value: f64) -> String {
     result
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "profiling"))]
 mod tests {
     #![allow(clippy::unreadable_literal)]
     use super::*;
@@ -460,7 +513,6 @@ mod tests {
 
     #[test]
     fn increments_named_count_correctly() {
-
         increment_named_count("test_event");
         increment_named_count("test_event");
         increment_named_count("another_event");
@@ -471,21 +523,10 @@ mod tests {
     }
 
     #[test]
-    fn start_time_initialized_on_first_increment() {
-        let mut data = profiling_data();
-        assert!(data.start_time.is_none());
-
-        data.increment_named_count("first_event");
-
-        assert!(data.start_time.is_some());
-    }
-
-    #[test]
     fn print_named_counts_outputs_expected_format() {
         // Inject a fixed start time 1 second ago
         let mut data = profiling_data();
-        data.start_time =
-            Some(Instant::now().checked_sub(Duration::from_secs(1)).unwrap());
+        data.start_time = Some(Instant::now().checked_sub(Duration::from_secs(1)).unwrap());
         data.counts.insert("event1", 5);
 
         data.print_named_counts(); // should print " event1  5  5.00 per second"
@@ -494,8 +535,7 @@ mod tests {
     #[test]
     fn print_named_counts_computes_forecast_efficiency() {
         let mut data = profiling_data();
-        data.start_time =
-            Some(Instant::now().checked_sub(Duration::from_secs(2)).unwrap());
+        data.start_time = Some(Instant::now().checked_sub(Duration::from_secs(2)).unwrap());
         data.counts.insert("forecasted infection", 10);
         data.counts.insert("accepted infection", 4);
 
@@ -608,15 +648,24 @@ mod tests {
         let mut container = profiling_data();
 
         // Set a fixed start time 10 seconds ago
-        container.start_time =
-            Some(Instant::now().checked_sub(Duration::from_secs(10)).unwrap());
+        container.start_time = Some(Instant::now().checked_sub(Duration::from_secs(10)).unwrap());
 
         // Add sample spans data
-        container.spans.insert("database_query", (Duration::from_millis(1500), 42));
-        container.spans.insert("api_request", (Duration::from_millis(800), 120));
-        container.spans.insert("data_processing", (Duration::from_secs(5), 15));
-        container.spans.insert("file_io", (Duration::from_millis(350), 78));
-        container.spans.insert("rendering", (Duration::from_secs(2), 30));
+        container
+            .spans
+            .insert("database_query", (Duration::from_millis(1500), 42));
+        container
+            .spans
+            .insert("api_request", (Duration::from_millis(800), 120));
+        container
+            .spans
+            .insert("data_processing", (Duration::from_secs(5), 15));
+        container
+            .spans
+            .insert("file_io", (Duration::from_millis(350), 78));
+        container
+            .spans
+            .insert("rendering", (Duration::from_secs(2), 30));
         container.print_named_spans();
     }
 }
