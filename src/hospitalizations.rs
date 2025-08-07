@@ -7,9 +7,8 @@ use serde::{Deserialize, Serialize};
 use statrs::distribution::Exp;
 
 use crate::{
-    parameters::ContextParametersExt,
-    population_loader::Age,
-    symptom_progression::{SymptomValue, Symptoms},
+    parameters::ContextParametersExt, population_loader::Age,
+    symptom_progression::PresentingWithSymptoms,
 };
 
 define_person_property_with_default!(Hospitalized, bool, false);
@@ -116,13 +115,13 @@ trait ContextHospitalizationInternalExt:
     }
     fn setup_hospitalization_event_sequence(&mut self) {
         // Subscribe to individuals being presymptomatic to plan if/when they enter the hospital
-        self.subscribe_to_event(move |context, event: PersonPropertyChangeEvent<Symptoms>| {
-            if let Some(SymptomValue::Presymptomatic) = event.current {
-                if context.evaluate_hospitalization_risk(event.person_id) {
+        self.subscribe_to_event(
+            move |context, event: PersonPropertyChangeEvent<PresentingWithSymptoms>| {
+                if event.current && context.evaluate_hospitalization_risk(event.person_id) {
                     context.plan_hospital_arrival(event.person_id).unwrap();
                 }
-            }
-        });
+            },
+        );
         // Subscribe to individuals being hospitalized to plan when they leave the hospital
         self.subscribe_to_event(
             move |context, event: PersonPropertyChangeEvent<Hospitalized>| {
@@ -159,7 +158,7 @@ mod test {
         parameters::{GlobalParams, HospitalizationParameters, ProgressionLibraryType},
         population_loader::Age,
         rate_fns::load_rate_fns,
-        symptom_progression::{SymptomValue, Symptoms},
+        symptom_progression::{PresentingWithSymptoms, SymptomValue, Symptoms},
         Params,
     };
     use std::{cell::RefCell, path::PathBuf, rc::Rc};
@@ -244,9 +243,9 @@ mod test {
             define_person_property_with_default!(SymptomStartTime, f64, 0.0);
             define_person_property_with_default!(HospitalStartTime, f64, 0.0);
 
-            context.subscribe_to_event::<PersonPropertyChangeEvent<Symptoms>>(
+            context.subscribe_to_event::<PersonPropertyChangeEvent<PresentingWithSymptoms>>(
                 move |context, event| {
-                    if let Some(SymptomValue::Presymptomatic) = event.current {
+                    if event.current {
                         context.set_person_property(
                             event.person_id,
                             SymptomStartTime,

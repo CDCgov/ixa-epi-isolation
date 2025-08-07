@@ -2,8 +2,8 @@ use std::collections::HashMap;
 
 use ixa::rand::Rng;
 use ixa::{
-    define_person_property_with_default, define_rng, Context, ContextPeopleExt, ContextRandomExt,
-    IxaError, PersonPropertyChangeEvent,
+    define_derived_property, define_person_property_with_default, define_rng, Context,
+    ContextPeopleExt, ContextRandomExt, IxaError, PersonPropertyChangeEvent,
 };
 use serde::{Deserialize, Serialize};
 use statrs::distribution::Weibull;
@@ -29,6 +29,12 @@ pub enum SymptomValue {
 }
 
 define_person_property_with_default!(Symptoms, Option<SymptomValue>, None);
+define_derived_property!(PresentingWithSymptoms, bool, [Symptoms], |symptom_value| {
+    match symptom_value {
+        Some(SymptomValue::Presymptomatic) | None => false,
+        Some(_) => true,
+    }
+});
 
 /// Stores information about a symptom progression (presymptomatic -> category{1..=4} -> None)
 /// for a person.
