@@ -1,7 +1,6 @@
 use ixa::{
-    define_derived_property, define_person_property_with_default, define_rng, trace, Context,
-    ContextPeopleExt, ContextRandomExt, IxaError, PersonId, PersonPropertyChangeEvent,
-    PluginContext,
+    define_person_property_with_default, define_rng, trace, Context, ContextPeopleExt,
+    ContextRandomExt, IxaError, PersonId, PersonPropertyChangeEvent, PluginContext,
 };
 
 use crate::{
@@ -10,17 +9,12 @@ use crate::{
     parameters::{ContextParametersExt, Params},
     policies::Policies,
     settings::{ContextSettingExt, Home, ItineraryModifiers},
-    symptom_progression::{SymptomValue, Symptoms},
+    symptom_progression::PresentingWithSymptoms,
 };
 
 define_person_property_with_default!(MaskingStatus, bool, false);
 define_person_property_with_default!(IsolatingStatus, bool, false);
-define_derived_property!(PresentingWithSymptoms, bool, [Symptoms], |symptom_value| {
-    match symptom_value {
-        Some(SymptomValue::Presymptomatic) | None => false,
-        Some(_) => true,
-    }
-});
+
 define_rng!(PolicyRng);
 
 #[derive(Debug, Clone, Copy)]
