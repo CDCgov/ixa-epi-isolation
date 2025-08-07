@@ -20,14 +20,14 @@ use ixa::{ContextPeopleExt, ContextRandomExt};
 use parameters::{ContextParametersExt, Params};
 use population_loader::Age;
 
-use crate::profiling::{print_profiling_data, write_named_counts_to_csv, write_named_spans_to_csv};
+use profiling::{print_profiling_data, ProfilingContextExt};
 
 // You must run this with a parameters file:
 // cargo run -- --config input/input.json
 // Try enabling logs to see some output about infections:
 // cargo run -- --config input/input.json --log-level epi_isolation=Trace -f
 fn main() {
-    run_with_args(|context, _, _| {
+    let mut context = run_with_args(|context, _, _| {
         // Read the global properties.
         let &Params { max_time, seed, .. } = context.get_params();
 
@@ -58,9 +58,7 @@ fn main() {
     })
     .unwrap();
 
+    // Write the profiling data and context's execution statistics to a JSON file.
+    context.write_profiling_data();
     print_profiling_data();
-    write_named_spans_to_csv("profiling_named_spans.csv")
-        .expect("Failed to write named spans to csv file");
-    write_named_counts_to_csv("profiling_named_counts.csv")
-        .expect("Failed to write named counts to csv file");
 }

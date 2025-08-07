@@ -95,9 +95,8 @@ pub struct Params {
     /// Specifies the policy guidance to use for interventions, defaulting to None
     /// Enum variants should contain structs with policy-relevant data values
     pub guidance_policy: Option<Policies>,
-    /// Any profiling data will be written to `{PROFILING_DATA_PREFIX}named_counts.csv`
-    /// and `{PROFILING_DATA_PREFIX}named_spans.csv`
-    pub profiling_data_prefix: Option<String>,
+    /// Any profiling data will be written to `{profiling_data_path}.json`
+    pub profiling_data_path: Option<String>,
 }
 
 // Any default parameters must be specified here
@@ -135,7 +134,7 @@ impl Default for Params {
                 hospital_incidence_report_name: "hospital_incidence_report.csv".to_string(),
             },
             guidance_policy: None,
-            profiling_data_prefix: None,
+            profiling_data_path: None,
         }
     }
 }
