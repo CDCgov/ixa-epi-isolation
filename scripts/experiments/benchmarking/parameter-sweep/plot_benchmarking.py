@@ -26,3 +26,4 @@ def plot_runtime(exp_output):
     plt.close()
 
 plot_runtime("scripts/experiments/benchmarking/parameter-sweep/experiment_runtime.csv")
+
