@@ -32,10 +32,9 @@ pub struct PersonPropertyReportValues {
 
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
 struct PersonPropertyIncidenceReport {
-    t: f64,
+    t_upper: f64,
     age: u8,
-    property: String,
-    property_value: String,
+    event: String,
     count: usize,
 }
 
@@ -60,6 +59,7 @@ struct PropertyReportDataContainer {
     person_property_report_map_container: HashMap<Vec<String>, usize>,
     person_property_report_incidence_container:
         HashMap<u8, HashMap<String, HashMap<String, usize>>>,
+    person_property_event_names: HashMap<String, HashMap<String, String>>,
 }
 
 define_data_plugin!(
@@ -68,6 +68,7 @@ define_data_plugin!(
     PropertyReportDataContainer {
         person_property_report_map_container: HashMap::new(),
         person_property_report_incidence_container: HashMap::new(),
+        person_property_event_names: HashMap::new(),
     }
 );
 
@@ -75,33 +76,39 @@ fn update_infection_incidence(
     context: &mut Context,
     event: PersonPropertyChangeEvent<InfectionStatus>,
 ) {
-    let age = context.get_person_property(event.person_id, Age);
-    let report_container_mut = context.get_data_mut(PropertyReportDataPlugin);
-    report_container_mut
-        .person_property_report_incidence_container
-        .entry(age)
-        .and_modify(|inf_map| {
-            inf_map
-                .entry("InfectionStatus".to_string())
-                .and_modify(|count_map| {
-                    *count_map.entry(format!("{:?}", event.current)).or_insert(0) += 1;
-                });
-        });
+    if event.current == InfectionStatusValue::Infectious || event.current == InfectionStatusValue::Recovered {
+        let age = context.get_person_property(event.person_id, Age);
+        let report_container_mut = context.get_data_mut(PropertyReportDataPlugin);
+        report_container_mut
+            .person_property_report_incidence_container
+            .entry(age)
+            .and_modify(|inf_map| {
+                inf_map
+                    .entry("InfectionStatus".to_string())
+                    .and_modify(|count_map| {
+                        *count_map.entry(format!("{:?}", event.current)).or_insert(0) += 1;
+                    });
+            });
+    }
 }
 
 fn update_symptoms_incidence(context: &mut Context, event: PersonPropertyChangeEvent<Symptoms>) {
     let age = context.get_person_property(event.person_id, Age);
     let report_container_mut = context.get_data_mut(PropertyReportDataPlugin);
-    report_container_mut
-        .person_property_report_incidence_container
-        .entry(age)
-        .and_modify(|symp_map| {
-            symp_map
-                .entry("Symptoms".to_string())
-                .and_modify(|count_map| {
-                    *count_map.entry(format!("{:?}", event.current)).or_insert(0) += 1;
+    if let Some(symptoms) = event.current {
+        if symptoms != SymptomValue::Presymptomatic {
+            report_container_mut
+                .person_property_report_incidence_container
+                .entry(age)
+                .and_modify(|symp_map| {
+                    symp_map
+                        .entry("Symptoms".to_string())
+                        .and_modify(|count_map| {
+                            *count_map.entry(format!("{:?}", event.current)).or_insert(0) += 1;
+                        });
                 });
-        });
+        }
+    }
 }
 
 fn update_hospitalization_incidence(
@@ -110,16 +117,18 @@ fn update_hospitalization_incidence(
 ) {
     let age = context.get_person_property(event.person_id, Age);
     let report_container_mut = context.get_data_mut(PropertyReportDataPlugin);
-    report_container_mut
-        .person_property_report_incidence_container
-        .entry(age)
-        .and_modify(|hosp_map| {
-            hosp_map
-                .entry("Hospitalized".to_string())
-                .and_modify(|count_map| {
-                    *count_map.entry(format!("{:?}", event.current)).or_insert(0) += 1;
-                });
-        });
+    if event.current {
+        report_container_mut
+            .person_property_report_incidence_container
+            .entry(age)
+            .and_modify(|hosp_map| {
+                hosp_map
+                    .entry("Hospitalized".to_string())
+                    .and_modify(|count_map| {
+                        *count_map.entry(format!("{:?}", event.current)).or_insert(0) += 1;
+                    });
+            });
+    }
 }
 
 fn update_property_change_counts(
@@ -188,11 +197,14 @@ fn send_incidence_counts(context: &mut Context) {
     for (age, map_incidence) in &report_container.person_property_report_incidence_container {
         for (property_name, property_map) in map_incidence {
             for (value, count_property) in property_map {
+                let event_name = report_container
+                    .person_property_event_names
+                    .get(property_name).expect("Property not found in map for incidence report")
+                    .get(value).expect("Property not found in map for incidence report");
                 context.send_report(PersonPropertyIncidenceReport {
-                    t: context.get_current_time(),
+                    t_upper: context.get_current_time(),
                     age: *age,
-                    property: property_name.clone(),
-                    property_value: value.clone(),
+                    event: event_name.to_string(),
                     count: *count_property,
                 });
             }
@@ -246,12 +258,12 @@ fn create_incidence_report(
     context.add_report::<PersonPropertyIncidenceReport>(file_name)?;
 
     let mut incidence_counts: HashMap<u8, HashMap<String, HashMap<String, usize>>> = HashMap::new();
+    let mut names_map: HashMap<String, HashMap<String, String>> = HashMap::new();
 
     for age in 0..100 {
         let inf_vec = [
-            InfectionStatusValue::Susceptible,
-            InfectionStatusValue::Infectious,
-            InfectionStatusValue::Recovered,
+            (InfectionStatusValue::Infectious, "Infectious".to_string()),
+            (InfectionStatusValue::Recovered, "Recovered".to_string()),
         ];
 
         for inf_value in inf_vec {
@@ -260,16 +272,18 @@ fn create_incidence_report(
                 .or_default()
                 .entry("InfectionStatus".to_string())
                 .or_default()
-                .insert(format!("{inf_value:?}"), 0);
+                .insert(format!("{:?}", inf_value.0), 0);
+            names_map
+                .entry("InfectionStatus".to_string())
+                .or_default()
+                .insert(format!("{:?}", inf_value.0), inf_value.1);
         }
 
         let symp_vec = [
-            None,
-            Some(SymptomValue::Presymptomatic),
-            Some(SymptomValue::Category1),
-            Some(SymptomValue::Category2),
-            Some(SymptomValue::Category3),
-            Some(SymptomValue::Category4),
+            (Some(SymptomValue::Category1), "Symptom-Category1".to_string()),
+            (Some(SymptomValue::Category2), "Symptom-Category2".to_string()),
+            (Some(SymptomValue::Category3), "Symptom-Category3".to_string()),
+            (Some(SymptomValue::Category4), "Symptom-Category4".to_string()),
         ];
         for symp_value in symp_vec {
             incidence_counts
@@ -277,17 +291,25 @@ fn create_incidence_report(
                 .or_default()
                 .entry("Symptoms".to_string())
                 .or_default()
-                .insert(format!("{symp_value:?}"), 0);
+                .insert(format!("{:?}", symp_value.0), 0);
+            names_map
+                .entry("Symptoms".to_string())
+                .or_default()
+                .insert(format!("{:?}", symp_value.0), symp_value.1);
         }
 
-        let hosp_vec = [false, true];
+        let hosp_vec = [(true, "Hospitalized".to_string())];
         for hosp_value in hosp_vec {
             incidence_counts
                 .entry(age)
                 .or_default()
                 .entry("Hospitalized".to_string())
                 .or_default()
-                .insert(format!("{hosp_value:?}"), 0);
+                .insert(format!("{:?}", hosp_value.0), 0);
+            names_map
+                .entry("Hospitalized".to_string())
+                .or_default()
+                .insert(format!("{:?}", hosp_value.0), hosp_value.1);
         }
     }
 
@@ -297,6 +319,10 @@ fn create_incidence_report(
         .person_property_report_incidence_container
         .clone_from(&incidence_counts);
 
+    report_container
+        .person_property_event_names
+        .clone_from(&names_map);
+    
     context.subscribe_to_event::<PersonPropertyChangeEvent<InfectionStatus>>(|context, event| {
         update_infection_incidence(context, event);
     });
@@ -307,6 +333,7 @@ fn create_incidence_report(
         update_hospitalization_incidence(context, event);
     });
 
+    
     context.add_periodic_plan_with_phase(
         period,
         move |context: &mut Context| {

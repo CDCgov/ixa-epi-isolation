@@ -19,6 +19,10 @@ person_property_incidence <- readr::read_csv(file.path(
   "incidence_person_property_count.csv"
 ))
 
+incidence_counts <- person_property_incidence |>
+  group_by(t_upper, event) |>
+  summarize(count = sum(count), .groups = "drop")
+
 ## ===============================#
 ## Plots ------------
 ## ===============================#
@@ -31,27 +35,24 @@ max_inf <- sum(pop_data[
     pop_data$infection_status == "Recovered", "count"
 ])
 
+
 ## ===============================#
 ## Infection curves ------------
 ## ===============================#
 inf_prevalence <- person_property_report |>
-  group_by(t, infection_status) |>
+  group_by(t, infection_status) |>  
   summarize(count = sum(count), .groups = "drop")
 
-inf_incidence <- person_property_incidence |>
-  filter(property == "InfectionStatus") |>
-  group_by(t, property_value) |>
-  summarize(count = sum(count), .groups = "drop")
-inf_report <- left_join(inf_incidence, inf_prevalence,
-  by = c("t" = "t", "property_value" = "infection_status"),
-  suffix = c("_incidence", "_prevalence")
-) |>
-  gather(key = "output", value = "count", -c(t, property_value))
+inf_report <- left_join(
+  inf_prevalence, incidence_counts, 
+  by = c("t" = "t_upper", "infection_status" = "event"),
+  suffix = c("_prevalence", "_incidence")) |>
+  gather(key = "output", value = "count", -c(t, infection_status)) 
 
 
 inf_report |>
   ggplot(aes(x = t, y = count)) +
-  geom_line(aes(color = property_value, linetype = output)) +
+  geom_line(aes(color = infection_status, linetype = output)) +
   xlab("Day") +
   ylab("Number of people") +
   ggtitle(sprintf(
@@ -63,18 +64,18 @@ inf_report |>
 ## Hospitalizations ------------
 ## ===============================#
 hosp_prevalence <- person_property_report |>
-  group_by(t, hospitalized) |>
-  summarize(hospital_count = sum(count), .groups = "drop") |>
   filter(hospitalized == TRUE) |>
-  select(-hospitalized)
+  group_by(t) |>
+  summarize(hospitalized = sum(count), .groups = "drop")
 
 hosp_incidence <- person_property_incidence |>
-  filter(property == "Hospitalized", property_value == "true") |>
-  group_by(t) |>
-  summarize(hospital_count = sum(count))
-hosp_report <- left_join(hosp_incidence, hosp_prevalence,
-  by = c("t"),
-  suffix = c("_incidence", "_prevalence")
+  filter(event == "Hospitalized") |>
+  group_by(t_upper) |>
+  summarize(hospitalized = sum(count))
+
+hosp_report <-left_join(hosp_prevalence, hosp_incidence,
+  by = c("t" = "t_upper"),
+  suffix = c("_prevalence", "_incidence")
 ) |>
   gather(key = "output", value = "count", -t)
 
