@@ -119,7 +119,12 @@ use std::sync::PoisonError;
 use std::{
     sync::{Mutex, MutexGuard, OnceLock},
     time::{Duration, Instant},
+    fs::File,
+    io::Write,
 };
+use std::path::Path;
+
+
 
 #[cfg(feature = "profiling")]
 const TOTAL_MEASURED: &str = "Total Measured";
@@ -241,11 +246,15 @@ impl ProfilingDataContainer {
             .or_insert((elapsed, 1));
     }
 
-    fn print_named_counts(&self) {
-        if self.counts.is_empty() {
-            // nothing to report
-            return;
-        }
+    /// Constructs a table of ("Event Label", "Count", "Rate (per sec)". Used to print
+    /// stats to the console and write the stats to a CSV. The formatting function applied
+    /// to `count` and `rate` can be supplied; otherwise the default `to_string()` method
+    /// is used.
+    fn compute_named_counts_table(
+        &self,
+        count_formatter: Option<&dyn Fn(usize) -> String>,
+        rate_formatter: Option<&dyn Fn(f64) -> String>,
+    ) -> Vec<Vec<String>> {
         let elapsed = self.start_time.unwrap().elapsed().as_secs_f64();
 
         let mut rows = vec![
@@ -261,15 +270,101 @@ impl ProfilingDataContainer {
         for (key, count) in &self.counts {
             #[allow(clippy::cast_precision_loss)]
             let rate = (*count as f64) / elapsed;
+
+            let count_str = match count_formatter {
+                Some(f) => f(*count),
+                None => count.to_string(),
+            };
+
+            let rate_str = match rate_formatter {
+                Some(f) => f(rate),
+                None => rate.to_string(),
+            };
+
             rows.push(vec![
                 (*key).to_string(),
-                format_with_commas(*count),
-                format_with_commas_f64(rate),
+                count_str,
+                rate_str,
             ]);
         }
 
+        rows
+    }
+
+    fn print_named_counts(&self) {
+        if self.counts.is_empty() {
+            // nothing to report
+            return;
+        }
+        let rows = self.compute_named_counts_table(
+            Some(&format_with_commas),
+            Some(&format_with_commas_f64),
+        );
         println!();
         print_formatted_table(&rows);
+    }
+
+    fn compute_named_spans_table(
+        &self,
+        count_formatter: Option<&dyn Fn(usize) -> String>,
+        duration_formatter: Option<&dyn Fn(Duration) -> String>,
+        percent_formatter: Option<&dyn Fn(f64) -> String>,
+    ) -> Vec<Vec<String>> {
+        let elapsed = self.start_time.unwrap().elapsed().as_secs_f64();
+
+        let mut rows = vec![
+            // Header row
+            vec![
+                "Span Label".to_string(),
+                "Count".to_string(),
+                "Duration".to_string(),
+                "% runtime".to_string(),
+            ]
+        ];
+
+        // Inner function for formatting a single row
+        let format_span_row = |
+            label: &'static str,
+            duration: Duration,
+            count: usize,
+            elapsed: f64
+        | {
+            let percent_runtime = duration.as_secs_f64() / elapsed * 100.0;
+
+            let count_str = match count_formatter {
+                Some(f) => f(count),
+                None => count.to_string(),
+            };
+
+            let duration_str = match duration_formatter {
+                Some(f) => f(duration),
+                None => duration.as_secs_f64().to_string(),
+            };
+
+            let percent_str = match percent_formatter {
+                Some(f) => f(percent_runtime),
+                None => percent_runtime.to_string(),
+            };
+
+            vec![
+                label.to_string(),
+                count_str,
+                duration_str,
+                percent_str,
+            ]
+        };
+
+        // Add all regular span rows
+        for (&label, &(duration, count)) in self.spans.iter().filter(|(k, _)| *k != &TOTAL_MEASURED) {
+            rows.push(format_span_row(label, duration, count, elapsed));
+        }
+
+        // Add the "Total measured" row at the end
+        if let Some(&(duration, count)) = self.spans.get(&TOTAL_MEASURED) {
+            rows.push(format_span_row(TOTAL_MEASURED, duration, count, elapsed));
+        }
+
+        rows
     }
 
     fn print_named_spans(&self) {
@@ -277,36 +372,11 @@ impl ProfilingDataContainer {
             // nothing to report
             return;
         }
-        let elapsed = self.start_time.unwrap().elapsed().as_secs_f64();
-
-        let mut rows = vec![vec![
-            "Span Label".to_string(),
-            "Count".to_string(),
-            "Duration".to_string(),
-            "% runtime".to_string(),
-        ]];
-
-        for (key, (duration, count)) in self.spans.iter().filter(|(key, _)| *key != &TOTAL_MEASURED)
-        {
-            let percent_runtime = duration.as_secs_f64() / elapsed * 100.0;
-            rows.push(vec![
-                (*key).to_string(),
-                count.to_string(),
-                format!("{}", format_duration(*duration)),
-                // format_with_commas_f64(percent_runtime),
-                format!("{:.2}%", percent_runtime),
-            ]);
-        }
-        // Make TOTAL_MEASURED the last row
-        let (duration, count) = self.spans.get(&TOTAL_MEASURED).unwrap();
-        let percent_runtime = duration.as_secs_f64() / elapsed * 100.0;
-        rows.push(vec![
-            (*TOTAL_MEASURED).to_string(),
-            count.to_string(),
-            format!("{}", format_duration(*duration)),
-            // format_with_commas_f64(percent_runtime),
-            format!("{:.2}%", percent_runtime),
-        ]);
+        let rows = self.compute_named_spans_table(
+            Some(&format_with_commas),
+            Some(&|v| format_duration(v).to_string()),
+            Some(&|percent| format!("{:.2}%", percent)),
+        );
 
         println!();
         print_formatted_table(&rows);
@@ -352,8 +422,8 @@ pub fn open_span(label: &'static str) -> Span {
 /// Call this if you want to explicitly close a span before the end of the scope in which the
 /// span was defined. Equivalent to `span.drop()`.
 pub fn close_span(_span: Span) {
-    // `span` is dropped here, and `"ProfilingDataContainer::close_span` is called
-    // from `Span::drop`.
+    // The `span` is dropped here, and `"ProfilingDataContainer::close_span` is called
+    // from `Span::drop`. Incidentally, this is the same implementation as `span.drop()`!
 }
 
 /// Prints all collected profiling data.
@@ -393,6 +463,50 @@ pub fn print_forecast_efficiency() {
 }
 #[cfg(not(feature = "profiling"))]
 pub fn print_forecast_efficiency() {}
+
+
+/// Writes the named counts to the given CSV file, overwriting the file if it already exists.
+/// This function is a noop if the profiling feature is disabled.
+#[cfg(feature = "profiling")]
+pub fn write_named_counts_to_csv<P: AsRef<Path>>(csv_file_path: P) -> std::io::Result<()> {
+    let container = profiling_data();
+    let rows = container.compute_named_counts_table(
+        None, // Formats counts as an integer (`usize`) with no separators
+        None // Formats rate as a decimal (`f64`, units of count/second) with no separators
+    );
+
+    let mut file = File::create(csv_file_path)?;
+
+    for row in rows {
+        writeln!(file, "{}", row.join(","))?;
+    }
+
+    Ok(())
+}
+#[cfg(not(feature = "profiling"))]
+pub fn write_named_counts_to_csv<P: AsRef<Path>>(_csv_file_path: P) -> std::io::Result<()> {Ok(())}
+
+/// Writes the named counts to the given CSV file, overwriting the file if it already exists.
+/// This function is a noop if the profiling feature is disabled.
+#[cfg(feature = "profiling")]
+pub fn write_named_spans_to_csv<P: AsRef<Path>>(csv_file_path: P) -> std::io::Result<()> {
+    let container = profiling_data();
+    let rows = container.compute_named_spans_table(
+        None, // Formats counts as an integer (`usize`) with no separators
+        None, // Formats duration as a decimal (`f64`) number of seconds
+        None // Formats percent as a decimal (`f64`)
+    );
+
+    let mut file = File::create(csv_file_path)?;
+
+    for row in rows {
+        writeln!(file, "{}", row.join(","))?;
+    }
+
+    Ok(())
+}
+#[cfg(not(feature = "profiling"))]
+pub fn write_named_spans_to_csv<P: AsRef<Path>>(_csv_file_path: P) -> std::io::Result<()> {Ok(())}
 
 /// Prints a table with aligned columns, using the first row as a header.
 /// The first column is left-aligned; remaining columns are right-aligned.

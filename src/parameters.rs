@@ -85,18 +85,19 @@ pub struct Params {
     pub synth_population_file: PathBuf,
     /// The path to the transmission report file
     pub transmission_report_name: Option<String>,
-    /// The path to the person property report file
-    pub person_property_report_name: Option<String>,
-    // Facemask parameters
-    // facemask_efficacy the reduction in tranmission associated with wearing a facemask.
+    /// Facemask parameters
+    /// The reduction in transmission associated with wearing a facemask.
     pub facemask_parameters: Option<FacemaskParameters>,
-    //Hospitalization parameters contain the probability of hospitalization by age group
-    // the mean of the delay distribution to hospitalization, and the mean of the duration of hospitalization.
+    /// Hospitalization parameters contain the probability of hospitalization by age group
+    /// The mean of the delay distribution to hospitalization, and the mean of the duration of hospitalization.
     pub hospitalization_parameters: HospitalizationParameters,
-    // Guidance Policy
-    // Specifiies the policy guidance to use for interventions, defaulting to None
-    // Enum variants should contain structs with policy-relevant data values
+    /// Guidance Policy
+    /// Specifies the policy guidance to use for interventions, defaulting to None
+    /// Enum variants should contain structs with policy-relevant data values
     pub guidance_policy: Option<Policies>,
+    /// Any profiling data will be written to `{PROFILING_DATA_PREFIX}named_counts.csv`
+    /// and `{PROFILING_DATA_PREFIX}named_spans.csv`
+    pub profiling_data_prefix: Option<String>,
 }
 
 // Any default parameters must be specified here
@@ -134,6 +135,7 @@ impl Default for Params {
                 hospital_incidence_report_name: "hospital_incidence_report.csv".to_string(),
             },
             guidance_policy: None,
+            profiling_data_prefix: None,
         }
     }
 }

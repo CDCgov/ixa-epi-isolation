@@ -44,6 +44,7 @@
         {"min": 65,"probability": 0.05}
       ],
       "hospital_incidence_report_name": "hospital_incidence_report.csv"
-    }
+    },
+    "profiling_data_prefix": "profiling_"
   }
 }
