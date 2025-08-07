@@ -39,16 +39,38 @@ def main():
         synth_pop = subexperiment.simulation_bundles[0].baseline_params[
             subexperiment.scenario_key
         ]["synth_population_file"]
-        isolation_probability = subexperiment.simulation_bundles[0].baseline_params[
+
+        infectiousness_scale = subexperiment.simulation_bundles[0].baseline_params[
             subexperiment.scenario_key
-        ]["intervention_policy_parameters"]["isolation_probability"]
+        ]["infectiousness_rate_fn"]["EmpiricalFromFile"]["scale"]
+
+        home_alpha = subexperiment.simulation_bundles[0].baseline_params[
+            subexperiment.scenario_key
+        ]["settings_properties"]["Home"]["alpha"]
+
+        workplace_alpha = subexperiment.simulation_bundles[0].baseline_params[
+            subexperiment.scenario_key
+        ]["settings_properties"]["Workplace"]["alpha"]
+
+        school_alpha = subexperiment.simulation_bundles[0].baseline_params[
+            subexperiment.scenario_key
+        ]["settings_properties"]["School"]["alpha"]
+
+        censustract_alpha = subexperiment.simulation_bundles[0].baseline_params[
+            subexperiment.scenario_key
+        ]["settings_properties"]["CensusTract"]["alpha"]
+
         pop_size = pl.read_csv(synth_pop).height
         average_times.append(
             {
                 "scenario": int(scenario.split("=")[-1]),
                 "average_time": average_time,
                 "pop_size": pop_size,
-                "isolation_probability": isolation_probability,
+                "infectiousness_scale": infectiousness_scale,
+                "home_alpha": home_alpha,
+                "workplace_alpha": workplace_alpha,
+                "school_alpha": school_alpha,
+                "censustract_alpha": censustract_alpha,
             }
         )
 
@@ -68,9 +90,6 @@ def main():
     )
     exp_output.write_csv(os.path.join(experiment.directory, "experiment_runtime.csv"))
 
-    plot_runtime(exp_output, experiment)
-
-
 def read_fn(outputs_dir):
     output_file_path = os.path.join(outputs_dir, "person_property_count.csv")
     if os.path.exists(output_file_path):
@@ -89,27 +108,5 @@ def read_fn(outputs_dir):
     )
     print(df.to_series().to_list()[0])
     return df
-
-def plot_runtime(exp_output, experiment):
-    unique_exp_output = exp_output.unique(subset=["pop_size", "isolation_probability"])
-    plt.figure()
-    for iso_prob in unique_exp_output["isolation_probability"].unique():
-        subset = unique_exp_output.filter(pl.col("isolation_probability") == iso_prob)
-        plt.plot(
-            subset["pop_size"],
-            subset["average_time"],
-            marker="o",
-            label=f"Isolation Probability: {iso_prob}"
-        )
-    plt.legend(title="Isolation Probability")
-    plt.xscale("log")
-    plt.yscale("log")
-    plt.xlabel("Population Size")
-    plt.ylabel("Average Runtime")
-    plt.title("Population Size vs Average Runtime")
-    plt.grid(True)
-    plt.tight_layout()
-    plt.savefig(os.path.join(experiment.directory, "popsize_vs_avgtime.png"))
-    plt.close()
 
 main()
