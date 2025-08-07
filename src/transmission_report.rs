@@ -1,3 +1,4 @@
+use crate::profiling::open_span;
 use crate::{
     infectiousness_manager::{InfectionData, InfectionDataValue},
     parameters::ContextParametersExt,
@@ -41,6 +42,7 @@ fn record_transmission_event(
 fn create_transmission_report(context: &mut Context, file_name: &str) -> Result<(), IxaError> {
     context.add_report::<TransmissionReport>(file_name)?;
     context.subscribe_to_event::<PersonPropertyChangeEvent<InfectionData>>(|context, event| {
+        let _span = open_span("transmission_report");
         if let InfectionDataValue::Infectious {
             infected_by,
             infection_setting_type,

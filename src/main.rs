@@ -7,6 +7,7 @@ mod natural_history_parameter_manager;
 mod parameters;
 mod policies;
 mod population_loader;
+mod profiling;
 mod property_progression_manager;
 pub mod rate_fns;
 mod settings;
@@ -22,10 +23,12 @@ use population_loader::Age;
 use symptom_progression::Symptoms;
 
 use crate::hospitalizations::Hospitalized;
+use crate::profiling::print_profiling_data;
+
 // You must run this with a parameters file:
 // cargo run -- --config input/input.json
 // Try enabling logs to see some output about infections:
-// cargo run -- --config input/input.json --log-level=Trace -f | grep epi_isolation
+// cargo run -- --config input/input.json --log-level epi_isolation=Trace -f
 fn main() {
     run_with_args(|context, _, _| {
         // Read the global properties.
@@ -70,4 +73,6 @@ fn main() {
         Ok(())
     })
     .unwrap();
+
+    print_profiling_data();
 }
