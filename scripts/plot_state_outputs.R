@@ -40,14 +40,15 @@ max_inf <- sum(pop_data[
 ## Infection curves ------------
 ## ===============================#
 inf_prevalence <- person_property_report |>
-  group_by(t, infection_status) |>  
+  group_by(t, infection_status) |>
   summarize(count = sum(count), .groups = "drop")
 
 inf_report <- left_join(
-  inf_prevalence, incidence_counts, 
+  inf_prevalence, incidence_counts,
   by = c("t" = "t_upper", "infection_status" = "event"),
-  suffix = c("_prevalence", "_incidence")) |>
-  gather(key = "output", value = "count", -c(t, infection_status)) 
+  suffix = c("_prevalence", "_incidence")
+) |>
+  gather(key = "output", value = "count", -c(t, infection_status))
 
 
 inf_report |>
@@ -73,7 +74,7 @@ hosp_incidence <- person_property_incidence |>
   group_by(t_upper) |>
   summarize(hospitalized = sum(count))
 
-hosp_report <-left_join(hosp_prevalence, hosp_incidence,
+hosp_report <- left_join(hosp_prevalence, hosp_incidence,
   by = c("t" = "t_upper"),
   suffix = c("_prevalence", "_incidence")
 ) |>
