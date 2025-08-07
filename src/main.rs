@@ -23,7 +23,7 @@ use population_loader::Age;
 use symptom_progression::Symptoms;
 
 use crate::hospitalizations::Hospitalized;
-use crate::profiling::print_profiling_data;
+use crate::profiling::{print_profiling_data, write_named_counts_to_csv, write_named_spans_to_csv};
 
 // You must run this with a parameters file:
 // cargo run -- --config input/input.json
@@ -75,4 +75,8 @@ fn main() {
     .unwrap();
 
     print_profiling_data();
+    write_named_spans_to_csv("profiling_named_spans.csv")
+        .expect("Failed to write named spans to csv file");
+    write_named_counts_to_csv("profiling_named_counts.csv")
+        .expect("Failed to write named counts to csv file");
 }
