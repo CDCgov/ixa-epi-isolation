@@ -57,8 +57,7 @@ define_derived_property!(
 
 struct PropertyReportDataContainer {
     report_map_container: HashMap<Vec<String>, usize>,
-    report_incidence_container:
-        HashMap<u8, HashMap<String, HashMap<String, usize>>>,
+    report_incidence_container: HashMap<u8, HashMap<String, HashMap<String, usize>>>,
     event_names: HashMap<String, HashMap<String, String>>,
 }
 
@@ -166,10 +165,7 @@ fn reset_incidence_map(context: &mut Context) {
     let report_container = context.get_data_mut(PropertyReportDataPlugin);
 
     #[allow(clippy::explicit_iter_loop)]
-    for (_, map_incidence) in report_container
-        .report_incidence_container
-        .iter_mut()
-    {
+    for (_, map_incidence) in report_container.report_incidence_container.iter_mut() {
         for (_, property_map) in map_incidence.iter_mut() {
             for (_, count_property) in property_map.iter_mut() {
                 *count_property = 0;
@@ -335,9 +331,7 @@ fn create_incidence_report(
         .report_incidence_container
         .clone_from(&incidence_counts);
 
-    report_container
-        .event_names
-        .clone_from(&names_map);
+    report_container.event_names.clone_from(&names_map);
 
     context.subscribe_to_event::<PersonPropertyChangeEvent<InfectionStatus>>(|context, event| {
         update_infection_incidence(context, event);
