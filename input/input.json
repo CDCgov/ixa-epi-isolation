@@ -20,6 +20,7 @@
     "report_period": 1.0,
     "synth_population_file": "input/people_test.csv",
     "transmission_report_name": "transmission_report.csv",
+		"person_property_report_name": "person_property_count.csv",
     "guidance_policy": { "UpdatedIsolationGuidance": {
       "post_isolation_duration": 5.0,
       "isolation_probability": 1.0,
