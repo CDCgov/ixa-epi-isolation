@@ -273,13 +273,6 @@ impl ProfilingDataContainer {
     }
 
     fn print_named_spans(&self) {
-        if self.open_span_count != 0 {
-            println!("OPEN SPAN COUNT NONZERO: {}", self.open_span_count);
-        }
-        if self.coverage.is_some() {
-            println!("total_measured span is NOT None");
-        }
-
         if self.spans.is_empty() {
             // nothing to report
             return;

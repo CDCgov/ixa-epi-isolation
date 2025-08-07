@@ -28,9 +28,9 @@ use crate::profiling::print_profiling_data;
 // You must run this with a parameters file:
 // cargo run -- --config input/input.json
 // Try enabling logs to see some output about infections:
-// cargo run -- --config input/input.json --log-level=Trace -f | grep epi_isolation
+// cargo run -- --config input/input.json --log-level epi_isolation=Trace -f
 fn main() {
-    let _ = run_with_args(|context, _, _| {
+    run_with_args(|context, _, _| {
         // Read the global properties.
         let &Params {
             max_time,
@@ -71,7 +71,8 @@ fn main() {
         hospital_incidence_report::init(context)?;
 
         Ok(())
-    });
+    })
+    .unwrap();
 
     print_profiling_data();
 }
