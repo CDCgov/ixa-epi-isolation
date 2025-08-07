@@ -15,7 +15,7 @@ use crate::{
 define_person_property_with_default!(MaskingStatus, bool, false);
 define_person_property_with_default!(IsolatingStatus, bool, false);
 
-define_rng!(PolicyRng);
+define_rng!(UpdatedPolicyRng);
 
 #[derive(Debug, Clone, Copy)]
 struct InterventionPolicyParameters {
@@ -49,7 +49,7 @@ trait ContextIsolationGuidanceInternalExt:
         intervention_policy_parameters: InterventionPolicyParameters,
     ) {
         if self.sample_bool(
-            PolicyRng,
+            UpdatedPolicyRng,
             intervention_policy_parameters.isolation_probability,
         ) {
             self.add_plan(
@@ -153,7 +153,7 @@ mod test {
         infectiousness_manager::InfectionContextExt,
         parameters::{
             CoreSettingsTypes, FacemaskParameters, GlobalParams, ItinerarySpecificationType,
-            ProgressionLibraryType,
+            ProgressionLibraryType, RateFnType,
         },
         policies::Policies,
         population_loader::Alive,
@@ -188,6 +188,10 @@ mod test {
             initial_recovered: 0.35,
             proportion_asymptomatic,
             max_time: 100.0,
+            infectiousness_rate_fn: RateFnType::EmpiricalFromFile {
+                file: PathBuf::from("./input/library_empirical_rate_fns.csv"),
+                scale: 0.05,
+            },
             symptom_progression_library: Some(ProgressionLibraryType::EmpiricalFromFile {
                 file: PathBuf::from("./input/library_symptom_parameters.csv"),
             }),

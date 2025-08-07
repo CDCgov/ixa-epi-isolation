@@ -125,7 +125,6 @@ impl SymptomData {
                 ))
             }
         };
-
         // Get out the incubation period parameters
         let incubation_period =
             *parameter_dict
@@ -209,7 +208,7 @@ fn schedule_recovery(data: &SymptomData, context: &Context) -> (Option<SymptomVa
         sample
     });
     // Schedule the person to recover from their symptoms (`Symptoms` = `None`) at the given time
-    (None, time)
+    (None, time + 0.000_001)
 }
 
 #[derive(Debug)]
