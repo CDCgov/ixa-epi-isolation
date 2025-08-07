@@ -20,12 +20,6 @@
     "report_period": 1.0,
     "synth_population_file": "input/people_test.csv",
     "transmission_report_name": "transmission_report.csv",
-    "guidance_policy": { "UpdatedIsolationGuidance": {
-      "post_isolation_duration": 5.0,
-      "isolation_probability": 1.0,
-      "isolation_delay_period": 3.0
-    }
-  },
     "facemask_parameters": {
       "facemask_efficacy": 0.2
     },
