@@ -54,7 +54,7 @@ def main(config_file: str, keep: bool):
             "synth_population_file": f"/{blob_experiment_directory}/{os.path.basename(synth_pop_file)}"
         }
         fps = [synth_pop_file, symptom_params_file]
-        use_existing = False
+        use_existing = True
     else:
         fps = []
         use_existing=False

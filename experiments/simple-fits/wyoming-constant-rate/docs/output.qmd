@@ -1,0 +1,95 @@
+---
+title: "Wyoming hospitalization fit report"
+author: "Will Koval (AD71@cdc.gov, CDC/ORR/CFA)"
+format: pdf
+toc: true
+number-sections: true
+execute:
+    warning: false
+jupyter: python3
+---
+
+# Objective
+Proof-of-concept fit to state-level hospitalization.
+
+# Parameters
+## Fixed values
+| Parameter | Description | Value | Source |
+| --------- | ----------- | ----- | ------ |
+| `initial_incidence` | Initial fraction of population infectious | 0.01 | Introduction value |
+| `initial_recovered` | Initial fraction of population immune to infection | 0.3 | Assumed from first wave of infection |
+| `relative_infectiousness_asymptomatics` | Multiplier for the relative infectiousness of asymptomatic infectious individuals compared to symptomatics | 0.453 | Alpha variant estimate from Whitaker et al 2022 Nat Commun. |
+| `Home.alpha` | Property of `Home` settings that modulates density-dependence | 0.2 | Assumed from increased contact and indoor air circulation |
+| `Workplace.alpha` | Property of `Workplace` settings that modulates density-dependence | 0.05 | Assumed from somewhat increased contact and indoor air circulation |
+| `School.alpha` | Property of `School` settings that modulates density-dependence | 0.05 | Assumed from somewhat increased contact and indoor air circulation |
+| `CensusTract.alpha` | Property of `CensusTract` settings that modulates density-dependence | 0.0 | Assumed from reduced contact in community settings |
+| `symptom_progression_library` | Rates of symptom onset and recovery for symptom categories | variable | Estimated from posteriors of viral load curve fits |
+| `mean_delay_to_hospitalization` | Mean time from symptom onset to hospitalization | 3.0 | NEEDED |
+| `mean_duration_of_hospitalization` | Mean time that hospitalized individuals stay in the hospital before recovery | In estimated range |
+| `hopsitalization_probability` | Probability that symptomatic individuals become hospitalized | 0.03 | NEEDED | 
+
+The probability of hospitalization is age-dependent, but in this example we consider all individuals to be in the same
+age group, thus making a population-level hospitalization risk given symptoms.
+
+## Fitted values
+The infectiousness rate function is considered the same for all individuals and that those
+individuals have a constant rate of generating infection attempts for a specified duration. Both
+the rate and duration of infectiousness are fitted in this example. 
+
+We additionally fit the proportion of individuals who are asymptomatic, which then determines the
+infections hospitalization ratio (IHR), which is the product of hospitalization risk given symptoms
+and the proportion of infectious individuals who develop symptoms.
+
+```{python}
+from scipy.stats import gamma, norm, poisson, beta
+
+prior = {
+    "infectiousness_rate_fn": {
+        "Constant": {
+            "rate": gamma(a=1, scale=0.1),
+            "duration": gamma(a=10, scale=0.5),
+        }
+    },
+    "proportion_asymptomatic": beta(3, 3)
+}
+```
+
+These priors are based on reasonably vague disributions that can capture the general
+expected mean duration and $R_0$ of the alpha variant.
+
+# Methods
+## Data
+The National Hospital Surveillance Network (NHSN) data was downloaded from the public data repository
+and filtered by state to select data from Wyoming. 
+
+Synthetic population data were generated using `create_synthetic_population.R`, setting the state to `WY`
+and the population size to 589,000 to reflect Wyoming.
+
+## Distance function and perturbation kernels
+
+## Additional model comments
+
+# Results
+```{python}
+from abmwrappers.experiment_class import Experiment
+
+experiment = Experiment(img_file="../data/experiment_history.pkl")
+print(f"Steps = {len(experiment.simulation_bundles)}")
+```
+
+## Parameter visualizations
+### Posterior correlation plot
+```{python}
+from abmwrappers import plotting
+
+plotting.plot_posterior_distribution_2d(experiment)
+```
+### Priors vs Posteriors
+```{python}
+plotting.plot_posterior_distribution(
+    experiment, 
+    visualization_methods=["histogram", "density"], 
+    facet_by="parameter", 
+    include_priors=True
+)
+```
