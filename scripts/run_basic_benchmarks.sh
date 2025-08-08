@@ -1,7 +1,7 @@
 #!/bin/bash
 input_base=$1
 
-pop_sizes=("10000" "50000")
+pop_sizes=("100000" "1000000")
 cargo build --profile profiling
 
 for p in ${pop_sizes[@]}; do
