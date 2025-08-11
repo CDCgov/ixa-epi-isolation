@@ -326,8 +326,10 @@ trait ContextSettingInternalExt: PluginContext + ContextRandomExt {
             Some(itinerary_vector) => {
                 let mut modified_itinerary = Vec::<ItineraryEntry>::new();
                 for entry in itinerary_vector {
+                    let mut new_entry = entry.clone();
+                    modified_itinerary.push(new_entry.clone());
                     if entry.setting.get_type_id() != setting.get_type_id() {
-                        modified_itinerary.push(entry.clone());
+                        new_entry.ratio = 0.0;
                     }
                 }
                 if modified_itinerary.is_empty() {
@@ -354,16 +356,19 @@ trait ContextSettingInternalExt: PluginContext + ContextRandomExt {
             Some(itineraries) => {
                 let mut modified_itinerary = Vec::<ItineraryEntry>::new();
                 for entry in itineraries {
+                    let mut new_entry = entry.clone();
                     if entry.setting.get_type_id() == setting.get_type_id() {
-                        modified_itinerary.push(entry.clone());
+                        new_entry.ratio = 1.0;
+                    } else {
+                        new_entry.ratio = 0.0;
                     }
+                    modified_itinerary.push(new_entry.clone());
                 }
                 if modified_itinerary.is_empty() {
                     return Err(IxaError::from(
                         "limit itinerary resulted in empty modified itinerary",
                     ));
                 }
-
                 self.add_modified_itinerary(person_id, modified_itinerary)?;
                 Ok(())
             }
@@ -577,6 +582,22 @@ pub trait ContextSettingExt:
     fn get_setting_members(&self, setting: &dyn AnySettingId) -> Option<&Vec<PersonId>> {
         self.get_data(SettingDataPlugin)
             .get_setting_members(setting)
+    }
+
+    /// Get the total infectiousness multiplier for a person
+    /// This is the sum of the infectiousness multipliers for each setting derived from the itinerary
+    /// These are generated without modification from the general formula of ratio * (N - 1) ^ alpha
+    /// where N is the number of members in the setting
+    fn calculate_max_total_infectiousness_multiplier_for_person(&self, person_id: PersonId) -> f64 {
+        let container = self.get_data(SettingDataPlugin);
+        let mut collector = 0.0;
+        container.with_itinerary(person_id, |setting, setting_props, members, ratio| {
+            let multiplier = setting.calculate_multiplier(members, *setting_props);
+            if multiplier > collector {
+                collector = multiplier;
+            }
+        });
+        collector
     }
 
     /// Get the total infectiousness multiplier for a person

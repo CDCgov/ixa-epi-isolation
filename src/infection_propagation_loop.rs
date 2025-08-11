@@ -99,7 +99,7 @@ trait ContextForecastInternalExt: PluginContext {
                 })
                 .copied()
                 .collect();
-
+            
             // We have to re-evaluate any infectors and infectious contacts that may be new to the person with a changed itinerary,
             // as their itinerary potentially increased membership across some settings
             // and therefore potentially increased the infectiousness of the infector
@@ -199,7 +199,7 @@ pub fn init(context: &mut Context) -> Result<(), IxaError> {
         },
     );
 
-    context.subscribe_to_itinerary_change();
+    //context.subscribe_to_itinerary_change();
 
     Ok(())
 }

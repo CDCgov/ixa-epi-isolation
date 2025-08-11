@@ -2,7 +2,7 @@ use ixa::{
     define_derived_property, define_person_property_with_default, define_rng, trace, Context,
     ContextPeopleExt, ContextRandomExt, PersonId, PluginContext,
 };
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use statrs::distribution::Exp;
 
 use crate::{
@@ -26,7 +26,7 @@ pub enum InfectionDataValue {
     },
 }
 
-#[derive(Serialize, PartialEq, Debug, Clone, Copy, Eq, Hash)]
+#[derive(Serialize, Deserialize, PartialEq, Debug, Clone, Copy, Eq, Hash)]
 pub enum InfectionStatusValue {
     Susceptible,
     Infectious,
@@ -69,7 +69,7 @@ pub fn calc_total_infectiousness_multiplier(context: &Context, person_id: Person
 /// The modifier used for intrinsic infectiousness is ignored because all modifiers must
 /// be less than or equal to one.
 pub fn max_total_infectiousness_multiplier(context: &Context, person_id: PersonId) -> f64 {
-    context.calculate_total_infectiousness_multiplier_for_person(person_id)
+    context.calculate_max_total_infectiousness_multiplier_for_person(person_id)
 }
 
 define_rng!(ForecastRng);
