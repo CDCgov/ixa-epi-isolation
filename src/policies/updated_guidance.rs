@@ -20,7 +20,7 @@ define_rng!(UpdatedPolicyRng);
 #[derive(Debug, Clone, Copy)]
 struct InterventionPolicyParameters {
     post_isolation_duration: f64,
-    isolation_probability: f64,
+    policy_probability: f64,
     isolation_delay_period: f64,
 }
 
@@ -43,14 +43,14 @@ trait ContextIsolationGuidanceInternalExt:
         Ok(())
     }
 
-    fn isolation(
+    fn make_isolation_plan(
         &mut self,
         person_id: PersonId,
         intervention_policy_parameters: InterventionPolicyParameters,
     ) {
         if self.sample_bool(
             UpdatedPolicyRng,
-            intervention_policy_parameters.isolation_probability,
+            intervention_policy_parameters.policy_probability,
         ) {
             self.add_plan(
                 self.get_current_time() + intervention_policy_parameters.isolation_delay_period,
@@ -64,7 +64,7 @@ trait ContextIsolationGuidanceInternalExt:
         }
     }
 
-    fn post_isolation(
+    fn make_post_isolation_masking_plan(
         &mut self,
         person_id: PersonId,
         intervention_policy_parameters: InterventionPolicyParameters,
@@ -90,10 +90,13 @@ trait ContextIsolationGuidanceInternalExt:
         self.subscribe_to_event(
             move |context, event: PersonPropertyChangeEvent<PresentingWithSymptoms>| {
                 if event.current {
-                    context.isolation(event.person_id, intervention_policy_parameters);
+                    context.make_isolation_plan(event.person_id, intervention_policy_parameters);
                 } else if event.previous {
                     //individuals transition from presenting with symptoms to not presenting with symptoms
-                    context.post_isolation(event.person_id, intervention_policy_parameters);
+                    context.make_post_isolation_masking_plan(
+                        event.person_id,
+                        intervention_policy_parameters,
+                    );
                 }
             },
         );
@@ -126,12 +129,12 @@ pub fn init(context: &mut Context) -> Result<(), IxaError> {
     match guidance_policy {
         Some(Policies::UpdatedIsolationGuidance {
             post_isolation_duration,
-            isolation_probability,
+            policy_probability,
             isolation_delay_period,
         }) => {
             let intervention_policy_parameters = InterventionPolicyParameters {
                 post_isolation_duration,
-                isolation_probability,
+                policy_probability,
                 isolation_delay_period,
             };
             context.setup_isolation_guidance_event_sequence(intervention_policy_parameters);
@@ -153,7 +156,7 @@ mod test {
         infectiousness_manager::InfectionContextExt,
         parameters::{
             CoreSettingsTypes, FacemaskParameters, GlobalParams, ItinerarySpecificationType,
-            ProgressionLibraryType, RateFnType,
+            ProgressionLibraryType,
         },
         policies::Policies,
         population_loader::Alive,
@@ -177,7 +180,7 @@ mod test {
 
     fn setup_context(
         post_isolation_duration: f64,
-        isolation_probability: f64,
+        policy_probability: f64,
         isolation_delay_period: f64,
         facemask_efficacy: f64,
         proportion_asymptomatic: f64,
@@ -188,10 +191,6 @@ mod test {
             initial_recovered: 0.35,
             proportion_asymptomatic,
             max_time: 100.0,
-            infectiousness_rate_fn: RateFnType::EmpiricalFromFile {
-                file: PathBuf::from("./input/library_empirical_rate_fns.csv"),
-                scale: 0.05,
-            },
             symptom_progression_library: Some(ProgressionLibraryType::EmpiricalFromFile {
                 file: PathBuf::from("./input/library_symptom_parameters.csv"),
             }),
@@ -226,7 +225,7 @@ mod test {
             ]),
             guidance_policy: Some(Policies::UpdatedIsolationGuidance {
                 post_isolation_duration,
-                isolation_probability,
+                policy_probability,
                 isolation_delay_period,
             }),
             facemask_parameters: Some(FacemaskParameters { facemask_efficacy }),
@@ -250,14 +249,14 @@ mod test {
         // 5. Assert that start of facemask is end of symptoms
         // 6. Assert that end of facemask is end of symptoms + post isolation days
         let post_isolation_duration = 5.0;
-        let isolation_probability = 1.0;
+        let policy_probability = 1.0;
         let isolation_delay_period = 1.0;
         let facemask_efficacy = 0.5;
         let proportion_asymptomatic = 0.0;
 
         let mut context = setup_context(
             post_isolation_duration,
-            isolation_probability,
+            policy_probability,
             isolation_delay_period,
             facemask_efficacy,
             proportion_asymptomatic,
@@ -349,7 +348,7 @@ mod test {
         // Note this requires an isolation delay period of 0.
 
         let post_isolation_duration = 5.0;
-        let isolation_probability = 0.75;
+        let policy_probability = 0.75;
         let isolation_delay_period = 0.0;
         let facemask_efficacy = 0.5;
         let proportion_asymptomatic = 0.3;
@@ -362,7 +361,7 @@ mod test {
             let num_people_isolating_clone = Rc::clone(&num_people_isolating);
             let mut context = setup_context(
                 post_isolation_duration,
-                isolation_probability,
+                policy_probability,
                 isolation_delay_period,
                 facemask_efficacy,
                 proportion_asymptomatic,
@@ -407,7 +406,7 @@ mod test {
             *num_people_isolating.borrow() as f64 / (num_people * num_sims) as f64;
         assert_almost_eq!(
             proportion_isolating,
-            isolation_probability * (1.0 - proportion_asymptomatic),
+            policy_probability * (1.0 - proportion_asymptomatic),
             0.01
         );
     }

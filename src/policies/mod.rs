@@ -12,15 +12,15 @@ pub enum Policies {
     // Post-isolation duration, isolation probability, and maximum isolation delay.
     UpdatedIsolationGuidance {
         post_isolation_duration: f64,
-        isolation_probability: f64,
+        policy_probability: f64,
         isolation_delay_period: f64,
     },
     PreviousIsolationGuidance {
-        duration_from_symptom_onset: f64,
+        maximum_policy_duration: f64,
         mild_symptom_isolation_duration: f64,
         moderate_symptom_isolation_duration: f64,
         negative_test_isolation_duration: f64,
-        isolation_probability: f64,
+        policy_probability: f64,
         isolation_delay_period: f64,
         test_sensitivity: f64,
     },
@@ -31,7 +31,7 @@ pub fn validate_guidance_policy(guidance_policy: Option<Policies>) -> Result<(),
         None => (),
         Some(Policies::UpdatedIsolationGuidance {
             post_isolation_duration,
-            isolation_probability,
+            policy_probability,
             isolation_delay_period,
         }) => {
             if post_isolation_duration < 0.0 {
@@ -39,7 +39,7 @@ pub fn validate_guidance_policy(guidance_policy: Option<Policies>) -> Result<(),
                     "The post-isolation duration must be non-negative.".to_string(),
                 ));
             }
-            if !(0.0..=1.0).contains(&isolation_probability) {
+            if !(0.0..=1.0).contains(&policy_probability) {
                 return Err(IxaError::IxaError(
                     "The isolation probability must be between 0 and 1, inclusive.".to_string(),
                 ));
@@ -51,15 +51,15 @@ pub fn validate_guidance_policy(guidance_policy: Option<Policies>) -> Result<(),
             }
         }
         Some(Policies::PreviousIsolationGuidance {
-            duration_from_symptom_onset,
+            maximum_policy_duration,
             mild_symptom_isolation_duration,
             moderate_symptom_isolation_duration,
             negative_test_isolation_duration,
-            isolation_probability,
+            policy_probability,
             isolation_delay_period,
             test_sensitivity,
         }) => {
-            if duration_from_symptom_onset < 0.0 {
+            if maximum_policy_duration < 0.0 {
                 return Err(IxaError::IxaError(
                     "The duration from symptom onset must be non-negative.".to_string(),
                 ));
@@ -79,7 +79,7 @@ pub fn validate_guidance_policy(guidance_policy: Option<Policies>) -> Result<(),
                     "The negative test isolation duration must be non-negative.".to_string(),
                 ));
             }
-            if !(0.0..=1.0).contains(&isolation_probability) {
+            if !(0.0..=1.0).contains(&policy_probability) {
                 return Err(IxaError::IxaError(
                     "The isolation probability must be between 0 and 1, inclusive.".to_string(),
                 ));

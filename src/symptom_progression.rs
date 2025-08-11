@@ -208,7 +208,7 @@ fn schedule_recovery(data: &SymptomData, context: &Context) -> (Option<SymptomVa
         sample
     });
     // Schedule the person to recover from their symptoms (`Symptoms` = `None`) at the given time
-    (None, time + 0.000_001)
+    (None, time)
 }
 
 #[derive(Debug)]
