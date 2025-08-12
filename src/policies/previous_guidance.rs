@@ -1,9 +1,8 @@
 use std::f64;
 
 use ixa::{
-    define_derived_property, define_person_property_with_default, define_rng, trace, Context,
-    ContextPeopleExt, ContextRandomExt, IxaError, PersonId, PersonPropertyChangeEvent,
-    PluginContext,
+    define_person_property_with_default, define_rng, trace, Context, ContextPeopleExt,
+    ContextRandomExt, IxaError, PersonId, PersonPropertyChangeEvent, PluginContext,
 };
 
 use crate::{
@@ -12,21 +11,13 @@ use crate::{
     parameters::{ContextParametersExt, Params},
     policies::Policies,
     settings::{ContextSettingExt, Home, ItineraryModifiers},
-    symptom_progression::{SymptomValue, Symptoms},
+    symptom_progression::{PresentingWithSymptoms, SymptomRecord},
 };
 
 define_person_property_with_default!(MaskingStatus, bool, false);
 define_person_property_with_default!(IsolatingStatus, bool, false);
 define_person_property_with_default!(LastTestResult, bool, false);
-define_person_property_with_default!(SymptomStartTime, f64, 0.0);
-define_person_property_with_default!(PresentedWithSevereSymptoms, bool, false);
 
-define_derived_property!(PresentingWithSymptoms, bool, [Symptoms], |symptom_value| {
-    match symptom_value {
-        Some(SymptomValue::Presymptomatic) | None => false,
-        Some(_) => true,
-    }
-});
 define_rng!(PreviousPolicyRng);
 
 #[derive(Debug, Clone, Copy)]
@@ -91,16 +82,18 @@ trait ContextIsolationGuidanceInternalExt:
         person_id: PersonId,
         intervention_policy_parameters: InterventionPolicyParameters,
     ) {
-        let proposed_masking_end_time = self.get_person_property(person_id, SymptomStartTime)
-            + intervention_policy_parameters.maximum_policy_duration;
-        if proposed_masking_end_time > self.get_current_time() {
-            self.set_person_property(person_id, MaskingStatus, true);
-            trace!("Person {person_id} is now masking");
+        if let Some(symptom_record) = self.get_person_property(person_id, SymptomRecord) {
+            let proposed_masking_end_time = symptom_record.symptom_start
+                + intervention_policy_parameters.maximum_policy_duration;
+            if proposed_masking_end_time > self.get_current_time() {
+                self.set_person_property(person_id, MaskingStatus, true);
+                trace!("Person {person_id} is now masking");
 
-            self.add_plan(proposed_masking_end_time, move |context| {
-                context.set_person_property(person_id, MaskingStatus, false);
-                trace!("Person {person_id} is now no longer masking");
-            });
+                self.add_plan(proposed_masking_end_time, move |context| {
+                    context.set_person_property(person_id, MaskingStatus, false);
+                    trace!("Person {person_id} is now no longer masking");
+                });
+            }
         }
     }
 
@@ -122,14 +115,6 @@ trait ContextIsolationGuidanceInternalExt:
         } else {
             self.set_person_property(person_id, LastTestResult, false);
         }
-        // if self.sample_bool(
-        //     PreviousPolicyRng,
-        //     intervention_policy_parameters.test_sensitivity,
-        // ) {
-        //     self.set_person_property(person_id, LastTestResult, true);
-        // } else {
-        //     self.set_person_property(person_id, LastTestResult, false);
-        // }
     }
 
     fn handle_symptom_resolution(
@@ -138,27 +123,28 @@ trait ContextIsolationGuidanceInternalExt:
         intervention_policy_parameters: InterventionPolicyParameters,
     ) {
         if self.get_person_property(person_id, LastTestResult) {
-            let severe_symptoms = self.get_person_property(person_id, PresentedWithSevereSymptoms);
-            let isolation_start_time = self.get_person_property(person_id, SymptomStartTime)
-                + intervention_policy_parameters.isolation_delay_period;
-            let minimum_isolation_time = if severe_symptoms {
-                intervention_policy_parameters.moderate_symptom_isolation_duration
-                    + isolation_start_time
-            } else {
-                intervention_policy_parameters.mild_symptom_isolation_duration
-                    + isolation_start_time
-            };
-            let isolation_end = f64::max(minimum_isolation_time, self.get_current_time());
-            self.add_plan(isolation_end, move |context| {
-                context.modify_isolation_status(person_id, false).unwrap();
-                trace!("Person {person_id} is now no longer isolating");
-                if !severe_symptoms {
-                    context.make_post_isolation_masking_plan(
-                        person_id,
-                        intervention_policy_parameters,
-                    );
-                }
-            });
+            if let Some(symptom_record) = self.get_person_property(person_id, SymptomRecord) {
+                let isolation_start_time = symptom_record.symptom_start
+                    + intervention_policy_parameters.isolation_delay_period;
+                let minimum_isolation_time = if symptom_record.severe {
+                    intervention_policy_parameters.moderate_symptom_isolation_duration
+                        + isolation_start_time
+                } else {
+                    intervention_policy_parameters.mild_symptom_isolation_duration
+                        + isolation_start_time
+                };
+                let isolation_end = f64::max(minimum_isolation_time, self.get_current_time());
+                self.add_plan(isolation_end, move |context| {
+                    context.modify_isolation_status(person_id, false).unwrap();
+                    trace!("Person {person_id} is now no longer isolating");
+                    if !symptom_record.severe {
+                        context.make_post_isolation_masking_plan(
+                            person_id,
+                            intervention_policy_parameters,
+                        );
+                    }
+                });
+            }
         } else {
             self.modify_isolation_status(person_id, false).unwrap();
         }
@@ -171,22 +157,6 @@ trait ContextIsolationGuidanceInternalExt:
         self.subscribe_to_event(
             move |context, event: PersonPropertyChangeEvent<PresentingWithSymptoms>| {
                 if event.current {
-                    if context.get_person_property(event.person_id, Symptoms)
-                        == Some(SymptomValue::Category3)
-                        || context.get_person_property(event.person_id, Symptoms)
-                            == Some(SymptomValue::Category4)
-                    {
-                        context.set_person_property(
-                            event.person_id,
-                            PresentedWithSevereSymptoms,
-                            true,
-                        );
-                    }
-                    context.set_person_property(
-                        event.person_id,
-                        SymptomStartTime,
-                        context.get_current_time(),
-                    );
                     if context.sample_bool(
                         PreviousPolicyRng,
                         intervention_policy_parameters.policy_probability,
@@ -262,23 +232,20 @@ pub fn init(context: &mut Context) -> Result<(), IxaError> {
 
 #[cfg(test)]
 mod test {
-    use super::PresentingWithSymptoms;
     use crate::{
         infectiousness_manager::InfectionContextExt,
         parameters::{
             CoreSettingsTypes, FacemaskParameters, GlobalParams, ItinerarySpecificationType,
             ProgressionLibraryType, RateFnType,
         },
-        policies::{
-            previous_guidance::{LastTestResult, PresentedWithSevereSymptoms, SymptomStartTime},
-            Policies,
-        },
+        policies::{previous_guidance::LastTestResult, Policies},
         population_loader::Alive,
         rate_fns::load_rate_fns,
         settings::{
             CensusTract, ContextSettingExt, Home, ItineraryEntry, SettingId, SettingProperties,
             Workplace,
         },
+        symptom_progression::SymptomRecord,
         Params,
     };
     use std::{cell::RefCell, collections::HashMap, path::PathBuf, rc::Rc};
@@ -419,33 +386,25 @@ mod test {
             let moderate_policy_ran_flag = Rc::new(RefCell::new(false));
             let moderate_policy_ran_flag_clone = Rc::clone(&moderate_policy_ran_flag);
 
-            define_person_property_with_default!(SymptomEndTime, f64, 0.0);
             define_person_property_with_default!(IsolationEndTime, f64, 0.0);
-
-            context.subscribe_to_event::<PersonPropertyChangeEvent<PresentingWithSymptoms>>(
-                move |context, event| {
-                    if event.previous {
-                        context.set_person_property(
-                            event.person_id,
-                            SymptomEndTime,
-                            context.get_current_time(),
-                        );
-                    }
-                },
-            );
 
             context.subscribe_to_event::<PersonPropertyChangeEvent<IsolatingStatus>>(
                 move |context, event| {
                     if event.current {
                         assert_almost_eq!(
-                            context.get_person_property(event.person_id, SymptomStartTime)
+                            context
+                                .get_person_property(event.person_id, SymptomRecord)
+                                .unwrap()
+                                .symptom_start
                                 + isolation_delay_period,
                             context.get_current_time(),
                             0.000_001
                         );
                     } else {
                         let severe_symptoms = context
-                            .get_person_property(event.person_id, PresentedWithSevereSymptoms);
+                            .get_person_property(event.person_id, SymptomRecord)
+                            .unwrap()
+                            .severe;
                         context.set_person_property(
                             event.person_id,
                             IsolationEndTime,
@@ -454,8 +413,14 @@ mod test {
                         if severe_symptoms {
                             assert_almost_eq!(
                                 f64::max(
-                                    context.get_person_property(event.person_id, SymptomEndTime),
-                                    context.get_person_property(event.person_id, SymptomStartTime)
+                                    context
+                                        .get_person_property(event.person_id, SymptomRecord)
+                                        .unwrap()
+                                        .symptom_end,
+                                    context
+                                        .get_person_property(event.person_id, SymptomRecord)
+                                        .unwrap()
+                                        .symptom_start
                                         + isolation_delay_period
                                         + moderate_symptom_isolation_duration
                                 ),
@@ -466,16 +431,28 @@ mod test {
                         } else {
                             assert_almost_eq!(
                                 f64::max(
-                                    context.get_person_property(event.person_id, SymptomEndTime),
-                                    context.get_person_property(event.person_id, SymptomStartTime)
+                                    context
+                                        .get_person_property(event.person_id, SymptomRecord)
+                                        .unwrap()
+                                        .symptom_end,
+                                    context
+                                        .get_person_property(event.person_id, SymptomRecord)
+                                        .unwrap()
+                                        .symptom_start
                                         + isolation_delay_period
                                         + mild_symptom_isolation_duration
                                 ),
                                 context.get_current_time(),
                                 0.000_001
                             );
-                            if context.get_person_property(event.person_id, SymptomEndTime)
-                                > context.get_person_property(event.person_id, SymptomStartTime)
+                            if context
+                                .get_person_property(event.person_id, SymptomRecord)
+                                .unwrap()
+                                .symptom_end
+                                > context
+                                    .get_person_property(event.person_id, SymptomRecord)
+                                    .unwrap()
+                                    .symptom_start
                                     + maximum_policy_duration
                             {
                                 *mild_no_masking_flag_clone.borrow_mut() = true;
@@ -495,11 +472,16 @@ mod test {
                             0.000_001
                         );
                         let severity = context
-                            .get_person_property(event.person_id, PresentedWithSevereSymptoms);
+                            .get_person_property(event.person_id, SymptomRecord)
+                            .unwrap()
+                            .severe;
                         assert!(!severity);
                     } else {
                         assert_almost_eq!(
-                            context.get_person_property(event.person_id, SymptomStartTime)
+                            context
+                                .get_person_property(event.person_id, SymptomRecord)
+                                .unwrap()
+                                .symptom_start
                                 + maximum_policy_duration,
                             context.get_current_time(),
                             0.000_001
@@ -511,8 +493,14 @@ mod test {
             context.infect_person(p1, None, None, None);
             context.execute();
 
-            let long_delay_flag = context.get_person_property(p1, SymptomEndTime)
-                - context.get_person_property(p1, SymptomStartTime)
+            let long_delay_flag = context
+                .get_person_property(p1, SymptomRecord)
+                .unwrap()
+                .symptom_end
+                - context
+                    .get_person_property(p1, SymptomRecord)
+                    .unwrap()
+                    .symptom_start
                 <= isolation_delay_period;
 
             assert!(
@@ -524,6 +512,7 @@ mod test {
         }
     }
 
+    #[allow(clippy::too_many_lines)]
     #[test]
     fn test_isolation_guidance_event_sequence_negative_tests() {
         // 1. Create a new person and set test sensitivity = 1
@@ -569,20 +558,7 @@ mod test {
             let policy_ran_flag = Rc::new(RefCell::new(false));
             let policy_ran_flag_clone = Rc::clone(&policy_ran_flag);
 
-            define_person_property_with_default!(SymptomEndTime, f64, 0.0);
             define_person_property_with_default!(NumberOfTests, usize, 0);
-
-            context.subscribe_to_event::<PersonPropertyChangeEvent<PresentingWithSymptoms>>(
-                move |context, event| {
-                    if event.previous {
-                        context.set_person_property(
-                            event.person_id,
-                            SymptomEndTime,
-                            context.get_current_time(),
-                        );
-                    }
-                },
-            );
 
             context.subscribe_to_event::<PersonPropertyChangeEvent<LastTestResult>>(
                 move |context, event| {
@@ -598,19 +574,31 @@ mod test {
                 move |context, event| {
                     if event.current {
                         assert_almost_eq!(
-                            context.get_person_property(event.person_id, SymptomStartTime)
+                            context
+                                .get_person_property(event.person_id, SymptomRecord)
+                                .unwrap()
+                                .symptom_start
                                 + isolation_delay_period,
                             context.get_current_time(),
                             0.000_001
                         );
                     } else {
                         assert_almost_eq!(
-                            context.get_person_property(event.person_id, SymptomEndTime),
+                            context
+                                .get_person_property(event.person_id, SymptomRecord)
+                                .unwrap()
+                                .symptom_end,
                             context.get_current_time(),
                             0.000_001
                         );
-                        if context.get_person_property(event.person_id, SymptomEndTime)
-                            - context.get_person_property(event.person_id, SymptomStartTime)
+                        if context
+                            .get_person_property(event.person_id, SymptomRecord)
+                            .unwrap()
+                            .symptom_end
+                            - context
+                                .get_person_property(event.person_id, SymptomRecord)
+                                .unwrap()
+                                .symptom_start
                             < negative_test_isolation_duration + isolation_delay_period
                         {
                             assert_eq!(
@@ -630,8 +618,14 @@ mod test {
             context.infect_person(p1, None, None, None);
             context.execute();
 
-            let long_delay_flag = context.get_person_property(p1, SymptomEndTime)
-                - context.get_person_property(p1, SymptomStartTime)
+            let long_delay_flag = context
+                .get_person_property(p1, SymptomRecord)
+                .unwrap()
+                .symptom_end
+                - context
+                    .get_person_property(p1, SymptomRecord)
+                    .unwrap()
+                    .symptom_start
                 <= isolation_delay_period;
 
             assert!(*policy_ran_flag.borrow() ^ long_delay_flag);
@@ -693,7 +687,6 @@ mod test {
             let shutdown_flag = Rc::new(RefCell::new(false));
             let shutdown_flag_clone = Rc::clone(&shutdown_flag);
 
-            define_person_property_with_default!(SymptomEndTime, f64, 0.0);
             define_person_property_with_default!(NumberOfTests, usize, 0);
             define_person_property_with_default!(IsolationEndTime, f64, 0.0);
 
@@ -719,30 +712,23 @@ mod test {
                 },
             );
 
-            context.subscribe_to_event::<PersonPropertyChangeEvent<PresentingWithSymptoms>>(
-                move |context, event| {
-                    if event.previous {
-                        context.set_person_property(
-                            event.person_id,
-                            SymptomEndTime,
-                            context.get_current_time(),
-                        );
-                    }
-                },
-            );
-
             context.subscribe_to_event::<PersonPropertyChangeEvent<IsolatingStatus>>(
                 move |context, event| {
                     if event.current {
                         assert_almost_eq!(
-                            context.get_person_property(event.person_id, SymptomStartTime)
+                            context
+                                .get_person_property(event.person_id, SymptomRecord)
+                                .unwrap()
+                                .symptom_start
                                 + isolation_delay_period,
                             context.get_current_time(),
                             0.000_001
                         );
                     } else {
                         let severe_symptoms = context
-                            .get_person_property(event.person_id, PresentedWithSevereSymptoms);
+                            .get_person_property(event.person_id, SymptomRecord)
+                            .unwrap()
+                            .severe;
                         context.set_person_property(
                             event.person_id,
                             IsolationEndTime,
@@ -753,9 +739,13 @@ mod test {
                                 assert_almost_eq!(
                                     f64::max(
                                         context
-                                            .get_person_property(event.person_id, SymptomEndTime),
+                                            .get_person_property(event.person_id, SymptomRecord)
+                                            .unwrap()
+                                            .symptom_end,
                                         context
-                                            .get_person_property(event.person_id, SymptomStartTime)
+                                            .get_person_property(event.person_id, SymptomRecord)
+                                            .unwrap()
+                                            .symptom_start
                                             + isolation_delay_period
                                             + moderate_symptom_isolation_duration
                                     ),
@@ -767,17 +757,27 @@ mod test {
                                 assert_almost_eq!(
                                     f64::max(
                                         context
-                                            .get_person_property(event.person_id, SymptomEndTime),
+                                            .get_person_property(event.person_id, SymptomRecord)
+                                            .unwrap()
+                                            .symptom_end,
                                         context
-                                            .get_person_property(event.person_id, SymptomStartTime)
+                                            .get_person_property(event.person_id, SymptomRecord)
+                                            .unwrap()
+                                            .symptom_start
                                             + isolation_delay_period
                                             + mild_symptom_isolation_duration
                                     ),
                                     context.get_current_time(),
                                     0.000_001
                                 );
-                                if context.get_person_property(event.person_id, SymptomEndTime)
-                                    > context.get_person_property(event.person_id, SymptomStartTime)
+                                if context
+                                    .get_person_property(event.person_id, SymptomRecord)
+                                    .unwrap()
+                                    .symptom_end
+                                    > context
+                                        .get_person_property(event.person_id, SymptomRecord)
+                                        .unwrap()
+                                        .symptom_start
                                         + maximum_policy_duration
                                 {
                                     *early_exit_flag_clone.borrow_mut() = true;
@@ -785,7 +785,10 @@ mod test {
                             }
                         } else {
                             assert_almost_eq!(
-                                context.get_person_property(event.person_id, SymptomEndTime),
+                                context
+                                    .get_person_property(event.person_id, SymptomRecord)
+                                    .unwrap()
+                                    .symptom_end,
                                 context.get_current_time(),
                                 0.000_001
                             );
@@ -806,7 +809,10 @@ mod test {
                         );
                     } else {
                         assert_almost_eq!(
-                            context.get_person_property(event.person_id, SymptomStartTime)
+                            context
+                                .get_person_property(event.person_id, SymptomRecord)
+                                .unwrap()
+                                .symptom_start
                                 + maximum_policy_duration,
                             context.get_current_time(),
                             0.000_001
@@ -819,8 +825,14 @@ mod test {
             context.infect_person(p1, None, None, None);
             context.execute();
 
-            let long_delay_flag = context.get_person_property(p1, SymptomEndTime)
-                - context.get_person_property(p1, SymptomStartTime)
+            let long_delay_flag = context
+                .get_person_property(p1, SymptomRecord)
+                .unwrap()
+                .symptom_end
+                - context
+                    .get_person_property(p1, SymptomRecord)
+                    .unwrap()
+                    .symptom_start
                 <= isolation_delay_period;
 
             assert!(

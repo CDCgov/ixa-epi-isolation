@@ -151,7 +151,6 @@ pub fn init(context: &mut Context) -> Result<(), IxaError> {
 
 #[cfg(test)]
 mod test {
-    use super::PresentingWithSymptoms;
     use crate::{
         infectiousness_manager::InfectionContextExt,
         parameters::{
@@ -165,6 +164,7 @@ mod test {
             CensusTract, ContextSettingExt, Home, ItineraryEntry, SettingId, SettingProperties,
             Workplace,
         },
+        symptom_progression::PresentingWithSymptoms,
         Params,
     };
     use std::{cell::RefCell, collections::HashMap, path::PathBuf, rc::Rc};
