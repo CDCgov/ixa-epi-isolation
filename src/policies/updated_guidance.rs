@@ -351,13 +351,13 @@ mod test {
         let proportion_asymptomatic = 0.3;
 
         let num_people_isolating = Rc::new(RefCell::new(0usize));
-        let num_people_fast_isolation = Rc::new(RefCell::new(0usize));
+        let num_people_short_symptoms = Rc::new(RefCell::new(0usize));
         let num_people_symptoms = Rc::new(RefCell::new(0usize));
         let num_sims = 100;
         let num_people = 1000;
         for seed in 0..num_sims {
             let num_people_isolating_clone = Rc::clone(&num_people_isolating);
-            let num_people_fast_isolation_clone = Rc::clone(&num_people_fast_isolation);
+            let num_people_short_symptoms_clone = Rc::clone(&num_people_short_symptoms);
             let num_people_symptoms_clone = Rc::clone(&num_people_symptoms);
             let mut context = setup_context(
                 post_isolation_duration,
@@ -409,7 +409,7 @@ mod test {
                         let duration = context.get_current_time()
                             - context.get_person_property(event.person_id, SymptomStartTime);
                         if duration <= isolation_delay_period {
-                            *num_people_fast_isolation_clone.borrow_mut() += 1;
+                            *num_people_short_symptoms_clone.borrow_mut() += 1;
                         }
                     }
                 },
@@ -426,14 +426,14 @@ mod test {
         let proportion_isolating =
             *num_people_isolating.borrow() as f64 / (num_sims * num_people) as f64;
         #[allow(clippy::cast_precision_loss)]
-        let proportion_fast_isolation = *num_people_fast_isolation.borrow() as f64
+        let proportion_short_symptoms = *num_people_short_symptoms.borrow() as f64
             / ((num_sims as f64 * num_people as f64) * (1.0 - proportion_asymptomatic));
 
         assert_almost_eq!(
             proportion_isolating,
             isolation_probability
                 * (1.0 - proportion_asymptomatic)
-                * (1.0 - proportion_fast_isolation),
+                * (1.0 - proportion_short_symptoms),
             0.01
         );
     }
