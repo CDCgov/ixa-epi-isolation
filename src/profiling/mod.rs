@@ -114,7 +114,8 @@ use crate::parameters::{ContextParametersExt, Params};
 pub use data::*;
 pub use display::*;
 use file::write_profiling_data_to_file;
-use ixa::Context;
+use ixa::{error, Context, ContextReportExt};
+use std::path::Path;
 #[cfg(feature = "profiling")]
 use std::time::Instant;
 
@@ -161,17 +162,42 @@ impl Drop for Span {
 
 /// Writes the execution statistics for the context and all profiling data
 /// to a JSON file.
-pub trait ProfilingContextExt: ContextParametersExt {
+pub trait ProfilingContextExt: ContextParametersExt + ContextReportExt {
     fn write_profiling_data(&mut self) {
+        let (mut prefix, directory, overwrite) = {
+            let report_options = self.report_options();
+            (
+                report_options.file_prefix.clone(),
+                report_options.output_dir.clone(),
+                report_options.overwrite,
+            )
+        };
+
         let execution_statistics = self.get_execution_statistics();
         let Params {
             profiling_data_path,
             ..
         } = self.get_params();
-        let profiling_data_path = profiling_data_path.as_ref().unwrap();
+
+        if profiling_data_path.is_none() {
+            error!("no profiling data path specified");
+            return;
+        }
+
+        prefix.push_str(profiling_data_path.as_ref().unwrap());
+        let profiling_data_path = directory.join(prefix);
+        let profiling_data_path = Path::new(&profiling_data_path);
+
+        if !overwrite && profiling_data_path.exists() {
+            error!(
+                "profiling output file already exists: {}",
+                profiling_data_path.display()
+            );
+            return;
+        }
 
         write_profiling_data_to_file(profiling_data_path, execution_statistics)
-            .expect("Could not write profiling data to file");
+            .expect("could not write profiling data to file");
     }
 }
 impl ProfilingContextExt for Context {}
