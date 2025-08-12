@@ -9,7 +9,9 @@ use serde::{Deserialize, Serialize};
 use statrs::distribution::Weibull;
 
 use crate::interventions::{ContextTransmissionModifierExt, TransmissionModifier};
-use crate::natural_history_parameter_manager::ContextNaturalHistoryParameterExt;
+use crate::natural_history_parameter_manager::{
+    ContextNaturalHistoryParameterExt, NaturalHistoryParameterLibrary,
+};
 use crate::parameters::ContextParametersExt;
 use crate::rate_fns::RateFn;
 use crate::{
@@ -244,9 +246,16 @@ pub fn init(context: &mut Context) -> Result<(), IxaError> {
 
     // For isolation guidance, each rate function has a corresponding symptom improvement time
     // distribution, so we enforce a 1:1 relationship between the two.
-    context.register_parameter_id_assigner(Symptoms, |context, person_id| {
-        context.get_parameter_id(RateFn, person_id)
-    })?;
+    if RateFn.library_size(context) == 1 {
+        context.register_parameter_id_assigner(Symptoms, |context, _person_id| {
+            let library_size = Symptoms.library_size(context);
+            context.sample_range(SymptomRng, 0..library_size)
+        })?;
+    } else {
+        context.register_parameter_id_assigner(Symptoms, |context, person_id| {
+            context.get_parameter_id(RateFn, person_id)
+        })?;
+    }
     Ok(())
 }
 

@@ -351,11 +351,14 @@ mod test {
         let proportion_asymptomatic = 0.3;
 
         let num_people_isolating = Rc::new(RefCell::new(0usize));
-
-        let num_people = 1000;
+        let num_people_fast_isolation = Rc::new(RefCell::new(0usize));
+        let num_people_symptoms = Rc::new(RefCell::new(0usize));
         let num_sims = 100;
+        let num_people = 1000;
         for seed in 0..num_sims {
             let num_people_isolating_clone = Rc::clone(&num_people_isolating);
+            let num_people_fast_isolation_clone = Rc::clone(&num_people_fast_isolation);
+            let num_people_symptoms_clone = Rc::clone(&num_people_symptoms);
             let mut context = setup_context(
                 post_isolation_duration,
                 isolation_probability,
@@ -381,10 +384,6 @@ mod test {
                 let person_id = context.add_person(()).unwrap();
                 context.add_itinerary(person_id, itinerary.clone()).unwrap();
             }
-            // Infect all of the people -- triggering the event subscriptions if they are symptomatic
-            for person in context.query_people((Alive, true)) {
-                context.infect_person(person, None, None, None);
-            }
 
             context.subscribe_to_event::<PersonPropertyChangeEvent<IsolatingStatus>>(
                 move |_context, event| {
@@ -394,16 +393,47 @@ mod test {
                 },
             );
 
+            define_person_property_with_default!(SymptomStartTime, f64, 0.0);
+            define_person_property_with_default!(SymptomEndTime, f64, 0.0);
+
+            context.subscribe_to_event::<PersonPropertyChangeEvent<PresentingWithSymptoms>>(
+                move |context, event| {
+                    if event.current {
+                        context.set_person_property(
+                            event.person_id,
+                            SymptomStartTime,
+                            context.get_current_time(),
+                        );
+                        *num_people_symptoms_clone.borrow_mut() += 1;
+                    } else if event.previous {
+                        let duration = context.get_current_time()
+                            - context.get_person_property(event.person_id, SymptomStartTime);
+                        if duration <= isolation_delay_period {
+                            *num_people_fast_isolation_clone.borrow_mut() += 1;
+                        }
+                    }
+                },
+            );
+
+            for person in context.query_people((Alive, true)) {
+                context.infect_person(person, None, None, None);
+            }
             context.execute();
         }
         // Check that the proportion of people who are isolating is close to the expected
         // proportion
         #[allow(clippy::cast_precision_loss)]
         let proportion_isolating =
-            *num_people_isolating.borrow() as f64 / (num_people * num_sims) as f64;
+            *num_people_isolating.borrow() as f64 / (num_sims * num_people) as f64;
+        #[allow(clippy::cast_precision_loss)]
+        let proportion_fast_isolation = *num_people_fast_isolation.borrow() as f64
+            / ((num_sims as f64 * num_people as f64) * (1.0 - proportion_asymptomatic));
+
         assert_almost_eq!(
             proportion_isolating,
-            isolation_probability * (1.0 - proportion_asymptomatic),
+            isolation_probability
+                * (1.0 - proportion_asymptomatic)
+                * (1.0 - proportion_fast_isolation),
             0.01
         );
     }
