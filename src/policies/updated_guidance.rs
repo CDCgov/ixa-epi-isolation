@@ -339,6 +339,106 @@ mod test {
     }
 
     #[test]
+    fn test_isolation_guidance_event_sequence_verison_two() {
+        // 1. Create a new person
+        // 2. Keep track of the time of symptom onset and duration
+        // 3. Assert that start of isolation is the same as symptom onset + isolation delay
+        // 4. Assert that end of isolation is end of symptoms
+        // 5. Assert that start of facemask is end of symptoms
+        // 6. Assert that end of facemask is end of symptoms + post isolation days
+        let post_isolation_duration = 5.0;
+        let isolation_probability = 1.0;
+        let isolation_delay_period = 1.0;
+        let facemask_efficacy = 0.5;
+        let proportion_asymptomatic = 0.0;
+
+        let mut context = setup_context(
+            post_isolation_duration,
+            isolation_probability,
+            isolation_delay_period,
+            facemask_efficacy,
+            proportion_asymptomatic,
+        );
+        let p1 = context.add_person(()).unwrap();
+        let itinerary = vec![
+            ItineraryEntry::new(SettingId::new(Home, 0), 1.0),
+            ItineraryEntry::new(SettingId::new(CensusTract, 0), 1.0),
+            ItineraryEntry::new(SettingId::new(Workplace, 0), 1.0),
+        ];
+        context.add_itinerary(p1, itinerary).unwrap();
+        crate::symptom_progression::init(&mut context).unwrap();
+        super::init(&mut context).unwrap();
+
+        let symptom_start_time = Rc::new(RefCell::new(0.0));
+        let symptom_start_time_clone = Rc::clone(&symptom_start_time);
+        let symptom_end_time = Rc::new(RefCell::new(0.0));
+        let symptom_end_time_clone = Rc::clone(&symptom_end_time);
+        let isolation_start_time = Rc::new(RefCell::new(0.0));
+        let isolation_start_time_clone = Rc::clone(&isolation_start_time);
+        let isolation_end_time = Rc::new(RefCell::new(0.0));
+        let isolation_end_time_clone = Rc::clone(&isolation_end_time);
+        let masking_start_time = Rc::new(RefCell::new(0.0));
+        let masking_start_time_clone = Rc::clone(&masking_start_time);
+        let masking_end_time = Rc::new(RefCell::new(0.0));
+        let masking_end_time_clone = Rc::clone(&masking_end_time);
+
+
+        context.subscribe_to_event::<PersonPropertyChangeEvent<PresentingWithSymptoms>>(
+            move |context, event| {
+                if event.current {
+                    *symptom_start_time_clone.borrow_mut() = context.get_current_time();
+                } else if event.previous {
+                    *symptom_end_time_clone.borrow_mut() = context.get_current_time();
+                }
+            },
+        );
+
+        context.subscribe_to_event::<PersonPropertyChangeEvent<IsolatingStatus>>(
+            move |context, event| {
+                if event.current {
+                    *isolation_start_time_clone.borrow_mut() = context.get_current_time();
+                } else {
+                    *isolation_end_time_clone.borrow_mut() = context.get_current_time();
+                }
+            },
+        );
+
+        context.subscribe_to_event::<PersonPropertyChangeEvent<MaskingStatus>>(
+            move |context, event| {
+                if event.current {
+                    //assert size of populatin masking equals the size of thep population masking
+                    *masking_start_time_clone.borrow_mut() = context.get_current_time();
+                } else {
+                    *masking_end_time_clone.borrow_mut() = context.get_current_time();
+                }
+            },
+        );
+        context.infect_person(p1, None, None, None);
+        context.execute();
+
+        assert_almost_eq!(
+            *symptom_start_time.borrow() + isolation_delay_period,
+            *isolation_start_time.borrow(),
+            0.0
+        );
+        assert_almost_eq!(
+            *symptom_end_time.borrow(),
+            *isolation_end_time.borrow(),
+            0.0
+        );
+        assert_almost_eq!(
+            *symptom_end_time.borrow(),
+            *masking_start_time.borrow(),
+            0.0
+        );
+        assert_almost_eq!(
+            *symptom_end_time.borrow() + post_isolation_duration,
+            *masking_end_time.borrow(),
+            0.0
+        );
+    }
+
+    #[test]
     fn test_isolation_guidance_probability() {
         // this test checks that the proportion of individuals that isolation is what we
         // expect. This proportion is determined by the isolation probability parameter.
