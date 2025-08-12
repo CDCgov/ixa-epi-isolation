@@ -26,7 +26,7 @@ fn schedule_next_forecasted_infection(context: &mut Context, person: PersonId) {
             let _span = open_span("evaluate and schedule next forecast");
             increment_named_count("forecasted infection");
             if evaluate_forecast(context, person, forecasted_total_infectiousness) {
-                increment_named_count("accepted infection");
+                increment_named_count("accepted infection attempt");
                 let _ = infection_attempt(context, person);
             }
             // Continue scheduling forecasts until the person recovers.
@@ -93,6 +93,7 @@ trait ContextForecastInternalExt: PluginContext {
     fn subscribe_to_itinerary_change(&mut self) {
         self.subscribe_to_event::<ItineraryChangeEvent>(move |context, event| {
             let _span = open_span("modify infector scheduled attempts");
+            increment_named_count("canceled forecasts");
             let container = context.get_data(ForecastDataPlugin);
             // Check for any active forecast associated with person
             let affected_infectors: Vec<PersonId> = container

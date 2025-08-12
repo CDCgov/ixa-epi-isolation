@@ -5,7 +5,7 @@
 //! - **Rate calculation** – Compute rates (events per second) since the first count.
 //! - **Span timing** – Measure time intervals between span creation and reporting.
 //! - **Efficiency reporting** – Report forecasting efficiency when "forecasted infection" and
-//!   "accepted infection" counts are available.
+//!   "accepted infection attempt" counts are available.
 //!
 //! The functionality of this module is gated behind the `profiling` feature, which is enabled by
 //! default. Disabling this feature leaves the public API defined but with an empty implementation,
@@ -95,7 +95,7 @@
 //!     if evaluate_forecast(context, person, forecasted_total_infectiousness) {
 //!         if let Some(setting_id) = context.get_setting_for_contact(person) {
 //!             if let Some(next_contact) = infection_attempt(context, person, setting_id) {
-//!                 increment_named_count("accepted infection");
+//!                 increment_named_count("accepted infection attempt");
 //!                 context.infect_person(next_contact, Some(person), None, None);
 //!             }
 //!         }
@@ -315,7 +315,7 @@ impl ProfilingDataContainer {
     fn print_forecast_efficiency(&self) {
         // Forecasting efficiency summary
         if let (Some(accepted), Some(forecasted)) = (
-            self.get_named_count("accepted infection"),
+            self.get_named_count("accepted infection attempt"),
             self.get_named_count("forecasted infection"),
         ) {
             #[allow(clippy::cast_precision_loss)]
@@ -530,7 +530,7 @@ mod tests {
         let mut data = profiling_data();
         data.start_time = Some(Instant::now().checked_sub(Duration::from_secs(2)).unwrap());
         data.counts.insert("forecasted infection", 10);
-        data.counts.insert("accepted infection", 4);
+        data.counts.insert("accepted infection attempt", 4);
 
         data.print_named_counts(); // should print "40.00% efficiency"
     }

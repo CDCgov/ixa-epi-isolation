@@ -5,7 +5,7 @@ use ixa::{
 use serde::Serialize;
 use statrs::distribution::Exp;
 
-use crate::profiling::open_span;
+use crate::profiling::{increment_named_count, open_span};
 use crate::{
     interventions::ContextTransmissionModifierExt,
     rate_fns::{InfectiousnessRateExt, InfectiousnessRateFn, ScaledRateFn},
@@ -88,6 +88,7 @@ pub fn infection_attempt(context: &mut Context, person_id: PersonId) -> Option<P
                     ForecastRng,
                     context.get_relative_total_transmission(next_contact),
                 ) {
+                    increment_named_count("infection_success");
                     trace!(
                         "Infection attempt successful. Person {}, setting type {} {}, infecting {}",
                         person_id,

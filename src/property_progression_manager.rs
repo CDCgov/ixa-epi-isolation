@@ -15,7 +15,6 @@ use crate::{parameters::ProgressionLibraryType, symptom_progression::SymptomData
 use crate::natural_history_parameter_manager::{
     ContextNaturalHistoryParameterExt, NaturalHistoryParameterLibrary,
 };
-use crate::profiling::increment_named_count;
 
 /// Defines a semi-Markovian method for getting the next value of a person property based on how
 /// it's changed (the event) and `&Context`. `P` is the person property being mapped in the progression.
@@ -69,7 +68,6 @@ pub trait ContextPropertyProgressionExt: PluginContext {
                 if let Some((next_value, time_to_next)) = tcr.next(context, event) {
                     let current_time = context.get_current_time();
                     context.add_plan(current_time + time_to_next, move |ctx| {
-                        increment_named_count("property progression");
                         ctx.set_person_property(event.person_id, property, next_value);
                     });
                 }
