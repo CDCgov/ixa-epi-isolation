@@ -6,6 +6,7 @@ use crate::infectiousness_manager::{
     InfectionData, InfectionDataValue, InfectionStatus, InfectionStatusValue,
 };
 use crate::parameters::{ContextParametersExt, Params};
+use crate::profiling::{increment_named_count, open_span};
 use crate::rate_fns::{load_rate_fns, InfectiousnessRateExt};
 use crate::settings::{ContextSettingExt, ItineraryChangeEvent};
 use ixa::{
@@ -22,7 +23,10 @@ fn schedule_next_forecasted_infection(context: &mut Context, person: PersonId) {
     }) = get_forecast(context, person)
     {
         let infection_plan = context.add_plan(next_time, move |context| {
+            let _span = open_span("evaluate and schedule next forecast");
+            increment_named_count("forecasted infection");
             if evaluate_forecast(context, person, forecasted_total_infectiousness) {
+                increment_named_count("accepted infection attempt");
                 let _ = infection_attempt(context, person);
             }
             // Continue scheduling forecasts until the person recovers.
@@ -37,6 +41,7 @@ fn schedule_recovery(context: &mut Context, person: PersonId) {
     let infection_duration = context.get_person_rate_fn(person).infection_duration();
     let recovery_time = context.get_current_time() + infection_duration;
     context.add_plan(recovery_time, move |context| {
+        increment_named_count("recovery");
         trace!("Person {person} has recovered at {recovery_time}");
         context.recover_person(person);
         context.remove_forecast_plan(person);
@@ -87,6 +92,8 @@ trait ContextForecastInternalExt: PluginContext {
     /// Listen to itinerary changes and determine their effect on the current active forecast plans of potential infectors
     fn subscribe_to_itinerary_change(&mut self) {
         self.subscribe_to_event::<ItineraryChangeEvent>(move |context, event| {
+            let _span = open_span("modify infector scheduled attempts");
+            increment_named_count("canceled forecasts");
             let container = context.get_data(ForecastDataPlugin);
             // Check for any active forecast associated with person
             let affected_infectors: Vec<PersonId> = container
