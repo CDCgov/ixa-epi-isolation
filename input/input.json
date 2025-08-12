@@ -22,7 +22,7 @@
     "transmission_report_name": "transmission_report.csv",
     "guidance_policy": { "UpdatedIsolationGuidance": {
       "post_isolation_duration": 5.0,
-      "isolation_probability": 1.0,
+      "policy_probability": 1.0,
       "isolation_delay_period": 3.0
     }
   },
