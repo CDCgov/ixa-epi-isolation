@@ -164,13 +164,13 @@ mod test {
             CensusTract, ContextSettingExt, Home, ItineraryEntry, SettingId, SettingProperties,
             Workplace,
         },
-        symptom_progression::PresentingWithSymptoms,
+        symptom_progression::SymptomRecord,
         Params,
     };
     use std::{cell::RefCell, collections::HashMap, path::PathBuf, rc::Rc};
 
     use ixa::{
-        define_person_property_with_default, Context, ContextGlobalPropertiesExt, ContextPeopleExt,
+        Context, ContextGlobalPropertiesExt, ContextPeopleExt,
         ContextRandomExt, IxaError, PersonPropertyChangeEvent,
     };
 
@@ -274,39 +274,18 @@ mod test {
         let policy_ran_flag = Rc::new(RefCell::new(false));
         let policy_ran_flag_clone = Rc::clone(&policy_ran_flag);
 
-        define_person_property_with_default!(SymptomStartTime, f64, 0.0);
-        define_person_property_with_default!(SymptomEndTime, f64, 0.0);
-
-        context.subscribe_to_event::<PersonPropertyChangeEvent<PresentingWithSymptoms>>(
-            move |context, event| {
-                if event.current {
-                    context.set_person_property(
-                        event.person_id,
-                        SymptomStartTime,
-                        context.get_current_time(),
-                    );
-                } else if event.previous {
-                    context.set_person_property(
-                        event.person_id,
-                        SymptomEndTime,
-                        context.get_current_time(),
-                    );
-                }
-            },
-        );
-
         context.subscribe_to_event::<PersonPropertyChangeEvent<IsolatingStatus>>(
             move |context, event| {
                 if event.current {
                     assert_almost_eq!(
-                        context.get_person_property(event.person_id, SymptomStartTime)
+                        context.get_person_property(event.person_id, SymptomRecord).unwrap().symptom_start
                             + isolation_delay_period,
                         context.get_current_time(),
                         0.0
                     );
                 } else {
                     assert_almost_eq!(
-                        context.get_person_property(event.person_id, SymptomEndTime),
+                        context.get_person_property(event.person_id, SymptomRecord).unwrap().symptom_end,
                         context.get_current_time(),
                         0.0
                     );
@@ -319,13 +298,13 @@ mod test {
                 if event.current {
                     //assert size of populatin masking equals the size of thep population masking
                     assert_almost_eq!(
-                        context.get_person_property(event.person_id, SymptomEndTime),
+                        context.get_person_property(event.person_id, SymptomRecord).unwrap().symptom_end,
                         context.get_current_time(),
                         0.0
                     );
                 } else {
                     assert_almost_eq!(
-                        context.get_person_property(event.person_id, SymptomEndTime)
+                        context.get_person_property(event.person_id, SymptomRecord).unwrap().symptom_end
                             + post_isolation_duration,
                         context.get_current_time(),
                         0.0
