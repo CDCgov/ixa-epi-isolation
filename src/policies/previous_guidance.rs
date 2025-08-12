@@ -854,8 +854,8 @@ mod test {
         let mild_symptom_isolation_duration = 5.0;
         let moderate_symptom_isolation_duration = 10.0;
         let negative_test_isolation_duration = 2.0;
-        let policy_probability = 1.0;
-        let isolation_delay_period = 0.0;
+        let policy_probability = 0.75;
+        let isolation_delay_period = 1.0;
         let test_sensitivity = 1.0;
         let facemask_efficacy = 0.5;
         let proportion_asymptomatic = 0.2;
