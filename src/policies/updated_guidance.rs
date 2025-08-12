@@ -170,8 +170,8 @@ mod test {
     use std::{cell::RefCell, collections::HashMap, path::PathBuf, rc::Rc};
 
     use ixa::{
-        Context, ContextGlobalPropertiesExt, ContextPeopleExt,
-        ContextRandomExt, IxaError, PersonPropertyChangeEvent,
+        Context, ContextGlobalPropertiesExt, ContextPeopleExt, ContextRandomExt, IxaError,
+        PersonPropertyChangeEvent,
     };
 
     use super::{IsolatingStatus, MaskingStatus};
@@ -278,14 +278,20 @@ mod test {
             move |context, event| {
                 if event.current {
                     assert_almost_eq!(
-                        context.get_person_property(event.person_id, SymptomRecord).unwrap().symptom_start
+                        context
+                            .get_person_property(event.person_id, SymptomRecord)
+                            .unwrap()
+                            .symptom_start
                             + isolation_delay_period,
                         context.get_current_time(),
                         0.0
                     );
                 } else {
                     assert_almost_eq!(
-                        context.get_person_property(event.person_id, SymptomRecord).unwrap().symptom_end,
+                        context
+                            .get_person_property(event.person_id, SymptomRecord)
+                            .unwrap()
+                            .symptom_end,
                         context.get_current_time(),
                         0.0
                     );
@@ -298,13 +304,19 @@ mod test {
                 if event.current {
                     //assert size of populatin masking equals the size of thep population masking
                     assert_almost_eq!(
-                        context.get_person_property(event.person_id, SymptomRecord).unwrap().symptom_end,
+                        context
+                            .get_person_property(event.person_id, SymptomRecord)
+                            .unwrap()
+                            .symptom_end,
                         context.get_current_time(),
                         0.0
                     );
                 } else {
                     assert_almost_eq!(
-                        context.get_person_property(event.person_id, SymptomRecord).unwrap().symptom_end
+                        context
+                            .get_person_property(event.person_id, SymptomRecord)
+                            .unwrap()
+                            .symptom_end
                             + post_isolation_duration,
                         context.get_current_time(),
                         0.0
