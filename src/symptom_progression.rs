@@ -12,7 +12,7 @@ use crate::interventions::{ContextTransmissionModifierExt, TransmissionModifier}
 use crate::natural_history_parameter_manager::{
     ContextNaturalHistoryParameterExt, NaturalHistoryParameterLibrary,
 };
-use crate::parameters::ContextParametersExt;
+use crate::parameters::{ContextParametersExt, RateFnType};
 use crate::rate_fns::RateFn;
 use crate::{
     infectiousness_manager::{InfectionStatus, InfectionStatusValue},
@@ -246,15 +246,20 @@ pub fn init(context: &mut Context) -> Result<(), IxaError> {
 
     // For isolation guidance, each rate function has a corresponding symptom improvement time
     // distribution, so we enforce a 1:1 relationship between the two.
-    if RateFn.library_size(context) == 1 {
-        context.register_parameter_id_assigner(Symptoms, |context, _person_id| {
-            let library_size = Symptoms.library_size(context);
-            context.sample_range(SymptomRng, 0..library_size)
-        })?;
-    } else {
-        context.register_parameter_id_assigner(Symptoms, |context, person_id| {
-            context.get_parameter_id(RateFn, person_id)
-        })?;
+    // If the rate function is constant, we sample a symptom category from the symptom library.
+    let rate_of_infection = context.get_params().infectiousness_rate_fn.clone();
+    match rate_of_infection {
+        RateFnType::Constant { .. } => {
+            context.register_parameter_id_assigner(Symptoms, |context, _person_id| {
+                let library_size = Symptoms.library_size(context);
+                context.sample_range(SymptomRng, 0..library_size)
+            })?;
+        }
+        RateFnType::EmpiricalFromFile { .. } => {
+            context.register_parameter_id_assigner(Symptoms, |context, person_id| {
+                context.get_parameter_id(RateFn, person_id)
+            })?;
+        }
     }
     Ok(())
 }
