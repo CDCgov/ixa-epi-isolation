@@ -56,8 +56,11 @@ define_derived_property!(
 
 struct PropertyReportDataContainer {
     report_map_container: HashMap<PersonPropertyReportValues, usize>,
-    report_incidence_container: HashMap<u8, HashMap<String, HashMap<String, usize>>>,
-    event_names: HashMap<String, HashMap<String, String>>,
+    incidence_infection_status: HashMap<(u8, InfectionStatusValue), usize>,
+    incidence_symptoms: HashMap<(u8, SymptomValue), usize>,
+    incidence_hospitalization: HashMap<(u8, bool), usize>,
+    // Unused?
+    // event_names: HashMap<String, HashMap<String, String>>,
 }
 
 define_data_plugin!(
@@ -65,8 +68,10 @@ define_data_plugin!(
     PropertyReportDataContainer,
     PropertyReportDataContainer {
         report_map_container: HashMap::default(),
-        report_incidence_container: HashMap::default(),
-        event_names: HashMap::default(),
+        incidence_infection_status: HashMap::default(),
+        incidence_symptoms: HashMap::default(),
+        incidence_hospitalization: HashMap::default(),
+        // event_names: HashMap::default(),
     }
 );
 
@@ -80,15 +85,10 @@ fn update_infection_incidence(
         let age = context.get_person_property(event.person_id, Age);
         let report_container_mut = context.get_data_mut(PropertyReportDataPlugin);
         report_container_mut
-            .report_incidence_container
-            .entry(age)
-            .and_modify(|inf_map| {
-                inf_map
-                    .entry("InfectionStatus".to_string())
-                    .and_modify(|count_map| {
-                        *count_map.entry(format!("{:?}", event.current)).or_insert(0) += 1;
-                    });
-            });
+            .incidence_infection_status
+            .entry((age, event.current))
+            .and_modify(|v| *v += 1)
+            .or_insert(1);
     }
 }
 
@@ -98,15 +98,10 @@ fn update_symptoms_incidence(context: &mut Context, event: PersonPropertyChangeE
     if let Some(symptoms) = event.current {
         if symptoms != SymptomValue::Presymptomatic {
             report_container_mut
-                .report_incidence_container
-                .entry(age)
-                .and_modify(|symp_map| {
-                    symp_map
-                        .entry("Symptoms".to_string())
-                        .and_modify(|count_map| {
-                            *count_map.entry(format!("{:?}", event.current)).or_insert(0) += 1;
-                        });
-                });
+                .incidence_symptoms
+                .entry((age, symptoms))
+                .and_modify(|count| *count += 1)
+                .or_insert(1);
         }
     }
 }
@@ -119,15 +114,10 @@ fn update_hospitalization_incidence(
     let report_container_mut = context.get_data_mut(PropertyReportDataPlugin);
     if event.current {
         report_container_mut
-            .report_incidence_container
-            .entry(age)
-            .and_modify(|hosp_map| {
-                hosp_map
-                    .entry("Hospitalized".to_string())
-                    .and_modify(|count_map| {
-                        *count_map.entry(format!("{:?}", event.current)).or_insert(0) += 1;
-                    });
-            });
+            .incidence_hospitalization
+            .entry((age, event.current))
+            .and_modify(|count| *count += 1)
+            .or_insert(1);
     }
 }
 
@@ -151,15 +141,9 @@ fn update_property_change_counts(
 
 fn reset_incidence_map(context: &mut Context) {
     let report_container = context.get_data_mut(PropertyReportDataPlugin);
-
-    #[allow(clippy::explicit_iter_loop)]
-    for (_, map_incidence) in report_container.report_incidence_container.iter_mut() {
-        for (_, property_map) in map_incidence.iter_mut() {
-            for (_, count_property) in property_map.iter_mut() {
-                *count_property = 0;
-            }
-        }
-    }
+    report_container.incidence_infection_status.clear();
+    report_container.incidence_symptoms.clear();
+    report_container.incidence_hospitalization.clear();
 }
 
 fn send_property_counts(context: &mut Context) {
@@ -179,24 +163,34 @@ fn send_property_counts(context: &mut Context) {
 
 fn send_incidence_counts(context: &mut Context) {
     let report_container = context.get_data(PropertyReportDataPlugin);
+    let t_upper = context.get_current_time();
 
-    for (age, map_incidence) in &report_container.report_incidence_container {
-        for (property_name, property_map) in map_incidence {
-            for (value, count_property) in property_map {
-                let event_name = report_container
-                    .event_names
-                    .get(property_name)
-                    .expect("Property not found in map for incidence report")
-                    .get(value)
-                    .expect("Property not found in map for incidence report");
-                context.send_report(PersonPropertyIncidenceReport {
-                    t_upper: context.get_current_time(),
-                    age: *age,
-                    event: event_name.to_string(),
-                    count: *count_property,
-                });
-            }
-        }
+    // Infection status
+    for ((age, infection_status), count) in &report_container.incidence_infection_status {
+        context.send_report(PersonPropertyIncidenceReport {
+            t_upper,
+            age: *age,
+            event: format!("{:?}", infection_status),
+            count: *count,
+        });
+    }
+    // Symptoms
+    for ((age, symptoms), count) in &report_container.incidence_symptoms {
+        context.send_report(PersonPropertyIncidenceReport {
+            t_upper,
+            age: *age,
+            event: format!("{:?}", symptoms),
+            count: *count,
+        });
+    }
+    // Hospitalization
+    for ((age, hospitalization), count) in &report_container.incidence_hospitalization {
+        context.send_report(PersonPropertyIncidenceReport {
+            t_upper,
+            age: *age,
+            event: format!("{:?}", hospitalization),
+            count: *count,
+        });
     }
     reset_incidence_map(context);
 }
@@ -215,14 +209,14 @@ fn create_prevalence_report(
     // This is a bit of a cheat, as we are not able to iterate over the entire population.
     for person in context.query_people((Hospitalized, false)) {
         let value = context.get_person_property(person, PersonReportProperties);
-        map_counts.entry(value).and_modify(|count| *count += 1).or_insert(1);   
+        map_counts.entry(value).and_modify(|count| *count += 1).or_insert(1);
     }
     // Only if you have initially hospitalized people.
     for person in context.query_people((Hospitalized, true)) {
         let value = context.get_person_property(person, PersonReportProperties);
         map_counts.entry(value).and_modify(|count| *count += 1).or_insert(1);
     }
-    
+
     let report_container = context.get_data_mut(PropertyReportDataPlugin);
     report_container
         .report_map_container = map_counts;
@@ -250,7 +244,8 @@ fn create_incidence_report(
 ) -> Result<(), IxaError> {
     context.add_report::<PersonPropertyIncidenceReport>(file_name)?;
 
-    let mut incidence_counts: HashMap<u8, HashMap<String, HashMap<String, usize>>> = HashMap::default();
+    // Is the point of this to have zero counts for all values?
+    /*let mut incidence_counts: HashMap<u8, HashMap<String, HashMap<String, usize>>> = HashMap::default();
     let mut names_map: HashMap<String, HashMap<String, String>> = HashMap::default();
 
     for age in 0..100 {
@@ -323,8 +318,8 @@ fn create_incidence_report(
     report_container
         .report_incidence_container
         .clone_from(&incidence_counts);
-
     report_container.event_names.clone_from(&names_map);
+    */
 
     context.subscribe_to_event::<PersonPropertyChangeEvent<InfectionStatus>>(|context, event| {
         update_infection_incidence(context, event);
