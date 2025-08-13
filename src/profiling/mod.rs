@@ -125,7 +125,7 @@ use std::time::Instant;
 const TOTAL_MEASURED: &str = "Total Measured";
 /// The name of the distinguished accepted infection label
 #[cfg(feature = "profiling")]
-const ACCEPTED_INFECTION_LABEL: &str = "accepted infection";
+const ACCEPTED_INFECTION_LABEL: &str = "accepted infection attempt";
 /// The name of the distinguished forecasted infection label
 #[cfg(feature = "profiling")]
 const FORECASTED_INFECTION_LABEL: &str = "forecasted infection";
