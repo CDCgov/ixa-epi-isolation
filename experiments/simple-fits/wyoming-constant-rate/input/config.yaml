@@ -16,7 +16,7 @@ azb:
   azb_config_path: input/azure_config.yaml
   azure_batch: true
   benchmark_test: false
-  create_pool: false
+  create_pool: true
 experiment_conditions:
   replicates_per_particle: 3
   samples_per_step: 200

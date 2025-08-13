@@ -70,12 +70,15 @@ def ode_lhood(results_data: pl.DataFrame, target_data: pl.DataFrame):
 
         return joint_set.select(pl.col("negloglikelihood").sum()).item()
 
+
 def output_processing_function(outputdir: str) -> pl.DataFrame:
     """
     Read the output files and return a DataFrame with the results.
     """
     # Read the simulation results from the output directory
-    sim_results = pl.read_csv(os.path.join(outputdir, "person_property_count.csv"))
+    sim_results = pl.read_csv(
+        os.path.join(outputdir, "person_property_count.csv")
+    )
 
     # Process the results to get the required format
     processed_results = (
@@ -84,6 +87,7 @@ def output_processing_function(outputdir: str) -> pl.DataFrame:
         .agg(pl.col("count").sum().alias("result_count"))
     )
     return processed_results
+
 
 argparser = argparse.ArgumentParser()
 argparser.add_argument("-x", "--execute", type=str, default="main")

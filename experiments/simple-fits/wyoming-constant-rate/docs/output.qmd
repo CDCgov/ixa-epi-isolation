@@ -26,7 +26,7 @@ Proof-of-concept fit to state-level hospitalization.
 | `symptom_progression_library` | Rates of symptom onset and recovery for symptom categories | variable | Estimated from posteriors of viral load curve fits |
 | `mean_delay_to_hospitalization` | Mean time from symptom onset to hospitalization | 3.0 | NEEDED |
 | `mean_duration_of_hospitalization` | Mean time that hospitalized individuals stay in the hospital before recovery | In estimated range |
-| `hopsitalization_probability` | Probability that symptomatic individuals become hospitalized | 0.03 | NEEDED | 
+| `hopsitalization_probability` | Probability that symptomatic individuals become hospitalized | 0.03 | NEEDED |
 
 The probability of hospitalization is age-dependent, but in this example we consider all individuals to be in the same
 age group, thus making a population-level hospitalization risk given symptoms.
@@ -34,7 +34,7 @@ age group, thus making a population-level hospitalization risk given symptoms.
 ## Fitted values
 The infectiousness rate function is considered the same for all individuals and that those
 individuals have a constant rate of generating infection attempts for a specified duration. Both
-the rate and duration of infectiousness are fitted in this example. 
+the rate and duration of infectiousness are fitted in this example.
 
 We additionally fit the proportion of individuals who are asymptomatic, which then determines the
 infections hospitalization ratio (IHR), which is the product of hospitalization risk given symptoms
@@ -60,7 +60,7 @@ expected mean duration and $R_0$ of the alpha variant.
 # Methods
 ## Data
 The National Hospital Surveillance Network (NHSN) data was downloaded from the public data repository
-and filtered by state to select data from Wyoming. 
+and filtered by state to select data from Wyoming.
 
 Synthetic population data were generated using `create_synthetic_population.R`, setting the state to `WY`
 and the population size to 589,000 to reflect Wyoming.
@@ -87,9 +87,9 @@ plotting.plot_posterior_distribution_2d(experiment)
 ### Priors vs Posteriors
 ```{python}
 plotting.plot_posterior_distribution(
-    experiment, 
-    visualization_methods=["histogram", "density"], 
-    facet_by="parameter", 
+    experiment,
+    visualization_methods=["histogram", "density"],
+    facet_by="parameter",
     include_priors=True
 )
 ```

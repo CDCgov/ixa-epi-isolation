@@ -1,33 +1,32 @@
 azb:
   azb_config:
-    blob_container_name:
+    blob_container_name: wtk-ixa-epi
     config_path: config.toml
     debug_mode: false
     docker_image: ./Dockerfile
     docker_repo_name: null
     docker_tag: latest
     job_prefix: null
-    max_autoscale_nodes: 3
+    max_autoscale_nodes: 5
     n_nodes: 2
     pool_mode: autoscale
-    pool_name:
+    pool_name: wtk-ixa-epi
     registry_name: cfaprdbatchcr
     task_slots_per_node: 8
   azb_config_path: input/azure_config.yaml
   azure_batch: true
   benchmark_test: false
-  create_pool: true
+  create_pool: false
 experiment_conditions:
-  replicates_per_particle: 5
-  samples_per_step: 3
+  replicates_per_particle: 3
+  samples_per_step: 150
   seed: 12345
   scenario_key: epi_isolation.GlobalParams
   tolerance:
-    '0': 120
-    '1': 100
+    '0': 4500
+    '1': 2000
 local_path:
-  default_params_file: experiments/examples/scale/input/base.json
+  default_params_file: experiments/simple-fits/recreate-synthetic/input/base.json
   exe_file: target/release/epi-isolation
-  sub_experiment_name: scale
-  super_experiment_name: examples
-  target_data_file:  experiments/examples/scale/input/ode_results_SIR.csv
+  sub_experiment_name: recreate-synthetic
+  super_experiment_name: simple-fits
