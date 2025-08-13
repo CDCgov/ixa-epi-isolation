@@ -18,7 +18,7 @@ struct PersonPropertyReport {
     symptoms: Option<SymptomValue>,
     infection_status: InfectionStatusValue,
     hospitalized: bool,
-    count: usize,
+    count: u32,
 }
 
 #[derive(Eq, Hash, PartialEq, Serialize, Deserialize, Copy, Clone, Debug)]
@@ -34,7 +34,7 @@ struct PersonPropertyIncidenceReport {
     t_upper: f64,
     age: u8,
     event: String,
-    count: usize,
+    count: u32,
 }
 
 define_report!(PersonPropertyReport);
@@ -55,10 +55,10 @@ define_derived_property!(
 );
 
 struct PropertyReportDataContainer {
-    report_map_container: HashMap<PersonPropertyReportValues, usize>,
-    incidence_infection_status: HashMap<(u8, InfectionStatusValue), usize>,
-    incidence_symptoms: HashMap<(u8, SymptomValue), usize>,
-    incidence_hospitalization: HashMap<(u8, bool), usize>,
+    report_map_container: HashMap<PersonPropertyReportValues, u32>,
+    incidence_infection_status: HashMap<(u8, InfectionStatusValue), u32>,
+    incidence_symptoms: HashMap<(u8, SymptomValue), u32>,
+    incidence_hospitalization: HashMap<(u8, bool), u32>,
     // Unused?
     // event_names: HashMap<String, HashMap<String, String>>,
 }
@@ -204,7 +204,7 @@ fn create_prevalence_report(
     context.add_report::<PersonPropertyReport>(file_name)?;
 
     // Compute initial counts
-    let mut map_counts: HashMap<PersonPropertyReportValues, usize> = HashMap::default();
+    let mut map_counts = HashMap::default();
 
     // This is a bit of a cheat, as we are not able to iterate over the entire population.
     for person in context.query_people((Hospitalized, false)) {
