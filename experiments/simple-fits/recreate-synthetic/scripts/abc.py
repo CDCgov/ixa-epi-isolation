@@ -3,27 +3,39 @@ import os
 from math import log
 
 import polars as pl
-from abmwrappers import wrappers
+from abmwrappers import utils, wrappers
 from abmwrappers.experiment_class import Experiment
-from scipy.stats import beta, gamma, norm, poisson
+from scipy.stats import norm, poisson, uniform
+
+# import seaborn as sns
+# import matplotlib.pyplot as plt
 
 
 def main(config_file: str, keep: bool):
     prior = {
         "infectiousness_rate_fn": {
-            "Constant": {
-                "rate": gamma(a=1, scale=0.1),
-                "duration": gamma(a=10, scale=0.5),
+            "EmpiricalFromFile": {
+                "scale": uniform(0.0, 0.2),
             }
         },
-        "proportion_asymptomatic": beta(3, 3),
+        "proportion_asymptomatic": uniform(0.0, 1.0),
+        "settings_properties": {
+            "Home": {"alpha": uniform(0.0, 0.2)},
+            "School": {"alpha": uniform(0.0, 0.2)},
+        },
     }
 
     perturbation = {
         "infectiousness_rate_fn": {
-            "Constant": {"rate": norm(0, 0.01), "duration": norm(0, 0.05)}
+            "EmpiricalFromFile": {
+                "scale": norm(0.0, 0.01),
+            }
         },
-        "proportion_asymptomatic": norm(0, 0.01),
+        "proportion_asymptomatic": norm(0.0, 0.05),
+        "settings_properties": {
+            "Home": {"alpha": norm(0.0, 0.01)},
+            "School": {"alpha": norm(0.0, 0.01)},
+        },
     }
 
     # Initialize experiment object
@@ -34,6 +46,25 @@ def main(config_file: str, keep: bool):
         perturbation_kernel_dict=perturbation,
     )
 
+    # Make the synthetic data for calibration testing
+    synthetic_data_folder = os.path.join(experiment.data_path, "target")
+    os.makedirs(synthetic_data_folder, exist_ok=True)
+    cmd = utils.write_default_cmd(
+        input_file=experiment.default_params_file,
+        output_dir=synthetic_data_folder,
+        exe_file=experiment.exe_file,
+        model_type=experiment.model_type,
+    )
+
+    utils.run_model_command_line(cmd, model_type=experiment.model_type)
+    experiment.target_data = output_processing_function(synthetic_data_folder)
+    experiment.target_data.write_csv(
+        os.path.join(synthetic_data_folder, "target_data.csv")
+    )
+
+    # sns.scatterplot(experiment.target_data, x = "t", y="count",hue="pediatric")
+    # plt.show()
+    # print(sdfg)
     if experiment.azure_batch:
         # Identifying file locations wihtin blob storage
         blob_experiment_directory = os.path.join(
@@ -44,6 +75,9 @@ def main(config_file: str, keep: bool):
             "EmpiricalFromFile"
         ]["file"]
         synth_pop_file = defaults["synth_population_file"]
+        infectiousness_file = defaults["infectiousness_rate_fn"][
+            "EmpiricalFromFile"
+        ]["file"]
         experiment.changed_baseline_params = {
             "symptom_progression_library": {
                 "EmpiricalFromFile": {
@@ -51,8 +85,13 @@ def main(config_file: str, keep: bool):
                 }
             },
             "synth_population_file": f"/{blob_experiment_directory}/{os.path.basename(synth_pop_file)}",
+            "infectiousness_rate_fn": {
+                "EmpiricalFromFile": {
+                    "file": f"/{blob_experiment_directory}/{os.path.basename(infectiousness_file)}",
+                }
+            },
         }
-        fps = [synth_pop_file, symptom_params_file]
+        fps = [synth_pop_file, symptom_params_file, infectiousness_file]
         use_existing = True
     else:
         fps = []
@@ -70,11 +109,14 @@ def main(config_file: str, keep: bool):
 
 def hosp_lhood(results_data: pl.DataFrame, target_data: pl.DataFrame):
     def poisson_lhood(model, data):
-        return -log(poisson.pmf(model, data) + 1e-12)
+        # Probability of data value given the model value as expectation
+        return -log(poisson.pmf(data, model + 1e-6) + 1e-12)
 
-    if "t" not in results_data.columns:
+    # This doesn't work because of apply groups per key in abctools
+    # The distance value is generated, but the empty data frame leads to an empty eval list
+    if "t" not in results_data.columns or results_data.is_empty():
         joint_set = target_data.with_columns(
-            pl.col("total_admissions")
+            pl.col("count")
             .map_elements(
                 lambda x: poisson_lhood(0, x),
                 return_dtype=pl.Float64,
@@ -83,19 +125,19 @@ def hosp_lhood(results_data: pl.DataFrame, target_data: pl.DataFrame):
         )
     else:
         joint_set = (
-            results_data.select(pl.col(["t", "count"]))
+            results_data.select(pl.col(["t", "count", "pediatric"]))
+            .rename({"count": "model_count"})
             .join(
-                target_data.select(pl.col(["t", "total_admissions"])),
-                on="t",
+                target_data.select(pl.col(["t", "count", "pediatric"])),
+                on=["t", "pediatric"],
                 how="right",
             )
-            .with_columns(pl.col("count").fill_null(strategy="zero"))
+            .with_columns(pl.col("model_count").fill_null(strategy="zero"))
         )
-
         joint_set = joint_set.with_columns(
-            pl.struct(["count", "total_admissions"])
+            pl.struct(["model_count", "count"])
             .map_elements(
-                lambda x: poisson_lhood(x["count"], x["total_admissions"]),
+                lambda x: poisson_lhood(x["model_count"], x["count"]),
                 return_dtype=pl.Float64,
             )
             .alias("negloglikelihood")
@@ -104,23 +146,25 @@ def hosp_lhood(results_data: pl.DataFrame, target_data: pl.DataFrame):
 
 
 def output_processing_function(outputs_dir):
-    fp = os.path.join(outputs_dir, "hospital_incidence_report.csv")
+    fp = os.path.join(outputs_dir, "person_property_count.csv")
+    default_df = pl.DataFrame({"t": 0, "pediatric": False, "count": 0})
 
     try:
         df = pl.read_csv(fp)
 
         df = (
-            df.with_columns(
-                (pl.col("time") / 7.0).ceil().cast(pl.Int64).alias("week")
-            )
-            .group_by("week")
-            .agg(pl.len().alias("count"))
-            .with_columns((pl.col("week") * 7 - 1).alias("t"))
+            df.with_columns((pl.col("Age") < 18).alias("pediatric"))
+            .filter(pl.col("Hospitalized") == "true")
+            .group_by("t", "pediatric")
+            .agg(pl.sum("count"))
         )
 
-        return df
+        if df.is_empty():
+            return default_df
+        else:
+            return df
     except:
-        return pl.DataFrame()
+        return default_df
 
 
 def task(
@@ -155,7 +199,7 @@ argparser.add_argument(
     "--config-file",
     type=str,
     required=False,
-    default="experiments/simple-fits/wyoming-constant-rate/input/config.yaml",
+    default="experiments/simple-fits/recreate-synthetic/input/config.yaml",
 )
 argparser.add_argument("-i", "--img-file", type=str, required=False)
 argparser.add_argument(

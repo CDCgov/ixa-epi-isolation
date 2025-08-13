@@ -16,6 +16,7 @@ griddler = {git = "https://github.com/CDCgov/pygriddler.git"}
 pyarrow = "^17.0.0"
 tqdm = "^4.66.5"
 polars = "^1.6.0"
+jupyter = "^1.1.1"
 
 
 [build-system]
