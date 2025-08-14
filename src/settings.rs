@@ -1249,7 +1249,7 @@ mod test {
         assert_eq!(s_members.len(), 1);
 
         let inf_multiplier =
-            context.calculate_max_infectiousness_multiplier_for_person(person_0.unwrap());
+            context.calculate_current_infectiousness_multiplier_for_person(person_0.unwrap());
         let expected_multiplier = (0.95) * (2_f64).powf(alpha_h) + (0.05) * (4_f64).powf(alpha_w);
         assert_almost_eq!(inf_multiplier, expected_multiplier, 0.001);
 
