@@ -101,7 +101,7 @@ impl ProfilingDataContainer {
             .or_insert((elapsed, 1));
     }
 
-    /// Constructs a table of ("Event Label", "Count", "Rate (per sec)". Used to print
+    /// Constructs a table of ("Event Label", "Count", "Rate (per sec)"). Used to print
     /// stats to the console and write the stats to a file.
     pub(super) fn get_named_counts_table(&self) -> Vec<(String, usize, f64)> {
         let elapsed = self.start_time.unwrap().elapsed().as_secs_f64();

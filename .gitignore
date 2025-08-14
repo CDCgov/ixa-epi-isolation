@@ -35,9 +35,11 @@ poetry.lock
 *.rar
 *.zip
 
+# Exclude all files & directories in the output folder.
+output/**
+
 # Allowlist
-# !your_data_file.csv
-# !your_data_directory/
+!output/.gitkeep
 !input/people_test.csv
 !tests/data/*
 !input/isolation_guidance_stan_parameters.csv
