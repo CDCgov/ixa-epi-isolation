@@ -129,6 +129,7 @@ pub fn append_itinerary_entry(
     itinerary: &mut Vec<ItineraryEntry>,
     context: &Context,
     setting: impl AnySettingId,
+    nondefault_ratio: Option<f64>,
 ) -> Result<(), IxaError> {
     // Is this setting type registered? Our population loader is hard coded to always try to put
     // people in the core setting types, but sometimes we don't want all the core setting types
@@ -138,11 +139,11 @@ pub fn append_itinerary_entry(
         .setting_properties
         .contains_key(&setting.get_type_id())
     {
-        let ratio = get_itinerary_ratio(context, &setting)?;
-        // No point in adding an itinerary entry if the ratio is zero
-        if ratio != 0.0 {
-            itinerary.push(ItineraryEntry::new(setting, ratio));
-        }
+        let ratio = match nondefault_ratio {
+            Some(user_input) => user_input,
+            None => get_itinerary_ratio(context, &setting)?
+        };
+        itinerary.push(ItineraryEntry::new(setting, ratio));
     }
     Ok(())
 }
@@ -171,14 +172,28 @@ struct SettingDataContainer {
     // For each setting type (e.g., Home) store the properties (e.g., alpha)
     setting_properties: HashMap<TypeId, SettingProperties>,
     // For each setting type, have a map of each setting id and a list of members
-    members: HashMap<(TypeId, usize), Vec<PersonId>>,
+    active_members: HashMap<(TypeId, usize), HashSet<PersonId>>,
+    inactive_members: HashMap<(TypeId, usize), HashSet<PersonId>>,
     itineraries: HashMap<PersonId, Vec<ItineraryEntry>>,
     modified_itineraries: HashMap<PersonId, Vec<ItineraryEntry>>,
 }
 
 impl SettingDataContainer {
-    fn get_setting_members(&self, setting: &dyn AnySettingId) -> Option<&Vec<PersonId>> {
-        self.members.get(&setting.get_tuple_id())
+    fn get_setting_members(&self, setting: &dyn AnySettingId) -> HashSet<PersonId> {
+        let default = HashSet::new();
+        let active = self.get_active_setting_members(setting)
+            .unwrap_or(&default);
+        self.get_inactive_setting_members(setting)
+            .unwrap_or(&default)
+            .union(active)
+            .copied()
+            .collect()
+    }
+    fn get_active_setting_members(&self, setting: &dyn AnySettingId) -> Option<&HashSet<PersonId>> {
+        self.active_members.get(&setting.get_tuple_id())
+    }
+    fn get_inactive_setting_members(&self, setting: &dyn AnySettingId) -> Option<&HashSet<PersonId>> {
+        self.inactive_members.get(&setting.get_tuple_id())
     }
     fn get_itinerary(&self, person_id: PersonId) -> Option<&Vec<ItineraryEntry>> {
         if let Some(modified_itinerary) = self.modified_itineraries.get(&person_id) {
@@ -192,7 +207,7 @@ impl SettingDataContainer {
     }
     fn with_itinerary<F>(&self, person_id: PersonId, mut callback: F)
     where
-        F: FnMut(&dyn AnySettingId, &SettingProperties, &Vec<PersonId>, f64),
+        F: FnMut(&dyn AnySettingId, &SettingProperties, &HashSet<PersonId>, f64),
     {
         if let Some(itinerary) = self.get_itinerary(person_id) {
             for entry in itinerary {
@@ -201,8 +216,8 @@ impl SettingDataContainer {
                     .setting_properties
                     .get(&entry.setting.get_type_id())
                     .unwrap();
-                let members = self.get_setting_members(setting).unwrap();
-                callback(setting, setting_props, members, entry.ratio);
+                let members = self.get_setting_members(setting);
+                callback(setting, setting_props, &members, entry.ratio);
             }
         }
     }
@@ -222,10 +237,17 @@ impl SettingDataContainer {
                     "Itinerary entry setting type not registered",
                 ));
             }
-            self.members
-                .entry(itinerary_entry.setting.get_tuple_id())
-                .or_default()
-                .push(person_id);
+            if itinerary_entry.ratio > 0.0 {
+                self.active_members
+                    .entry(itinerary_entry.setting.get_tuple_id())
+                    .or_default()
+                    .insert(person_id);
+            } else {
+                self.inactive_members
+                    .entry(itinerary_entry.setting.get_tuple_id())
+                    .or_default()
+                    .insert(person_id);
+            }
         }
         Ok(())
     }
@@ -235,10 +257,14 @@ impl SettingDataContainer {
         itinerary: Vec<ItineraryEntry>,
     ) {
         for itinerary_entry in itinerary {
-            self.members
+            self.active_members
                 .entry(itinerary_entry.setting.get_tuple_id())
                 .or_default()
                 .retain(|&x| x != person_id);
+            self.inactive_members
+                .entry(itinerary_entry.setting.get_tuple_id())
+                .or_default()
+                .insert(person_id);            
         }
     }
 }
@@ -579,7 +605,7 @@ pub trait ContextSettingExt:
         Ok(())
     }
 
-    fn get_setting_members(&self, setting: &dyn AnySettingId) -> Option<&Vec<PersonId>> {
+    fn get_setting_members(&self, setting: &dyn AnySettingId) -> Option<&HashSet<PersonId>> {
         self.get_data(SettingDataPlugin)
             .get_setting_members(setting)
     }
@@ -610,26 +636,13 @@ pub trait ContextSettingExt:
     ) -> Result<Option<PersonId>, IxaError> {
         let _span = open_span("get_contact");
         if let Some(members) = self.get_setting_members(setting) {
-            if members.len() == 1 {
-                // Because sample_from_setting_with_exclusion doesn't check for membership
-                // if there's one person and it's not person_id, it should return that person
-                if members[0] == person_id {
-                    return Ok(None);
-                }
-                return Ok(Some(members[0]));
-            } else if members.is_empty() {
+            let other_members: Vec<PersonId> = members.extract_if(|&p| p == person_id).collect();
+            if other_members.is_empty() {
                 return Ok(None);
+            } else {
+                let contact_id = other_members[self.sample_range(SettingsRng, 0..other_members.len())];
+                return Ok(Some(contact_id))
             }
-
-            let mut contact_id;
-            loop {
-                contact_id = members[self.sample_range(SettingsRng, 0..members.len())];
-                if contact_id != person_id {
-                    break;
-                }
-            }
-
-            Ok(Some(contact_id))
         } else {
             Err(IxaError::from("Group membership is None"))
         }
