@@ -23,7 +23,7 @@ impl Serialize for SerializableDuration {
     }
 }
 
-/// A version of ExecutionStatistics the serialization format of which we have control over.
+/// A version of `ExecutionStatistics` the serialization format of which we have control over.
 #[cfg(feature = "profiling")]
 #[derive(Serialize)]
 struct SerializableExecutionStatistics {
