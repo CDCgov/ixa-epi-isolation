@@ -105,12 +105,15 @@
 //! });
 //! ```
 #![allow(dead_code)]
+#![allow(unused_imports)]
 
+mod computed_statistic;
 mod data;
 mod display;
 mod file;
 
 use crate::parameters::{ContextParametersExt, Params};
+pub use computed_statistic::*;
 pub use data::*;
 pub use display::*;
 use file::write_profiling_data_to_file;
