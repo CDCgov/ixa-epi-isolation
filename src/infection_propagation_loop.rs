@@ -8,7 +8,7 @@ use crate::infectiousness_manager::{
 use crate::parameters::{ContextParametersExt, Params};
 use crate::profiling::{increment_named_count, open_span};
 use crate::rate_fns::{load_rate_fns, InfectiousnessRateExt};
-use crate::settings::{ContextSettingExt, ItineraryChangeEvent};
+use crate::settings::ItineraryChangeEvent;
 use ixa::{
     define_data_plugin, define_rng, plan::PlanId, trace, Context, ContextPeopleExt,
     ContextRandomExt, HashMap, IxaError, PersonId, PersonPropertyChangeEvent, PluginContext,
@@ -100,9 +100,8 @@ trait ContextForecastInternalExt: PluginContext {
                 .active_plans
                 .keys()
                 .filter(|&infector| {
-                    (context.is_contact(event.person_id, *infector) && event.increases_membership)
-                        || (event.person_id == *infector
-                            && event.previous_multiplier < event.current_multiplier)
+                    event.person_id == *infector
+                        && event.previous_multiplier < event.current_multiplier
                 })
                 .copied()
                 .collect();
