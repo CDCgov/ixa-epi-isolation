@@ -20,7 +20,6 @@ use ixa::{ContextPeopleExt, ContextRandomExt};
 use parameters::{ContextParametersExt, Params};
 use population_loader::Age;
 
-use crate::hospitalizations::Hospitalized;
 use crate::profiling::print_profiling_data;
 
 // You must run this with a parameters file:
