@@ -7,7 +7,7 @@ use crate::{
 };
 use ixa::{
     define_data_plugin, define_derived_property, define_report, info, report::ContextReportExt,
-    Context, ContextPeopleExt, ExecutionPhase, IxaError, PersonPropertyChangeEvent, HashMap
+    Context, ContextPeopleExt, ExecutionPhase, HashMap, IxaError, PersonPropertyChangeEvent,
 };
 use serde::{Deserialize, Serialize};
 
@@ -138,12 +138,20 @@ fn update_property_change_counts(
         .or_insert(0) -= 1;
 }
 
-
 fn reset_incidence_map(context: &mut Context) {
     let report_container = context.get_data_mut(PropertyReportDataPlugin);
-    report_container.incidence_infection_status.clear();
-    report_container.incidence_symptoms.clear();
-    report_container.incidence_hospitalization.clear();
+    report_container
+        .incidence_infection_status
+        .values_mut()
+        .for_each(|v| *v = 0);
+    report_container
+        .incidence_symptoms
+        .values_mut()
+        .for_each(|v| *v = 0);
+    report_container
+        .incidence_hospitalization
+        .values_mut()
+        .for_each(|v| *v = 0);
 }
 
 fn send_property_counts(context: &mut Context) {
@@ -209,17 +217,22 @@ fn create_prevalence_report(
     // This is a bit of a cheat, as we are not able to iterate over the entire population.
     for person in context.query_people((Hospitalized, false)) {
         let value = context.get_person_property(person, PersonReportProperties);
-        map_counts.entry(value).and_modify(|count| *count += 1).or_insert(1);
+        map_counts
+            .entry(value)
+            .and_modify(|count| *count += 1)
+            .or_insert(1);
     }
     // Only if you have initially hospitalized people.
     for person in context.query_people((Hospitalized, true)) {
         let value = context.get_person_property(person, PersonReportProperties);
-        map_counts.entry(value).and_modify(|count| *count += 1).or_insert(1);
+        map_counts
+            .entry(value)
+            .and_modify(|count| *count += 1)
+            .or_insert(1);
     }
 
     let report_container = context.get_data_mut(PropertyReportDataPlugin);
-    report_container
-        .report_map_container = map_counts;
+    report_container.report_map_container = map_counts;
 
     context.subscribe_to_event::<PersonPropertyChangeEvent<PersonReportProperties>>(
         |context, event| {
@@ -244,82 +257,38 @@ fn create_incidence_report(
 ) -> Result<(), IxaError> {
     context.add_report::<PersonPropertyIncidenceReport>(file_name)?;
 
-    // Is the point of this to have zero counts for all values?
-    /*let mut incidence_counts: HashMap<u8, HashMap<String, HashMap<String, usize>>> = HashMap::default();
-    let mut names_map: HashMap<String, HashMap<String, String>> = HashMap::default();
-
+    let report_container = context.get_data_mut(PropertyReportDataPlugin);
     for age in 0..100 {
         let inf_vec = [
-            (InfectionStatusValue::Infectious, "Infectious".to_string()),
-            (InfectionStatusValue::Recovered, "Recovered".to_string()),
+            InfectionStatusValue::Infectious,
+            InfectionStatusValue::Recovered,
         ];
 
         for inf_value in inf_vec {
-            incidence_counts
-                .entry(age)
-                .or_default()
-                .entry("InfectionStatus".to_string())
-                .or_default()
-                .insert(format!("{:?}", inf_value.0), 0);
-            names_map
-                .entry("InfectionStatus".to_string())
-                .or_default()
-                .insert(format!("{:?}", inf_value.0), inf_value.1);
+            report_container
+                .incidence_infection_status
+                .insert((age, inf_value), 0);
         }
 
         let symp_vec = [
-            (
-                Some(SymptomValue::Category1),
-                "Symptom-Category1".to_string(),
-            ),
-            (
-                Some(SymptomValue::Category2),
-                "Symptom-Category2".to_string(),
-            ),
-            (
-                Some(SymptomValue::Category3),
-                "Symptom-Category3".to_string(),
-            ),
-            (
-                Some(SymptomValue::Category4),
-                "Symptom-Category4".to_string(),
-            ),
+            SymptomValue::Category1,
+            SymptomValue::Category2,
+            SymptomValue::Category3,
+            SymptomValue::Category4,
         ];
         for symp_value in symp_vec {
-            incidence_counts
-                .entry(age)
-                .or_default()
-                .entry("Symptoms".to_string())
-                .or_default()
-                .insert(format!("{:?}", symp_value.0), 0);
-            names_map
-                .entry("Symptoms".to_string())
-                .or_default()
-                .insert(format!("{:?}", symp_value.0), symp_value.1);
+            report_container
+                .incidence_symptoms
+                .insert((age, symp_value), 0);
         }
 
-        let hosp_vec = [(true, "Hospitalized".to_string())];
+        let hosp_vec = [true];
         for hosp_value in hosp_vec {
-            incidence_counts
-                .entry(age)
-                .or_default()
-                .entry("Hospitalized".to_string())
-                .or_default()
-                .insert(format!("{:?}", hosp_value.0), 0);
-            names_map
-                .entry("Hospitalized".to_string())
-                .or_default()
-                .insert(format!("{:?}", hosp_value.0), hosp_value.1);
+            report_container
+                .incidence_hospitalization
+                .insert((age, hosp_value), 0);
         }
     }
-
-    let report_container = context.get_data_mut(PropertyReportDataPlugin);
-
-    report_container
-        .report_incidence_container
-        .clone_from(&incidence_counts);
-    report_container.event_names.clone_from(&names_map);
-    */
 
     context.subscribe_to_event::<PersonPropertyChangeEvent<InfectionStatus>>(|context, event| {
         update_infection_incidence(context, event);
