@@ -1096,6 +1096,53 @@ mod test {
     }
 
     #[test]
+    fn test_get_itinerary() {
+        let mut context = Context::new();
+        register_default_settings(&mut context);
+        let person = context.add_person(()).unwrap();
+        let default_itinerary = vec![
+            ItineraryEntry::new(SettingId::new(Home, 1), 0.5),
+            ItineraryEntry::new(SettingId::new(Home, 2), 0.5),
+        ];
+        let modified_itinerary = vec![
+            ItineraryEntry::new(SettingId::new(Home, 1), 0.0),
+            ItineraryEntry::new(SettingId::new(Home, 2), 1.0),
+        ];
+        context.add_itinerary(person, default_itinerary).unwrap();
+        context
+            .add_modified_itinerary(person, modified_itinerary)
+            .unwrap();
+
+        let default = context
+            .get_itinerary(person, ItinerarySelector::Default)
+            .unwrap();
+        let modified = context
+            .get_itinerary(person, ItinerarySelector::Modified)
+            .unwrap();
+        let current = context
+            .get_itinerary(person, ItinerarySelector::Current)
+            .unwrap();
+
+        for entry in default {
+            assert_almost_eq!(entry.ratio, 0.5, 0.0);
+        }
+        for entry in modified {
+            if entry.setting.id() == 1 {
+                assert_almost_eq!(entry.ratio, 0.0, 0.0);
+            } else {
+                assert_almost_eq!(entry.ratio, 1.0, 0.0);
+            }
+        }
+        for entry in current {
+            if entry.setting.id() == 1 {
+                assert_almost_eq!(entry.ratio, 0.0, 0.0);
+            } else {
+                assert_almost_eq!(entry.ratio, 1.0, 0.0);
+            }
+        }
+    }
+
+    #[test]
     fn test_get_setting_ids() {
         let mut context = Context::new();
         register_default_settings(&mut context);
@@ -1468,6 +1515,76 @@ mod test {
 
             assert_eq!(members.len(), 5);
             assert_eq!(tract_members.len(), 5);
+        }
+    }
+
+    #[test]
+    fn test_setting_registration_activity() {
+        let mut context = Context::new();
+        context
+            .register_setting_category(
+                &Home,
+                SettingProperties {
+                    alpha: 0.1,
+                    itinerary_specification: None,
+                },
+            )
+            .unwrap();
+        context
+            .register_setting_category(
+                &CensusTract,
+                SettingProperties {
+                    alpha: 0.01,
+                    itinerary_specification: None,
+                },
+            )
+            .unwrap();
+        for s in 0..5 {
+            for _ in 0..5 {
+                let person = context.add_person(()).unwrap();
+                let itinerary = vec![
+                    ItineraryEntry::new(SettingId::new(Home, s), 1.0),
+                    ItineraryEntry::new(SettingId::new(CensusTract, s), 0.0),
+                ];
+                context.add_itinerary(person, itinerary).unwrap();
+            }
+            let inactive_home_members = context
+                .get_setting_members_internal(
+                    &SettingId::new(Home, s),
+                    MembershipSelector::Inactive,
+                )
+                .unwrap();
+            let inactive_tract_members = context
+                .get_setting_members_internal(
+                    &SettingId::new(CensusTract, s),
+                    MembershipSelector::Inactive,
+                )
+                .unwrap();
+            let active_home_members = context
+                .get_setting_members_internal(&SettingId::new(Home, s), MembershipSelector::Active)
+                .unwrap();
+            let active_tract_members = context
+                .get_setting_members_internal(
+                    &SettingId::new(CensusTract, s),
+                    MembershipSelector::Active,
+                )
+                .unwrap();
+            let all_home_members = context
+                .get_setting_members_internal(&SettingId::new(Home, s), MembershipSelector::Union)
+                .unwrap();
+            let all_tract_members = context
+                .get_setting_members_internal(
+                    &SettingId::new(CensusTract, s),
+                    MembershipSelector::Union,
+                )
+                .unwrap();
+
+            assert!(inactive_home_members.is_empty());
+            assert_eq!(inactive_tract_members.len(), 5);
+            assert_eq!(active_home_members.len(), 5);
+            assert!(active_tract_members.is_empty());
+            assert_eq!(all_home_members.len(), 5);
+            assert_eq!(all_tract_members.len(), 5);
         }
     }
 
