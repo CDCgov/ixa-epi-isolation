@@ -8,6 +8,17 @@ This project presents a general transmission model developed in [ixa](https://gi
 As of 11/29/24, `cargo run -- -c ./input/input.json -o ./output`. There is an optional `-f` or `--force-overwrite` flag that can be
 passed to force overwriting of reports while in development/testing modes.
 
+### Base example
+To recreate the `input/people_test.csv` population file used in the base example `input/input.json`, run `Rscript scripts/create_synthetic_population.R`, seeting the write variables to
+
+```R
+state_synth <- "WY"
+year_synth <- 2023
+population_size <- 1000
+school_per_pop_ratio <- 0.002
+work_per_pop_ratio <- 0.1
+```
+
 ## Project Admin
 
 William Koval (CDC/IOD/ORR/CFA), Chirag Kumar (CDC/IOD/ORR/CFA), and Guido Camargo España (CDC/IOD/ORR/CFA)
