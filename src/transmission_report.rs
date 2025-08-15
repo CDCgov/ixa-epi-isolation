@@ -113,26 +113,26 @@ mod test {
         let params_json = r#"
             {
                 "epi_isolation.GlobalParams": {
-                "max_time": 200.0,
-                "seed": 123,
-                "infectiousness_rate_fn": {"Constant": {"rate": 1.0, "duration": 5.0}},
-                "initial_incidence": 0.01,
-                "initial_recovered": 0.0,
-                "report_period": 1.0,
-                "proportion_asymptomatic": 0.0,
-                "relative_infectiousness_asymptomatics": 0.0,
-                "settings_properties": {},
-                "synth_population_file": "input/people_test.csv",
-                "hospitalization_parameters": {
-                    "age_groups": [
-                        {"min": 0, "probability": 0.0},
-                        {"min": 19, "probability": 0.0},
-                        {"min": 65, "probability": 0.0}
-                    ],
-                    "mean_delay_to_hospitalization": 1.0,
-                    "mean_duration_of_hospitalization": 1.0,
-                    "hospital_incidence_report_name": "hospital_incidence_report.csv"
-                }
+                    "max_time": 200.0,
+                    "seed": 123,
+                    "infectiousness_rate_fn": {"Constant": {"rate": 1.0, "duration": 5.0}},
+                    "initial_incidence": 0.01,
+                    "initial_recovered": 0.0,
+                    "report_period": 1.0,
+                    "proportion_asymptomatic": 0.0,
+                    "relative_infectiousness_asymptomatics": 0.0,
+                    "settings_properties": {},
+                    "synth_population_file": "input/people_test.csv",
+                    "hospitalization_parameters": {
+                        "age_groups": [
+                            {"min": 0, "probability": 0.0},
+                            {"min": 19, "probability": 0.0},
+                            {"min": 65, "probability": 0.0}
+                        ],
+                        "mean_delay_to_hospitalization": 1.0,
+                        "mean_duration_of_hospitalization": 1.0,
+                        "hospital_incidence_report_name": "hospital_incidence_report.csv"
+                    }
                 }
             }
         "#;
@@ -146,27 +146,27 @@ mod test {
         let params_json = r#"
             {
                 "epi_isolation.GlobalParams": {
-                "max_time": 200.0,
-                "seed": 123,
-                "infectiousness_rate_fn": {"Constant": {"rate": 1.0, "duration": 5.0}},
-                "initial_incidence": 0.01,
-                "initial_recovered": 0.0,
-                "report_period": 1.0,
-                "proportion_asymptomatic": 0.0,
-                "relative_infectiousness_asymptomatics": 0.0,
-                "settings_properties": {},
-                "synth_population_file": "input/people_test.csv",
-                "transmission_report_name": "output.csv",
-                "hospitalization_parameters": {
-                    "age_groups": [
-                        {"min": 0, "probability": 0.0},
-                        {"min": 19, "probability": 0.0},
-                        {"min": 65, "probability": 0.0}
-                    ],
-                    "mean_delay_to_hospitalization": 1.0,
-                    "mean_duration_of_hospitalization": 1.0,
-                    "hospital_incidence_report_name": "hospital_incidence_report.csv"
-                }
+                    "max_time": 200.0,
+                    "seed": 123,
+                    "infectiousness_rate_fn": {"Constant": {"rate": 1.0, "duration": 5.0}},
+                    "initial_incidence": 0.01,
+                    "initial_recovered": 0.0,
+                    "report_period": 1.0,
+                    "proportion_asymptomatic": 0.0,
+                    "relative_infectiousness_asymptomatics": 0.0,
+                    "settings_properties": {},
+                    "synth_population_file": "input/people_test.csv",
+                    "transmission_report_name": "output.csv",
+                    "hospitalization_parameters": {
+                        "age_groups": [
+                            {"min": 0, "probability": 0.0},
+                            {"min": 19, "probability": 0.0},
+                            {"min": 65, "probability": 0.0}
+                        ],
+                        "mean_delay_to_hospitalization": 1.0,
+                        "mean_duration_of_hospitalization": 1.0,
+                        "hospital_incidence_report_name": "hospital_incidence_report.csv"
+                    }
                 }
             }
         "#;
@@ -180,38 +180,37 @@ mod test {
         let params_json = r#"
             {
                 "epi_isolation.GlobalParams": {
-                "max_time": 200.0,
-                "seed": 123,
-                "infectiousness_rate_fn": {"Constant": {"rate": 1.0, "duration": 5.0}},
-                "initial_incidence": 0.01,
-                "initial_recovered": 0.0,
-                "proportion_asymptomatic": 0.0,
-                "relative_infectiousness_asymptomatics": 0.0,
-                "report_period": 1.0,
-                "settings_properties": {},
-                "synth_population_file": "input/people_test.csv",
-                "transmission_report_name": "output.csv",
-                "hospitalization_parameters": {
-                    "age_groups": [
-                        {"min": 0, "probability": 0.0},
-                        {"min": 19, "probability": 0.0},
-                        {"min": 65, "probability": 0.0}
-                    ],
-                    "mean_delay_to_hospitalization": 1.0,
-                    "mean_duration_of_hospitalization": 1.0,
-                    "hospital_incidence_report_name": "hospital_incidence_report.csv"
-                }
+                    "max_time": 200.0,
+                    "seed": 123,
+                    "infectiousness_rate_fn": {"Constant": {"rate": 1.0, "duration": 5.0}},
+                    "initial_incidence": 0.0,
+                    "initial_recovered": 0.0,
+                    "proportion_asymptomatic": 0.0,
+                    "relative_infectiousness_asymptomatics": 0.0,
+                    "report_period": 1.0,
+                    "settings_properties": {},
+                    "synth_population_file": "input/people_test.csv",
+                    "transmission_report_name": "output.csv",
+                    "hospitalization_parameters": {
+                        "age_groups": [
+                            {"min": 0, "probability": 0.0},
+                            {"min": 19, "probability": 0.0},
+                            {"min": 65, "probability": 0.0}
+                        ],
+                        "mean_delay_to_hospitalization": 1.0,
+                        "mean_duration_of_hospitalization": 1.0,
+                        "hospital_incidence_report_name": "hospital_incidence_report.csv"
+                    }
                 }
             }
         "#;
         let mut context = setup_context_from_str(params_json);
 
-        let temp_dir = tempdir().unwrap();
-        let path = PathBuf::from(&temp_dir.path());
+        // let temp_dir = tempdir().unwrap();
+        // let path = PathBuf::from(&temp_dir.path());
         let config = context.report_options();
-        config.directory(path.clone());
-
-        crate::transmission_report::init(&mut context).unwrap();
+        // config.directory(path.clone());
+        let path = config.output_dir.clone();
 
         let source = context.add_person(()).unwrap();
         let target = context.add_person(()).unwrap();
@@ -220,18 +219,24 @@ mod test {
         let infection_time = 1.0;
 
         context.infect_person(source, None, None, None);
+        crate::transmission_report::init(&mut context).unwrap();
 
         context.add_plan(infection_time, move |context| {
             context.infect_person(target, Some(source), setting_type, setting_id);
         });
         context.execute();
 
-        let file_path = path.join("output.csv");
+        let file_path = path.join(context.get_params().transmission_report_name.clone().unwrap());
 
         assert!(file_path.exists());
+        
         let mut reader = csv::Reader::from_path(file_path).unwrap();
-        for result in reader.deserialize() {
-            let record: TransmissionReport = result.unwrap();
+        let mut raw_record = csv::ByteRecord::new();
+        let headers = reader.byte_headers().unwrap().clone();
+        let mut line_count = 0;
+
+        while reader.read_byte_record(&mut raw_record).unwrap() {
+            let record: TransmissionReport = raw_record.deserialize(Some(&headers)).unwrap();
             assert_almost_eq!(record.time, infection_time, 0.0);
             assert_eq!(record.target_id, target);
             assert_eq!(record.infected_by.unwrap(), source);
@@ -240,6 +245,8 @@ mod test {
                 Some("test_setting".to_string())
             );
             assert_eq!(record.infection_setting_id, Some(1));
+            line_count += 1;
         }
+        assert_eq!(line_count, 1);
     }
 }

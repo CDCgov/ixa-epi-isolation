@@ -164,11 +164,14 @@ mod test {
 
         assert!(file_path.exists());
         let mut reader = csv::Reader::from_path(file_path).unwrap();
+        let mut line_count = 0;
         for result in reader.deserialize() {
             let record: HospitalIncidenceReport = result.unwrap();
             assert_almost_eq!(record.time, hospitalization_time, 0.0);
             assert_eq!(record.person_id, person_id);
             assert_eq!(record.age, 0);
+            line_count += 1;
         }
+        assert!(line_count > 0);
     }
 }
