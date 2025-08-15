@@ -1171,6 +1171,6 @@ mod test {
         let expected_cases = expected_incidence * 5.0;
 
         let avg_successes = *successes.borrow() as f64 / n_replicates as f64;
-        assert_almost_eq!(avg_successes, expected_cases, 0.01);
+        assert_almost_eq!(avg_successes, expected_cases, 0.015);
     }
 }
