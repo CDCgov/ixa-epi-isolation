@@ -225,18 +225,22 @@ mod test {
         });
         context.execute();
 
-        let file_path = path.join(context.get_params().transmission_report_name.clone().unwrap());
+        let file_path = path.join(
+            context
+                .get_params()
+                .transmission_report_name
+                .clone()
+                .unwrap(),
+        );
 
         assert!(file_path.exists());
         std::mem::drop(context);
 
+        assert!(file_path.exists());
         let mut reader = csv::Reader::from_path(file_path).unwrap();
-        let mut raw_record = csv::ByteRecord::new();
-        let headers = reader.byte_headers().unwrap().clone();
         let mut line_count = 0;
-
-        while reader.read_byte_record(&mut raw_record).unwrap() {
-            let record: TransmissionReport = raw_record.deserialize(Some(&headers)).unwrap();
+        for result in reader.deserialize() {
+            let record: TransmissionReport = result.unwrap();
             assert_almost_eq!(record.time, infection_time, 0.0);
             assert_eq!(record.target_id, target);
             assert_eq!(record.infected_by.unwrap(), source);
