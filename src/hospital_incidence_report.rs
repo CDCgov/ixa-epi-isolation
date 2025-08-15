@@ -162,7 +162,9 @@ mod test {
 
         let file_path = path.join("hospital_incidence_report.csv");
 
+        std::mem::drop(context);
         assert!(file_path.exists());
+
         let mut reader = csv::Reader::from_path(file_path).unwrap();
         let mut line_count = 0;
         for result in reader.deserialize() {
