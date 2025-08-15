@@ -206,11 +206,10 @@ mod test {
         "#;
         let mut context = setup_context_from_str(params_json);
 
-        // let temp_dir = tempdir().unwrap();
-        // let path = PathBuf::from(&temp_dir.path());
+        let temp_dir = tempdir().unwrap();
+        let path = PathBuf::from(&temp_dir.path());
         let config = context.report_options();
-        // config.directory(path.clone());
-        let path = config.output_dir.clone();
+        config.directory(path.clone());
 
         let source = context.add_person(()).unwrap();
         let target = context.add_person(()).unwrap();
@@ -229,7 +228,8 @@ mod test {
         let file_path = path.join(context.get_params().transmission_report_name.clone().unwrap());
 
         assert!(file_path.exists());
-        
+        std::mem::drop(context);
+
         let mut reader = csv::Reader::from_path(file_path).unwrap();
         let mut raw_record = csv::ByteRecord::new();
         let headers = reader.byte_headers().unwrap().clone();
