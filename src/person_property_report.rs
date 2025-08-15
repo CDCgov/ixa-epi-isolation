@@ -178,7 +178,7 @@ fn send_incidence_counts(context: &mut Context) {
         context.send_report(PersonPropertyIncidenceReport {
             t_upper,
             age: *age,
-            event: format!("{:?}", infection_status),
+            event: format!("{infection_status:?}"),
             count: *count,
         });
     }
@@ -187,7 +187,7 @@ fn send_incidence_counts(context: &mut Context) {
         context.send_report(PersonPropertyIncidenceReport {
             t_upper,
             age: *age,
-            event: format!("{:?}", symptoms),
+            event: format!("{symptoms:?}"),
             count: *count,
         });
     }
@@ -196,7 +196,7 @@ fn send_incidence_counts(context: &mut Context) {
         context.send_report(PersonPropertyIncidenceReport {
             t_upper,
             age: *age,
-            event: format!("{:?}", hospitalization),
+            event: format!("{hospitalization:?}"),
             count: *count,
         });
     }
