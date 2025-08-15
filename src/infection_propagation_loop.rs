@@ -1150,14 +1150,9 @@ mod test {
 
             // Create a quasi-infinite pool of susceptibles by reverting status
             context.subscribe_to_event(
-                move |context, event: PersonPropertyChangeEvent<InfectionStatus>| {
+                move |_, event: PersonPropertyChangeEvent<InfectionStatus>| {
                     if event.current == InfectionStatusValue::Infectious {
                         *successes_clone.borrow_mut() += 1;
-                        context.set_person_property(
-                            event.person_id,
-                            InfectionData,
-                            InfectionDataValue::Susceptible,
-                        );
                     }
                 },
             );
@@ -1169,9 +1164,13 @@ mod test {
         }
 
         // Rate of 3.0 = 0.5*(6 - 1)^1.0 + 0.5*(6 - 1)^0.0 across both settings
-        // For a duration of 5 days, this should yield 15 infections on average.
-        // Because 8.2% of all infectors never initiate a scheduled forecast (dpois(0, 0.5*5.0=2.5)), there is a decrease.
+        // Expected cumulative incidence is 1-exp(-(per capita incidence rate) * time)
+        // 1 -exp(-3/5 * 5) = 1 - exp(-3)
+        let per_capita_r0: f64 = -3.0;
+        let expected_incidence = 1.0 - per_capita_r0.exp();
+        let expected_cases = expected_incidence * 5.0;
+
         let avg_successes = *successes.borrow() as f64 / n_replicates as f64;
-        assert_almost_eq!(avg_successes, 15.0 * (1.0 - 0.082), 0.5);
+        assert_almost_eq!(avg_successes, expected_cases, 0.01);
     }
 }
