@@ -21,7 +21,7 @@ use crate::{
 
 define_rng!(SymptomRng);
 
-#[derive(PartialEq, Copy, Clone, Debug, Serialize, Deserialize)]
+#[derive(PartialEq, Copy, Clone, Debug, Serialize, Deserialize, Eq, Hash)]
 pub enum SymptomValue {
     Presymptomatic,
     Category1,
