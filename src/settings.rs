@@ -172,7 +172,6 @@ struct SettingDataContainer {
 #[derive(Clone, Copy)]
 enum ItinerarySelector {
     Default,
-    Modified,
     Current,
 }
 
@@ -226,7 +225,6 @@ impl SettingDataContainer {
         // Assume modified is current if specified
         match selector {
             ItinerarySelector::Default => self.get_default_itinerary(person_id),
-            ItinerarySelector::Modified => self.get_modified_itinerary(person_id),
             ItinerarySelector::Current => {
                 let modified = self.get_modified_itinerary(person_id);
                 if modified.is_some() {
@@ -523,26 +521,6 @@ trait ContextSettingInternalExt: PluginContext + ContextRandomExt {
             .get_setting_members(setting, selector)
     }
 
-    fn calculate_max_infectiousness_multiplier_by_itinerary(
-        &self,
-        person_id: PersonId,
-        itinerary_selector: ItinerarySelector,
-    ) -> f64 {
-        let container = self.get_data(SettingDataPlugin);
-        let mut collector = 0.0;
-        container.with_itinerary(
-            person_id,
-            itinerary_selector,
-            MembershipSelector::Union,
-            |setting, setting_props, members, _ratio| {
-                let multiplier: f64 = setting.calculate_multiplier(members, *setting_props);
-                // We want to identify the max at the setting level, not itinerary level, so that we sample at the true maximum possible rate
-                collector = f64::max(collector, multiplier);
-            },
-        );
-        collector
-    }
-
     fn sample_active_setting_members(&self, setting: &dyn AnySettingId) -> Option<PersonId> {
         if let Some(members) = self
             .get_data(SettingDataPlugin)
@@ -750,15 +728,19 @@ pub trait ContextSettingExt:
     /// These are generated without modification from the general formula of ratio * (N - 1) ^ alpha
     /// where N is the number of all active and inactive members in the setting
     fn calculate_max_infectiousness_multiplier_for_person(&self, person_id: PersonId) -> f64 {
-        let default_collector = self.calculate_max_infectiousness_multiplier_by_itinerary(
+        let container = self.get_data(SettingDataPlugin);
+        let mut collector = 0.0;
+        container.with_itinerary(
             person_id,
             ItinerarySelector::Default,
+            MembershipSelector::Union,
+            |setting, setting_props, members, _ratio| {
+                let multiplier: f64 = setting.calculate_multiplier(members, *setting_props);
+                // We want to identify the max at the setting level, not itinerary level, so that we sample at the true maximum possible rate
+                collector = f64::max(collector, multiplier);
+            },
         );
-        let modified_collector = self.calculate_max_infectiousness_multiplier_by_itinerary(
-            person_id,
-            ItinerarySelector::Modified,
-        );
-        f64::max(modified_collector, default_collector)
+        collector
     }
 
     fn sample_from_setting_with_exclusion(
@@ -1225,22 +1207,12 @@ mod test {
         let default = context
             .get_itinerary(person, ItinerarySelector::Default)
             .unwrap();
-        let modified = context
-            .get_itinerary(person, ItinerarySelector::Modified)
-            .unwrap();
         let current = context
             .get_itinerary(person, ItinerarySelector::Current)
             .unwrap();
 
         for entry in default {
             assert_almost_eq!(entry.ratio, 0.5, 0.0);
-        }
-        for entry in modified {
-            if entry.setting.id() == 1 {
-                assert_almost_eq!(entry.ratio, 0.0, 0.0);
-            } else {
-                assert_almost_eq!(entry.ratio, 1.0, 0.0);
-            }
         }
         for entry in current {
             if entry.setting.id() == 1 {
@@ -1368,9 +1340,10 @@ mod test {
 
         let inf_multiplier =
             context.calculate_max_infectiousness_multiplier_for_person(person_0.unwrap());
-        let expected_multiplier = (1.0 / 3.0) * (2_f64).powf(alpha_h)
-            + (1.0 / 3.0) * (4_f64).powf(alpha_w)
-            + (1.0 / 3.0) * (1_f64).powf(alpha_s);
+        let expected_multiplier = f64::max(
+            f64::max((2_f64).powf(alpha_h), (4_f64).powf(alpha_w)),
+            (1_f64).powf(alpha_s),
+        );
 
         assert_almost_eq!(inf_multiplier, expected_multiplier, 0.0);
 
@@ -1431,9 +1404,10 @@ mod test {
 
         let inf_multiplier =
             context.calculate_max_infectiousness_multiplier_for_person(person_0.unwrap());
-        let expected_multiplier = (1.0 / 3.0) * (2_f64).powf(alpha_h)
-            + (1.0 / 3.0) * (4_f64).powf(alpha_w)
-            + (1.0 / 3.0) * (1_f64).powf(alpha_s);
+        let expected_multiplier = f64::max(
+            f64::max((2_f64).powf(alpha_h), (4_f64).powf(alpha_w)),
+            (1_f64).powf(alpha_s),
+        );
 
         assert_almost_eq!(inf_multiplier, expected_multiplier, 0.001);
     }
@@ -1672,12 +1646,10 @@ mod test {
             let active_home_members = context
                 .get_setting_members_internal(&SettingId::new(Home, s), MembershipSelector::Active)
                 .unwrap();
-            let active_tract_members = context
-                .get_setting_members_internal(
-                    &SettingId::new(CensusTract, s),
-                    MembershipSelector::Active,
-                )
-                .unwrap();
+            let active_tract_members = context.get_setting_members_internal(
+                &SettingId::new(CensusTract, s),
+                MembershipSelector::Active,
+            );
             let all_home_members = context
                 .get_setting_members_internal(&SettingId::new(Home, s), MembershipSelector::Union)
                 .unwrap();
@@ -1691,7 +1663,7 @@ mod test {
             assert!(inactive_home_members.is_empty());
             assert_eq!(inactive_tract_members.len(), 5);
             assert_eq!(active_home_members.len(), 5);
-            assert!(active_tract_members.is_empty());
+            assert!(active_tract_members.is_none());
             assert_eq!(all_home_members.len(), 5);
             assert_eq!(all_tract_members.len(), 5);
         }
@@ -1791,7 +1763,10 @@ mod test {
 
         assert_almost_eq!(
             inf_multiplier_two_settings,
-            (f64::from(7 - 1).powf(alpha_h)) * 0.5 + (f64::from(6 - 1).powf(alpha_ct)) * 0.5,
+            f64::max(
+                f64::from(7 - 1).powf(alpha_h),
+                f64::from(6 - 1).powf(alpha_ct)
+            ),
             0.0
         );
     }
