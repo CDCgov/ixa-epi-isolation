@@ -1,10 +1,10 @@
 import os
 import time
 
+import matplotlib.pyplot as plt
 import polars as pl
 from abmwrappers import wrappers
 from abmwrappers.experiment_class import Experiment
-import matplotlib.pyplot as plt
 
 
 def main():
@@ -30,9 +30,7 @@ def main():
             config_file=config_path,
         )
         start_time = time.time()
-        subexperiment.run_step(
-            data_read_fn=read_fn, products=["simulations"]
-        )
+        subexperiment.run_step(data_read_fn=read_fn, products=["simulations"])
         end_time = time.time()
         average_time = (end_time - start_time) / subexperiment.replicates
 
@@ -40,9 +38,11 @@ def main():
             subexperiment.scenario_key
         ]["synth_population_file"]
 
-        infectiousness_scale = subexperiment.simulation_bundles[0].baseline_params[
-            subexperiment.scenario_key
-        ]["infectiousness_rate_fn"]["EmpiricalFromFile"]["scale"]
+        infectiousness_scale = subexperiment.simulation_bundles[
+            0
+        ].baseline_params[subexperiment.scenario_key][
+            "infectiousness_rate_fn"
+        ]["EmpiricalFromFile"]["scale"]
 
         home_alpha = subexperiment.simulation_bundles[0].baseline_params[
             subexperiment.scenario_key
@@ -56,9 +56,11 @@ def main():
             subexperiment.scenario_key
         ]["settings_properties"]["School"]["alpha"]
 
-        censustract_alpha = subexperiment.simulation_bundles[0].baseline_params[
-            subexperiment.scenario_key
-        ]["settings_properties"]["CensusTract"]["alpha"]
+        censustract_alpha = subexperiment.simulation_bundles[
+            0
+        ].baseline_params[subexperiment.scenario_key]["settings_properties"][
+            "CensusTract"
+        ]["alpha"]
 
         pop_size = pl.read_csv(synth_pop).height
         average_times.append(
@@ -88,7 +90,10 @@ def main():
     exp_output = exp_output.join(
         pl.DataFrame(average_times), on="scenario", how="left"
     )
-    exp_output.write_csv(os.path.join(experiment.directory, "experiment_runtime.csv"))
+    exp_output.write_csv(
+        os.path.join(experiment.directory, "experiment_runtime.csv")
+    )
+
 
 def read_fn(outputs_dir):
     output_file_path = os.path.join(outputs_dir, "person_property_count.csv")
@@ -108,5 +113,6 @@ def read_fn(outputs_dir):
     )
     print(df.to_series().to_list()[0])
     return df
+
 
 main()
