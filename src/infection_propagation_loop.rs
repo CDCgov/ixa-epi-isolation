@@ -205,7 +205,7 @@ pub fn init(context: &mut Context) -> Result<(), IxaError> {
         },
     );
 
-    context.subscribe_to_itinerary_change();
+    // context.subscribe_to_itinerary_change();
 
     Ok(())
 }

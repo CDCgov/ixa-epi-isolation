@@ -509,9 +509,10 @@ trait ContextSettingInternalExt: PluginContext + ContextRandomExt {
             person_id,
             itinerary_selector,
             MembershipSelector::Union,
-            |setting, setting_props, members, ratio| {
+            |setting, setting_props, members, _ratio| {
                 let multiplier: f64 = setting.calculate_multiplier(members, *setting_props);
-                collector += ratio * multiplier;
+                // We want to identify the max at the setting level, not itinerary level, so that we sample at the true maximum possible rate
+                collector = f64::max(collector, multiplier);
             },
         );
         collector
