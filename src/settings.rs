@@ -2,8 +2,8 @@ use crate::parameters::{
     ContextParametersExt, CoreSettingsTypes, ItinerarySpecificationType, Params,
 };
 use ixa::{
-    define_data_plugin, define_rng, prelude_for_plugins::IxaEvent, trace, Context,
-    ContextPeopleExt, ContextRandomExt, IxaError, PersonId, PluginContext,
+    define_data_plugin, define_rng, trace, Context, ContextPeopleExt, ContextRandomExt, IxaError,
+    PersonId, PluginContext,
 };
 use serde::{Deserialize, Serialize};
 
@@ -103,16 +103,6 @@ impl ItineraryEntry {
     }
 }
 
-#[derive(Copy, Clone, IxaEvent)]
-pub struct ItineraryChangeEvent {
-    /// `PersonId` of the individual whose itinerary has changed
-    pub person_id: PersonId,
-    /// Multiplier from previous itinerary
-    pub previous_multiplier: f64,
-    /// Multiplier from current itinerary
-    pub current_multiplier: f64,
-}
-
 #[allow(dead_code)]
 pub enum ItineraryModifiers<'a> {
     // Replace itinerary with a new vector of itinerary entries
@@ -170,7 +160,9 @@ struct SettingDataContainer {
     // For each setting type (e.g., Home) store the properties (e.g., alpha)
     setting_properties: HashMap<TypeId, SettingProperties>,
     // For each setting type, have a map of each setting id and a list of members
-    active_members: HashMap<(TypeId, usize), HashSet<PersonId>>,
+    active_members: HashMap<(TypeId, usize), HashMap<PersonId, usize>>,
+    active_members_set: HashMap<(TypeId, usize), HashSet<PersonId>>,
+    active_members_vec: HashMap<(TypeId, usize), Vec<PersonId>>,
     inactive_members: HashMap<(TypeId, usize), HashSet<PersonId>>,
     all_members: HashMap<(TypeId, usize), HashSet<PersonId>>,
     itineraries: HashMap<PersonId, Vec<ItineraryEntry>>,
@@ -206,7 +198,10 @@ impl SettingDataContainer {
         }
     }
     fn get_active_setting_members(&self, setting: &dyn AnySettingId) -> Option<&HashSet<PersonId>> {
-        self.active_members.get(&setting.get_tuple_id())
+        self.active_members_set.get(&setting.get_tuple_id())
+    }
+    fn get_active_setting_members_vec(&self, setting: &dyn AnySettingId) -> Option<&Vec<PersonId>> {
+        self.active_members_vec.get(&setting.get_tuple_id())
     }
     fn get_inactive_setting_members(
         &self,
@@ -296,39 +291,69 @@ impl SettingDataContainer {
         setting_identifier: (TypeId, usize),
     ) {
         if ratio > 0.0 {
-            self.active_members
-                .entry(setting_identifier)
-                .or_default()
-                .insert(person_id);
-            self.inactive_members
-                .entry(setting_identifier)
-                .or_default()
-                .retain(|&x| x != person_id);
+            self.add_active_member(person_id, setting_identifier);
         } else {
-            self.inactive_members
+            self.add_inactive_member(person_id, setting_identifier);
+        }
+    }
+
+    fn add_active_member(&mut self, person_id: PersonId, setting_identifier: (TypeId, usize)) {
+        let map = self.active_members.entry(setting_identifier).or_default();
+        if map.get(&person_id).is_none() {
+            map.insert(person_id, map.len());
+            self.active_members_set
                 .entry(setting_identifier)
                 .or_default()
                 .insert(person_id);
-            self.active_members
+            self.active_members_vec
                 .entry(setting_identifier)
                 .or_default()
-                .retain(|&x| x != person_id);
+                .push(person_id);
         }
+        self.inactive_members
+            .entry(setting_identifier)
+            .or_default()
+            .retain(|&x| x != person_id);
         self.all_members
             .entry(setting_identifier)
             .or_default()
             .insert(person_id);
     }
+
+    fn add_inactive_member(&mut self, person_id: PersonId, setting_identifier: (TypeId, usize)) {
+        let map = self.active_members.entry(setting_identifier).or_default();
+        if let Some(&index) = map.get(&person_id) {
+            let v = self
+                .active_members_vec
+                .get_mut(&setting_identifier)
+                .unwrap();
+
+            if v.len() > 1 {
+                let old_member = v[v.len() - 1];
+                map.insert(old_member, index);
+            }
+
+            v.swap_remove(index);
+            map.retain(|&p, _| p != person_id);
+
+            self.active_members_set
+                .entry(setting_identifier)
+                .or_default()
+                .retain(|&p| p != person_id);
+        }
+        self.inactive_members
+            .entry(setting_identifier)
+            .or_default()
+            .insert(person_id);
+        self.all_members
+            .entry(setting_identifier)
+            .or_default()
+            .insert(person_id);
+    }
+
     fn deactivate_itinerary(&mut self, person_id: PersonId, itinerary: Vec<ItineraryEntry>) {
         for itinerary_entry in itinerary {
-            self.active_members
-                .entry(itinerary_entry.setting.get_tuple_id())
-                .or_default()
-                .retain(|&x| x != person_id);
-            self.inactive_members
-                .entry(itinerary_entry.setting.get_tuple_id())
-                .or_default()
-                .insert(person_id);
+            self.add_inactive_member(person_id, itinerary_entry.setting.get_tuple_id());
         }
     }
 }
@@ -518,6 +543,20 @@ trait ContextSettingInternalExt: PluginContext + ContextRandomExt {
         collector
     }
 
+    fn sample_active_setting_members(&self, setting: &dyn AnySettingId) -> Option<PersonId> {
+        if let Some(members) = self
+            .get_data(SettingDataPlugin)
+            .get_active_setting_members_vec(setting)
+        {
+            if members.is_empty() {
+                return None;
+            }
+            let person = members[self.sample_range(SettingsRng, 0..members.len())];
+            return Some(person);
+        }
+        None
+    }
+
     fn get_itinerary(
         &self,
         person_id: PersonId,
@@ -588,14 +627,6 @@ pub trait ContextSettingExt:
             ));
         }
 
-        // We don't need to calculate mutliplier differences when removing a modified itinerary
-        // The previous multiplier is already the max of current and the removed modified multiplier,
-        // So the new max rate is guaranteed to bee less than or equal to the previous max rate
-        self.emit_event(ItineraryChangeEvent {
-            person_id,
-            previous_multiplier: 1.0,
-            current_multiplier: 0.0,
-        });
         Ok(())
     }
 
@@ -605,8 +636,6 @@ pub trait ContextSettingExt:
         itinerary_modifier: ItineraryModifiers,
     ) -> Result<(), IxaError> {
         let _span = open_span("modify_itinerary");
-        let previous_multiplier =
-            self.calculate_max_infectiousness_multiplier_for_person(person_id);
         let result = match itinerary_modifier {
             ItineraryModifiers::ReplaceWith { itinerary } => {
                 trace!("ItineraryModifier::Replace person {person_id} --  {itinerary:?}");
@@ -627,15 +656,6 @@ pub trait ContextSettingExt:
                 self.exclude_setting_from_itinerary(person_id, setting)
             }
         };
-
-        let current_multiplier = self.calculate_max_infectiousness_multiplier_for_person(person_id);
-
-        self.emit_event(ItineraryChangeEvent {
-            person_id,
-            previous_multiplier,
-            current_multiplier,
-        });
-
         result
     }
 
@@ -753,15 +773,15 @@ pub trait ContextSettingExt:
             if members.get(&person_id).is_some() && members.len() == 1 {
                 return Ok(None);
             }
-            let members: Vec<PersonId> = members.iter().copied().collect();
             let mut contact_id;
             loop {
-                contact_id = members[self.sample_range(SettingsRng, 0..members.len())];
-                if contact_id != person_id {
+                contact_id = self.sample_active_setting_members(setting);
+
+                if contact_id != Some(person_id) {
                     break;
                 }
             }
-            return Ok(Some(contact_id));
+            return Ok(contact_id);
         }
         Err(IxaError::from("Group membership is None"))
     }
@@ -1054,6 +1074,94 @@ mod test {
             ),
             None => panic!("Expected an error. Instead, validation passed with no errors."),
         }
+    }
+
+    #[test]
+    fn test_change_activity_members() {
+        let mut context = Context::new();
+        register_default_settings(&mut context);
+        let active_person = context.add_person(()).unwrap();
+        let inactive_person = context.add_person(()).unwrap();
+        let active_itinerary = vec![ItineraryEntry::new(SettingId::new(Home, 1), 1.0)];
+        let inactive_itinerary = vec![ItineraryEntry::new(SettingId::new(Home, 1), 0.0)];
+        context
+            .add_itinerary(active_person, active_itinerary.clone())
+            .unwrap();
+        context
+            .add_itinerary(inactive_person, inactive_itinerary.clone())
+            .unwrap();
+
+        let home = SettingId::new(Home, 1);
+
+        let members = context
+            .get_setting_members_internal(&home, MembershipSelector::Union)
+            .unwrap();
+        let active_members = context
+            .get_setting_members_internal(&home, MembershipSelector::Active)
+            .unwrap();
+        let inactive_members = context
+            .get_setting_members_internal(&home, MembershipSelector::Inactive)
+            .unwrap();
+
+        assert_eq!(members.len(), 2);
+        assert_eq!(active_members.len(), 1);
+        assert_eq!(inactive_members.len(), 1);
+
+        let container = context.get_data_mut(SettingDataPlugin);
+
+        // Activate the "inactive" itinerary with ratio 0.0 for the active person
+        container
+            .activate_itinerary(active_person, &inactive_itinerary)
+            .unwrap();
+
+        let members = context
+            .get_setting_members_internal(&home, MembershipSelector::Union)
+            .unwrap();
+        let active_members = context
+            .get_setting_members_internal(&home, MembershipSelector::Active)
+            .unwrap();
+        let inactive_members = context
+            .get_setting_members_internal(&home, MembershipSelector::Inactive)
+            .unwrap();
+
+        assert_eq!(members.len(), 2);
+        assert_eq!(active_members.len(), 0);
+        assert_eq!(inactive_members.len(), 2);
+
+        let container = context.get_data_mut(SettingDataPlugin);
+        assert_eq!(
+            container.get_active_setting_members(&home).unwrap().len(),
+            0
+        );
+
+        // Reactivate the "active" itinerary for the active person
+        container
+            .activate_itinerary(active_person, &active_itinerary)
+            .unwrap();
+        let container = context.get_data(SettingDataPlugin);
+        assert_eq!(
+            container
+                .active_members
+                .get(&home.get_tuple_id())
+                .unwrap()
+                .get(&active_person),
+            Some(&0)
+        );
+        assert_eq!(
+            container
+                .active_members_vec
+                .get(&home.get_tuple_id())
+                .unwrap()
+                .len(),
+            1
+        );
+        assert_eq!(
+            container
+                .active_members_vec
+                .get(&home.get_tuple_id())
+                .unwrap()[0],
+            active_person
+        );
     }
 
     #[test]
