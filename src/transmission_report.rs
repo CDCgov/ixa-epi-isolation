@@ -248,7 +248,7 @@ mod test {
                 record.infection_setting_type,
                 Some("test_setting".to_string())
             );
-            assert_eq!(record.infection_setting_id, Some(1));
+            assert_eq!(record.infection_setting_id, setting_id);
             line_count += 1;
         }
         assert_eq!(line_count, 1);
