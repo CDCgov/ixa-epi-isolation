@@ -1,0 +1,129 @@
+---
+title:
+author:
+format: pdf
+toc: true
+number-sections: true
+execute:
+    warning: false
+jupyter: python3
+---
+
+# Purpose
+
+Describe the objective of the experiment
+
+# Methods
+
+## Data
+
+The National Hospital Surveillance Network (NHSN) data was downloaded from the public data repository
+and filtered by state to select data from Wyoming.
+
+Synthetic population data were generated using `create_synthetic_population.R`, setting the state to `WY`
+and the population size to 589,000 to reflect Wyoming.
+
+
+## Parameters
+
+| Parameter name | Description |
+| :------------: | ----------- |
+| `initial_incidence` | Initial fraction of population infectious |
+| `initial_recovered` | Initial fraction of population immune to infection |
+| `proportion_asymptomatic` | The fraction of new cases that will never develop symptoms |
+| `relative_infectiousness_asymptomatics` | Multiplier for the relative infectiousness of asymptomatic infectious individuals compared to symptomatics |
+| `Home.alpha` | Property of `Home` settings that modulates density-dependence |
+| `Workplace.alpha` | Property of `Workplace` settings that modulates density-dependence |
+| `School.alpha` | Property of `School` settings that modulates density-dependence |
+| `CensusTract.alpha` | Property of `CensusTract` settings that modulates density-dependence |
+| `symptom_progression_library` | Rates of symptom onset and recovery for symptom categories |
+| `mean_delay_to_hospitalization` | Mean time from symptom onset to hospitalization |
+| `mean_duration_of_hospitalization` | Mean time that hospitalized individuals stay in the hospital before recovery | In estimated range |
+| `age_groups.min` | Age group lower bound associated with hospitalization risk values |
+| `age_groups.probability` | Probability that symptomatic individuals become hospitalized for a given age group |
+| `infectiousness_rate_fn` | Function to determine the rate at which infecitous indivudals generate infection attempts |
+
+### Fixed parameter values
+
+We assume no interventions or behavioral changes affect contact rates during the outbreak calibration period.
+
+| Parameter | Value | Source |
+| :-------: | :---: | ------ |
+| `initial_incidence` | 0.01 | Small initial incidence for full curve |
+| `initial_recovered` | 0.3 | Assumed partial protection in summer wave |
+| `relative_infectiousness_asymptomatics` | 0.81 | Assumed from relative logVL mild:severe symptoms, Chen et al., 2021. eLife. |
+| `CensusTract.alpha` | 0.0 | Assume no density-dependence in community |
+| `symptom_progression_library` | Category-dependent Weibull | Use posteriors from viral-load isolation gudiance |
+| `mean_delay_to_hospitalization` | 5.7 | Mean delay from Yadav et al. 2023 Am J Emerg Med |
+| `mean_duration_of_hospitalization` | 8.0 | Approximated during GCM experiments using NHCS data |
+| `age_groups.min` | Decile | Binned according to Hladish et al., 2024. PLOS Comp Bio |
+| `age_groups.probability` | See next table | Hladish et al., 2024. PLOS Comp Bio |
+| `infectiousness_rate_fn` | Category-dependent triangle VL | Use posteriors from viral-load isolation gudiance |
+
+| Age group | P(Hospitalization | Age) |
+| :-------: | :---: |
+| 0-9 | 0.00495 |
+| 10-19 | 0.00216 |
+| 20-29 | 0.00329 |
+| 30-39 | 0.00675 |
+| 40-49 | 0.0117 |
+| 50-59 | 0.0212 |
+| 60-69 | 0.0437 |
+| 70-79 | 0.0855 |
+| 80+ | 0.0945 |
+
+Assumed to be P(hospitalization | severe symptoms) $\times$ P(severe symptoms | Age) from Hladish et al., 2024. PLOS Comp Bio.
+However, the model uses P (Hospitalization | Age, symptomatic). We assume that dividing by the point estimate 
+of proportion asymptomatic for the alpha variant (0.861, Whitaker et al., 2022) can initially approximate that value
+and we later fit the proportion asymptomatic with strong priors.
+
+| Age group | P(Hospitalization | Age, symptoms) |
+| :-------: | :---: |
+| 0-9 | 0.00575 |
+| 10-19 | 0.00251 |
+| 20-29 | 0.00382 |
+| 30-39 | 0.00784 |
+| 40-49 | 0.0136 |
+| 50-59 | 0.0246 |
+| 60-69 | 0.0508 |
+| 70-79 | 0.0993 |
+| 80+ | 0.110 |
+
+### Fitted parameter values
+
+Describe the parameters, priors, perturbations and relevant sources used for fixed values
+
+| Parameter | Prior | Source |
+| :-------: | :---: | ------ |
+| $\alpha_\text{Home}$ | Uniform(0.0, 0.2) | uninformative |
+| $\alpha_\text{Work}$ | Uniform(0.0, 0.2) | uninformative |
+| $\alpha_\text{Sch}$ | Uniform(0.0, 0.2) | uninformative |
+| `infectiousness_rate_fn.scale` | Uniform(0.0, 0.2) | uninformative |
+| `proportion_asymptomatic` | Beta(43, 7) | Alpha variant point estimate (0.861) with wider variance, Whitaker et al. 2022 Nat Comm. |
+
+## Distance function
+
+Describe the distance function used to compare target data with simulation output and rationale
+
+# Results
+
+Load the experiment history file if available
+
+```{python}
+from abmwrappers.experiment_class import Experiment
+
+experiment = Experiment(img_file="../data/experiment_history.pkl")
+print(f"Steps = {len(experiment.tolerance_dict)}")
+```
+
+## Simulation visualizations
+
+Plot and describe any relevant simulation output
+
+## Parameter posterior visualizations
+
+Plot any relevant figures for the posterior distributions of fitted parameters
+
+# Additional resources
+
+## Citations
