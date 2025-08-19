@@ -263,6 +263,7 @@ impl SettingDataContainer {
         person_id: PersonId,
         itinerary: &Vec<ItineraryEntry>,
     ) -> Result<(), IxaError> {
+        let _span = open_span("activate itinerary");
         for itinerary_entry in itinerary {
             // TODO: If we are changing a person's itinerary, the person_id should be removed from vector
             // This isn't the same as the concept of being present or not.
@@ -350,6 +351,7 @@ impl SettingDataContainer {
     }
 
     fn deactivate_itinerary(&mut self, person_id: PersonId, itinerary: Vec<ItineraryEntry>) {
+        let _span = open_span("deactivate itinerary");
         for itinerary_entry in itinerary {
             self.add_inactive_member(person_id, itinerary_entry.setting.get_tuple_id());
         }
@@ -392,6 +394,7 @@ trait ContextSettingInternalExt: PluginContext + ContextRandomExt {
         &mut self,
         person_id: PersonId,
         mut itinerary: Vec<ItineraryEntry>,
+        settings_change: bool,
     ) -> Result<(), IxaError> {
         // Normalize itinerary ratios
         self.validate_itinerary(&itinerary)?;
@@ -419,7 +422,9 @@ trait ContextSettingInternalExt: PluginContext + ContextRandomExt {
                 ))
             }
             Some(previous_itinerary) => {
-                container.deactivate_itinerary(person_id, previous_itinerary.clone());
+                if settings_change {
+                    container.deactivate_itinerary(person_id, previous_itinerary.clone());
+                }
             }
         }
 
@@ -452,7 +457,7 @@ trait ContextSettingInternalExt: PluginContext + ContextRandomExt {
                     ));
                 }
 
-                self.add_modified_itinerary(person_id, modified_itinerary)?;
+                self.add_modified_itinerary(person_id, modified_itinerary, false)?;
                 Ok(())
             }
         }
@@ -482,7 +487,7 @@ trait ContextSettingInternalExt: PluginContext + ContextRandomExt {
                     ));
                 }
 
-                self.add_modified_itinerary(person_id, modified_itinerary)?;
+                self.add_modified_itinerary(person_id, modified_itinerary, false)?;
                 Ok(())
             }
         }
@@ -490,6 +495,7 @@ trait ContextSettingInternalExt: PluginContext + ContextRandomExt {
 
     fn validate_itinerary(&self, itinerary: &[ItineraryEntry]) -> Result<(), IxaError> {
         let mut setting_counts: HashMap<TypeId, HashSet<usize>> = HashMap::new();
+        let _span = open_span("validate_modified_itinerary");
         for itinerary_entry in itinerary {
             let setting_id = itinerary_entry.setting.id();
             let setting_type = itinerary_entry.setting.get_type_id();
@@ -617,7 +623,7 @@ pub trait ContextSettingExt:
         let result = match itinerary_modifier {
             ItineraryModifiers::ReplaceWith { itinerary } => {
                 trace!("ItineraryModifier::Replace person {person_id} --  {itinerary:?}");
-                self.add_modified_itinerary(person_id, itinerary)
+                self.add_modified_itinerary(person_id, itinerary, true)
             }
             ItineraryModifiers::RestrictTo { setting } => {
                 trace!(
@@ -1201,7 +1207,7 @@ mod test {
         ];
         context.add_itinerary(person, default_itinerary).unwrap();
         context
-            .add_modified_itinerary(person, modified_itinerary)
+            .add_modified_itinerary(person, modified_itinerary, false)
             .unwrap();
 
         let default = context
