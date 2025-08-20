@@ -552,6 +552,23 @@ trait ContextSettingInternalExt: PluginContext + ContextRandomExt {
 }
 impl ContextSettingInternalExt for Context {}
 
+fn identical_settings(
+    itinerary_0: &Vec<ItineraryEntry>,
+    itinerary_1: &Vec<ItineraryEntry>,
+) -> bool {
+    let mut set_0 = HashSet::new();
+    let mut set_1 = HashSet::new();
+
+    for entry in itinerary_0 {
+        set_0.insert(entry.setting.get_tuple_id());
+    }
+    for entry in itinerary_1 {
+        set_1.insert(entry.setting.get_tuple_id());
+    }
+
+    set_0 == set_1
+}
+
 #[allow(private_bounds)]
 pub trait ContextSettingExt:
     PluginContext + ContextSettingInternalExt + ContextRandomExt + ContextPeopleExt
@@ -623,6 +640,15 @@ pub trait ContextSettingExt:
         let result = match itinerary_modifier {
             ItineraryModifiers::ReplaceWith { itinerary } => {
                 trace!("ItineraryModifier::Replace person {person_id} --  {itinerary:?}");
+
+                // The model currtently assumes that people cannot change the settings of their itinerary, only the ratios of those settings.
+                // We therefore assert that the settings are identical for this `ItineraryModifiers::ReplaceWith` as it is the only
+                // modifier that could feasibly change settings ids between default and modified itineraries.
+                assert!(identical_settings(
+                    self.get_itinerary(person_id, ItinerarySelector::Default)
+                        .unwrap(),
+                    &itinerary
+                ));
                 self.add_modified_itinerary(person_id, itinerary, true)
             }
             ItineraryModifiers::RestrictTo { setting } => {
@@ -728,9 +754,8 @@ pub trait ContextSettingExt:
         );
         collector
     }
-    /// Get the maximum infectiousness multiplier for a person across all itineraries
-    /// This is the sum of the infectiousness multipliers for each setting derived from both the
-    /// default and modified itineraries of the person.
+    /// Get the maximum infectiousness multiplier for a person across all settings
+    /// derived from both the default and modified itineraries of the person.
     /// These are generated without modification from the general formula of ratio * (N - 1) ^ alpha
     /// where N is the number of all active and inactive members in the setting
     fn calculate_max_infectiousness_multiplier_for_person(&self, person_id: PersonId) -> f64 {
@@ -1062,6 +1087,28 @@ mod test {
             ),
             None => panic!("Expected an error. Instead, validation passed with no errors."),
         }
+    }
+
+    #[test]
+    fn test_identical_settings() {
+        let itinerary_0 = vec![
+            ItineraryEntry::new(SettingId::new(Home, 1), 1.0),
+            ItineraryEntry::new(SettingId::new(Home, 2), 0.5),
+            ItineraryEntry::new(SettingId::new(Home, 3), 1.5),
+        ];
+        let itinerary_1 = vec![
+            ItineraryEntry::new(SettingId::new(Home, 1), 0.0),
+            ItineraryEntry::new(SettingId::new(Home, 2), 1.5),
+            ItineraryEntry::new(SettingId::new(Home, 3), 0.5),
+        ];
+        let itinerary_2 = vec![
+            ItineraryEntry::new(SettingId::new(Home, 1), 1.0),
+            ItineraryEntry::new(SettingId::new(Home, 2), 0.5),
+            ItineraryEntry::new(SettingId::new(Home, 4), 1.5),
+        ];
+
+        assert!(identical_settings(&itinerary_0, &itinerary_1));
+        assert!(!identical_settings(&itinerary_0, &itinerary_2));
     }
 
     #[test]
@@ -1966,6 +2013,15 @@ mod test {
         assert_eq!(itinerary.len(), 2);
         assert_eq!(itinerary[1].setting.get_type_id(), TypeId::of::<School>());
         assert_eq!(itinerary[1].setting.id(), 42);
+        assert_almost_eq!(itinerary[1].ratio, 0.25, 0.0);
+
+        // Test appending an entry with a non-default ratio
+        append_itinerary_entry(&mut itinerary, &context, SettingId::new(Home, 2), Some(1.0))
+            .unwrap();
+        assert_eq!(itinerary.len(), 3);
+        assert_eq!(itinerary[2].setting.get_type_id(), TypeId::of::<Home>());
+        assert_eq!(itinerary[2].setting.id(), 2);
+        assert_almost_eq!(itinerary[2].ratio, 1.0, 0.0);
     }
 
     #[test]
