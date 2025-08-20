@@ -1,6 +1,6 @@
 {
   "epi_isolation.GlobalParams": {
-    "max_time": 300.0,
+    "max_time": 250.0,
     "seed": 123,
     "infectiousness_rate_fn": {
         "EmpiricalFromFile": {
