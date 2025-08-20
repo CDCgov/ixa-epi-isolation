@@ -21,6 +21,7 @@ def main(config_file: str, keep: bool):
             "School": {"alpha": uniform(0.0, 0.2)},
             "Workplace": {"alpha": uniform(0.0, 0.2)},
         },
+        "initial_recovered": beta(5, 15),
     }
 
     perturbation = {
@@ -35,8 +36,8 @@ def main(config_file: str, keep: bool):
             "School": {"alpha": norm(0.0, 0.01)},
             "Workplace": {"alpha": norm(0.0, 0.01)},
         },
+        "initial_recovered": norm(0.0, 0.02),
     }
-
 
     # Initialize experiment object
     experiment = Experiment(
@@ -55,6 +56,9 @@ def main(config_file: str, keep: bool):
         symptom_params_file = defaults["symptom_progression_library"][
             "EmpiricalFromFile"
         ]["file"]
+        infectiousness_rate_file = defaults["infectiousness_rate_fn"][
+            "EmpiricalFromFile"
+        ]["file"]
         synth_pop_file = defaults["synth_population_file"]
         experiment.changed_baseline_params = {
             "symptom_progression_library": {
@@ -62,9 +66,14 @@ def main(config_file: str, keep: bool):
                     "file": f"/{blob_experiment_directory}/{os.path.basename(symptom_params_file)}"
                 }
             },
+            "infectiousness_rate_fn": {
+                "EmpiricalFromFile": {
+                    "file": f"/{blob_experiment_directory}/{os.path.basename(infectiousness_rate_file)}"
+                }
+            },
             "synth_population_file": f"/{blob_experiment_directory}/{os.path.basename(synth_pop_file)}",
         }
-        fps = [synth_pop_file, symptom_params_file]
+        fps = [synth_pop_file, symptom_params_file, infectiousness_rate_file]
         use_existing = True
     else:
         fps = []
@@ -116,18 +125,17 @@ def hosp_lhood(results_data: pl.DataFrame, target_data: pl.DataFrame):
 
 
 def output_processing_function(outputs_dir):
-    fp = os.path.join(outputs_dir, "hospital_incidence_report.csv")
+    fp = os.path.join(outputs_dir, "incidence_person_property_count.csv")
 
     try:
         df = pl.read_csv(fp)
 
         df = (
-            df.with_columns(
-                (pl.col("time") / 7.0).ceil().cast(pl.Int64).alias("week")
-            )
-            .group_by("week")
-            .agg(pl.len().alias("count"))
-            .with_columns((pl.col("week") * 7 - 1).alias("t"))
+            df
+            .filter(pl.col("event") == "hospitalized")
+            .group_by("t_upper")
+            .agg(pl.sum("count"))
+            .with_columns(pl.col("t_upper").cast(pl.Int64).alias("t"))
         )
 
         return df

@@ -1,6 +1,6 @@
 ---
-title:
-author:
+title: "Fit to Wyoming state-level hospitalization incidence data"
+author: "Will Koval (AD71@cdc.gov, CDC/ORR/CFA)"
 format: pdf
 toc: true
 number-sections: true
@@ -18,11 +18,11 @@ Describe the objective of the experiment
 ## Data
 
 The National Hospital Surveillance Network (NHSN) data was downloaded from the public data repository
-and filtered by state to select data from Wyoming.
+and filtered by state to select data from Wyoming. We then filter for dates on or after September 19th, 2020,
+leaving September 12th to be the day 0 of the simulation.
 
 Synthetic population data were generated using `create_synthetic_population.R`, setting the state to `WY`
-and the population size to 589,000 to reflect Wyoming.
-
+and the population size to 589,000 to reflect Wyoming's size.
 
 ## Parameters
 
@@ -50,17 +50,26 @@ We assume no interventions or behavioral changes affect contact rates during the
 | Parameter | Value | Source |
 | :-------: | :---: | ------ |
 | `initial_incidence` | 0.01 | Small initial incidence for full curve |
-| `initial_recovered` | 0.3 | Assumed partial protection in summer wave |
 | `relative_infectiousness_asymptomatics` | 0.81 | Assumed from relative logVL mild:severe symptoms, Chen et al., 2021. eLife. |
 | `CensusTract.alpha` | 0.0 | Assume no density-dependence in community |
 | `symptom_progression_library` | Category-dependent Weibull | Use posteriors from viral-load isolation gudiance |
+| `infectiousness_rate_fn` | Category-dependent triangle VL | Use posteriors from viral-load isolation guidance |
 | `mean_delay_to_hospitalization` | 5.7 | Mean delay from Yadav et al. 2023 Am J Emerg Med |
 | `mean_duration_of_hospitalization` | 8.0 | Approximated during GCM experiments using NHCS data |
 | `age_groups.min` | Decile | Binned according to Hladish et al., 2024. PLOS Comp Bio |
 | `age_groups.probability` | See next table | Hladish et al., 2024. PLOS Comp Bio |
-| `infectiousness_rate_fn` | Category-dependent triangle VL | Use posteriors from viral-load isolation gudiance |
 
-| Age group | P(Hospitalization | Age) |
+The relative infectiousness of asymptomatics is assumed to be proportional to the ratio of log viral load between individuals
+with mild and severe symptoms, estimated to be 0.81 two days after symptom onset by Chen et al., 2021. Age and sex were National
+found to be significant predictors of viral load. We assume that differences between this ratio and the relative infectiousness
+of asymptomatics can be averaged out in the infectiousness rate scaling factor.
+
+To approximate hospitalization given the onset of any symptoms, we use the deciles table from Hladish et al., 2024.
+
+We assumed that P(hospitalization | severe symptoms) $\times$ P(severe symptoms | Age) from Hladish et al., 2024 would generate
+a viable age-specific hospitalization risk table. However, our model uses P (Hospitalization | Age, symptomatic). 
+
+| Age group | $P(H \vert \text{Age})$ |
 | :-------: | :---: |
 | 0-9 | 0.00495 |
 | 10-19 | 0.00216 |
@@ -72,12 +81,11 @@ We assume no interventions or behavioral changes affect contact rates during the
 | 70-79 | 0.0855 |
 | 80+ | 0.0945 |
 
-Assumed to be P(hospitalization | severe symptoms) $\times$ P(severe symptoms | Age) from Hladish et al., 2024. PLOS Comp Bio.
-However, the model uses P (Hospitalization | Age, symptomatic). We assume that dividing by the point estimate 
-of proportion asymptomatic for the alpha variant (0.861, Whitaker et al., 2022) can initially approximate that value
-and we later fit the proportion asymptomatic with strong priors.
+We assume that dividing by the point estimate of the proportion asymptomatic for the alpha variant (0.861, Whitaker et al., 2022) 
+can initially approximate that value and we later fit the proportion asymptomatic with strong priors. the final values used in the
+simulation are as follows:
 
-| Age group | P(Hospitalization | Age, symptoms) |
+| Age group | $P(H \vert \text{Age, symptoms})$ |
 | :-------: | :---: |
 | 0-9 | 0.00575 |
 | 10-19 | 0.00251 |
@@ -91,39 +99,99 @@ and we later fit the proportion asymptomatic with strong priors.
 
 ### Fitted parameter values
 
-Describe the parameters, priors, perturbations and relevant sources used for fixed values
-
 | Parameter | Prior | Source |
 | :-------: | :---: | ------ |
 | $\alpha_\text{Home}$ | Uniform(0.0, 0.2) | uninformative |
 | $\alpha_\text{Work}$ | Uniform(0.0, 0.2) | uninformative |
 | $\alpha_\text{Sch}$ | Uniform(0.0, 0.2) | uninformative |
+| `initial_recovered` | Beta(5, 15) | Assumed partial protection in summer wave |
 | `infectiousness_rate_fn.scale` | Uniform(0.0, 0.2) | uninformative |
 | `proportion_asymptomatic` | Beta(43, 7) | Alpha variant point estimate (0.861) with wider variance, Whitaker et al. 2022 Nat Comm. |
 
+The point estimate for the alpha variant wave, which corresponds to the timing of the data we filter from NHSN, has narrow margins
+(0.861, CI: 0.83, 0.89). We increase the variance to account for reasonable differences between UK and US populations, as well as
+to allow for the appropriate calibration of IHR since we fixed age-group hospitalization risks.
+
+We use Gaussian noise to perturb parameter sets across ABC SMC steps
+
+| Parameter | Perturbation |
+| :-------: | :---: |
+| `infectiousness_rate_fn.scale` | Norm(0.0, 0.01) |
+| `proportion_asymptomatic` | Norm(0.0, 0.02) |
+| `initial_recovered` | Norm(0.0, 0.02) |
+| $\alpha_\text{Home}$ | Norm(0.0, 0.01) |
+| $\alpha_\text{Work}$ | Norm(0.0, 0.01) |
+| $\alpha_\text{Sch}$ | Norm(0.0, 0.01) |
+
 ## Distance function
 
-Describe the distance function used to compare target data with simulation output and rationale
+We combine the simulated incidence report across age bins. We then assume
+that total admissions in the weekly NHSN data counts are Poisson distributed according to the simulation. We
+take the negative log likelihood score as our distance measure.
 
 # Results
 
-Load the experiment history file if available
-
 ```{python}
+#| echo: false
 from abmwrappers.experiment_class import Experiment
 
 experiment = Experiment(img_file="../data/experiment_history.pkl")
-print(f"Steps = {len(experiment.tolerance_dict)}")
+steps = len(experiment.tolerance_dict)
+print(experiment)
 ```
 
 ## Simulation visualizations
 
-Plot and describe any relevant simulation output
+```{python}
+#| echo: false
+import seaborn as sns
+import matplotlib.pyplot as plt
+import polars as pl
+
+# max_target = experiment.tolerance_dict[steps - 1]
+max_target = 390
+
+# For azure implementations, use default blob container read:
+if experiment.azure_batch:
+    simulations = experiment.read_results(filename="simulations", verbose = False)
+    distances = experiment.read_results(filename="distances",verbose=False)
+# For local implementations, account for relative path of docs:
+else:
+    simulations = experiment.read_results(filename="simulations", input_dir ="../data")
+    distances = experiment.read_results(filename="distances", input_dir ="../data")
+
+posterior_sims=distances.sort("distance").filter(pl.col("distance")<max_target).join(simulations, on="simulation", how="inner")
+print(f"Showing {posterior_sims.select(pl.n_unique('simulation')).item()} accepted simulations from last step below threshold {max_target}")
+sns.lineplot(posterior_sims, x="t", y="count",hue="distance", units="simulation", estimator=None)
+sns.scatterplot(experiment.target_data, x = "t", y="total_admissions",zorder=10)
+plt.show()
+```
 
 ## Parameter posterior visualizations
 
 Plot any relevant figures for the posterior distributions of fitted parameters
+```{python}
+from abmwrappers import plotting
 
+plotting.plot_posterior_distribution_2d(experiment)
+
+plotting.plot_posterior_distribution(
+    experiment,
+    visualization_methods=["density"],
+    facet_by="parameter",
+    include_priors=True
+)
+plotting.plot_posterior_distribution(
+    experiment,
+    visualization_methods=["density", "histogram"],
+    facet_by=["parameter", "step"],
+    include_priors=True
+)
+```
 # Additional resources
 
 ## Citations
+1. Chen et al., SARS-CoV-2 shedding dynamics across the respiratory tract, sex, and disease severity for adult and pediatric COVID-19. eLife. 2021. DOI: 10.7554/eLife.70458
+2. Hladish et al. Evaluating targeted COVID-19 vaccination strategies with agent-based modeling. PLoS Comput Biol. 2024. DOI: 10.1371/journal.pcbi.1012128
+3. Whitaker et al. Variant-Specific symptoms of COVID-19 in a study of 1,542,510 adults in England. Nat Comm. 2022. DOI: 10.1038/s41467-022-34244-2
+4. Yadav et al. Association between patient-report onset-to-door time and mortality in patients hospitalized with COVID-19 disease. Am J Emerg Med. 2023. DOI: 10.1016/j.ajem.2023.11.044
