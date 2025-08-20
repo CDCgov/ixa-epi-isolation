@@ -1316,7 +1316,10 @@ mod test {
             ItineraryEntry::new(SettingId::new(Home, 0), 1.0),
             ItineraryEntry::new(SettingId::new(Workplace, 0), 1.0),
         ];
-        let isolation_itinerary = vec![ItineraryEntry::new(SettingId::new(Home, 0), 1.0)];
+        let isolation_itinerary = vec![
+            ItineraryEntry::new(SettingId::new(Home, 0), 1.0),
+            ItineraryEntry::new(SettingId::new(Workplace, 0), 0.0),
+        ];
 
         let _ = context.add_itinerary(person, itinerary);
 
@@ -1404,6 +1407,7 @@ mod test {
         let isolation_itinerary = vec![
             ItineraryEntry::new(SettingId::new(Home, 0), 0.95),
             ItineraryEntry::new(SettingId::new(Workplace, 0), 0.05),
+            ItineraryEntry::new(SettingId::new(School, 0), 0.0),
         ];
 
         let _ = context.modify_itinerary(
