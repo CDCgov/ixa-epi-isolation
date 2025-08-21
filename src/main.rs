@@ -20,14 +20,14 @@ use ixa::{ContextPeopleExt, ContextRandomExt};
 use parameters::{ContextParametersExt, Params};
 use population_loader::Age;
 
-use crate::profiling::print_profiling_data;
+use profiling::{print_profiling_data, ProfilingContextExt};
 
 // You must run this with a parameters file:
 // cargo run -- --config input/input.json
 // Try enabling logs to see some output about infections:
 // cargo run -- --config input/input.json --log-level epi_isolation=Trace -f
 fn main() {
-    run_with_args(|context, _, _| {
+    let mut context = run_with_args(|context, _, _| {
         // Read the global properties.
         let &Params { max_time, seed, .. } = context.get_params();
 
@@ -58,5 +58,7 @@ fn main() {
     })
     .unwrap();
 
+    // Write the profiling data and context's execution statistics to a JSON file.
+    context.write_profiling_data();
     print_profiling_data();
 }
