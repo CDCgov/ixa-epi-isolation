@@ -79,7 +79,14 @@ struct ProfilingData {
     execution_statistics: SerializableExecutionStatistics,
     named_counts: Vec<CountRecord>,
     named_spans: Vec<SpanRecord>,
-    computed_statistics: HashMap<&'static str, ComputedValue>,
+    computed_statistics: HashMap<&'static str, ComputedStatisticRecord>,
+}
+
+#[cfg(feature = "profiling")]
+#[derive(Serialize)]
+struct ComputedStatisticRecord {
+    description: &'static str,
+    value: ComputedValue,
 }
 
 #[cfg(feature = "profiling")]
@@ -123,7 +130,13 @@ pub fn write_profiling_data_to_file<P: AsRef<Path>>(
         if stat.value.is_none() {
             None
         } else {
-            Some((stat.label, stat.value.unwrap()))
+            Some((
+                stat.label,
+                ComputedStatisticRecord {
+                    description: stat.description,
+                    value: stat.value.unwrap(),
+                },
+            ))
         }
     });
     let computed_statistics = computed_statistics.collect::<HashMap<_, _>>();

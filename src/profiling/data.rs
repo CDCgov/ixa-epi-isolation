@@ -80,7 +80,9 @@ impl ProfilingDataContainer {
             println!("Infection Forecasting Efficiency: {:.2}%", efficiency);
         };
         let printer: CustomStatisticPrinter<f64> = Box::new(printer);
-        container.add_computed_statistic("infection forecasting efficiency", computer, printer);
+        let label = "infection forecasting efficiency";
+        let description = "The percentage of forecasted infections that were accepted.";
+        container.add_computed_statistic(label, description, computer, printer);
 
         container
     }
@@ -185,11 +187,13 @@ impl ProfilingDataContainer {
     pub(super) fn add_computed_statistic<T: ComputableType>(
         &mut self,
         label: &'static str,
+        description: &'static str,
         computer: CustomStatisticComputer<T>,
         printer: CustomStatisticPrinter<T>,
     ) {
         let computed_stat = ComputedStatistic {
             label,
+            description,
             value: None,
             functions: T::new_functions(computer, printer),
         };

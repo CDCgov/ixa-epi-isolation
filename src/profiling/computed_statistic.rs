@@ -67,6 +67,8 @@ impl ComputedStatisticFunctions {
 pub(super) struct ComputedStatistic {
     /// The label used for the statistic in the JSON report.
     pub label: &'static str,
+    /// Description of the statistic. Used in the JSON report.
+    pub description: &'static str,
     /// The computed value of the statistic.
     pub value: Option<ComputedValue>,
     /// The two functions used to compute the statistic and to print it to the console.
@@ -149,15 +151,17 @@ impl Display for ComputedValue {
 #[cfg(feature = "profiling")]
 pub fn add_computed_statistic<T: ComputableType>(
     label: &'static str,
+    description: &'static str,
     computer: CustomStatisticComputer<T>,
     printer: CustomStatisticPrinter<T>,
 ) {
     let mut container = profiling_data();
-    container.add_computed_statistic(label, computer, printer);
+    container.add_computed_statistic(label, description, computer, printer);
 }
 #[cfg(not(feature = "profiling"))]
 pub fn add_computed_statistic<T: ComputableType>(
     _label: &'static str,
+    _description: &'static str,
     _computer: CustomStatisticComputer<T>,
     _printer: CustomStatisticPrinter<T>,
 ) {
