@@ -34,7 +34,7 @@ struct InterventionPolicyParameters {
 trait ContextIsolationGuidanceInternalExt:
     PluginContext + ContextRandomExt + ContextPeopleExt + ContextSettingExt
 {
-    fn modify_isolation_status(
+    fn modify_itinerary_and_isolation_status(
         &mut self,
         person: PersonId,
         isolation_status: bool,
@@ -57,11 +57,13 @@ trait ContextIsolationGuidanceInternalExt:
             self.get_current_time() + intervention_policy_parameters.isolation_delay_period,
             move |context| {
                 if context.get_person_property(person_id, PresentingWithSymptoms) {
-                    context.administer_test_and_schedule_followup(
+                    context.administer_test_and_schedule_any_followup(
                         person_id,
                         intervention_policy_parameters,
                     );
-                    context.modify_isolation_status(person_id, true).unwrap();
+                    context
+                        .modify_itinerary_and_isolation_status(person_id, true)
+                        .unwrap();
                     trace!("Person {person_id} is now isolating");
                 }
             },
@@ -88,25 +90,7 @@ trait ContextIsolationGuidanceInternalExt:
         }
     }
 
-    fn schedule_test(
-        &mut self,
-        person_id: PersonId,
-        intervention_policy_parameters: InterventionPolicyParameters,
-    ) {
-        self.add_plan(
-            self.get_current_time() + intervention_policy_parameters.delay_to_retest,
-            move |context| {
-                if context.get_person_property(person_id, PresentingWithSymptoms) {
-                    context.administer_test_and_schedule_followup(
-                        person_id,
-                        intervention_policy_parameters,
-                    );
-                }
-            },
-        );
-    }
-
-    fn administer_test_and_schedule_followup(
+    fn administer_test_and_schedule_any_followup(
         &mut self,
         person_id: PersonId,
         intervention_policy_parameters: InterventionPolicyParameters,
@@ -137,8 +121,26 @@ trait ContextIsolationGuidanceInternalExt:
         trace!("Person {person_id} was tested");
 
         if retest {
-            self.schedule_test(person_id, intervention_policy_parameters);
+            self.schedule_retest(person_id, intervention_policy_parameters);
         }
+    }
+
+    fn schedule_retest(
+        &mut self,
+        person_id: PersonId,
+        intervention_policy_parameters: InterventionPolicyParameters,
+    ) {
+        self.add_plan(
+            self.get_current_time() + intervention_policy_parameters.delay_to_retest,
+            move |context| {
+                if context.get_person_property(person_id, PresentingWithSymptoms) {
+                    context.administer_test_and_schedule_any_followup(
+                        person_id,
+                        intervention_policy_parameters,
+                    );
+                }
+            },
+        );
     }
 
     fn handle_symptom_resolution(
@@ -151,18 +153,20 @@ trait ContextIsolationGuidanceInternalExt:
             .unwrap_or(false)
         {
             if let Some(symptom_record) = self.get_person_property(person_id, SymptomRecord) {
-                let isolation_start_time = symptom_record.symptom_start
-                    + intervention_policy_parameters.isolation_delay_period;
+                // even if there is a delay to start isolation, people's isolation time is counted
+                // from their symptom start time
                 let minimum_isolation_time = if symptom_record.severe {
                     intervention_policy_parameters.moderate_symptom_isolation_duration
-                        + isolation_start_time
+                        + symptom_record.symptom_start
                 } else {
                     intervention_policy_parameters.mild_symptom_isolation_duration
-                        + isolation_start_time
+                        + symptom_record.symptom_start
                 };
                 let isolation_end = f64::max(minimum_isolation_time, self.get_current_time());
                 self.add_plan(isolation_end, move |context| {
-                    context.modify_isolation_status(person_id, false).unwrap();
+                    context
+                        .modify_itinerary_and_isolation_status(person_id, false)
+                        .unwrap();
                     trace!("Person {person_id} is now no longer isolating");
                     if !symptom_record.severe {
                         context.make_post_isolation_masking_plan(
@@ -173,7 +177,8 @@ trait ContextIsolationGuidanceInternalExt:
                 });
             }
         } else {
-            self.modify_isolation_status(person_id, false).unwrap();
+            self.modify_itinerary_and_isolation_status(person_id, false)
+                .unwrap();
         }
     }
 
@@ -448,7 +453,6 @@ mod test {
                                         .get_person_property(event.person_id, SymptomRecord)
                                         .unwrap()
                                         .symptom_start
-                                        + isolation_delay_period
                                         + moderate_symptom_isolation_duration
                                 ),
                                 context.get_current_time(),
@@ -467,7 +471,6 @@ mod test {
                                         .get_person_property(event.person_id, SymptomRecord)
                                         .unwrap()
                                         .symptom_start
-                                        + isolation_delay_period
                                         + mild_symptom_isolation_duration
                                 ),
                                 context.get_current_time(),
@@ -780,7 +783,6 @@ mod test {
                                             .get_person_property(event.person_id, SymptomRecord)
                                             .unwrap()
                                             .symptom_start
-                                            + isolation_delay_period
                                             + moderate_symptom_isolation_duration
                                     ),
                                     context.get_current_time(),
@@ -799,7 +801,6 @@ mod test {
                                             .get_person_property(event.person_id, SymptomRecord)
                                             .unwrap()
                                             .symptom_start
-                                            + isolation_delay_period
                                             + mild_symptom_isolation_duration
                                     ),
                                     context.get_current_time(),
