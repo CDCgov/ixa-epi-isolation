@@ -33,7 +33,7 @@ pub enum Policies {
         policy_adherence: f64,
         // delay from symptom onset to when an individual starts following the isolation guidance policy
         isolation_delay_period: f64,
-        // the sensitivity of the test used to determine if an individual is infectious
+        // sensitivity of the test used to determine if an individual is infected
         test_sensitivity: f64,
     },
 }
@@ -53,7 +53,7 @@ pub fn validate_guidance_policy(guidance_policy: Option<Policies>) -> Result<(),
             }
             if !(0.0..=1.0).contains(&policy_adherence) {
                 return Err(IxaError::IxaError(
-                    "The isolation probability must be between 0 and 1, inclusive.".to_string(),
+                    "The policy adherence must be between 0 and 1, inclusive.".to_string(),
                 ));
             }
             if isolation_delay_period < 0.0 {
@@ -73,7 +73,7 @@ pub fn validate_guidance_policy(guidance_policy: Option<Policies>) -> Result<(),
         }) => {
             if overall_policy_duration < 0.0 {
                 return Err(IxaError::IxaError(
-                    "The duration from symptom onset must be non-negative.".to_string(),
+                    "The overall duration of the policy must be non-negative.".to_string(),
                 ));
             }
             if mild_symptom_isolation_duration < 0.0 {
@@ -88,12 +88,12 @@ pub fn validate_guidance_policy(guidance_policy: Option<Policies>) -> Result<(),
             }
             if delay_to_retest < 0.0 {
                 return Err(IxaError::IxaError(
-                    "The negative test isolation duration must be non-negative.".to_string(),
+                    "The delay to retest must be non-negative.".to_string(),
                 ));
             }
             if !(0.0..=1.0).contains(&policy_adherence) {
                 return Err(IxaError::IxaError(
-                    "The isolation probability must be between 0 and 1, inclusive.".to_string(),
+                    "The policy adherence must be between 0 and 1, inclusive.".to_string(),
                 ));
             }
             if isolation_delay_period < 0.0 {
