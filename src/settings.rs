@@ -312,7 +312,7 @@ impl SettingDataContainer {
         self.inactive_members
             .entry(setting_identifier)
             .or_default()
-            .retain(|&x| x != person_id);
+            .remove(&person_id);
         self.all_members
             .entry(setting_identifier)
             .or_default()
@@ -333,12 +333,12 @@ impl SettingDataContainer {
             }
 
             v.swap_remove(index);
-            map.retain(|&p, _| p != person_id);
+            map.remove(&person_id);
 
             self.active_members_set
                 .entry(setting_identifier)
                 .or_default()
-                .retain(|&p| p != person_id);
+                .remove(&person_id);
         }
         self.inactive_members
             .entry(setting_identifier)
