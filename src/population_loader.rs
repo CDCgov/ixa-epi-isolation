@@ -43,11 +43,13 @@ fn create_person_from_record(
         &mut itinerary,
         context,
         SettingId::new(Home, home_id.parse()?),
+        None,
     )?;
     append_itinerary_entry(
         &mut itinerary,
         context,
         SettingId::new(CensusTract, tract.parse()?),
+        None,
     )?;
 
     // Check for school and work memberships
@@ -56,6 +58,7 @@ fn create_person_from_record(
             &mut itinerary,
             context,
             SettingId::new(School, school_string.parse()?),
+            None,
         )?;
     }
     if !workplace_string.is_empty() {
@@ -63,6 +66,7 @@ fn create_person_from_record(
             &mut itinerary,
             context,
             SettingId::new(Workplace, workplace_string.parse()?),
+            None,
         )?;
     }
 

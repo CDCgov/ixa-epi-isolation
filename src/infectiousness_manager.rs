@@ -62,7 +62,7 @@ define_derived_property!(
 pub fn calc_total_infectiousness_multiplier(context: &Context, person_id: PersonId) -> f64 {
     let relative_transmission_potential = context.get_relative_total_transmission(person_id);
     relative_transmission_potential
-        * context.calculate_total_infectiousness_multiplier_for_person(person_id)
+        * context.calculate_current_infectiousness_multiplier_for_person(person_id)
 }
 
 /// Calculate the maximum possible scaling factor for total infectiousness
@@ -70,7 +70,7 @@ pub fn calc_total_infectiousness_multiplier(context: &Context, person_id: Person
 /// The modifier used for intrinsic infectiousness is ignored because all modifiers must
 /// be less than or equal to one.
 pub fn max_total_infectiousness_multiplier(context: &Context, person_id: PersonId) -> f64 {
-    context.calculate_total_infectiousness_multiplier_for_person(person_id)
+    context.calculate_max_infectiousness_multiplier_for_person(person_id)
 }
 
 define_rng!(ForecastRng);
@@ -78,7 +78,7 @@ define_rng!(ForecastRng);
 // Infection attempt function for a context and given `PersonId`
 pub fn infection_attempt(context: &mut Context, person_id: PersonId) -> Option<PersonId> {
     let _span = open_span("infection_attempt");
-    if let Some(setting) = context.sample_setting(person_id) {
+    if let Some(setting) = context.sample_current_setting(person_id) {
         let next_contact = context
             .sample_from_setting_with_exclusion(person_id, setting)
             .unwrap()?;
