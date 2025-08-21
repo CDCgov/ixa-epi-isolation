@@ -10,7 +10,7 @@
     },
     "initial_incidence": 0.01,
     "initial_recovered": 0.3,
-    "proportion_asymptomatic": 0.55,
+    "proportion_asymptomatic": 0.45,
     "relative_infectiousness_asymptomatics": 0.81,
     "settings_properties": {"Home": {"alpha": 0.2,
                                      "itinerary_specification": {"Constant": {"ratio": 0.25}}},
@@ -37,15 +37,15 @@
       "mean_delay_to_hospitalization": 5.7,
       "mean_duration_of_hospitalization": 8.0,
       "age_groups": [
-        {"min": 0, "probability": 0.00575},
-        {"min": 10, "probability": 0.00251},
-        {"min": 20, "probability": 0.00382},
-        {"min": 30, "probability": 0.00784},
-        {"min": 40, "probability": 0.0136},
-        {"min": 50, "probability": 0.0246},
-        {"min": 60, "probability": 0.0508},
-        {"min": 70, "probability": 0.0993},
-        {"min": 80, "probability": 0.110}
+        {"min": 0, "probability": 0.011},
+        {"min": 10, "probability": 0.0048},
+        {"min": 20, "probability": 0.0073},
+        {"min": 30, "probability": 0.015},
+        {"min": 40, "probability": 0.026},
+        {"min": 50, "probability": 0.047},
+        {"min": 60, "probability": 0.097},
+        {"min": 70, "probability": 0.19},
+        {"min": 80, "probability": 0.21}
       ],
       "hospital_incidence_report_name": "hospitalization.csv"
     }

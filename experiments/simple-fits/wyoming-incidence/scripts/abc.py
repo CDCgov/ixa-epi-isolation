@@ -15,7 +15,7 @@ def main(config_file: str, keep: bool):
                 "scale": uniform(0.0, 0.2)
             }
         },
-        "proportion_asymptomatic": beta(43, 7),
+        "proportion_asymptomatic": beta(45, 55),
         "settings_properties": {
             "Home": {"alpha": uniform(0.0, 0.2)},
             "School": {"alpha": uniform(0.0, 0.2)},

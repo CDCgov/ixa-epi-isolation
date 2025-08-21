@@ -5,7 +5,7 @@ docker_image: ./Dockerfile
 docker_repo_name: null
 docker_tag: latest
 job_prefix: null
-max_autoscale_nodes: 5
+max_autoscale_nodes: 25
 n_nodes: 2
 pool_mode: autoscale
 pool_name: wtk-ixa-epi
