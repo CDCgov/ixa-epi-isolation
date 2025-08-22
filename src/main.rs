@@ -53,6 +53,7 @@ fn main() {
         symptom_progression::init(context)?;
         policies::init(context)?;
         hospitalizations::init(context);
+        context.write_profiling_data();
 
         Ok(())
     })
