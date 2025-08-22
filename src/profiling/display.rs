@@ -1,8 +1,5 @@
 #[cfg(feature = "profiling")]
-use super::{
-    data::profiling_data, ACCEPTED_INFECTION_LABEL, FORECASTED_INFECTION_LABEL,
-    NAMED_COUNTS_HEADERS, NAMED_SPANS_HEADERS,
-};
+use super::{profiling_data, ProfilingDataContainer, NAMED_COUNTS_HEADERS, NAMED_SPANS_HEADERS};
 #[cfg(feature = "profiling")]
 use humantime::format_duration;
 
@@ -11,7 +8,7 @@ use humantime::format_duration;
 pub fn print_profiling_data() {
     print_named_spans();
     print_named_counts();
-    print_forecast_efficiency();
+    print_computed_statistics();
 }
 
 #[cfg(not(feature = "profiling"))]
@@ -88,27 +85,34 @@ pub fn print_named_spans() {}
 
 /// Prints the forecast efficiency.
 #[cfg(feature = "profiling")]
-pub fn print_forecast_efficiency() {
-    let container = profiling_data();
+pub fn print_computed_statistics() {
+    let mut container = profiling_data();
 
-    if let (Some(accepted), Some(forecasted)) = (
-        container.get_named_count(ACCEPTED_INFECTION_LABEL),
-        container.get_named_count(FORECASTED_INFECTION_LABEL),
-    ) {
-        #[allow(clippy::cast_precision_loss)]
-        let efficiency = (accepted as f64) / (forecasted as f64) * 100.0;
-        println!();
-        println!(
-            "Infection Forecasting Efficiency: {:.2}% ({} accepted of {} forecasted)\n",
-            efficiency,
-            format_with_commas(accepted),
-            format_with_commas(forecasted)
-        );
+    // Compute first to avoid double borrow
+    let stat_count = container.computed_statistics.len();
+    if stat_count == 0 {
+        return;
+    }
+    for idx in 0..stat_count {
+        // Temporarily take the statistic, because we need immutable access to `container`.
+        let mut statistic = container.computed_statistics[idx].take().unwrap();
+        statistic.value = statistic.functions.compute(&container);
+        // Return the statistic
+        container.computed_statistics[idx] = Some(statistic);
+    }
+
+    println!();
+
+    for statistic in &container.computed_statistics {
+        let statistic = statistic.as_ref().unwrap();
+        if statistic.value.is_none() {
+            continue;
+        }
+        statistic.functions.print(statistic.value.unwrap());
     }
 }
-
 #[cfg(not(feature = "profiling"))]
-pub fn print_forecast_efficiency() {}
+pub fn print_computed_statistics() {}
 
 /// Prints a table with aligned columns, using the first row as a header.
 /// The first column is left-aligned; remaining columns are right-aligned.

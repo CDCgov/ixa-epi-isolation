@@ -20,7 +20,7 @@ use ixa::{ContextPeopleExt, ContextRandomExt};
 use parameters::{ContextParametersExt, Params};
 use population_loader::Age;
 
-use profiling::{print_profiling_data, ProfilingContextExt};
+use crate::profiling::{print_profiling_data, ProfilingContextExt};
 
 // You must run this with a parameters file:
 // cargo run -- --config input/input.json

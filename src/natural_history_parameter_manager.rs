@@ -200,7 +200,7 @@ mod test {
                 assert_eq!(msg, "An assignment function for this parameter has already been registered.".to_string());
             }
             Some(ue) => panic!(
-                "Expected an error that an assignment function for this parameter has already been registered.. Instead got {:?}",
+                "Expected an error that an assignment function for this parameter has already been registered. Instead got {:?}",
                 ue.to_string()
             ),
             None => panic!("Expected an error. Instead, function registration passed with no errors."),
