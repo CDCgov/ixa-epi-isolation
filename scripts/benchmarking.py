@@ -1,7 +1,6 @@
 import os
 import time
 
-import matplotlib.pyplot as plt
 import polars as pl
 from abmwrappers import wrappers
 from abmwrappers.experiment_class import Experiment
