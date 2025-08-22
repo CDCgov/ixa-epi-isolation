@@ -38,9 +38,20 @@ define_derived_property!(PresentingWithSymptoms, bool, [Symptoms], |symptom_valu
     }
 });
 
+#[derive(Debug, PartialEq, Copy, Clone, Serialize, Deserialize)]
+pub struct SymptomRecordValue {
+    pub category: SymptomValue,
+    pub symptom_start: f64,
+    pub symptom_end: Option<f64>,
+    pub severe: bool,
+}
+
+define_person_property_with_default!(SymptomRecord, Option<SymptomRecordValue>, None);
+
 /// Stores information about a symptom progression (presymptomatic -> category{1..=4} -> None)
 /// for a person.
 /// Includes an incubation period and the time to symptom improvement distribution.
+#[derive(Debug, PartialEq, Copy, Clone, Serialize, Deserialize)]
 pub struct SymptomData {
     category: SymptomValue,
     // We need to store a singular value as this progression's incubation period rather than a
@@ -54,7 +65,7 @@ pub struct SymptomData {
     time_to_symptom_improvement: RightTruncatedWeibull,
 }
 
-#[derive(Copy, Clone)]
+#[derive(Debug, PartialEq, Copy, Clone, Serialize, Deserialize)]
 /// A Weibull distribution that is right truncated (probability mass of 0 past a given
 /// value).
 struct RightTruncatedWeibull {
@@ -127,7 +138,6 @@ impl SymptomData {
                 ))
             }
         };
-
         // Get out the incubation period parameters
         let incubation_period =
             *parameter_dict
@@ -238,6 +248,9 @@ pub fn init(context: &mut Context) -> Result<(), IxaError> {
     // Subscribe to infection status change events to assign people symptoms
     subscribe_to_becoming_infected(context);
 
+    // Register to symptom changes to record symptom data
+    record_symptom_changes(context);
+
     // Register that asymptomatics have an infectiousness modifier
     context.register_transmission_modifier_fn(
         InfectionStatusValue::Infectious,
@@ -282,6 +295,42 @@ fn subscribe_to_becoming_infected(context: &mut Context) {
                         Some(SymptomValue::Presymptomatic),
                     );
                 }
+            }
+        },
+    );
+}
+
+fn record_symptom_changes(context: &mut Context) {
+    context.subscribe_to_event(
+        |context, event: PersonPropertyChangeEvent<PresentingWithSymptoms>| {
+            if event.current {
+                // If the person is presenting with symptoms, we record the symptom data.
+                let category = context.get_person_property(event.person_id, Symptoms);
+                if let Some(category) = category {
+                    let severe = match category {
+                        SymptomValue::Category1 => true,
+                        SymptomValue::Category2
+                        | SymptomValue::Category3
+                        | SymptomValue::Category4 => false,
+                        SymptomValue::Presymptomatic => {
+                            // Presymptomatic is not severe, but we don't record it in the symptom record
+                            return;
+                        }
+                    };
+                    let record_value = SymptomRecordValue {
+                        category,
+                        symptom_start: context.get_current_time(),
+                        symptom_end: None, // Will be set when they recover
+                        severe,
+                    };
+                    context.set_person_property(event.person_id, SymptomRecord, Some(record_value));
+                }
+            } else if let Some(mut record_value) =
+                context.get_person_property(event.person_id, SymptomRecord)
+            {
+                // If the person is no longer presenting with symptoms, we update the symptom end time.
+                record_value.symptom_end = Some(context.get_current_time());
+                context.set_person_property(event.person_id, SymptomRecord, Some(record_value));
             }
         },
     );
