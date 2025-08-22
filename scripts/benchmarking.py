@@ -8,7 +8,6 @@ from abmwrappers import utils
 from abmwrappers.experiment_class import Experiment
 import json
 
-
 def main():
     # Create the new Experiment and scenarios folder
     experiment = Experiment(
@@ -63,27 +62,16 @@ def read_fn(outputs_dir):
     profiling_file_path = os.path.join(outputs_dir, "profiling_data.json")
     with open(profiling_file_path, "r") as f:
         profiling_data = json.load(f)
-    pop_size = profiling_data["execution_statistics"]["population"]
-    memory = profiling_data["execution_statistics"]["max_memory_usage"]
-    cpu_time = profiling_data["execution_statistics"]["cpu_time"]
-    wall_time = profiling_data["execution_statistics"]["wall_time"]
-    
-    attack_rate = profiling_data["named_counts"][3]["count"]/pop_size
-    prop_prog = profiling_data["named_counts"][0]["count"]
-    forcasted = profiling_data["named_counts"][4]["count"]
-    accepted = profiling_data["named_counts"][1]["count"]
-
     data = {
-        "pop_size": pop_size,
-        "memory": memory,
-        "cpu_time": cpu_time,
-        "wall_time": wall_time,
-        "attack_rate": attack_rate,
-        "property_progressions": prop_prog,
-        "forcasted_infections": forcasted,
-        "accepted_forecasts": accepted,
+        "pop_size": profiling_data["execution_statistics"]["population"],
+        "memory": profiling_data["execution_statistics"]["max_memory_usage"],
+        "cpu_time": profiling_data["execution_statistics"]["cpu_time"],
+        "wall_time": profiling_data["execution_statistics"]["wall_time"],
+        "attack_rate": profiling_data["named_counts"][3]["count"]/profiling_data["execution_statistics"]["population"],
+        "property_progressions": profiling_data["named_counts"][0]["count"],
+        "forcasted_infections": profiling_data["named_counts"][4]["count"],
+        "accepted_forecasts": profiling_data["named_counts"][1]["count"],
     }
-    df = pl.DataFrame([data])
-    return df
+    return(pl.DataFrame([data]))
 
 main()
