@@ -33,63 +33,14 @@ def main():
         subexperiment.run_step(data_read_fn=read_fn, products=["simulations"])
         with open(experiment.griddle_file, "r") as fp:
             raw_griddle = json.load(fp)
-        print(type(raw_griddle))
-        print(raw_griddle["parameters"].keys())
+
         parameter_dict = {}
         for key in raw_griddle["parameters"].keys():
-            print(subexperiment.simulation_bundles[0].baseline_params[
-            subexperiment.scenario_key])
             flattened_dict = utils.flatten_dict(subexperiment.simulation_bundles[0].baseline_params[
             subexperiment.scenario_key])
             parameter_dict[key] = flattened_dict[key]
         parameter_dict["scenario"] = int(scenario.split("=")[-1])
         parameters.append(parameter_dict)
-        # print(griddler.parse(raw_griddle))
-        
-        # for par_set in griddler.parse(raw_griddle)():
-        #     print(par_set)
-
-        # synth_pop = subexperiment.simulation_bundles[0].baseline_params[
-        #     subexperiment.scenario_key
-        # ]["synth_population_file"]
-
-        # infectiousness_scale = subexperiment.simulation_bundles[
-        #     0
-        # ].baseline_params[subexperiment.scenario_key][
-        #     "infectiousness_rate_fn"
-        # ]["EmpiricalFromFile"]["scale"]
-
-        # home_alpha = subexperiment.simulation_bundles[0].baseline_params[
-        #     subexperiment.scenario_key
-        # ]["settings_properties"]["Home"]["alpha"]
-
-        # workplace_alpha = subexperiment.simulation_bundles[0].baseline_params[
-        #     subexperiment.scenario_key
-        # ]["settings_properties"]["Workplace"]["alpha"]
-
-        # school_alpha = subexperiment.simulation_bundles[0].baseline_params[
-        #     subexperiment.scenario_key
-        # ]["settings_properties"]["School"]["alpha"]
-
-        # censustract_alpha = subexperiment.simulation_bundles[
-        #     0
-        # ].baseline_params[subexperiment.scenario_key]["settings_properties"][
-        #     "CensusTract"
-        # ]["alpha"]
-
-        # average_times.append(
-        #     {
-        #         "scenario": int(scenario.split("=")[-1]),
-        #         "average_time": average_time,
-        #         # "pop_size": pop_size,
-        #         # "infectiousness_scale": infectiousness_scale,
-        #         # "home_alpha": home_alpha,
-        #         # "workplace_alpha": workplace_alpha,
-        #         # "school_alpha": school_alpha,
-        #         "censustract_alpha": censustract_alpha,
-        #     }
-        # )
-
         experiment.simulation_bundles.update(
             {scenario: subexperiment.simulation_bundles[0]}
         )
