@@ -1,14 +1,12 @@
 use ixa::{
-    define_data_plugin, define_person_property_with_default, define_rng, trace, Context,
-    ContextPeopleExt, ContextRandomExt, HashMap, PersonId, PersonPropertyChangeEvent,
-    PluginContext,
+    define_data_plugin, define_person_property_with_default, define_rng, trace, Context, ContextPeopleExt, ContextRandomExt, HashMap, IxaError, PersonId, PersonPropertyChangeEvent, PluginContext
 };
 use serde::{Deserialize, Serialize};
 use statrs::distribution::Exp;
 
 use crate::{
-    parameters::ContextParametersExt, population_loader::Age,
-    symptom_progression::PresentingWithSymptoms,
+    parameters::ContextParametersExt, population_loader::Age, settings::{ContextSettingExt, Home, ItineraryModifiers}, symptom_progression::PresentingWithSymptoms
+
 };
 
 define_person_property_with_default!(Hospitalized, bool, false);
@@ -55,8 +53,23 @@ define_data_plugin!(
 );
 
 trait ContextHospitalizationInternalExt:
-    PluginContext + ContextRandomExt + ContextPeopleExt + ContextParametersExt + ContextRandomExt
+    PluginContext + ContextRandomExt + ContextPeopleExt + ContextParametersExt + ContextRandomExt + ContextSettingExt
 {
+    fn modify_hospitalization_status(
+        &mut self,
+        person: PersonId,
+        hospitalization_status: bool,
+    ) -> Result<(), IxaError> {
+        if self.get_person_property(person, Hospitalized) != hospitalization_status {
+            self.set_person_property(person, Hospitalized, hospitalization_status);
+            if hospitalization_status {
+                self.modify_itinerary(person, ItineraryModifiers::RestrictTo { setting: &Home })?;
+            } else {
+                self.remove_modified_itinerary(person)?;
+            }
+        }
+        Ok(())
+    }
     fn plan_hospital_arrival(&mut self, person_id: PersonId) -> Result<(), ixa::IxaError> {
         // get hospital parameters
         // evaluate hospitalization risk
@@ -72,7 +85,7 @@ trait ContextHospitalizationInternalExt:
             self.get_current_time() + duration
         );
         self.add_plan(self.get_current_time() + duration, move |context| {
-            context.set_person_property(person_id, Hospitalized, true);
+            context.modify_hospitalization_status(person_id, true).unwrap();
         });
         Ok(())
     }
@@ -88,7 +101,7 @@ trait ContextHospitalizationInternalExt:
         let exp = Exp::new(1.0 / mean_duration_of_hospitalization).unwrap();
         let duration = self.sample_distr(HospitalizationRng, exp);
         self.add_plan(self.get_current_time() + duration, move |context| {
-            context.set_person_property(person_id, Hospitalized, false);
+            context.modify_hospitalization_status(person_id, false).unwrap();
         });
         Ok(())
     }
