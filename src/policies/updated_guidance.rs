@@ -303,7 +303,7 @@ mod test {
         context.subscribe_to_event::<PersonPropertyChangeEvent<MaskingStatus>>(
             move |context, event| {
                 if event.current {
-                    //assert size of populatin masking equals the size of thep population masking
+                    //assert size of population masking equals the size of the population masking
                     assert_almost_eq!(
                         context
                             .get_person_property(event.person_id, SymptomRecord)

@@ -15,6 +15,7 @@ pub enum Policies {
         // in this implementation this refers to masking
         post_isolation_duration: f64,
         // probability an individual follows the isolation guidance policy
+        // conditional on symptom duration > isolation_delay_period
         policy_adherence: f64,
         // delay from symptom onset to when an individual starts following the isolation guidance policy
         isolation_delay_period: f64,
@@ -30,6 +31,7 @@ pub enum Policies {
         // the delay between an individual's first negative test and the subsequent retest
         delay_to_retest: f64,
         // probability an individual follows the isolation guidance policy
+        // conditional on symptom duration > isolation_delay_period
         policy_adherence: f64,
         // delay from symptom onset to when an individual starts following the isolation guidance policy
         isolation_delay_period: f64,

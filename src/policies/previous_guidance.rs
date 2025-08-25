@@ -497,7 +497,7 @@ mod test {
             context.subscribe_to_event::<PersonPropertyChangeEvent<MaskingStatus>>(
                 move |context, event| {
                     if event.current {
-                        //assert size of populatin masking equals the size of thep population masking
+                        //assert size of population masking equals the size of the population masking
                         assert_almost_eq!(
                             context.get_person_property(event.person_id, IsolationEndTime),
                             context.get_current_time(),
@@ -664,22 +664,26 @@ mod test {
                     .symptom_start
                 <= isolation_delay_period;
 
+            if long_delay_flag {
+                assert_eq!(0, context.get_person_property(p1, NumberOfTests));
+            }
+
             assert!(*policy_ran_flag.borrow() ^ long_delay_flag);
         }
     }
 
     #[allow(clippy::too_many_lines)]
     #[test]
-    fn test_isolation_guidance_event_sequence_test_positive_negative() {
+    fn test_isolation_guidance_event_sequence_test_negative_then_positive() {
         // 1. Create a new person and set test sensitivity = 0.5
         // 2. Keep track of the time of symptom onset and end time
-        //  - Filter indidivuals that have 1 positive test or two negative tests
+        //  - Filter out indidivuals that have 1 positive test or two negative tests
         // 3. Assert that start of isolation is the same as symptom onset + isolation delay
         // 4. Assert that end of isolation is at the max(end of symptoms, end of isolation duration)
         //   and correctly account for symptom severity
         // 5. Assert that start of facemask is end of isolation and occurs for correct symptom severity
         // 6. Assert that end of facemask is end of isolation + post isolation days
-        // 7. Assert that they policy ran or the simulation shutdown
+        // 7. Assert that the policy ran or the simulation shutdown
 
         let overall_policy_duration = 10.0;
         let mild_symptom_isolation_duration = 5.0;
@@ -718,6 +722,8 @@ mod test {
             let mild_policy_ran_flag_clone = Rc::clone(&mild_policy_ran_flag);
             let moderate_policy_ran_flag = Rc::new(RefCell::new(false));
             let moderate_policy_ran_flag_clone = Rc::clone(&moderate_policy_ran_flag);
+            let mild_policy_no_masking_flag = Rc::new(RefCell::new(false));
+            let mild_policy_no_masking_flag_clone = Rc::clone(&mild_policy_no_masking_flag);
             let early_exit_flag = Rc::new(RefCell::new(false));
             let early_exit_flag_clone = Rc::clone(&early_exit_flag);
             let shutdown_flag = Rc::new(RefCell::new(false));
@@ -817,7 +823,7 @@ mod test {
                                         .symptom_start
                                         + overall_policy_duration
                                 {
-                                    *early_exit_flag_clone.borrow_mut() = true;
+                                    *mild_policy_no_masking_flag_clone.borrow_mut() = true;
                                 }
                             }
                         } else {
@@ -839,7 +845,6 @@ mod test {
             context.subscribe_to_event::<PersonPropertyChangeEvent<MaskingStatus>>(
                 move |context, event| {
                     if event.current {
-                        //assert size of populatin masking equals the size of thep population masking
                         assert_almost_eq!(
                             context.get_person_property(event.person_id, IsolationEndTime),
                             context.get_current_time(),
@@ -880,6 +885,7 @@ mod test {
                 *mild_policy_ran_flag.borrow()
                     ^ *moderate_policy_ran_flag.borrow()
                     ^ *early_exit_flag.borrow()
+                    ^ *mild_policy_no_masking_flag.borrow()
                     ^ (*shutdown_flag.borrow() || long_delay_flag),
             );
         }
@@ -887,9 +893,10 @@ mod test {
 
     #[test]
     fn test_isolation_guidance_probability() {
-        // this test checks that the proportion of individuals that start the policy is what we
-        // expect. This proportion is determined by the isolation probability parameter.
-        // Note this requires an isolation delay period of 0.
+        // this test checks that the proportion of individuals that isolation is what we
+        // expect. This proportion is determined by the policy adherence, proportion of asymptomatic,
+        // and proportion of indidividuals whose symptomatic period is shorter than the isolation_delay_period.
+        // The last component is calculated from the simulation.
 
         let overall_policy_duration = 10.0;
         let mild_symptom_isolation_duration = 5.0;
