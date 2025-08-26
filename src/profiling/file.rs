@@ -1,6 +1,8 @@
+use super::computed_statistic::{ComputedStatistic, ComputedValue};
 #[cfg(feature = "profiling")]
 use super::profiling_data;
 use ixa::execution_stats::ExecutionStatistics;
+use ixa::HashMap;
 #[cfg(feature = "profiling")]
 use serde::{Serialize, Serializer};
 use std::path::Path;
@@ -77,6 +79,14 @@ struct ProfilingData {
     execution_statistics: SerializableExecutionStatistics,
     named_counts: Vec<CountRecord>,
     named_spans: Vec<SpanRecord>,
+    computed_statistics: HashMap<&'static str, ComputedStatisticRecord>,
+}
+
+#[cfg(feature = "profiling")]
+#[derive(Serialize)]
+struct ComputedStatisticRecord {
+    description: &'static str,
+    value: ComputedValue,
 }
 
 #[cfg(feature = "profiling")]
@@ -84,7 +94,7 @@ pub fn write_profiling_data_to_file<P: AsRef<Path>>(
     file_path: P,
     execution_statistics: ExecutionStatistics,
 ) -> std::io::Result<()> {
-    let container = profiling_data();
+    let mut container = profiling_data();
     let named_spans_data = container.get_named_spans_table();
     let named_spans_data = named_spans_data
         .into_iter()
@@ -105,11 +115,38 @@ pub fn write_profiling_data_to_file<P: AsRef<Path>>(
         })
         .collect();
 
+    // Compute first to avoid double borrow
+    let stat_count = container.computed_statistics.len();
+    for idx in 0..stat_count {
+        // Temporarily take the statistic, because we need immutable access to `container`.
+        let mut statistic = container.computed_statistics[idx].take().unwrap();
+        statistic.value = statistic.functions.compute(&container);
+        // Return the statistic
+        container.computed_statistics[idx] = Some(statistic);
+    }
+
+    let computed_statistics = container.computed_statistics.iter().filter_map(|stat| {
+        let stat = stat.as_ref().unwrap();
+        if stat.value.is_none() {
+            None
+        } else {
+            Some((
+                stat.label,
+                ComputedStatisticRecord {
+                    description: stat.description,
+                    value: stat.value.unwrap(),
+                },
+            ))
+        }
+    });
+    let computed_statistics = computed_statistics.collect::<HashMap<_, _>>();
+
     let profiling_data = ProfilingData {
         date_time: SystemTime::now(),
         execution_statistics: execution_statistics.into(),
         named_counts: named_counts_data,
         named_spans: named_spans_data,
+        computed_statistics,
     };
 
     let json =
