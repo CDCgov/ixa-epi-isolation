@@ -1,12 +1,16 @@
 use ixa::{
-    define_data_plugin, define_person_property_with_default, define_rng, trace, Context, ContextPeopleExt, ContextRandomExt, HashMap, IxaError, PersonId, PersonPropertyChangeEvent, PluginContext
+    define_data_plugin, define_person_property_with_default, define_rng, trace, Context,
+    ContextPeopleExt, ContextRandomExt, HashMap, IxaError, PersonId, PersonPropertyChangeEvent,
+    PluginContext,
 };
 use serde::{Deserialize, Serialize};
 use statrs::distribution::Exp;
 
 use crate::{
-    parameters::ContextParametersExt, population_loader::Age, settings::{ContextSettingExt, Home, ItineraryModifiers}, symptom_progression::PresentingWithSymptoms
-
+    parameters::ContextParametersExt,
+    population_loader::Age,
+    settings::{ContextSettingExt, Home, ItineraryModifiers},
+    symptom_progression::PresentingWithSymptoms,
 };
 
 define_person_property_with_default!(Hospitalized, bool, false);
@@ -53,7 +57,12 @@ define_data_plugin!(
 );
 
 trait ContextHospitalizationInternalExt:
-    PluginContext + ContextRandomExt + ContextPeopleExt + ContextParametersExt + ContextRandomExt + ContextSettingExt
+    PluginContext
+    + ContextRandomExt
+    + ContextPeopleExt
+    + ContextParametersExt
+    + ContextRandomExt
+    + ContextSettingExt
 {
     fn modify_hospitalization_status(
         &mut self,
@@ -85,7 +94,9 @@ trait ContextHospitalizationInternalExt:
             self.get_current_time() + duration
         );
         self.add_plan(self.get_current_time() + duration, move |context| {
-            context.modify_hospitalization_status(person_id, true).unwrap();
+            context
+                .modify_hospitalization_status(person_id, true)
+                .unwrap();
         });
         Ok(())
     }
@@ -101,7 +112,9 @@ trait ContextHospitalizationInternalExt:
         let exp = Exp::new(1.0 / mean_duration_of_hospitalization).unwrap();
         let duration = self.sample_distr(HospitalizationRng, exp);
         self.add_plan(self.get_current_time() + duration, move |context| {
-            context.modify_hospitalization_status(person_id, false).unwrap();
+            context
+                .modify_hospitalization_status(person_id, false)
+                .unwrap();
         });
         Ok(())
     }

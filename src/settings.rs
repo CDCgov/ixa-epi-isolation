@@ -1,5 +1,6 @@
-use crate::parameters::{
-    ContextParametersExt, CoreSettingsTypes, ItinerarySpecificationType, Params,
+use crate::{
+    interventions::ContextItineraryModifierExt,
+    parameters::{ContextParametersExt, CoreSettingsTypes, ItinerarySpecificationType, Params},
 };
 use ixa::{
     define_data_plugin, define_rng, trace, Context, ContextPeopleExt, ContextRandomExt, IxaError,
@@ -89,7 +90,7 @@ impl<T: SettingCategory> SettingId<T> {
 #[derive(Clone, Debug)]
 pub struct ItineraryEntry {
     pub setting: Box<dyn AnySettingId>,
-    ratio: f64,
+    pub ratio: f64,
 }
 
 impl ItineraryEntry {
@@ -104,6 +105,7 @@ impl ItineraryEntry {
 }
 
 #[allow(dead_code)]
+#[derive(Clone, Debug)]
 pub enum ItineraryModifiers<'a> {
     // Replace itinerary with a new vector of itinerary entries
     ReplaceWith { itinerary: Vec<ItineraryEntry> },
@@ -386,7 +388,9 @@ define_data_plugin!(
     SettingDataContainer::default()
 );
 
-trait ContextSettingInternalExt: PluginContext + ContextRandomExt {
+trait ContextSettingInternalExt:
+    PluginContext + ContextRandomExt + ContextItineraryModifierExt
+{
     /// Takes an itinerary and adds makes it the modified itinerary of `person id`
     /// This modified itinerary is used as the person's itinerary instead of default itinerary
     /// for as long as modified itinerary exists in the container.
