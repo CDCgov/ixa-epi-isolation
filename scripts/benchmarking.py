@@ -1,12 +1,12 @@
+import json
 import os
 import time
 
 import griddler
 import polars as pl
-from abmwrappers import wrappers
-from abmwrappers import utils
+from abmwrappers import utils, wrappers
 from abmwrappers.experiment_class import Experiment
-import json
+
 
 def main():
     # Create the new Experiment and scenarios folder
@@ -22,6 +22,7 @@ def main():
     scenarios_dir = os.path.join(experiment.directory, "scenarios")
     parameters = []
     for scenario in os.listdir(scenarios_dir):
+        print(f"Running scenario: {scenario}")
         config_path = os.path.join(
             scenarios_dir, scenario, "input", "config.yaml"
         )
@@ -35,8 +36,11 @@ def main():
 
         parameter_dict = {}
         for key in raw_griddle["parameters"].keys():
-            flattened_dict = utils.flatten_dict(subexperiment.simulation_bundles[0].baseline_params[
-            subexperiment.scenario_key])
+            flattened_dict = utils.flatten_dict(
+                subexperiment.simulation_bundles[0].baseline_params[
+                    subexperiment.scenario_key
+                ]
+            )
             parameter_dict[key] = flattened_dict[key]
         parameter_dict["scenario"] = int(scenario.split("=")[-1])
         parameters.append(parameter_dict)
@@ -67,11 +71,14 @@ def read_fn(outputs_dir):
         "memory": profiling_data["execution_statistics"]["max_memory_usage"],
         "cpu_time": profiling_data["execution_statistics"]["cpu_time"],
         "wall_time": profiling_data["execution_statistics"]["wall_time"],
-        "attack_rate": profiling_data["named_counts"][3]["count"]/profiling_data["execution_statistics"]["population"],
+        "attack_rate": profiling_data["named_counts"][3]["count"]
+        / profiling_data["execution_statistics"]["population"],
         "property_progressions": profiling_data["named_counts"][0]["count"],
         "forcasted_infections": profiling_data["named_counts"][4]["count"],
         "accepted_forecasts": profiling_data["named_counts"][1]["count"],
+        "load_synth_pop": profiling_data["named_spans"][0]["duration"],
     }
-    return(pl.DataFrame([data]))
+    return pl.DataFrame([data])
+
 
 main()
