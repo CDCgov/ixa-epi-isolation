@@ -166,7 +166,13 @@ pub fn init(context: &mut Context) {
         context
             .store_and_subscribe_itinerary_modifier_values(
                 Hospitalized,
-                &[(true, ItineraryModifiers::RestrictTo { setting: &Home })],
+                &[(
+                    true,
+                    ItineraryModifiers::RestrictTo {
+                        setting: &Home,
+                        ranking: 1,
+                    },
+                )],
             )
             .unwrap();
         context.set_age_group_mapping();

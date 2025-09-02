@@ -117,6 +117,7 @@ pub fn init(context: &mut Context) -> Result<(), IxaError> {
                 true,
                 ItineraryModifiers::Exclude {
                     setting: &CensusTract,
+                    ranking: 2,
                 },
             )],
         )

@@ -144,30 +144,9 @@ pub trait ContextItineraryModifierExt: PluginContext {
 
         Ok(())
     }
-
-    /// Get the active itinerary for a person
-    /// based on their set of person properties based on all registered modifiers. Queries all registered
-    /// modifier functions and evaluates them based on the person's properties. Multiplies them
-    /// together to get the total relative transmission modifier for the person.
-    /// Returns 1.0 if no modifiers are registered for the person's infection status.
-    #[allow(dead_code)]
-    fn active_itinerary_modifier(&mut self, person_id: PersonId) -> Option<ItineraryModifiers<'_>>;
 }
 
-impl ContextItineraryModifierExt for Context {
-    fn active_itinerary_modifier(&mut self, person_id: PersonId) -> Option<ItineraryModifiers<'_>> {
-        let itinerary_modifier_plugin = self.get_data(ItineraryModifierPlugin);
-        let itinerary_modifier_map = &itinerary_modifier_plugin.itinerary_modifier_map;
-        // Calculate the relative modifier for each registered function and multiply them
-        // together to get the total relative transmission modifier for the person
-        let mut final_itinerary_modifier: ItineraryModifiers =
-            ItineraryModifiers::ReplaceWith { itinerary: vec![] };
-        for value in itinerary_modifier_map {
-            final_itinerary_modifier = value.1.get_itinerary(self, person_id).unwrap().clone();
-        }
-        Some(final_itinerary_modifier)
-    }
-}
+impl ContextItineraryModifierExt for Context {}
 
 #[cfg(test)]
 mod test {
@@ -264,9 +243,13 @@ mod test {
     #[test]
     fn test_register_modifier_values() {
         let mut context = setup();
-        let full_itinerary = ItineraryModifiers::RestrictTo { setting: &Home };
+        let full_itinerary = ItineraryModifiers::RestrictTo {
+            setting: &Home,
+            ranking: 1,
+        };
         let partial_itinerary = ItineraryModifiers::Exclude {
             setting: &CensusTract,
+            ranking: 1,
         };
         context
             .store_and_subscribe_itinerary_modifier_values(

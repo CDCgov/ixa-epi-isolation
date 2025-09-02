@@ -108,11 +108,20 @@ impl ItineraryEntry {
 #[derive(Clone, Debug)]
 pub enum ItineraryModifiers<'a> {
     // Replace itinerary with a new vector of itinerary entries
-    ReplaceWith { itinerary: Vec<ItineraryEntry> },
+    ReplaceWith {
+        itinerary: Vec<ItineraryEntry>,
+        ranking: usize,
+    },
     // Reduce the current itinerary to a setting type (e.g., Home)
-    RestrictTo { setting: &'a dyn SettingCategory },
+    RestrictTo {
+        setting: &'a dyn SettingCategory,
+        ranking: usize,
+    },
     // Exclude setting types from current itinerary (e.g., Workplace)
-    Exclude { setting: &'a dyn SettingCategory },
+    Exclude {
+        setting: &'a dyn SettingCategory,
+        ranking: usize,
+    },
 }
 
 pub fn append_itinerary_entry(
@@ -168,7 +177,7 @@ struct SettingDataContainer {
     inactive_members: HashMap<(TypeId, usize), HashSet<PersonId>>,
     all_members: HashMap<(TypeId, usize), HashSet<PersonId>>,
     itineraries: HashMap<PersonId, Vec<ItineraryEntry>>,
-    modified_itineraries: HashMap<PersonId, Vec<Vec<ItineraryEntry>>>,
+    modified_itineraries: HashMap<PersonId, HashMap<usize, Vec<ItineraryEntry>>>,
 }
 
 #[derive(Clone, Copy)]
@@ -217,9 +226,18 @@ impl SettingDataContainer {
         self.itineraries.get(&person_id)
     }
     fn get_dominate_modified_itinerary(&self, person_id: PersonId) -> Option<&Vec<ItineraryEntry>> {
-        self.modified_itineraries
-            .get(&person_id)
-            .and_then(|v: &Vec<Vec<ItineraryEntry>>| v.last())
+        self.modified_itineraries.get(&person_id).and_then(
+            |v: &HashMap<usize, Vec<ItineraryEntry>>| {
+                v.iter().min_by_key(|(k, _)| *k).map(|(_, entries)| entries)
+            },
+        )
+    }
+    fn get_dominate_modified_itinerary_ranking(&self, person_id: PersonId) -> Option<usize> {
+        self.modified_itineraries.get(&person_id).and_then(
+            |v: &HashMap<usize, Vec<ItineraryEntry>>| {
+                v.iter().min_by_key(|(k, _)| *k).map(|(k, _)| *k)
+            },
+        )
     }
     fn get_itinerary(
         &self,
@@ -401,6 +419,7 @@ trait ContextSettingInternalExt:
         person_id: PersonId,
         mut itinerary: Vec<ItineraryEntry>,
         settings_change: bool,
+        ranking: usize,
     ) -> Result<(), IxaError> {
         // Normalize itinerary ratios
         self.validate_itinerary(&itinerary)?;
@@ -413,12 +432,14 @@ trait ContextSettingInternalExt:
         }
         let container = self.get_data_mut(SettingDataPlugin);
 
-        // // If there's a modified itinerary present, replace with this
-        // if container.modified_itineraries.contains_key(&person_id) {
-        //     return Err(IxaError::from(
-        //          "Can't modify itinerary because a modified itinerary is already present. Remove and add new modified itinerary."
-        //      ));
-        // }
+        // Check if a modified itinerary with the same ranking already exists
+        if let Some(modified_itineraries) = container.modified_itineraries.get(&person_id) {
+            if modified_itineraries.contains_key(&ranking) {
+                return Err(IxaError::from(
+                    format!("Can't add modified itinerary: ranking {ranking} already exists for person {person_id}. Remove it before adding a new one.")
+                ));
+            }
+        }
 
         // Remove people from default itinerary, if there's one
         match container.itineraries.get(&person_id) {
@@ -438,7 +459,7 @@ trait ContextSettingInternalExt:
             .modified_itineraries
             .entry(person_id)
             .or_default()
-            .push(itinerary.clone());
+            .insert(ranking, itinerary.clone());
         let dominant_itinerary = container
             .get_dominate_modified_itinerary(person_id)
             .ok_or_else(|| IxaError::from("Can't find dominate modified itinerary"))?
@@ -452,6 +473,7 @@ trait ContextSettingInternalExt:
         &mut self,
         person_id: PersonId,
         setting: &dyn SettingCategory,
+        ranking: usize,
     ) -> Result<(), IxaError> {
         let container = self.get_data_mut(SettingDataPlugin);
         match container.itineraries.get(&person_id) {
@@ -471,7 +493,7 @@ trait ContextSettingInternalExt:
                     ));
                 }
 
-                self.add_modified_itinerary(person_id, modified_itinerary, false)?;
+                self.add_modified_itinerary(person_id, modified_itinerary, false, ranking)?;
                 Ok(())
             }
         }
@@ -482,6 +504,7 @@ trait ContextSettingInternalExt:
         &mut self,
         person_id: PersonId,
         setting: &dyn SettingCategory,
+        ranking: usize,
     ) -> Result<(), IxaError> {
         let container = self.get_data_mut(SettingDataPlugin);
         match container.itineraries.get(&person_id) {
@@ -501,7 +524,7 @@ trait ContextSettingInternalExt:
                     ));
                 }
 
-                self.add_modified_itinerary(person_id, modified_itinerary, false)?;
+                self.add_modified_itinerary(person_id, modified_itinerary, false, ranking)?;
                 Ok(())
             }
         }
@@ -630,12 +653,15 @@ pub trait ContextSettingExt:
 
         if let Some(previous_mod_itinerary) = container.get_dominate_modified_itinerary(person_id) {
             container.deactivate_itinerary(person_id, previous_mod_itinerary.clone());
+
+            let previous_ranking = container
+                .get_dominate_modified_itinerary_ranking(person_id)
+                .unwrap();
             // Remove only the last (dominant) modified itinerary for this person
-            if let Some(modified_vec) = container.modified_itineraries.get_mut(&person_id) {
-                modified_vec.pop();
-                if modified_vec.is_empty() {
-                    container.modified_itineraries.remove(&person_id);
-                }
+            let modified_map = container.modified_itineraries.get_mut(&person_id).unwrap();
+            modified_map.remove(&previous_ranking);
+            if modified_map.is_empty() {
+                container.modified_itineraries.remove(&person_id);
             }
         }
 
@@ -657,7 +683,7 @@ pub trait ContextSettingExt:
     ) -> Result<(), IxaError> {
         let _span = open_span("modify_itinerary");
         match itinerary_modifier {
-            ItineraryModifiers::ReplaceWith { itinerary } => {
+            ItineraryModifiers::ReplaceWith { itinerary, ranking } => {
                 trace!("ItineraryModifier::Replace person {person_id} --  {itinerary:?}");
 
                 // The model currtently assumes that people cannot change the settings of their itinerary, only the ratios of those settings.
@@ -668,21 +694,21 @@ pub trait ContextSettingExt:
                         .unwrap(),
                     &itinerary
                 ));
-                self.add_modified_itinerary(person_id, itinerary, true)
+                self.add_modified_itinerary(person_id, itinerary, true, ranking)
             }
-            ItineraryModifiers::RestrictTo { setting } => {
+            ItineraryModifiers::RestrictTo { setting, ranking } => {
                 trace!(
                     "ItineraryModifier::RestrictTo person {person_id} -- {:?}",
                     setting.get_type_id()
                 );
-                self.limit_itinerary_by_setting_category(person_id, setting)
+                self.limit_itinerary_by_setting_category(person_id, setting, ranking)
             }
-            ItineraryModifiers::Exclude { setting } => {
+            ItineraryModifiers::Exclude { setting, ranking } => {
                 trace!(
                     "ItineraryModifier::Exclude person {person_id}-- {:?}",
                     setting.get_type_id()
                 );
-                self.exclude_setting_from_itinerary(person_id, setting)
+                self.exclude_setting_from_itinerary(person_id, setting, ranking)
             }
         }
     }
@@ -845,7 +871,10 @@ pub trait ContextSettingExt:
         }
     }
     #[allow(dead_code)]
-    fn get_modified_itinerary(&self, person_id: PersonId) -> Option<&Vec<Vec<ItineraryEntry>>> {
+    fn get_modified_itinerary(
+        &self,
+        person_id: PersonId,
+    ) -> Option<&HashMap<usize, Vec<ItineraryEntry>>> {
         self.get_data(SettingDataPlugin)
             .modified_itineraries
             .get(&person_id)
@@ -1278,7 +1307,7 @@ mod test {
         ];
         context.add_itinerary(person, default_itinerary).unwrap();
         context
-            .add_modified_itinerary(person, modified_itinerary, false)
+            .add_modified_itinerary(person, modified_itinerary, false, 1)
             .unwrap();
 
         let default = context
@@ -1360,6 +1389,7 @@ mod test {
             person,
             ItineraryModifiers::ReplaceWith {
                 itinerary: isolation_itinerary,
+                ranking: 1,
             },
         );
 
@@ -1438,6 +1468,7 @@ mod test {
             person_0.unwrap(),
             ItineraryModifiers::ReplaceWith {
                 itinerary: isolation_itinerary,
+                ranking: 1,
             },
         );
 
@@ -1536,7 +1567,13 @@ mod test {
         println!("WORK MEMBERS (limit default): {w_members:?}");
 
         // Reduce itinerary to only Home
-        let _ = context.modify_itinerary(person, ItineraryModifiers::RestrictTo { setting: &Home });
+        let _ = context.modify_itinerary(
+            person,
+            ItineraryModifiers::RestrictTo {
+                setting: &Home,
+                ranking: 1,
+            },
+        );
 
         // Check membership
         let h_members = context
@@ -1611,6 +1648,7 @@ mod test {
             person,
             ItineraryModifiers::Exclude {
                 setting: &Workplace,
+                ranking: 1,
             },
         );
 
@@ -2201,6 +2239,7 @@ mod test {
             person,
             ItineraryModifiers::ReplaceWith {
                 itinerary: isolation_itinerary,
+                ranking: 1,
             },
         );
 
@@ -2218,6 +2257,7 @@ mod test {
             person,
             ItineraryModifiers::ReplaceWith {
                 itinerary: work_from_home_itinerary,
+                ranking: 2,
             },
         );
 
@@ -2228,7 +2268,7 @@ mod test {
             .get_setting_members(&SettingId::new(Workplace, 0))
             .unwrap();
         assert_eq!(members.len(), 1);
-        assert_eq!(w_members.len(), 1);
+        assert_eq!(w_members.len(), 0);
         assert_eq!(context.get_modified_itinerary(person).unwrap().len(), 2);
     }
 }
