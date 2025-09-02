@@ -1,21 +1,25 @@
 use ixa::{
     define_data_plugin, define_person_property_with_default, define_rng, trace, Context,
-    ContextPeopleExt, ContextRandomExt, HashMap, IxaError, PersonId, PersonPropertyChangeEvent,
+    ContextPeopleExt, ContextRandomExt, HashMap, PersonId, PersonPropertyChangeEvent,
     PluginContext,
 };
 use serde::{Deserialize, Serialize};
 use statrs::distribution::Exp;
 
 use crate::{
-    parameters::ContextParametersExt,
+    define_setting_category,
+    interventions::ContextItineraryModifierExt,
+    parameters::{ContextParametersExt, ItinerarySpecificationType},
     population_loader::Age,
-    settings::{ContextSettingExt, Home, ItineraryModifiers},
+    settings::{ContextSettingExt, Home, ItineraryModifiers, SettingProperties},
     symptom_progression::PresentingWithSymptoms,
 };
 
 define_person_property_with_default!(Hospitalized, bool, false);
 
 define_rng!(HospitalizationRng);
+
+define_setting_category!(Hospital);
 
 #[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq)]
 pub struct HospitalAgeGroups {
@@ -64,21 +68,6 @@ trait ContextHospitalizationInternalExt:
     + ContextRandomExt
     + ContextSettingExt
 {
-    fn modify_hospitalization_status(
-        &mut self,
-        person: PersonId,
-        hospitalization_status: bool,
-    ) -> Result<(), IxaError> {
-        if self.get_person_property(person, Hospitalized) != hospitalization_status {
-            self.set_person_property(person, Hospitalized, hospitalization_status);
-            if hospitalization_status {
-                self.modify_itinerary(person, ItineraryModifiers::RestrictTo { setting: &Home })?;
-            } else {
-                self.remove_modified_itinerary(person)?;
-            }
-        }
-        Ok(())
-    }
     fn plan_hospital_arrival(&mut self, person_id: PersonId) -> Result<(), ixa::IxaError> {
         // get hospital parameters
         // evaluate hospitalization risk
@@ -94,9 +83,7 @@ trait ContextHospitalizationInternalExt:
             self.get_current_time() + duration
         );
         self.add_plan(self.get_current_time() + duration, move |context| {
-            context
-                .modify_hospitalization_status(person_id, true)
-                .unwrap();
+            context.set_person_property(person_id, Hospitalized, true);
         });
         Ok(())
     }
@@ -112,9 +99,7 @@ trait ContextHospitalizationInternalExt:
         let exp = Exp::new(1.0 / mean_duration_of_hospitalization).unwrap();
         let duration = self.sample_distr(HospitalizationRng, exp);
         self.add_plan(self.get_current_time() + duration, move |context| {
-            context
-                .modify_hospitalization_status(person_id, false)
-                .unwrap();
+            context.set_person_property(person_id, Hospitalized, false);
         });
         Ok(())
     }
@@ -167,6 +152,23 @@ pub fn init(context: &mut Context) {
         .iter()
         .any(|grp| grp.probability > 0.0);
     if initialization_check {
+        context
+            .register_setting_category(
+                &Hospital,
+                SettingProperties {
+                    alpha: 0.0,
+                    itinerary_specification: Some(ItinerarySpecificationType::Constant {
+                        ratio: 1.0,
+                    }),
+                },
+            )
+            .unwrap();
+        context
+            .store_and_subscribe_itinerary_modifier_values(
+                Hospitalized,
+                &[(true, ItineraryModifiers::RestrictTo { setting: &Home })],
+            )
+            .unwrap();
         context.set_age_group_mapping();
         context.setup_hospitalization_event_sequence();
     } else {

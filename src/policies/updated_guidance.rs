@@ -5,10 +5,10 @@ use ixa::{
 
 use crate::{
     infectiousness_manager::InfectionStatusValue,
-    interventions::ContextTransmissionModifierExt,
+    interventions::{ContextItineraryModifierExt, ContextTransmissionModifierExt},
     parameters::{ContextParametersExt, Params},
     policies::Policies,
-    settings::{ContextSettingExt, Home, ItineraryModifiers},
+    settings::{CensusTract, ContextSettingExt, ItineraryModifiers},
     symptom_progression::PresentingWithSymptoms,
 };
 
@@ -27,22 +27,6 @@ struct InterventionPolicyParameters {
 trait ContextIsolationGuidanceInternalExt:
     PluginContext + ContextRandomExt + ContextPeopleExt + ContextSettingExt
 {
-    fn modify_isolation_status(
-        &mut self,
-        person: PersonId,
-        isolation_status: bool,
-    ) -> Result<(), IxaError> {
-        if self.get_person_property(person, IsolatingStatus) != isolation_status {
-            self.set_person_property(person, IsolatingStatus, isolation_status);
-            if isolation_status {
-                self.modify_itinerary(person, ItineraryModifiers::RestrictTo { setting: &Home })?;
-            } else {
-                self.remove_modified_itinerary(person)?;
-            }
-        }
-        Ok(())
-    }
-
     fn make_isolation_plan(
         &mut self,
         person_id: PersonId,
@@ -56,7 +40,7 @@ trait ContextIsolationGuidanceInternalExt:
                 self.get_current_time() + intervention_policy_parameters.isolation_delay_period,
                 move |context| {
                     if context.get_person_property(person_id, PresentingWithSymptoms) {
-                        context.modify_isolation_status(person_id, true).unwrap();
+                        context.set_person_property(person_id, IsolatingStatus, true);
                         trace!("Person {person_id} is now isolating");
                     }
                 },
@@ -70,7 +54,7 @@ trait ContextIsolationGuidanceInternalExt:
         intervention_policy_parameters: InterventionPolicyParameters,
     ) {
         if self.get_person_property(person_id, IsolatingStatus) {
-            self.modify_isolation_status(person_id, false).unwrap();
+            self.set_person_property(person_id, IsolatingStatus, false);
             self.set_person_property(person_id, MaskingStatus, true);
             trace!("Person {person_id} is now masking and no longer isolating");
             self.add_plan(
@@ -125,6 +109,18 @@ pub fn init(context: &mut Context) -> Result<(), IxaError> {
                 .to_string(),
         ));
     }
+
+    context
+        .store_and_subscribe_itinerary_modifier_values(
+            IsolatingStatus,
+            &[(
+                true,
+                ItineraryModifiers::Exclude {
+                    setting: &CensusTract,
+                },
+            )],
+        )
+        .unwrap();
 
     match guidance_policy {
         Some(Policies::UpdatedIsolationGuidance {

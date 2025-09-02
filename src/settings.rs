@@ -612,6 +612,7 @@ pub trait ContextSettingExt:
         Ok(())
     }
 
+    #[allow(dead_code)]
     fn remove_modified_itinerary(&mut self, person_id: PersonId) -> Result<(), IxaError> {
         let _span = open_span("remove_modified_itinerary");
 

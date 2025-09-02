@@ -38,6 +38,7 @@ where
     P: PersonProperty + std::fmt::Debug + 'static,
     P::Value: std::hash::Hash + Eq,
 {
+    #[allow(dead_code)]
     fn get_itinerary(
         &self,
         context: &Context,
