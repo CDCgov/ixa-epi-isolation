@@ -606,6 +606,26 @@ fn identical_settings(
     set_0 == set_1
 }
 
+#[allow(dead_code)]
+fn equivalent_itineraries(
+    itinerary_0: &Vec<ItineraryEntry>,
+    itinerary_1: &Vec<ItineraryEntry>,
+) -> bool {
+    if !identical_settings(itinerary_0, itinerary_1) {
+        return false;
+    }
+    for entry_zero in itinerary_0 {
+        for entry_one in itinerary_1 {
+            if entry_zero.setting.get_tuple_id() == entry_one.setting.get_tuple_id()
+                && (entry_zero.ratio - entry_one.ratio).abs() > 0.01
+            {
+                return false;
+            }
+        }
+    }
+    true
+}
+
 #[allow(private_bounds)]
 pub trait ContextSettingExt:
     PluginContext + ContextSettingInternalExt + ContextRandomExt + ContextPeopleExt
@@ -673,6 +693,56 @@ pub trait ContextSettingExt:
             ));
         }
 
+        Ok(())
+    }
+
+    #[allow(dead_code)]
+    fn remove_modified_itinerary_entry(
+        &mut self,
+        person_id: PersonId,
+        itinerary_modifier: ItineraryModifiers,
+    ) -> Result<(), IxaError> {
+        let _span = open_span("remove_modified_itinerary");
+
+        let container = self.get_data_mut(SettingDataPlugin);
+        let ranking = match itinerary_modifier {
+            ItineraryModifiers::ReplaceWith { ranking, .. }
+            | ItineraryModifiers::RestrictTo { ranking, .. }
+            | ItineraryModifiers::Exclude { ranking, .. } => ranking,
+        };
+        let previous_dominate_itinerary_ranking = container
+            .get_dominate_modified_itinerary_ranking(person_id)
+            .ok_or_else(|| IxaError::from("Can't find dominate modified itinerary"))?;
+        if ranking == previous_dominate_itinerary_ranking {
+            if let Some(previous_mod_itinerary) =
+                container.get_dominate_modified_itinerary(person_id)
+            {
+                container.deactivate_itinerary(person_id, previous_mod_itinerary.clone());
+            }
+        }
+        if let Some(modifier_map) = container.modified_itineraries.get_mut(&person_id) {
+            if modifier_map.remove(&ranking).is_none() {
+                return Err(IxaError::from(format!(
+                    "Can't find modified itinerary with ranking {ranking} for person {person_id}."
+                )));
+            }
+            if modifier_map.is_empty() {
+                container.modified_itineraries.remove(&person_id);
+                if let Some(default_itinerary) = container.itineraries.get(&person_id) {
+                    container.activate_itinerary(person_id, &default_itinerary.clone())?;
+                } else {
+                    return Err(IxaError::from(
+                        "Can't remove modified itinerary if there isn't a default present",
+                    ));
+                }
+            } else {
+                let new_dominant_itinerary = container
+                    .get_dominate_modified_itinerary(person_id)
+                    .ok_or_else(|| IxaError::from("Can't find dominate modified itinerary"))?
+                    .clone();
+                container.activate_itinerary(person_id, &new_dominant_itinerary)?;
+            }
+        }
         Ok(())
     }
 
@@ -918,7 +988,9 @@ pub fn init(context: &mut Context) {
 mod test {
     use super::*;
     use crate::{
+        hospitalizations::Hospitalized,
         parameters::{GlobalParams, ItinerarySpecificationType},
+        policies::previous_guidance::IsolatingStatus,
         settings::ContextSettingExt,
     };
     use ixa::{define_person_property, ContextGlobalPropertiesExt, ContextPeopleExt};
@@ -2270,5 +2342,108 @@ mod test {
         assert_eq!(members.len(), 1);
         assert_eq!(w_members.len(), 0);
         assert_eq!(context.get_modified_itinerary(person).unwrap().len(), 2);
+    }
+
+    #[test]
+    fn test_itinerary_modifier_ranking_person_properties() {
+        let mut context = Context::new();
+        register_default_settings(&mut context);
+
+        let person = context.add_person(()).unwrap();
+        let itinerary = vec![
+            ItineraryEntry::new(SettingId::new(Home, 0), 1.0),
+            ItineraryEntry::new(SettingId::new(Workplace, 0), 1.0),
+            ItineraryEntry::new(SettingId::new(CensusTract, 0), 1.0),
+        ];
+        let _ = context.add_itinerary(person, itinerary);
+        context
+            .store_and_subscribe_itinerary_modifier_values(
+                IsolatingStatus,
+                &[(
+                    true,
+                    ItineraryModifiers::Exclude {
+                        setting: &CensusTract,
+                        ranking: 2,
+                    },
+                )],
+            )
+            .unwrap();
+        context
+            .store_and_subscribe_itinerary_modifier_values(
+                Hospitalized,
+                &[(
+                    true,
+                    ItineraryModifiers::RestrictTo {
+                        setting: &Home,
+                        ranking: 1,
+                    },
+                )],
+            )
+            .unwrap();
+        context.add_plan(0.01, move |ctx| {
+            ctx.set_person_property(person, IsolatingStatus, true);
+        });
+
+        context.add_plan(0.1, move |ctx| {
+            let isolating_itinerary = vec![
+                ItineraryEntry::new(SettingId::new(Home, 0), 0.5),
+                ItineraryEntry::new(SettingId::new(CensusTract, 0), 0.0),
+                ItineraryEntry::new(SettingId::new(Workplace, 0), 0.5),
+            ];
+            assert!(equivalent_itineraries(
+                ctx.get_current_itinerary(person).unwrap(),
+                &isolating_itinerary
+            ));
+        });
+
+        context.add_plan(1.0, move |ctx| {
+            ctx.set_person_property(person, Hospitalized, true);
+        });
+
+        context.add_plan(1.1, move |ctx| {
+            let hospitalized_itinerary = vec![
+                ItineraryEntry::new(SettingId::new(Home, 0), 1.0),
+                ItineraryEntry::new(SettingId::new(CensusTract, 0), 0.0),
+                ItineraryEntry::new(SettingId::new(Workplace, 0), 0.0),
+            ];
+            assert!(equivalent_itineraries(
+                ctx.get_current_itinerary(person).unwrap(),
+                &hospitalized_itinerary
+            ));
+        });
+
+        context.add_plan(2.0, move |ctx| {
+            ctx.set_person_property(person, Hospitalized, false);
+        });
+        context.add_plan(2.1, move |ctx| {
+            let isolating_itinerary = vec![
+                ItineraryEntry::new(SettingId::new(Home, 0), 0.5),
+                ItineraryEntry::new(SettingId::new(CensusTract, 0), 0.0),
+                ItineraryEntry::new(SettingId::new(Workplace, 0), 0.5),
+            ];
+            println!(
+                "Modified Itinerary (IsolatingStatus = true): {:?}",
+                ctx.get_modified_itinerary(person).unwrap()
+            );
+            println!(
+                "Current Itinerary (IsolatingStatus = true): {:?}",
+                ctx.get_current_itinerary(person).unwrap()
+            );
+            println!(
+                "Expected Itinerary (IsolatingStatus = true): {:?}",
+                isolating_itinerary
+            );
+            assert!(equivalent_itineraries(
+                ctx.get_current_itinerary(person).unwrap(),
+                &isolating_itinerary
+            ));
+        });
+
+        context.execute();
+
+        println!(
+            "Modified Itinerary (IsolatingStatus = true): {:?}",
+            context.get_modified_itinerary(person).unwrap()
+        );
     }
 }

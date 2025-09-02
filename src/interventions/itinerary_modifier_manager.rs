@@ -106,6 +106,11 @@ pub trait ContextItineraryModifierExt: PluginContext {
                     .modify_itinerary(event.person_id, itinerary_modifiers.clone())
                     .unwrap();
             }
+            if let Some(itinerary_modifiers) = modifier_map.get(&event.previous) {
+                context
+                    .remove_modified_itinerary_entry(event.person_id, itinerary_modifiers.clone())
+                    .unwrap();
+            }
         });
     }
 
