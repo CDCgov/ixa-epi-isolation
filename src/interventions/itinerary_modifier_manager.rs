@@ -33,12 +33,12 @@ type PersonPropertyModifier<'a, P> = (
     HashMap<<P as PersonProperty>::Value, ItineraryModifiers<'static>>,
 );
 
+#[allow(dead_code)]
 impl<P> ItineraryModifier for PersonPropertyModifier<'_, P>
 where
     P: PersonProperty + std::fmt::Debug + 'static,
     P::Value: std::hash::Hash + Eq,
 {
-    #[allow(dead_code)]
     fn get_itinerary(
         &self,
         context: &Context,
