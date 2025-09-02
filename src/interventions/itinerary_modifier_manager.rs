@@ -11,6 +11,7 @@ use crate::settings::{ContextSettingExt, ItineraryModifiers};
 // We require `Debug` for easy logging of the trait so the user can see what is happening.
 pub trait ItineraryModifier: std::fmt::Debug {
     /// Return the itinerary of a person based on their properties and the current context.
+    #[allow(dead_code)]
     fn get_itinerary(
         &self,
         context: &Context,
