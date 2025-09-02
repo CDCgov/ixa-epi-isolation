@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::policies::{validate_guidance_policy, Policies};
 use crate::{hospitalizations::HospitalAgeGroups, settings::SettingProperties};
+use crate::reports::ReportType;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum RateFnType {
@@ -77,16 +78,12 @@ pub struct Params {
     pub proportion_asymptomatic: f64,
     /// Asymptomatic individuals are less infectious than symptomatic individuals
     pub relative_infectiousness_asymptomatics: f64,
-    /// The period at which to report tabulated values
-    pub report_period: f64,
     /// Setting properties by setting type
     pub settings_properties: HashMap<CoreSettingsTypes, SettingProperties>,
     /// The path to the synthetic population file loaded in `population_loader`
     pub synth_population_file: PathBuf,
-    /// The path to the transmission report file
-    pub transmission_report_name: Option<String>,
-    /// The path to the person property report file
-    pub person_property_report_name: Option<String>,
+    /// Vector of report names and period, if applicable
+    pub reports: Vec<ReportType>,
     /// Facemask parameters
     /// The reduction in transmission associated with wearing a facemask.
     pub facemask_parameters: Option<FacemaskParameters>,
@@ -119,12 +116,9 @@ impl Default for Params {
             proportion_asymptomatic: 0.0,
             // Asymptomatics, if included, should act as symptomatics unless otherwise specified
             relative_infectiousness_asymptomatics: 1.0,
-            // If reports are called for some reason and not specified, 0.0 could lead to large memory errors
-            report_period: 1.0,
+            reports: Vec::new(),
             settings_properties: HashMap::new(),
             synth_population_file: PathBuf::new(),
-            transmission_report_name: None,
-            person_property_report_name: None,
             facemask_parameters: None,
             hospitalization_parameters: HospitalizationParameters {
                 mean_delay_to_hospitalization: 0.0,
@@ -167,11 +161,6 @@ fn validate_inputs(parameters: &Params) -> Result<(), IxaError> {
         ));
     }
 
-    if parameters.report_period < 0.0 {
-        return Err(IxaError::IxaError(
-            "The report writing period must be non-negative.".to_string(),
-        ));
-    }
     // Check the infectiousness rate function
     match parameters.infectiousness_rate_fn {
         RateFnType::Constant { rate, duration } => {

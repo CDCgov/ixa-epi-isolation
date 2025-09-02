@@ -1,10 +1,9 @@
 use crate::profiling::open_span;
 use crate::{
     infectiousness_manager::{InfectionData, InfectionDataValue},
-    parameters::ContextParametersExt,
 };
 use ixa::{
-    define_report, info, report::ContextReportExt, Context, IxaError, PersonId,
+    define_report, report::ContextReportExt, Context, IxaError, PersonId,
     PersonPropertyChangeEvent,
 };
 use serde::{Deserialize, Serialize};
@@ -39,7 +38,7 @@ fn record_transmission_event(
     }
 }
 
-fn create_transmission_report(context: &mut Context, file_name: &str) -> Result<(), IxaError> {
+pub fn init(context: &mut Context, file_name: &str) -> Result<(), IxaError> {
     context.add_report::<TransmissionReport>(file_name)?;
     context.subscribe_to_event::<PersonPropertyChangeEvent<InfectionData>>(|context, event| {
         let _span = open_span("transmission_report");
@@ -59,20 +58,6 @@ fn create_transmission_report(context: &mut Context, file_name: &str) -> Result<
             );
         }
     });
-    Ok(())
-}
-
-pub fn init(context: &mut Context) -> Result<(), IxaError> {
-    let parameters = context.get_params();
-    let report = parameters.transmission_report_name.clone();
-    match report {
-        Some(path_name) => {
-            create_transmission_report(context, path_name.as_ref())?;
-        }
-        None => {
-            info!("No transmission report name provided. Skipping transmission report creation");
-        }
-    }
     Ok(())
 }
 
