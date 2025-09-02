@@ -641,7 +641,7 @@ pub trait ContextSettingExt:
         itinerary_modifier: ItineraryModifiers,
     ) -> Result<(), IxaError> {
         let _span = open_span("modify_itinerary");
-        let result = match itinerary_modifier {
+        match itinerary_modifier {
             ItineraryModifiers::ReplaceWith { itinerary } => {
                 trace!("ItineraryModifier::Replace person {person_id} --  {itinerary:?}");
 
@@ -669,8 +669,7 @@ pub trait ContextSettingExt:
                 );
                 self.exclude_setting_from_itinerary(person_id, setting)
             }
-        };
-        result
+        }
     }
 
     #[allow(dead_code)]

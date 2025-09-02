@@ -181,13 +181,20 @@ mod test {
     use super::Hospitalized;
     use crate::{
         hospitalizations::HospitalAgeGroups,
-        parameters::{GlobalParams, HospitalizationParameters, ProgressionLibraryType},
+        parameters::{
+            CoreSettingsTypes, GlobalParams, HospitalizationParameters, ItinerarySpecificationType,
+            ProgressionLibraryType,
+        },
         population_loader::Age,
         rate_fns::load_rate_fns,
+        settings::{
+            CensusTract, ContextSettingExt, Home, ItineraryEntry, SettingId, SettingProperties,
+            Workplace,
+        },
         symptom_progression::{PresentingWithSymptoms, SymptomValue, Symptoms},
         Params,
     };
-    use std::{cell::RefCell, path::PathBuf, rc::Rc};
+    use std::{cell::RefCell, collections::HashMap, path::PathBuf, rc::Rc};
 
     use ixa::{
         define_person_property_with_default, Context, ContextGlobalPropertiesExt, ContextPeopleExt,
@@ -210,6 +217,35 @@ mod test {
             symptom_progression_library: Some(ProgressionLibraryType::EmpiricalFromFile {
                 file: PathBuf::from("./input/library_symptom_parameters.csv"),
             }),
+            settings_properties: HashMap::from([
+                (
+                    CoreSettingsTypes::Home,
+                    SettingProperties {
+                        alpha: 0.5,
+                        itinerary_specification: Some(ItinerarySpecificationType::Constant {
+                            ratio: 1.0,
+                        }),
+                    },
+                ),
+                (
+                    CoreSettingsTypes::Workplace,
+                    SettingProperties {
+                        alpha: 0.5,
+                        itinerary_specification: Some(ItinerarySpecificationType::Constant {
+                            ratio: 1.0,
+                        }),
+                    },
+                ),
+                (
+                    CoreSettingsTypes::CensusTract,
+                    SettingProperties {
+                        alpha: 0.5,
+                        itinerary_specification: Some(ItinerarySpecificationType::Constant {
+                            ratio: 1.0,
+                        }),
+                    },
+                ),
+            ]),
             hospitalization_parameters: HospitalizationParameters {
                 mean_delay_to_hospitalization,
                 mean_duration_of_hospitalization,
@@ -222,6 +258,7 @@ mod test {
             .set_global_property_value(GlobalParams, parameters)
             .unwrap();
         load_rate_fns(&mut context).unwrap();
+        crate::settings::init(&mut context);
         context
     }
     #[test]
@@ -262,6 +299,12 @@ mod test {
             );
             context.init_random(seed);
             let p1 = context.add_person((Age, 1u8)).unwrap();
+            let itinerary = vec![
+                ItineraryEntry::new(SettingId::new(Home, 0), 1.0),
+                ItineraryEntry::new(SettingId::new(CensusTract, 0), 1.0),
+                ItineraryEntry::new(SettingId::new(Workplace, 0), 1.0),
+            ];
+            context.add_itinerary(p1, itinerary).unwrap();
             crate::symptom_progression::init(&mut context).unwrap();
             super::init(&mut context);
             context.set_person_property(p1, Symptoms, Some(SymptomValue::Presymptomatic));
@@ -359,6 +402,14 @@ mod test {
             let p1 = context.add_person((Age, 1u8)).unwrap();
             let p2 = context.add_person((Age, 25u8)).unwrap();
             let p3 = context.add_person((Age, 75u8)).unwrap();
+            let itinerary = vec![
+                ItineraryEntry::new(SettingId::new(Home, 0), 1.0),
+                ItineraryEntry::new(SettingId::new(CensusTract, 0), 1.0),
+                ItineraryEntry::new(SettingId::new(Workplace, 0), 1.0),
+            ];
+            context.add_itinerary(p1, itinerary.clone()).unwrap();
+            context.add_itinerary(p2, itinerary.clone()).unwrap();
+            context.add_itinerary(p3, itinerary.clone()).unwrap();
             crate::symptom_progression::init(&mut context).unwrap();
             super::init(&mut context);
 

@@ -33,7 +33,7 @@ type PersonPropertyModifier<'a, P> = (
     HashMap<<P as PersonProperty>::Value, ItineraryModifiers<'static>>,
 );
 
-impl<'a, P> ItineraryModifier for PersonPropertyModifier<'a, P>
+impl<P> ItineraryModifier for PersonPropertyModifier<'_, P>
 where
     P: PersonProperty + std::fmt::Debug + 'static,
     P::Value: std::hash::Hash + Eq,
@@ -98,15 +98,7 @@ pub trait ContextItineraryModifierExt: PluginContext {
         P: PersonProperty + std::fmt::Debug + 'static,
         P::Value: Eq + std::hash::Hash,
     {
-        println!(
-            "Subscribing to changes in person property {:?}",
-            _person_property
-        );
         self.subscribe_to_event(move |context, event: PersonPropertyChangeEvent<P>| {
-            println!(
-                "Person property change event detected for person {}: changed from {:?} to {:?}",
-                event.person_id, event.previous, event.current
-            );
             if let Some(itinerary_modifiers) = modifier_map.get(&event.current) {
                 context
                     .modify_itinerary(event.person_id, itinerary_modifiers.clone())
@@ -168,7 +160,7 @@ impl ContextItineraryModifierExt for Context {
         // together to get the total relative transmission modifier for the person
         let mut final_itinerary_modifier: ItineraryModifiers =
             ItineraryModifiers::ReplaceWith { itinerary: vec![] };
-        for value in itinerary_modifier_map.iter() {
+        for value in itinerary_modifier_map {
             final_itinerary_modifier = value.1.get_itinerary(self, person_id).unwrap().clone();
         }
         Some(final_itinerary_modifier)
@@ -344,10 +336,6 @@ mod test {
             ItineraryEntry::new(SettingId::new(CensusTract, 0), 1.0 / 3.0),
             ItineraryEntry::new(SettingId::new(Workplace, 0), 1.0 / 3.0),
         ];
-
-        println!("Full Itinerary: {:?}", full_itinerary);
-        println!("Partial Itinerary: {:?}", partial_itinerary);
-        println!("None Itinerary: {:?}", none_itinerary);
 
         let full = context.get_current_itinerary(full_id).unwrap();
 
