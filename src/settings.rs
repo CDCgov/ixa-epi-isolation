@@ -666,37 +666,6 @@ pub trait ContextSettingExt:
     }
 
     #[allow(dead_code)]
-    fn remove_modified_itinerary(&mut self, person_id: PersonId) -> Result<(), IxaError> {
-        let _span = open_span("remove_modified_itinerary");
-
-        let container = self.get_data_mut(SettingDataPlugin);
-
-        if let Some(previous_mod_itinerary) = container.get_dominate_modified_itinerary(person_id) {
-            container.deactivate_itinerary(person_id, previous_mod_itinerary.clone());
-
-            let previous_ranking = container
-                .get_dominate_modified_itinerary_ranking(person_id)
-                .unwrap();
-            // Remove only the last (dominant) modified itinerary for this person
-            let modified_map = container.modified_itineraries.get_mut(&person_id).unwrap();
-            modified_map.remove(&previous_ranking);
-            if modified_map.is_empty() {
-                container.modified_itineraries.remove(&person_id);
-            }
-        }
-
-        if let Some(default_itinerary) = container.itineraries.get(&person_id) {
-            container.activate_itinerary(person_id, &default_itinerary.clone())?;
-        } else {
-            return Err(IxaError::from(
-                "Can't remove modified itinerary if there isn't a default present",
-            ));
-        }
-
-        Ok(())
-    }
-
-    #[allow(dead_code)]
     fn remove_modified_itinerary_entry(
         &mut self,
         person_id: PersonId,
@@ -1536,14 +1505,11 @@ mod test {
             ItineraryEntry::new(SettingId::new(Workplace, 0), 0.05),
             ItineraryEntry::new(SettingId::new(School, 0), 0.0),
         ];
-
-        let _ = context.modify_itinerary(
-            person_0.unwrap(),
-            ItineraryModifiers::ReplaceWith {
-                itinerary: isolation_itinerary,
-                ranking: 1,
-            },
-        );
+        let itinerary_modifier = ItineraryModifiers::ReplaceWith {
+            itinerary: isolation_itinerary.clone(),
+            ranking: 1,
+        };
+        let _ = context.modify_itinerary(person_0.unwrap(), itinerary_modifier.clone());
 
         let h_members = context
             .get_setting_members(&SettingId::new(Home, 0))
@@ -1568,7 +1534,7 @@ mod test {
         assert_almost_eq!(inf_multiplier, expected_multiplier, 0.001);
 
         // 3. Remove modified itinerary; get back to normal
-        let _ = context.remove_modified_itinerary(person_0.unwrap());
+        let _ = context.remove_modified_itinerary_entry(person_0.unwrap(), itinerary_modifier);
         let h_members = context
             .get_setting_members(&SettingId::new(Home, 0))
             .unwrap();
@@ -1639,14 +1605,12 @@ mod test {
         println!("HOME MEMBERS (limit default): {h_members:?}");
         println!("WORK MEMBERS (limit default): {w_members:?}");
 
+        let itinerary_modifier = ItineraryModifiers::RestrictTo {
+            setting: &Home,
+            ranking: 1,
+        };
         // Reduce itinerary to only Home
-        let _ = context.modify_itinerary(
-            person,
-            ItineraryModifiers::RestrictTo {
-                setting: &Home,
-                ranking: 1,
-            },
-        );
+        let _ = context.modify_itinerary(person, itinerary_modifier.clone());
 
         // Check membership
         let h_members = context
@@ -1660,7 +1624,7 @@ mod test {
         println!("HOME MEMBERS (limit isolation): {h_members:?}");
         println!("WORK MEMBERS (limit isolation): {w_members:?}");
 
-        let _ = context.remove_modified_itinerary(person);
+        let _ = context.remove_modified_itinerary_entry(person, itinerary_modifier);
         let h_members = context
             .get_setting_members(&SettingId::new(Home, 0))
             .unwrap();
@@ -1716,14 +1680,12 @@ mod test {
         println!("HOME MEMBERS (exclude default): {h_members:?}");
         println!("WORK MEMBERS (exclude default): {w_members:?}");
 
+        let itinerary_modifier = ItineraryModifiers::Exclude {
+            setting: &Workplace,
+            ranking: 1,
+        };
         // Reduce itinerary to only Home
-        let _ = context.modify_itinerary(
-            person,
-            ItineraryModifiers::Exclude {
-                setting: &Workplace,
-                ranking: 1,
-            },
-        );
+        let _ = context.modify_itinerary(person, itinerary_modifier.clone());
 
         // Check membership
         let h_members = context
@@ -1737,7 +1699,7 @@ mod test {
         println!("HOME MEMBERS (exclude isolation): {h_members:?}");
         println!("WORK MEMBERS (exclude isolation): {w_members:?}");
 
-        let _ = context.remove_modified_itinerary(person);
+        let _ = context.remove_modified_itinerary_entry(person, itinerary_modifier);
         let h_members = context
             .get_setting_members(&SettingId::new(Home, 0))
             .unwrap();

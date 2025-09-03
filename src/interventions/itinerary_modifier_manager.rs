@@ -52,9 +52,7 @@ where
             None => None,
         }
     }
-    // fn set_itinerary(&self, context: &mut Context, person_id: PersonId, itinerary: ItineraryModifiers<'_>) -> Result<(), IxaError> {
-    //     context.modify_itinerary(person_id, itinerary)
-    // }
+
     fn get_name(&self) -> String {
         format!("{:?}", self.0)
     }
@@ -150,7 +148,6 @@ pub trait ContextItineraryModifierExt: PluginContext {
         Ok(())
     }
 }
-
 impl ContextItineraryModifierExt for Context {}
 
 #[cfg(test)]
