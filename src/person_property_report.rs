@@ -192,11 +192,11 @@ fn send_incidence_counts(context: &mut Context) {
         });
     }
     // Hospitalization
-    for ((age, hospitalization), count) in &report_container.incidence_hospitalization {
+    for ((age, _), count) in &report_container.incidence_hospitalization {
         context.send_report(PersonPropertyIncidenceReport {
             t_upper,
             age: *age,
-            event: format!("{hospitalization:?}"),
+            event: format!("hospitalized"),
             count: *count,
         });
     }
