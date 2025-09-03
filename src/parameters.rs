@@ -55,8 +55,6 @@ pub struct HospitalizationParameters {
     pub mean_duration_of_hospitalization: f64,
     /// Age groups for hospitalization probabilities.
     pub age_groups: Vec<HospitalAgeGroups>,
-    /// The path to the hospitalization incidence report file.
-    pub hospital_incidence_report_name: String,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -127,7 +125,6 @@ impl Default for Params {
                     min: 0,
                     probability: 0.0,
                 }],
-                hospital_incidence_report_name: "hospital_incidence_report.csv".to_string(),
             },
             guidance_policy: None,
             profiling_data_path: None,
@@ -284,14 +281,6 @@ fn validate_inputs(parameters: &Params) -> Result<(), IxaError> {
     if hospitalization_parameters.age_groups[0].min != 0 {
         return Err(IxaError::IxaError(
             "The first age group for hospitalization probabilities must start at 0.".to_string(),
-        ));
-    }
-    if hospitalization_parameters
-        .hospital_incidence_report_name
-        .is_empty()
-    {
-        return Err(IxaError::IxaError(
-            "The hospital incidence report name must not be empty.".to_string(),
         ));
     }
 

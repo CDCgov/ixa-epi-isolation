@@ -155,7 +155,7 @@ mod test {
     use super::Hospitalized;
     use crate::{
         hospitalizations::HospitalAgeGroups,
-        parameters::{GlobalParams, HospitalizationParameters, ProgressionLibraryType},
+        parameters::{GlobalParams, ProgressionLibraryType, HospitalizationParameters},
         population_loader::Age,
         rate_fns::load_rate_fns,
         symptom_progression::{PresentingWithSymptoms, SymptomValue, Symptoms},
@@ -187,8 +187,7 @@ mod test {
             hospitalization_parameters: HospitalizationParameters {
                 mean_delay_to_hospitalization,
                 mean_duration_of_hospitalization,
-                age_groups,
-                hospital_incidence_report_name: "hospital_incidence_report.csv".to_string(),
+                age_groups
             },
             ..Default::default()
         };

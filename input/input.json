@@ -52,8 +52,7 @@
         {"min": 45, "probability": 0.01},
         {"min": 55, "probability": 0.02},
         {"min": 65,"probability": 0.05}
-      ],
-      "hospital_incidence_report_name": "hospital_incidence_report.csv"
+      ]
     },
     "profiling_data_path": "profiling_data.json"
   }
