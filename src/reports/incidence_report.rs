@@ -6,9 +6,10 @@ use crate::{
 };
 use ixa::{
     define_data_plugin, define_report, report::ContextReportExt, Context, ContextPeopleExt,
-    ExecutionPhase, HashMap, IxaError, PersonPropertyChangeEvent,
+    ExecutionPhase, HashMap, HashSet, HashSetExt, IxaError, PersonPropertyChangeEvent,
 };
 use serde::{Deserialize, Serialize};
+use std::cell::RefCell;
 
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
 struct PersonPropertyIncidenceReport {
@@ -140,11 +141,22 @@ fn send_incidence_counts(context: &mut Context) {
 /// # Errors
 ///
 /// Will return `IxaError` if the report cannot be added
+///
+/// # Panics
+///
+/// Will panic if an age group cannot be parsed from the tabulated string
 pub fn init(context: &mut Context, file_name: &str, period: f64) -> Result<(), IxaError> {
     context.add_report::<PersonPropertyIncidenceReport>(file_name)?;
 
+    let tabulator = (Age,);
+    let ages: RefCell<HashSet<u8>> = RefCell::new(HashSet::new());
+    context.tabulate_person_properties(&tabulator, |_context, values, _count| {
+        ages.borrow_mut().insert(values[0].parse::<u8>().unwrap());
+    });
+
     let report_container = context.get_data_mut(PropertyReportDataPlugin);
-    for age in 0..100 {
+
+    for age in ages.take() {
         let inf_vec = [
             InfectionStatusValue::Infectious,
             InfectionStatusValue::Recovered,
@@ -272,6 +284,9 @@ mod test {
             }
         }
 
-        assert_eq!(line_count, 1400);
+        // 7 event types: 4 symptom categories + hospitalization + Infectious + Recovered
+        // 2 time points
+        // 2 ages
+        assert_eq!(line_count, 28);
     }
 }
