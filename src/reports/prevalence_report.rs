@@ -175,3 +175,94 @@ pub fn init(context: &mut Context, file_name: &str, period: f64) -> Result<(), I
     );
     Ok(())
 }
+
+
+#[cfg(test)]
+mod test {
+    use crate::{
+        Age,
+        infectiousness_manager::InfectionContextExt, parameters::{ContextParametersExt, GlobalParams, Params},
+        rate_fns::load_rate_fns, reports::ReportType
+    };
+    use ixa::{
+        Context, ContextGlobalPropertiesExt, ContextPeopleExt, ContextRandomExt, ContextReportExt,
+    };
+    use std::path::PathBuf;
+    use tempfile::tempdir;
+
+
+    fn setup_context_with_report(report: ReportType) -> Context {
+        let mut context = Context::new();
+        context
+            .set_global_property_value(
+                GlobalParams,
+                Params {
+                    max_time: 3.0,
+                    reports: vec![report],
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+        context.init_random(context.get_params().seed);
+        load_rate_fns(&mut context).unwrap();
+        context
+    }
+
+    #[test]
+    fn test_generate_prevalence_report() {
+        let mut context = setup_context_with_report(ReportType::PrevalenceReport {name: "output.csv".to_string(), period: 2.0});
+
+        let temp_dir = tempdir().unwrap();
+        let path = PathBuf::from(&temp_dir.path());
+        let config = context.report_options();
+        config.directory(path.clone());
+
+        let source = context.add_person((Age, 42)).unwrap();
+        let target = context.add_person((Age, 43)).unwrap();
+        let setting_type = Some("test_setting");
+        let setting_id: Option<usize> = Some(1);
+        let infection_time = 1.0;
+
+        context.infect_person(source, None, None, None);
+        crate::reports::init(&mut context).unwrap();
+
+        context.add_plan(infection_time, move |context| {
+            context.infect_person(target, Some(source), setting_type, setting_id);
+        });
+        context.execute();
+
+        
+        let Params { reports, .. } = context.get_params();
+        let file_path = path.join(match &reports[0] {
+            ReportType::PrevalenceReport { name , ..} => name,
+            _ => panic!("Unreachable report encountered")
+        });
+
+        assert!(file_path.exists());
+        std::mem::drop(context);
+
+        assert!(file_path.exists());
+        let mut reader = csv::Reader::from_path(file_path).unwrap();
+
+        let mut actual: Vec<Vec<String>> = reader
+            .records()
+            .map(|result| result.unwrap().iter().map(String::from).collect())
+            .collect();
+        let mut expected = vec![
+            //   t    | age |sym| inf status  | hosp   | count
+            vec!["0.0", "42", "", "Infectious", "false", "1"],
+            vec!["0.0", "43", "", "Infectious", "false", "0"],
+            vec!["0.0", "42", "", "Susceptible", "false", "0"],
+            vec!["0.0", "43", "", "Susceptible", "false", "1"],
+            vec!["2.0", "42", "", "Infectious", "false", "1"],
+            vec!["2.0", "43", "", "Infectious", "false", "1"],
+            vec!["2.0", "42", "", "Susceptible", "false", "0"],
+            vec!["2.0", "43", "", "Susceptible", "false", "0"],
+        ];
+
+        actual.sort();
+        expected.sort();
+
+        assert_eq!(actual, expected, "CSV file should contain the correct data");
+    }
+}
