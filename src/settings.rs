@@ -995,6 +995,7 @@ mod test {
     };
     use ixa::{define_person_property, ContextGlobalPropertiesExt, ContextPeopleExt};
     use statrs::assert_almost_eq;
+    use std::rc::Rc;
 
     define_setting_category!(Community);
 
@@ -2351,11 +2352,24 @@ mod test {
 
         let person = context.add_person(()).unwrap();
         let itinerary = vec![
-            ItineraryEntry::new(SettingId::new(Home, 0), 1.0),
-            ItineraryEntry::new(SettingId::new(Workplace, 0), 1.0),
-            ItineraryEntry::new(SettingId::new(CensusTract, 0), 1.0),
+            ItineraryEntry::new(SettingId::new(Home, 0), 1.0 / 3.0),
+            ItineraryEntry::new(SettingId::new(Workplace, 0), 1.0 / 3.0),
+            ItineraryEntry::new(SettingId::new(CensusTract, 0), 1.0 / 3.0),
         ];
-        let _ = context.add_itinerary(person, itinerary);
+
+        let isolating_itinerary = Rc::new(vec![
+            ItineraryEntry::new(SettingId::new(Home, 0), 0.5),
+            ItineraryEntry::new(SettingId::new(CensusTract, 0), 0.0),
+            ItineraryEntry::new(SettingId::new(Workplace, 0), 0.5),
+        ]);
+
+        let hospitalized_itinerary = vec![
+            ItineraryEntry::new(SettingId::new(Home, 0), 1.0),
+            ItineraryEntry::new(SettingId::new(CensusTract, 0), 0.0),
+            ItineraryEntry::new(SettingId::new(Workplace, 0), 0.0),
+        ];
+
+        let _ = context.add_itinerary(person, itinerary.clone());
         context
             .store_and_subscribe_itinerary_modifier_values(
                 IsolatingStatus,
@@ -2380,19 +2394,15 @@ mod test {
                 )],
             )
             .unwrap();
-        context.add_plan(0.01, move |ctx| {
+        context.add_plan(1.0, move |ctx| {
             ctx.set_person_property(person, IsolatingStatus, true);
         });
 
-        context.add_plan(0.1, move |ctx| {
-            let isolating_itinerary = vec![
-                ItineraryEntry::new(SettingId::new(Home, 0), 0.5),
-                ItineraryEntry::new(SettingId::new(CensusTract, 0), 0.0),
-                ItineraryEntry::new(SettingId::new(Workplace, 0), 0.5),
-            ];
+        let isolating_itinerary_clone = isolating_itinerary.clone();
+        context.add_plan(1.0, move |ctx| {
             assert!(equivalent_itineraries(
                 ctx.get_current_itinerary(person).unwrap(),
-                &isolating_itinerary
+                &isolating_itinerary_clone
             ));
         });
 
@@ -2400,50 +2410,35 @@ mod test {
             ctx.set_person_property(person, Hospitalized, true);
         });
 
-        context.add_plan(1.1, move |ctx| {
-            let hospitalized_itinerary = vec![
-                ItineraryEntry::new(SettingId::new(Home, 0), 1.0),
-                ItineraryEntry::new(SettingId::new(CensusTract, 0), 0.0),
-                ItineraryEntry::new(SettingId::new(Workplace, 0), 0.0),
-            ];
+        context.add_plan(1.0, move |ctx| {
             assert!(equivalent_itineraries(
                 ctx.get_current_itinerary(person).unwrap(),
                 &hospitalized_itinerary
             ));
         });
 
-        context.add_plan(2.0, move |ctx| {
+        context.add_plan(1.0, move |ctx| {
             ctx.set_person_property(person, Hospitalized, false);
         });
-        context.add_plan(2.1, move |ctx| {
-            let isolating_itinerary = vec![
-                ItineraryEntry::new(SettingId::new(Home, 0), 0.5),
-                ItineraryEntry::new(SettingId::new(CensusTract, 0), 0.0),
-                ItineraryEntry::new(SettingId::new(Workplace, 0), 0.5),
-            ];
-            println!(
-                "Modified Itinerary (IsolatingStatus = true): {:?}",
-                ctx.get_modified_itinerary(person).unwrap()
-            );
-            println!(
-                "Current Itinerary (IsolatingStatus = true): {:?}",
-                ctx.get_current_itinerary(person).unwrap()
-            );
-            println!(
-                "Expected Itinerary (IsolatingStatus = true): {:?}",
-                isolating_itinerary
-            );
+        let isolating_itinerary_clone = isolating_itinerary.clone();
+        context.add_plan(1.0, move |ctx| {
             assert!(equivalent_itineraries(
                 ctx.get_current_itinerary(person).unwrap(),
-                &isolating_itinerary
+                &isolating_itinerary_clone
+            ));
+        });
+
+        context.add_plan(1.0, move |ctx| {
+            ctx.set_person_property(person, IsolatingStatus, false);
+        });
+
+        context.add_plan(1.0, move |ctx| {
+            assert!(equivalent_itineraries(
+                ctx.get_current_itinerary(person).unwrap(),
+                &itinerary
             ));
         });
 
         context.execute();
-
-        println!(
-            "Modified Itinerary (IsolatingStatus = true): {:?}",
-            context.get_modified_itinerary(person).unwrap()
-        );
     }
 }
