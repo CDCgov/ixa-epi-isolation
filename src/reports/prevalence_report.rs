@@ -5,8 +5,8 @@ use crate::{
     symptom_progression::{SymptomValue, Symptoms},
 };
 use ixa::{
-    define_data_plugin, define_derived_property, define_report, report::ContextReportExt,
-    Context, ContextPeopleExt, ExecutionPhase, HashMap, HashMapExt, IxaError, PersonPropertyChangeEvent,
+    define_data_plugin, define_derived_property, define_report, report::ContextReportExt, Context,
+    ContextPeopleExt, ExecutionPhase, HashMap, HashMapExt, IxaError, PersonPropertyChangeEvent,
 };
 use serde::{Deserialize, Serialize};
 use std::{cell::RefCell, str::FromStr};
@@ -59,10 +59,7 @@ define_data_plugin!(
 
 type ReportEvent = PersonPropertyChangeEvent<PersonReportProperties>;
 
-fn update_property_change_counts(
-    context: &mut Context,
-    event: ReportEvent,
-) {
+fn update_property_change_counts(context: &mut Context, event: ReportEvent) {
     let report_container_mut = context.get_data_mut(PropertyReportDataPlugin);
 
     let _ = *report_container_mut
@@ -101,7 +98,9 @@ impl FromStr for InfectionStatusValue {
             "Susceptible" => Ok(InfectionStatusValue::Susceptible),
             "Infectious" => Ok(InfectionStatusValue::Infectious),
             "Recovered" => Ok(InfectionStatusValue::Recovered),
-            _ => Err(IxaError::IxaError("Value type not found for infection status".to_string()))
+            _ => Err(IxaError::IxaError(
+                "Value type not found for infection status".to_string(),
+            )),
         }
     }
 }
@@ -116,27 +115,34 @@ impl FromStr for SymptomValue {
             "Category2" => Ok(SymptomValue::Category2),
             "Category3" => Ok(SymptomValue::Category3),
             "Category4" => Ok(SymptomValue::Category4),
-            _ => Err(IxaError::IxaError("Value type not found for symptom value".to_string())) 
+            _ => Err(IxaError::IxaError(
+                "Value type not found for symptom value".to_string(),
+            )),
         }
     }
 }
 
-pub fn init(
-    context: &mut Context,
-    file_name: &str,
-    period: f64,
-) -> Result<(), IxaError> {
+/// # Errors
+///
+/// Will return `IxaError` if the report cannot be added
+///
+/// # Panics
+///
+/// Will panic if symptom value string is not listed in enum
+pub fn init(context: &mut Context, file_name: &str, period: f64) -> Result<(), IxaError> {
     // Count initial number of people per property status
     context.add_report::<PersonPropertyReport>(file_name)?;
 
     let tabulator = (Age, InfectionStatus, Symptoms, Hospitalized);
-    // Tabulate initial counts    
-    let map_counts: RefCell<HashMap<PersonPropertyReportValues, usize>> = RefCell::new(HashMap::new());
+    // Tabulate initial counts
+    let map_counts: RefCell<HashMap<PersonPropertyReportValues, usize>> =
+        RefCell::new(HashMap::new());
     context.tabulate_person_properties(&tabulator, |_context, values, count| {
-        // Handle the string Option<SymptomValue> 
-        let symptoms = if let Some(start) = values[2].find('(') {
-            let end = values[2].find(')').unwrap();
-            let symptom_string = &values[2][(start + 1)..end];
+        // Handle the string Option<SymptomValue>
+        let symptoms = if values[2].starts_with("Some") {
+            let end = values[2].chars().count();
+            // Get symptom value contents within Some(_)
+            let symptom_string = &values[2][6..(end - 1)];
             let symptom_values = symptom_string.parse::<SymptomValue>().unwrap();
             Some(symptom_values)
         } else {
@@ -147,7 +153,7 @@ pub fn init(
             age: values[0].parse::<u8>().unwrap(),
             infection_status: values[1].parse::<InfectionStatusValue>().unwrap(),
             symptoms,
-            hospitalized: values[3].parse::<bool>().unwrap()
+            hospitalized: values[3].parse::<bool>().unwrap(),
         };
 
         map_counts.borrow_mut().insert(input, count);
@@ -156,11 +162,9 @@ pub fn init(
     let report_container = context.get_data_mut(PropertyReportDataPlugin);
     report_container.report_map_container = map_counts.take();
 
-    context.subscribe_to_event::<ReportEvent>(
-        |context, event| {
-            update_property_change_counts(context, event);
-        },
-    );
+    context.subscribe_to_event::<ReportEvent>(|context, event| {
+        update_property_change_counts(context, event);
+    });
 
     context.add_periodic_plan_with_phase(
         period,

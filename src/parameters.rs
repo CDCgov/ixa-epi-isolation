@@ -4,8 +4,8 @@ use ixa::{define_global_property, Context, ContextGlobalPropertiesExt, IxaError,
 use serde::{Deserialize, Serialize};
 
 use crate::policies::{validate_guidance_policy, Policies};
-use crate::{hospitalizations::HospitalAgeGroups, settings::SettingProperties};
 use crate::reports::ReportType;
+use crate::{hospitalizations::HospitalAgeGroups, settings::SettingProperties};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum RateFnType {

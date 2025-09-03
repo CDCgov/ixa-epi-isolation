@@ -1,56 +1,51 @@
-use ixa::{Context, IxaError, info};
+use crate::parameters::{ContextParametersExt, Params};
+use ixa::{info, Context, IxaError};
 use serde::{Deserialize, Serialize};
-use crate::parameters::{Params, ContextParametersExt};
 
-pub mod transmission_report;
-pub mod prevalence_report;
 pub mod incidence_report;
+pub mod prevalence_report;
+pub mod transmission_report;
 
 #[derive(Clone, Serialize, Deserialize, Debug)]
 pub enum ReportType {
-    PrevalenceReport {
-        name: String,
-        period: f64,
-    },
-    IncidenceReport {
-        name: String,
-        period: f64,
-    },
-    TransmissionReport {
-        name: String
-    },
+    PrevalenceReport { name: String, period: f64 },
+    IncidenceReport { name: String, period: f64 },
+    TransmissionReport { name: String },
 }
 
+/// # Errors
+///
+/// Will return `IxaError` if any report within the reports list cannot be added
+/// or if the period for any periodic report is less than 0.0
 pub fn init(context: &mut Context) -> Result<(), IxaError> {
-    let Params {
-        reports,
-        ..
-    } = context.get_params().clone();
+    let Params { reports, .. } = context.get_params().clone();
 
     // Should at least one report be required?
-    if reports.len() < 1 {
+    if reports.is_empty() {
         info!("No reports are being generated.");
     }
 
-    for report in reports.iter() {
+    for report in &reports {
         match report {
-            ReportType::PrevalenceReport { name, period } => {      
+            ReportType::PrevalenceReport { name, period } => {
                 if period < &0.0 {
                     return Err(IxaError::IxaError(
                         "The prevalence report writing period must be non-negative.".to_string(),
                     ));
                 }
                 prevalence_report::init(context, name.as_str(), *period)?;
-            },
-            ReportType::IncidenceReport { name, period } => {      
+            }
+            ReportType::IncidenceReport { name, period } => {
                 if period < &0.0 {
                     return Err(IxaError::IxaError(
                         "The incidence report writing period must be non-negative.".to_string(),
                     ));
                 }
                 incidence_report::init(context, name.as_str(), *period)?;
-            },
-            ReportType::TransmissionReport { name } => transmission_report::init(context, name.as_str())?
+            }
+            ReportType::TransmissionReport { name } => {
+                transmission_report::init(context, name.as_str())?;
+            }
         }
     }
     Ok(())

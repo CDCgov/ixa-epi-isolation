@@ -9,9 +9,9 @@ mod population_loader;
 mod profiling;
 mod property_progression_manager;
 pub mod rate_fns;
+pub mod reports;
 mod settings;
 mod symptom_progression;
-pub mod reports;
 pub mod utils;
 
 use ixa::runner::run_with_args;

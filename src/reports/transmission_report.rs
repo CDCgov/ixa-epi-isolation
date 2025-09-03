@@ -1,10 +1,7 @@
+use crate::infectiousness_manager::{InfectionData, InfectionDataValue};
 use crate::profiling::open_span;
-use crate::{
-    infectiousness_manager::{InfectionData, InfectionDataValue},
-};
 use ixa::{
-    define_report, report::ContextReportExt, Context, IxaError, PersonId,
-    PersonPropertyChangeEvent,
+    define_report, report::ContextReportExt, Context, IxaError, PersonId, PersonPropertyChangeEvent,
 };
 use serde::{Deserialize, Serialize};
 use std::string::ToString;
@@ -38,6 +35,9 @@ fn record_transmission_event(
     }
 }
 
+/// # Errors
+///
+/// Will return `IxaError` if the report cannot be added
 pub fn init(context: &mut Context, file_name: &str) -> Result<(), IxaError> {
     context.add_report::<TransmissionReport>(file_name)?;
     context.subscribe_to_event::<PersonPropertyChangeEvent<InfectionData>>(|context, event| {

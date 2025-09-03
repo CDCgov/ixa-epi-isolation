@@ -5,8 +5,8 @@ use crate::{
     symptom_progression::{SymptomValue, Symptoms},
 };
 use ixa::{
-    define_data_plugin, define_report, report::ContextReportExt,
-    Context, ContextPeopleExt, ExecutionPhase, HashMap, IxaError, PersonPropertyChangeEvent,
+    define_data_plugin, define_report, report::ContextReportExt, Context, ContextPeopleExt,
+    ExecutionPhase, HashMap, IxaError, PersonPropertyChangeEvent,
 };
 use serde::{Deserialize, Serialize};
 
@@ -21,21 +21,20 @@ struct PersonPropertyIncidenceReport {
 define_report!(PersonPropertyIncidenceReport);
 
 struct PropertyReportDataContainer {
-    incidence_infection_status: HashMap<(u8, InfectionStatusValue), u32>,
-    incidence_symptoms: HashMap<(u8, SymptomValue), u32>,
-    incidence_hospitalization: HashMap<(u8, bool), u32>,
+    infection_status_change: HashMap<(u8, InfectionStatusValue), u32>,
+    symptom_onset: HashMap<(u8, SymptomValue), u32>,
+    hospitalization: HashMap<(u8, bool), u32>,
 }
 
 define_data_plugin!(
     PropertyReportDataPlugin,
     PropertyReportDataContainer,
     PropertyReportDataContainer {
-        incidence_infection_status: HashMap::default(),
-        incidence_symptoms: HashMap::default(),
-        incidence_hospitalization: HashMap::default(),
+        infection_status_change: HashMap::default(),
+        symptom_onset: HashMap::default(),
+        hospitalization: HashMap::default(),
     }
 );
-
 
 fn update_infection_incidence(
     context: &mut Context,
@@ -47,7 +46,7 @@ fn update_infection_incidence(
         let age = context.get_person_property(event.person_id, Age);
         let report_container_mut = context.get_data_mut(PropertyReportDataPlugin);
         report_container_mut
-            .incidence_infection_status
+            .infection_status_change
             .entry((age, event.current))
             .and_modify(|v| *v += 1)
             .or_insert(1);
@@ -57,10 +56,13 @@ fn update_infection_incidence(
 fn update_symptoms_incidence(context: &mut Context, event: PersonPropertyChangeEvent<Symptoms>) {
     let age = context.get_person_property(event.person_id, Age);
     let report_container_mut = context.get_data_mut(PropertyReportDataPlugin);
-    if let Some(symptoms) = event.current {
-        if symptoms != SymptomValue::Presymptomatic {
+
+    // Only track true symptom onset, not Some(Presymptomatic) or None (symptom resolution)
+    match event.current {
+        None | Some(SymptomValue::Presymptomatic) => (),
+        Some(symptoms) => {
             report_container_mut
-                .incidence_symptoms
+                .symptom_onset
                 .entry((age, symptoms))
                 .and_modify(|count| *count += 1)
                 .or_insert(1);
@@ -74,9 +76,10 @@ fn update_hospitalization_incidence(
 ) {
     let age = context.get_person_property(event.person_id, Age);
     let report_container_mut = context.get_data_mut(PropertyReportDataPlugin);
+    // Only track hospitalization, not departure
     if event.current {
         report_container_mut
-            .incidence_hospitalization
+            .hospitalization
             .entry((age, event.current))
             .and_modify(|count| *count += 1)
             .or_insert(1);
@@ -86,15 +89,15 @@ fn update_hospitalization_incidence(
 fn reset_incidence_map(context: &mut Context) {
     let report_container = context.get_data_mut(PropertyReportDataPlugin);
     report_container
-        .incidence_infection_status
+        .infection_status_change
         .values_mut()
         .for_each(|v| *v = 0);
     report_container
-        .incidence_symptoms
+        .symptom_onset
         .values_mut()
         .for_each(|v| *v = 0);
     report_container
-        .incidence_hospitalization
+        .hospitalization
         .values_mut()
         .for_each(|v| *v = 0);
 }
@@ -104,7 +107,7 @@ fn send_incidence_counts(context: &mut Context) {
     let t_upper = context.get_current_time();
 
     // Infection status
-    for ((age, infection_status), count) in &report_container.incidence_infection_status {
+    for ((age, infection_status), count) in &report_container.infection_status_change {
         context.send_report(PersonPropertyIncidenceReport {
             t_upper,
             age: *age,
@@ -113,7 +116,7 @@ fn send_incidence_counts(context: &mut Context) {
         });
     }
     // Symptoms
-    for ((age, symptoms), count) in &report_container.incidence_symptoms {
+    for ((age, symptoms), count) in &report_container.symptom_onset {
         context.send_report(PersonPropertyIncidenceReport {
             t_upper,
             age: *age,
@@ -122,22 +125,22 @@ fn send_incidence_counts(context: &mut Context) {
         });
     }
     // Hospitalization
-    for ((age, hospitalization), count) in &report_container.incidence_hospitalization {
+    for ((age, _), count) in &report_container.hospitalization {
+        // We only ever record entering the hospital, we print a string to avoid an ambiguous boolean value
         context.send_report(PersonPropertyIncidenceReport {
             t_upper,
             age: *age,
-            event: format!("{hospitalization:?}"),
+            event: "Hospitalized".to_string(),
             count: *count,
         });
     }
     reset_incidence_map(context);
 }
 
-pub fn init(
-    context: &mut Context,
-    file_name: &str,
-    period: f64,
-) -> Result<(), IxaError> {
+/// # Errors
+///
+/// Will return `IxaError` if the report cannot be added
+pub fn init(context: &mut Context, file_name: &str, period: f64) -> Result<(), IxaError> {
     context.add_report::<PersonPropertyIncidenceReport>(file_name)?;
 
     let report_container = context.get_data_mut(PropertyReportDataPlugin);
@@ -149,7 +152,7 @@ pub fn init(
 
         for inf_value in inf_vec {
             report_container
-                .incidence_infection_status
+                .infection_status_change
                 .insert((age, inf_value), 0);
         }
 
@@ -160,17 +163,10 @@ pub fn init(
             SymptomValue::Category4,
         ];
         for symp_value in symp_vec {
-            report_container
-                .incidence_symptoms
-                .insert((age, symp_value), 0);
+            report_container.symptom_onset.insert((age, symp_value), 0);
         }
 
-        let hosp_vec = [true];
-        for hosp_value in hosp_vec {
-            report_container
-                .incidence_hospitalization
-                .insert((age, hosp_value), 0);
-        }
+        report_container.hospitalization.insert((age, true), 0);
     }
 
     context.subscribe_to_event::<PersonPropertyChangeEvent<InfectionStatus>>(|context, event| {
