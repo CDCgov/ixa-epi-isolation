@@ -189,3 +189,89 @@ pub fn init(context: &mut Context, file_name: &str, period: f64) -> Result<(), I
 
     Ok(())
 }
+
+#[cfg(test)]
+mod test {
+    use crate::{
+        infectiousness_manager::InfectionContextExt,
+        parameters::{ContextParametersExt, GlobalParams, Params},
+        rate_fns::load_rate_fns,
+        reports::ReportType,
+        Age,
+    };
+    use ixa::{
+        Context, ContextGlobalPropertiesExt, ContextPeopleExt, ContextRandomExt, ContextReportExt,
+    };
+    use std::path::PathBuf;
+    use tempfile::tempdir;
+
+    fn setup_context_with_report(report: ReportType) -> Context {
+        let mut context = Context::new();
+        context
+            .set_global_property_value(
+                GlobalParams,
+                Params {
+                    max_time: 3.0,
+                    reports: vec![report],
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+        context.init_random(context.get_params().seed);
+        load_rate_fns(&mut context).unwrap();
+        context
+    }
+
+    #[test]
+    #[allow(clippy::float_cmp)]
+    fn test_generate_prevalence_report() {
+        let mut context = setup_context_with_report(ReportType::IncidenceReport {
+            name: "output.csv".to_string(),
+            period: 2.0,
+        });
+
+        let temp_dir = tempdir().unwrap();
+        let path = PathBuf::from(&temp_dir.path());
+        let config = context.report_options();
+        config.directory(path.clone());
+
+        let source = context.add_person((Age, 42)).unwrap();
+        let target = context.add_person((Age, 43)).unwrap();
+        let setting_type = Some("test_setting");
+        let setting_id: Option<usize> = Some(1);
+        let infection_time = 1.0;
+
+        context.infect_person(source, None, None, None);
+        crate::reports::init(&mut context).unwrap();
+
+        context.add_plan(infection_time, move |context| {
+            context.infect_person(target, Some(source), setting_type, setting_id);
+        });
+        context.execute();
+
+        let Params { reports, .. } = context.get_params();
+        let file_path = path.join(match &reports[0] {
+            ReportType::IncidenceReport { name, .. } => name,
+            _ => panic!("Unreachable report encountered"),
+        });
+
+        assert!(file_path.exists());
+        std::mem::drop(context);
+
+        assert!(file_path.exists());
+        let mut reader = csv::Reader::from_path(file_path).unwrap();
+        let mut line_count = 0;
+        for result in reader.deserialize() {
+            let record: crate::reports::incidence_report::PersonPropertyIncidenceReport =
+                result.unwrap();
+            line_count += 1;
+            if record.t_upper == 2.0 && record.event == *"Infectious" && record.age == 43 {
+                assert_eq!(record.count, 1);
+            } else {
+                assert_eq!(record.count, 0);
+            }
+        }
+
+        assert_eq!(line_count, 1400);
+    }
+}

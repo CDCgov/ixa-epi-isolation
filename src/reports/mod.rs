@@ -59,9 +59,7 @@ mod test {
         parameters::{ContextParametersExt, Params},
         rate_fns::load_rate_fns,
     };
-    use ixa::{
-        Context, ContextGlobalPropertiesExt, ContextRandomExt
-    };
+    use ixa::{Context, ContextGlobalPropertiesExt, ContextRandomExt};
     use statrs::assert_almost_eq;
     use std::path::PathBuf;
     use tempfile::tempdir;
@@ -127,14 +125,14 @@ mod test {
         assert_eq!(reports.len(), 3);
         for report in reports {
             match report {
-                ReportType::TransmissionReport {name} => {
-                    assert_eq!(*name, "transmission.csv".to_string())
-                },
+                ReportType::TransmissionReport { name } => {
+                    assert_eq!(*name, "transmission.csv".to_string());
+                }
                 ReportType::PrevalenceReport { name, period } => {
                     assert_eq!(*name, "prevalence.csv".to_string());
                     assert_almost_eq!(*period, 1.0, 0.0);
                 }
-                ReportType::IncidenceReport { name, period} => {
+                ReportType::IncidenceReport { name, period } => {
                     assert_eq!(*name, "incidence.csv".to_string());
                     assert_almost_eq!(*period, 2.0, 0.0);
                 }

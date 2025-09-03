@@ -64,8 +64,10 @@ pub fn init(context: &mut Context, file_name: &str) -> Result<(), IxaError> {
 #[cfg(test)]
 mod test {
     use crate::{
-        infectiousness_manager::InfectionContextExt, parameters::{ContextParametersExt, GlobalParams, Params},
-        rate_fns::load_rate_fns, reports::ReportType
+        infectiousness_manager::InfectionContextExt,
+        parameters::{ContextParametersExt, GlobalParams, Params},
+        rate_fns::load_rate_fns,
+        reports::ReportType,
     };
     use ixa::{
         Context, ContextGlobalPropertiesExt, ContextPeopleExt, ContextRandomExt, ContextReportExt,
@@ -73,7 +75,6 @@ mod test {
     use statrs::assert_almost_eq;
     use std::path::PathBuf;
     use tempfile::tempdir;
-
 
     fn setup_context_with_report(report: ReportType) -> Context {
         let mut context = Context::new();
@@ -94,7 +95,9 @@ mod test {
 
     #[test]
     fn test_generate_transmission_report() {
-        let mut context = setup_context_with_report(ReportType::TransmissionReport {name: "output.csv".to_string()});
+        let mut context = setup_context_with_report(ReportType::TransmissionReport {
+            name: "output.csv".to_string(),
+        });
 
         let temp_dir = tempdir().unwrap();
         let path = PathBuf::from(&temp_dir.path());
@@ -115,11 +118,10 @@ mod test {
         });
         context.execute();
 
-        
         let Params { reports, .. } = context.get_params();
         let file_path = path.join(match &reports[0] {
             ReportType::TransmissionReport { name } => name,
-            _ => panic!("Unreachable report encountered")
+            _ => panic!("Unreachable report encountered"),
         });
 
         assert!(file_path.exists());

@@ -155,7 +155,7 @@ mod test {
     use super::Hospitalized;
     use crate::{
         hospitalizations::HospitalAgeGroups,
-        parameters::{GlobalParams, ProgressionLibraryType, HospitalizationParameters},
+        parameters::{GlobalParams, HospitalizationParameters, ProgressionLibraryType},
         population_loader::Age,
         rate_fns::load_rate_fns,
         symptom_progression::{PresentingWithSymptoms, SymptomValue, Symptoms},
@@ -187,7 +187,7 @@ mod test {
             hospitalization_parameters: HospitalizationParameters {
                 mean_delay_to_hospitalization,
                 mean_duration_of_hospitalization,
-                age_groups
+                age_groups,
             },
             ..Default::default()
         };
