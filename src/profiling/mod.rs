@@ -170,16 +170,16 @@ use std::path::Path;
 #[cfg(feature = "profiling")]
 use std::time::Instant;
 
+#[cfg(test)]
+/// Publicly expose access to profiling data only for testing.
+pub fn get_profiling_data() -> std::sync::MutexGuard<'static, ProfilingData> {
+    profiling_data()
+}
+
 // "Magic" constants used in this module
 /// The distinguished total measured time label.
 #[cfg(feature = "profiling")]
 const TOTAL_MEASURED: &str = "Total Measured";
-/// The name of the distinguished accepted infection label
-#[cfg(feature = "profiling")]
-pub const ACCEPTED_INFECTION_LABEL: &str = "accepted infection attempt";
-/// The name of the distinguished forecasted infection label
-#[cfg(feature = "profiling")]
-pub const FORECASTED_INFECTION_LABEL: &str = "forecasted infection";
 #[cfg(feature = "profiling")]
 const NAMED_SPANS_HEADERS: &[&str] = &["Span Label", "Count", "Duration", "% runtime"];
 #[cfg(feature = "profiling")]

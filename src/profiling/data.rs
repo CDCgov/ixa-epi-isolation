@@ -3,7 +3,7 @@ use super::Span;
 #[cfg(feature = "profiling")]
 use super::{
     ComputedStatistic, ComputedValue, CustomStatisticComputer, CustomStatisticPrinter,
-    ACCEPTED_INFECTION_LABEL, FORECASTED_INFECTION_LABEL, TOTAL_MEASURED,
+    TOTAL_MEASURED,
 };
 use ixa::HashMap;
 #[cfg(feature = "profiling")]
