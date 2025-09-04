@@ -3,7 +3,7 @@ use super::Span;
 #[cfg(feature = "profiling")]
 use super::{
     ComputedStatistic, ComputedValue, CustomStatisticComputer, CustomStatisticPrinter,
-    ACCEPTED_INFECTION_LABEL, FORECASTED_INFECTION_LABEL, TOTAL_MEASURED,
+    TOTAL_MEASURED,
 };
 use ixa::HashMap;
 #[cfg(feature = "profiling")]
@@ -11,31 +11,31 @@ use std::sync::{Mutex, MutexGuard, OnceLock};
 use std::time::{Duration, Instant};
 
 #[cfg(feature = "profiling")]
-static PROFILING_DATA: OnceLock<Mutex<ProfilingDataContainer>> = OnceLock::new();
+static PROFILING_DATA: OnceLock<Mutex<ProfilingData>> = OnceLock::new();
 
 /// During testing, tests that are meant to panic can poison the mutex. Since we don't care
 /// about accuracy of profiling data during tests, we just reset the poison flag.
 #[cfg(all(feature = "profiling", test))]
-pub(super) fn profiling_data() -> MutexGuard<'static, ProfilingDataContainer> {
+pub(super) fn profiling_data() -> MutexGuard<'static, ProfilingData> {
     #[cfg(test)]
     PROFILING_DATA
-        .get_or_init(|| Mutex::new(ProfilingDataContainer::new()))
+        .get_or_init(|| Mutex::new(ProfilingData::new()))
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner)
 }
 
 /// Acquires an exclusive lock on the profiling data, blocking until it's available.
 #[cfg(all(feature = "profiling", not(test)))]
-pub(super) fn profiling_data() -> MutexGuard<'static, ProfilingDataContainer> {
+pub(super) fn profiling_data() -> MutexGuard<'static, ProfilingData> {
     #[cfg(not(test))]
     PROFILING_DATA
-        .get_or_init(|| Mutex::new(ProfilingDataContainer::new()))
+        .get_or_init(|| Mutex::new(ProfilingData::new()))
         .lock()
         .unwrap()
 }
 
 #[derive(Default)]
-pub struct ProfilingDataContainer {
+pub struct ProfilingData {
     pub start_time: Option<Instant>,
     pub counts: HashMap<&'static str, usize>,
     // We store span counts with the span duration, because they are updated when
@@ -58,33 +58,10 @@ pub struct ProfilingDataContainer {
 }
 
 #[cfg(feature = "profiling")]
-impl ProfilingDataContainer {
-    /// Initialize a new `ProfilingDataContainer` with any default computed statistics.
+impl ProfilingData {
+    /// Initialize a new `ProfilingData`.
     fn new() -> Self {
-        let mut container = Self::default();
-        let computer = |container: &ProfilingDataContainer| {
-            if let (Some(accepted), Some(forecasted)) = (
-                container.get_named_count(ACCEPTED_INFECTION_LABEL),
-                container.get_named_count(FORECASTED_INFECTION_LABEL),
-            ) {
-                #[allow(clippy::cast_precision_loss)]
-                let efficiency = (accepted as f64) / (forecasted as f64) * 100.0;
-                Some(efficiency)
-            } else {
-                None
-            }
-        };
-        let computer: CustomStatisticComputer<f64> = Box::new(computer);
-
-        let printer = |efficiency| {
-            println!("Infection Forecasting Efficiency: {:.2}%", efficiency);
-        };
-        let printer: CustomStatisticPrinter<f64> = Box::new(printer);
-        let label = "infection forecasting efficiency";
-        let description = "The percentage of forecasted infections that were accepted.";
-        container.add_computed_statistic(label, description, computer, printer);
-
-        container
+        Self::default()
     }
 
     pub(super) fn increment_named_count(&mut self, key: &'static str) {
@@ -224,6 +201,6 @@ pub fn open_span(label: &'static str) -> Span {
 /// Call this if you want to explicitly close a span before the end of the scope in which the
 /// span was defined. Equivalent to `span.drop()`.
 pub fn close_span(_span: Span) {
-    // The `span` is dropped here, and `ProfilingDataContainer::close_span` is called
+    // The `span` is dropped here, and `ProfilingData::close_span` is called
     // from `Span::drop`. Incidentally, this is the same implementation as `span.drop()`!
 }

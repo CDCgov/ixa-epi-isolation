@@ -1,5 +1,5 @@
 #[cfg(feature = "profiling")]
-use super::{profiling_data, ProfilingDataContainer, NAMED_COUNTS_HEADERS, NAMED_SPANS_HEADERS};
+use super::{profiling_data, ProfilingData, NAMED_COUNTS_HEADERS, NAMED_SPANS_HEADERS};
 #[cfg(feature = "profiling")]
 use humantime::format_duration;
 
@@ -173,7 +173,7 @@ pub fn format_with_commas(value: usize) -> String {
     for (i, &b) in bytes.iter().enumerate() {
         result.push(b as char);
         let digits_left = len - i - 1;
-        if digits_left > 0 && digits_left % 3 == 0 {
+        if digits_left > 0 && digits_left.is_multiple_of(3) {
             result.push(',');
         }
     }
@@ -221,6 +221,7 @@ pub fn format_with_commas_f64(value: f64) -> String {
 #[cfg(all(test, feature = "profiling"))]
 mod tests {
     #![allow(clippy::unreadable_literal)]
+    use crate::computed_statistics::{ACCEPTED_INFECTION_LABEL, FORECASTED_INFECTION_LABEL};
     use crate::profiling::display::{
         format_with_commas, format_with_commas_f64, print_named_counts, print_named_spans,
     };
@@ -248,17 +249,6 @@ mod tests {
             data.counts.insert("event1", 5);
         }
         print_named_counts(); // should print " event1  5  5.00 per second"
-    }
-
-    #[test]
-    fn print_named_counts_computes_forecast_efficiency() {
-        {
-            let mut data = profiling_data();
-            data.start_time = Some(Instant::now().checked_sub(Duration::from_secs(2)).unwrap());
-            data.counts.insert("forecasted infection", 10);
-            data.counts.insert("accepted infection", 4);
-        }
-        print_named_counts(); // should print "40.00% efficiency"
     }
 
     // region Tests for `format_with_commas()`

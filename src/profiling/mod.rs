@@ -101,7 +101,7 @@
 //! ## Computed statistics
 //!
 //! You can register custom computed statistics that derive values from the current
-//! `ProfilingDataContainer`. Use `add_computed_statistic(label, description, computer, printer)`
+//! `ProfilingData`. Use `add_computed_statistic(label, description, computer, printer)`
 //! to add one. The relevant API is:
 //!
 //! ```rust
@@ -111,14 +111,14 @@
 //!     label: &'static str,
 //!     /// Description of the statistic. Used in the JSON report.
 //!     description: &'static str,
-//!     /// A function that takes a reference to the `ProfilingDataContainer` and computes a value
+//!     /// A function that takes a reference to the `ProfilingData` and computes a value
 //!     computer: CustomStatisticComputer,
 //!     /// A function that prints the computed value to the console.
 //!     printer: CustomStatisticPrinter,
 //! );
 //!
 //! pub type CustomStatisticComputer<T> =
-//!     Box<dyn (Fn(&ProfilingDataContainer) -> Option<T>) + Send + Sync>;
+//!     Box<dyn (Fn(&ProfilingData) -> Option<T>) + Send + Sync>;
 //! pub type CustomStatisticPrinter<T> = Box<dyn (Fn(T)) + Send + Sync>;
 //!
 //! // The "computer" gets an immutable reference to all counts and spans and to the start time.
@@ -170,16 +170,16 @@ use std::path::Path;
 #[cfg(feature = "profiling")]
 use std::time::Instant;
 
+#[cfg(test)]
+/// Publicly expose access to profiling data only for testing.
+pub fn get_profiling_data() -> std::sync::MutexGuard<'static, ProfilingData> {
+    profiling_data()
+}
+
 // "Magic" constants used in this module
 /// The distinguished total measured time label.
 #[cfg(feature = "profiling")]
 const TOTAL_MEASURED: &str = "Total Measured";
-/// The name of the distinguished accepted infection label
-#[cfg(feature = "profiling")]
-const ACCEPTED_INFECTION_LABEL: &str = "accepted infection attempt";
-/// The name of the distinguished forecasted infection label
-#[cfg(feature = "profiling")]
-const FORECASTED_INFECTION_LABEL: &str = "forecasted infection";
 #[cfg(feature = "profiling")]
 const NAMED_SPANS_HEADERS: &[&str] = &["Span Label", "Count", "Duration", "% runtime"];
 #[cfg(feature = "profiling")]

@@ -1,6 +1,7 @@
 use core::f64;
 use statrs::distribution::Binomial;
 
+use crate::computed_statistics::{ACCEPTED_INFECTION_LABEL, FORECASTED_INFECTION_LABEL};
 use crate::infectiousness_manager::{
     evaluate_forecast, get_forecast, infection_attempt, Forecast, InfectionContextExt,
     InfectionData, InfectionDataValue, InfectionStatus, InfectionStatusValue,
@@ -23,9 +24,9 @@ fn schedule_next_forecasted_infection(context: &mut Context, person: PersonId) {
     {
         context.add_plan(next_time, move |context| {
             let _span = open_span("evaluate and schedule next forecast");
-            increment_named_count("forecasted infection");
+            increment_named_count(FORECASTED_INFECTION_LABEL);
             if evaluate_forecast(context, person, forecasted_total_infectiousness) {
-                increment_named_count("accepted infection attempt");
+                increment_named_count(ACCEPTED_INFECTION_LABEL);
                 let _ = infection_attempt(context, person);
             }
             // Continue scheduling forecasts until the person recovers.
