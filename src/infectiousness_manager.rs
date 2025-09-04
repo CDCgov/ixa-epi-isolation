@@ -161,7 +161,7 @@ pub fn evaluate_forecast(
 
     assert!(
         // 1e-10 is a small enough tolerance for floating point comparison.
-        (current_infectiousness <= forecasted_total_infectiousness + 1e-10),
+        current_infectiousness <= forecasted_total_infectiousness + 1e-10,
         "Person {person_id}: Forecasted infectiousness must always be greater than or equal to current infectiousness. Current: {current_infectiousness}, Forecasted: {forecasted_total_infectiousness}"
     );
 

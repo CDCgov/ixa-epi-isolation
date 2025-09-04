@@ -1,12 +1,11 @@
 #[cfg(feature = "profiling")]
 use super::profiling_data;
-use super::ProfilingDataContainer;
+use super::ProfilingData;
 use serde::Serialize;
 use std::fmt::Display;
 
-pub type CustomStatisticComputer<T> =
-    Box<dyn (Fn(&ProfilingDataContainer) -> Option<T>) + Send + Sync>;
-pub type CustomStatisticPrinter<T> = Box<dyn (Fn(T)) + Send + Sync>;
+pub type CustomStatisticComputer<T> = Box<dyn (Fn(&ProfilingData) -> Option<T>) + Send + Sync>;
+pub type CustomStatisticPrinter<T> = Box<dyn Fn(T) + Send + Sync>;
 
 pub(super) enum ComputedStatisticFunctions {
     USize {
@@ -25,7 +24,7 @@ pub(super) enum ComputedStatisticFunctions {
 
 impl ComputedStatisticFunctions {
     /// A type erased way to compute a statistic.
-    pub(super) fn compute(&self, container: &ProfilingDataContainer) -> Option<ComputedValue> {
+    pub(super) fn compute(&self, container: &ProfilingData) -> Option<ComputedValue> {
         match self {
             ComputedStatisticFunctions::USize { computer, .. } => {
                 computer(container).map(ComputedValue::USize)

@@ -1,5 +1,5 @@
 #[cfg(feature = "profiling")]
-use super::{profiling_data, ProfilingDataContainer, NAMED_COUNTS_HEADERS, NAMED_SPANS_HEADERS};
+use super::{profiling_data, ProfilingData, NAMED_COUNTS_HEADERS, NAMED_SPANS_HEADERS};
 #[cfg(feature = "profiling")]
 use humantime::format_duration;
 
@@ -173,7 +173,7 @@ pub fn format_with_commas(value: usize) -> String {
     for (i, &b) in bytes.iter().enumerate() {
         result.push(b as char);
         let digits_left = len - i - 1;
-        if digits_left > 0 && digits_left % 3 == 0 {
+        if digits_left > 0 && digits_left.is_multiple_of(3) {
             result.push(',');
         }
     }

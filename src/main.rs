@@ -1,3 +1,4 @@
+mod computed_statistics;
 mod hospitalizations;
 mod infection_propagation_loop;
 mod infectiousness_manager;
@@ -53,6 +54,9 @@ fn main() {
         symptom_progression::init(context)?;
         policies::init(context)?;
         hospitalizations::init(context);
+
+        // Computed statistics do not require the context to be initialized.
+        computed_statistics::init();
 
         Ok(())
     })

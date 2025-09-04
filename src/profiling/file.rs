@@ -74,7 +74,7 @@ struct CountRecord {
 
 #[cfg(feature = "profiling")]
 #[derive(Serialize)]
-struct ProfilingData {
+struct ProfilingDataRecord {
     date_time: SystemTime,
     execution_statistics: SerializableExecutionStatistics,
     named_counts: Vec<CountRecord>,
@@ -141,7 +141,7 @@ pub fn write_profiling_data_to_file<P: AsRef<Path>>(
     });
     let computed_statistics = computed_statistics.collect::<HashMap<_, _>>();
 
-    let profiling_data = ProfilingData {
+    let profiling_data = ProfilingDataRecord {
         date_time: SystemTime::now(),
         execution_statistics: execution_statistics.into(),
         named_counts: named_counts_data,
