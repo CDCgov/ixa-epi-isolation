@@ -5,15 +5,14 @@ mod infectiousness_manager;
 mod interventions;
 mod natural_history_parameter_manager;
 mod parameters;
-mod person_property_report;
 mod policies;
 mod population_loader;
 mod profiling;
 mod property_progression_manager;
 pub mod rate_fns;
+pub mod reports;
 mod settings;
 mod symptom_progression;
-mod transmission_report;
 pub mod utils;
 
 use ixa::runner::run_with_args;
@@ -49,8 +48,7 @@ fn main() {
         context.index_property(Age);
 
         infection_propagation_loop::init(context)?;
-        transmission_report::init(context)?;
-        person_property_report::init(context)?;
+        reports::init(context)?;
         symptom_progression::init(context)?;
         policies::init(context)?;
         hospitalizations::init(context);
