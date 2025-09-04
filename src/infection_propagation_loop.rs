@@ -1024,7 +1024,13 @@ mod test {
             // Modify itinerary of infector to increase infectiousness due to isolating at home with alpha > 0
             context.add_plan(0.0, move |context| {
                 context
-                    .modify_itinerary(infector, ItineraryModifiers::RestrictTo { setting: &Home })
+                    .modify_itinerary(
+                        infector,
+                        ItineraryModifiers::RestrictTo {
+                            setting: &Home,
+                            ranking: 1,
+                        },
+                    )
                     .unwrap();
             });
 
@@ -1060,12 +1066,18 @@ mod test {
                 let contact = context.add_person(()).unwrap();
                 context.add_itinerary(contact, itinerary.clone()).unwrap();
                 // Modify itinerary of each contact
+                let itinerary_modifier = ItineraryModifiers::Exclude {
+                    setting: &Home,
+                    ranking: 1,
+                };
                 context
-                    .modify_itinerary(contact, ItineraryModifiers::Exclude { setting: &Home })
+                    .modify_itinerary(contact, itinerary_modifier.clone())
                     .unwrap();
                 // Plan to remove the modified itinerary after the forecast is calculated
                 context.add_plan(0.0, move |context| {
-                    context.remove_modified_itinerary(contact).unwrap();
+                    context
+                        .remove_modified_itinerary_entry(contact, itinerary_modifier)
+                        .unwrap();
                 });
             }
 
