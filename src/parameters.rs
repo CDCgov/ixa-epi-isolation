@@ -1,6 +1,9 @@
-use std::{collections::HashMap, fmt::Debug, path::PathBuf};
+use std::{fmt::Debug, path::PathBuf};
 
-use ixa::{define_global_property, Context, ContextGlobalPropertiesExt, IxaError, PluginContext};
+use ixa::{
+    define_global_property, Context, ContextGlobalPropertiesExt, HashMap, HashMapExt, IxaError,
+    PluginContext,
+};
 use serde::{Deserialize, Serialize};
 
 use crate::policies::{validate_guidance_policy, Policies};
@@ -321,7 +324,7 @@ impl ContextParametersExt for Context {}
 
 #[cfg(test)]
 mod test {
-    use ixa::{Context, ContextGlobalPropertiesExt, IxaError};
+    use ixa::{Context, ContextGlobalPropertiesExt, HashMap, IxaError};
     use statrs::assert_almost_eq;
 
     use super::{validate_inputs, CoreSettingsTypes, ItinerarySpecificationType};
@@ -329,7 +332,6 @@ mod test {
         parameters::{ContextParametersExt, GlobalParams, Params, RateFnType},
         settings::SettingProperties,
     };
-    use std::collections::HashMap;
 
     #[test]
     fn test_standard_input_file() {
@@ -396,26 +398,30 @@ mod test {
     #[test]
     fn test_validate_split_zeros() {
         let parameters = Params {
-            settings_properties: HashMap::from([
-                (
-                    CoreSettingsTypes::Home,
-                    SettingProperties {
-                        alpha: 0.5,
-                        itinerary_specification: Some(ItinerarySpecificationType::Constant {
-                            ratio: 0.0,
-                        }),
-                    },
-                ),
-                (
-                    CoreSettingsTypes::School,
-                    SettingProperties {
-                        alpha: 0.5,
-                        itinerary_specification: Some(ItinerarySpecificationType::Constant {
-                            ratio: 0.0,
-                        }),
-                    },
-                ),
-            ]),
+            settings_properties: HashMap::from_iter(
+                [
+                    (
+                        CoreSettingsTypes::Home,
+                        SettingProperties {
+                            alpha: 0.5,
+                            itinerary_specification: Some(ItinerarySpecificationType::Constant {
+                                ratio: 0.0,
+                            }),
+                        },
+                    ),
+                    (
+                        CoreSettingsTypes::School,
+                        SettingProperties {
+                            alpha: 0.5,
+                            itinerary_specification: Some(ItinerarySpecificationType::Constant {
+                                ratio: 0.0,
+                            }),
+                        },
+                    ),
+                ]
+                .into_iter()
+                .collect::<HashMap<_, _>>(),
+            ),
             ..Default::default()
         };
         let e = validate_inputs(&parameters).err();
@@ -434,26 +440,30 @@ mod test {
     #[test]
     fn test_validate_split_negative() {
         let parameters = Params {
-            settings_properties: HashMap::from([
-                (
-                    CoreSettingsTypes::Home,
-                    SettingProperties {
-                        alpha: 0.5,
-                        itinerary_specification: Some(ItinerarySpecificationType::Constant {
-                            ratio: -0.1,
-                        }),
-                    },
-                ),
-                (
-                    CoreSettingsTypes::School,
-                    SettingProperties {
-                        alpha: 0.5,
-                        itinerary_specification: Some(ItinerarySpecificationType::Constant {
-                            ratio: 0.0,
-                        }),
-                    },
-                ),
-            ]),
+            settings_properties: HashMap::from_iter(
+                [
+                    (
+                        CoreSettingsTypes::Home,
+                        SettingProperties {
+                            alpha: 0.5,
+                            itinerary_specification: Some(ItinerarySpecificationType::Constant {
+                                ratio: -0.1,
+                            }),
+                        },
+                    ),
+                    (
+                        CoreSettingsTypes::School,
+                        SettingProperties {
+                            alpha: 0.5,
+                            itinerary_specification: Some(ItinerarySpecificationType::Constant {
+                                ratio: 0.0,
+                            }),
+                        },
+                    ),
+                ]
+                .into_iter()
+                .collect::<HashMap<_, _>>(),
+            ),
             ..Default::default()
         };
         let e = validate_inputs(&parameters).err();
@@ -475,22 +485,26 @@ mod test {
     #[test]
     fn test_validation_itinerary_all_none() {
         let parameters = Params {
-            settings_properties: HashMap::from([
-                (
-                    CoreSettingsTypes::Home,
-                    SettingProperties {
-                        alpha: 0.5,
-                        itinerary_specification: None,
-                    },
-                ),
-                (
-                    CoreSettingsTypes::School,
-                    SettingProperties {
-                        alpha: 0.5,
-                        itinerary_specification: None,
-                    },
-                ),
-            ]),
+            settings_properties: HashMap::from_iter(
+                [
+                    (
+                        CoreSettingsTypes::Home,
+                        SettingProperties {
+                            alpha: 0.5,
+                            itinerary_specification: None,
+                        },
+                    ),
+                    (
+                        CoreSettingsTypes::School,
+                        SettingProperties {
+                            alpha: 0.5,
+                            itinerary_specification: None,
+                        },
+                    ),
+                ]
+                .into_iter()
+                .collect::<HashMap<_, _>>(),
+            ),
             ..Default::default()
         };
         let e = validate_inputs(&parameters).err();
@@ -500,24 +514,28 @@ mod test {
     #[test]
     fn test_validation_itinerary_one_some_zero_rest_none() {
         let parameters = Params {
-            settings_properties: HashMap::from([
-                (
-                    CoreSettingsTypes::Home,
-                    SettingProperties {
-                        alpha: 0.5,
-                        itinerary_specification: Some(ItinerarySpecificationType::Constant {
-                            ratio: 0.0,
-                        }),
-                    },
-                ),
-                (
-                    CoreSettingsTypes::School,
-                    SettingProperties {
-                        alpha: 0.5,
-                        itinerary_specification: None,
-                    },
-                ),
-            ]),
+            settings_properties: HashMap::from_iter(
+                [
+                    (
+                        CoreSettingsTypes::Home,
+                        SettingProperties {
+                            alpha: 0.5,
+                            itinerary_specification: Some(ItinerarySpecificationType::Constant {
+                                ratio: 0.0,
+                            }),
+                        },
+                    ),
+                    (
+                        CoreSettingsTypes::School,
+                        SettingProperties {
+                            alpha: 0.5,
+                            itinerary_specification: None,
+                        },
+                    ),
+                ]
+                .into_iter()
+                .collect::<HashMap<_, _>>(),
+            ),
             ..Default::default()
         };
         let e = validate_inputs(&parameters).err();

@@ -279,11 +279,11 @@ mod test {
         symptom_progression::{PresentingWithSymptoms, SymptomRecord},
         Params,
     };
-    use std::{cell::RefCell, collections::HashMap, path::PathBuf, rc::Rc};
+    use std::{cell::RefCell, path::PathBuf, rc::Rc};
 
     use ixa::{
         define_person_property_with_default, Context, ContextGlobalPropertiesExt, ContextPeopleExt,
-        ContextRandomExt, IxaError, PersonPropertyChangeEvent,
+        ContextRandomExt, HashMap, IxaError, PersonPropertyChangeEvent,
     };
 
     use super::{IsolatingStatus, MaskingStatus};
@@ -315,35 +315,39 @@ mod test {
             symptom_progression_library: Some(ProgressionLibraryType::EmpiricalFromFile {
                 file: PathBuf::from("./input/library_symptom_parameters.csv"),
             }),
-            settings_properties: HashMap::from([
-                (
-                    CoreSettingsTypes::Home,
-                    SettingProperties {
-                        alpha: 0.5,
-                        itinerary_specification: Some(ItinerarySpecificationType::Constant {
-                            ratio: 1.0,
-                        }),
-                    },
-                ),
-                (
-                    CoreSettingsTypes::Workplace,
-                    SettingProperties {
-                        alpha: 0.5,
-                        itinerary_specification: Some(ItinerarySpecificationType::Constant {
-                            ratio: 1.0,
-                        }),
-                    },
-                ),
-                (
-                    CoreSettingsTypes::CensusTract,
-                    SettingProperties {
-                        alpha: 0.5,
-                        itinerary_specification: Some(ItinerarySpecificationType::Constant {
-                            ratio: 1.0,
-                        }),
-                    },
-                ),
-            ]),
+            settings_properties: HashMap::from_iter(
+                [
+                    (
+                        CoreSettingsTypes::Home,
+                        SettingProperties {
+                            alpha: 0.5,
+                            itinerary_specification: Some(ItinerarySpecificationType::Constant {
+                                ratio: 1.0,
+                            }),
+                        },
+                    ),
+                    (
+                        CoreSettingsTypes::Workplace,
+                        SettingProperties {
+                            alpha: 0.5,
+                            itinerary_specification: Some(ItinerarySpecificationType::Constant {
+                                ratio: 1.0,
+                            }),
+                        },
+                    ),
+                    (
+                        CoreSettingsTypes::CensusTract,
+                        SettingProperties {
+                            alpha: 0.5,
+                            itinerary_specification: Some(ItinerarySpecificationType::Constant {
+                                ratio: 1.0,
+                            }),
+                        },
+                    ),
+                ]
+                .into_iter()
+                .collect::<HashMap<_, _>>(),
+            ),
             guidance_policy: Some(Policies::PreviousIsolationGuidance {
                 overall_policy_duration,
                 mild_symptom_isolation_duration,

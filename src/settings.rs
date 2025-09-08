@@ -2,16 +2,12 @@ use crate::parameters::{
     ContextParametersExt, CoreSettingsTypes, ItinerarySpecificationType, Params,
 };
 use ixa::{
-    define_data_plugin, define_rng, trace, Context, ContextPeopleExt, ContextRandomExt, IxaError,
-    PersonId, PluginContext,
+    define_data_plugin, define_rng, trace, Context, ContextPeopleExt, ContextRandomExt, HashMap,
+    HashMapExt, HashSet, HashSetExt, IxaError, PersonId, PluginContext,
 };
 use serde::{Deserialize, Serialize};
 
-use std::{
-    any::TypeId,
-    collections::{HashMap, HashSet},
-    hash::Hash,
-};
+use std::{any::TypeId, hash::Hash};
 
 use dyn_clone::DynClone;
 
@@ -2052,15 +2048,19 @@ mod test {
     fn test_only_include_registered_settings_in_itineraries() {
         let mut context = Context::new();
         let parameters = Params {
-            settings_properties: HashMap::from([(
-                CoreSettingsTypes::Home,
-                SettingProperties {
-                    alpha: 0.5,
-                    itinerary_specification: Some(ItinerarySpecificationType::Constant {
-                        ratio: 0.5,
-                    }),
-                },
-            )]),
+            settings_properties: HashMap::from_iter(
+                [(
+                    CoreSettingsTypes::Home,
+                    SettingProperties {
+                        alpha: 0.5,
+                        itinerary_specification: Some(ItinerarySpecificationType::Constant {
+                            ratio: 0.5,
+                        }),
+                    },
+                )]
+                .into_iter()
+                .collect::<HashMap<_, _>>(),
+            ),
             ..Default::default()
         };
 
