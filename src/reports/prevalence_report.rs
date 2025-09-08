@@ -204,12 +204,10 @@ mod test {
         let mut expected = vec![
             //   t    | age |sym| inf status  | hosp   | count
             vec!["0.0", "42", "", "Infectious", "false", "1"],
-            vec!["0.0", "43", "", "Infectious", "false", "0"],
-            vec!["0.0", "42", "", "Susceptible", "false", "0"],
             vec!["0.0", "43", "", "Susceptible", "false", "1"],
             vec!["2.0", "42", "", "Infectious", "false", "1"],
             vec!["2.0", "43", "", "Infectious", "false", "1"],
-            vec!["2.0", "42", "", "Susceptible", "false", "0"],
+            // Only an initialized combination can have a zero count
             vec!["2.0", "43", "", "Susceptible", "false", "0"],
         ];
 
