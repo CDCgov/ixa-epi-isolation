@@ -1,15 +1,14 @@
 use crate::{
     hospitalizations::Hospitalized,
     infectiousness_manager::{InfectionStatus, InfectionStatusValue},
-    population_loader::Age,
+    population_loader::{Age, Alive},
     symptom_progression::{SymptomValue, Symptoms},
 };
 use ixa::{
     define_data_plugin, define_derived_property, define_report, report::ContextReportExt, Context,
-    ContextPeopleExt, ExecutionPhase, HashMap, HashMapExt, IxaError, PersonPropertyChangeEvent,
+    ContextPeopleExt, ExecutionPhase, HashMap, IxaError, PersonPropertyChangeEvent,
 };
 use serde::{Deserialize, Serialize};
-use std::{cell::RefCell, str::FromStr};
 
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
 struct PersonPropertyReport {
@@ -90,38 +89,6 @@ fn send_property_counts(context: &mut Context) {
     }
 }
 
-impl FromStr for InfectionStatusValue {
-    type Err = IxaError;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
-            "Susceptible" => Ok(InfectionStatusValue::Susceptible),
-            "Infectious" => Ok(InfectionStatusValue::Infectious),
-            "Recovered" => Ok(InfectionStatusValue::Recovered),
-            _ => Err(IxaError::IxaError(
-                "Value type not found for infection status".to_string(),
-            )),
-        }
-    }
-}
-
-impl FromStr for SymptomValue {
-    type Err = IxaError;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
-            "Presymptomatic" => Ok(SymptomValue::Presymptomatic),
-            "Category1" => Ok(SymptomValue::Category1),
-            "Category2" => Ok(SymptomValue::Category2),
-            "Category3" => Ok(SymptomValue::Category3),
-            "Category4" => Ok(SymptomValue::Category4),
-            _ => Err(IxaError::IxaError(
-                "Value type not found for symptom value".to_string(),
-            )),
-        }
-    }
-}
-
 /// # Errors
 ///
 /// Will return `IxaError` if the report cannot be added
@@ -133,34 +100,18 @@ pub fn init(context: &mut Context, file_name: &str, period: f64) -> Result<(), I
     // Count initial number of people per property status
     context.add_report::<PersonPropertyReport>(file_name)?;
 
-    let tabulator = (Age, InfectionStatus, Symptoms, Hospitalized);
-    // Tabulate initial counts
-    let map_counts: RefCell<HashMap<PersonPropertyReportValues, usize>> =
-        RefCell::new(HashMap::new());
-    context.tabulate_person_properties(&tabulator, |_context, values, count| {
-        // Handle the string Option<SymptomValue>
-        let symptoms = if values[2].starts_with("Some") {
-            let end = values[2].chars().count();
-            // Get symptom value contents within Some(_)
-            let symptom_string = &values[2][6..(end - 1)];
-            let symptom_values = symptom_string.parse::<SymptomValue>().unwrap();
-            Some(symptom_values)
-        } else {
-            None
-        };
-        // Create the struct report values
-        let input = PersonPropertyReportValues {
-            age: values[0].parse::<u8>().unwrap(),
-            infection_status: values[1].parse::<InfectionStatusValue>().unwrap(),
-            symptoms,
-            hospitalized: values[3].parse::<bool>().unwrap(),
-        };
+    let mut map_counts = HashMap::default();
 
-        map_counts.borrow_mut().insert(input, count);
-    });
+    for person in context.query_people((Alive, true)) {
+        let value = context.get_person_property(person, PersonReportProperties);
+        map_counts
+            .entry(value)
+            .and_modify(|count| *count += 1)
+            .or_insert(1);
+    }
 
     let report_container = context.get_data_mut(PropertyReportDataPlugin);
-    report_container.report_map_container = map_counts.take();
+    report_container.report_map_container = map_counts;
 
     context.subscribe_to_event::<ReportEvent>(|context, event| {
         update_property_change_counts(context, event);
