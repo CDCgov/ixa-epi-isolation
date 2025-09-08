@@ -3,10 +3,16 @@
 	"features": {
 		"ghcr.io/devcontainers/features/rust:1": {},
 		"ghcr.io/rocker-org/devcontainer-features/r-apt:0": {},
+		"ghcr.io/rocker-org/devcontainer-features/apt-packages:1": {
+        	"packages": "r-cran-curl"
+    	},
 		"ghcr.io/devcontainers/features/node:1": {},
 		"ghcr.io/guiyomh/features/just:0": {},
 		"ghcr.io/prulloac/devcontainer-features/pre-commit:latest": {}
 	},
+	"overrideFeatureInstallOrder": [
+    	"ghcr.io/rocker-org/devcontainer-features/r-apt"
+	],
 	"customizations": {
 		"vscode": {
 			"settings": {
