@@ -2,7 +2,12 @@
 	"image": "mcr.microsoft.com/devcontainers/base:debian",
 	"features": {
 		"ghcr.io/devcontainers/features/rust:1": {},
-		"ghcr.io/rocker-org/devcontainer-features/r-apt:0": {},
+		"ghcr.io/rocker-org/devcontainer-features/r-apt:0": {
+			"vscodeRSupport": "full",
+			"installREnv": true,
+			"installVscDebugger": true
+
+		},
 		"ghcr.io/rocker-org/devcontainer-features/apt-packages:1": {
         	"packages": "r-cran-curl"
     	},
