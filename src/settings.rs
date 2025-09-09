@@ -1,6 +1,7 @@
 use crate::parameters::{
     ContextParametersExt, CoreSettingsTypes, ItinerarySpecificationType, Params,
 };
+use indexmap::set::IndexSet;
 use ixa::{
     define_data_plugin, define_rng, trace, Context, ContextPeopleExt, ContextRandomExt, IxaError,
     PersonId, PluginContext,
@@ -42,7 +43,7 @@ where
     fn id(&self) -> usize;
     fn calculate_multiplier(
         &self,
-        members: &HashSet<PersonId>,
+        members: &IndexSet<PersonId>,
         setting_properties: SettingProperties,
     ) -> f64;
     fn get_category_id(&self) -> &'static str;
@@ -64,7 +65,7 @@ impl<T: SettingCategory + Clone> AnySettingId for SettingId<T> {
     #[allow(clippy::cast_precision_loss)]
     fn calculate_multiplier(
         &self,
-        members: &HashSet<PersonId>,
+        members: &IndexSet<PersonId>,
         setting_properties: SettingProperties,
     ) -> f64 {
         ((members.len() - 1) as f64).powf(setting_properties.alpha)
@@ -160,11 +161,9 @@ struct SettingDataContainer {
     // For each setting type (e.g., Home) store the properties (e.g., alpha)
     setting_properties: HashMap<TypeId, SettingProperties>,
     // For each setting type, have a map of each setting id and a list of members
-    active_members: HashMap<(TypeId, usize), HashMap<PersonId, usize>>,
-    active_members_set: HashMap<(TypeId, usize), HashSet<PersonId>>,
-    active_members_vec: HashMap<(TypeId, usize), Vec<PersonId>>,
-    inactive_members: HashMap<(TypeId, usize), HashSet<PersonId>>,
-    all_members: HashMap<(TypeId, usize), HashSet<PersonId>>,
+    active_members: HashMap<(TypeId, usize), IndexSet<PersonId>>,
+    inactive_members: HashMap<(TypeId, usize), IndexSet<PersonId>>,
+    all_members: HashMap<(TypeId, usize), IndexSet<PersonId>>,
     itineraries: HashMap<PersonId, Vec<ItineraryEntry>>,
     modified_itineraries: HashMap<PersonId, Vec<ItineraryEntry>>,
 }
@@ -189,26 +188,26 @@ impl SettingDataContainer {
         &self,
         setting: &dyn AnySettingId,
         selector: MembershipSelector,
-    ) -> Option<&HashSet<PersonId>> {
+    ) -> Option<&IndexSet<PersonId>> {
         match selector {
             MembershipSelector::Active => self.get_active_setting_members(setting),
             MembershipSelector::Inactive => self.get_inactive_setting_members(setting),
             MembershipSelector::Union => self.get_all_setting_members(setting),
         }
     }
-    fn get_active_setting_members(&self, setting: &dyn AnySettingId) -> Option<&HashSet<PersonId>> {
-        self.active_members_set.get(&setting.get_tuple_id())
-    }
-    fn get_active_setting_members_vec(&self, setting: &dyn AnySettingId) -> Option<&Vec<PersonId>> {
-        self.active_members_vec.get(&setting.get_tuple_id())
+    fn get_active_setting_members(
+        &self,
+        setting: &dyn AnySettingId,
+    ) -> Option<&IndexSet<PersonId>> {
+        self.active_members.get(&setting.get_tuple_id())
     }
     fn get_inactive_setting_members(
         &self,
         setting: &dyn AnySettingId,
-    ) -> Option<&HashSet<PersonId>> {
+    ) -> Option<&IndexSet<PersonId>> {
         self.inactive_members.get(&setting.get_tuple_id())
     }
-    fn get_all_setting_members(&self, setting: &dyn AnySettingId) -> Option<&HashSet<PersonId>> {
+    fn get_all_setting_members(&self, setting: &dyn AnySettingId) -> Option<&IndexSet<PersonId>> {
         self.all_members.get(&setting.get_tuple_id())
     }
     fn get_default_itinerary(&self, person_id: PersonId) -> Option<&Vec<ItineraryEntry>> {
@@ -242,7 +241,7 @@ impl SettingDataContainer {
         membership_selector: MembershipSelector,
         mut callback: F,
     ) where
-        F: FnMut(&dyn AnySettingId, &SettingProperties, &HashSet<PersonId>, f64),
+        F: FnMut(&dyn AnySettingId, &SettingProperties, &IndexSet<PersonId>, f64),
     {
         if let Some(itinerary) = self.get_itinerary(person_id, itinerary_selector) {
             for entry in itinerary {
@@ -297,57 +296,39 @@ impl SettingDataContainer {
     }
 
     fn add_active_member(&mut self, person_id: PersonId, setting_identifier: (TypeId, usize)) {
-        let map = self.active_members.entry(setting_identifier).or_default();
-        if map.get(&person_id).is_none() {
-            map.insert(person_id, map.len());
-            self.active_members_set
+        self.active_members
+            .entry(setting_identifier)
+            .or_default()
+            .insert(person_id);
+        if !self
+            .inactive_members
+            .entry(setting_identifier)
+            .or_default()
+            .swap_remove(&person_id)
+        {
+            self.all_members
                 .entry(setting_identifier)
                 .or_default()
                 .insert(person_id);
-            self.active_members_vec
-                .entry(setting_identifier)
-                .or_default()
-                .push(person_id);
         }
-        self.inactive_members
-            .entry(setting_identifier)
-            .or_default()
-            .remove(&person_id);
-        self.all_members
-            .entry(setting_identifier)
-            .or_default()
-            .insert(person_id);
     }
 
     fn add_inactive_member(&mut self, person_id: PersonId, setting_identifier: (TypeId, usize)) {
-        let map = self.active_members.entry(setting_identifier).or_default();
-        if let Some(&index) = map.get(&person_id) {
-            let v = self
-                .active_members_vec
-                .get_mut(&setting_identifier)
-                .unwrap();
-
-            if v.len() > 1 {
-                let old_member = v[v.len() - 1];
-                map.insert(old_member, index);
-            }
-
-            v.swap_remove(index);
-            map.remove(&person_id);
-
-            self.active_members_set
-                .entry(setting_identifier)
-                .or_default()
-                .remove(&person_id);
-        }
         self.inactive_members
             .entry(setting_identifier)
             .or_default()
             .insert(person_id);
-        self.all_members
+        if !self
+            .active_members
             .entry(setting_identifier)
             .or_default()
-            .insert(person_id);
+            .swap_remove(&person_id)
+        {
+            self.all_members
+                .entry(setting_identifier)
+                .or_default()
+                .insert(person_id);
+        }
     }
 
     fn deactivate_itinerary(&mut self, person_id: PersonId, itinerary: Vec<ItineraryEntry>) {
@@ -522,7 +503,7 @@ trait ContextSettingInternalExt: PluginContext + ContextRandomExt {
         &self,
         setting: &dyn AnySettingId,
         selector: MembershipSelector,
-    ) -> Option<&HashSet<PersonId>> {
+    ) -> Option<&IndexSet<PersonId>> {
         self.get_data(SettingDataPlugin)
             .get_setting_members(setting, selector)
     }
@@ -530,7 +511,7 @@ trait ContextSettingInternalExt: PluginContext + ContextRandomExt {
     fn sample_active_setting_members(&self, setting: &dyn AnySettingId) -> Option<PersonId> {
         if let Some(members) = self
             .get_data(SettingDataPlugin)
-            .get_active_setting_members_vec(setting)
+            .get_active_setting_members(setting)
         {
             if members.is_empty() {
                 return None;
@@ -727,7 +708,7 @@ pub trait ContextSettingExt:
     }
 
     #[allow(dead_code)]
-    fn get_setting_members(&self, setting: &dyn AnySettingId) -> Option<&HashSet<PersonId>> {
+    fn get_setting_members(&self, setting: &dyn AnySettingId) -> Option<&IndexSet<PersonId>> {
         self.get_setting_members_internal(setting, MembershipSelector::Active)
     }
 
@@ -1179,22 +1160,11 @@ mod test {
                 .active_members
                 .get(&home.get_tuple_id())
                 .unwrap()
-                .get(&active_person),
-            Some(&0)
-        );
-        assert_eq!(
-            container
-                .active_members_vec
-                .get(&home.get_tuple_id())
-                .unwrap()
                 .len(),
             1
         );
         assert_eq!(
-            container
-                .active_members_vec
-                .get(&home.get_tuple_id())
-                .unwrap()[0],
+            container.active_members.get(&home.get_tuple_id()).unwrap()[0],
             active_person
         );
     }
@@ -1703,10 +1673,12 @@ mod test {
             let active_home_members = context
                 .get_setting_members_internal(&SettingId::new(Home, s), MembershipSelector::Active)
                 .unwrap();
-            let active_tract_members = context.get_setting_members_internal(
-                &SettingId::new(CensusTract, s),
-                MembershipSelector::Active,
-            );
+            let active_tract_members = context
+                .get_setting_members_internal(
+                    &SettingId::new(CensusTract, s),
+                    MembershipSelector::Active,
+                )
+                .unwrap();
             let all_home_members = context
                 .get_setting_members_internal(&SettingId::new(Home, s), MembershipSelector::Union)
                 .unwrap();
@@ -1720,7 +1692,7 @@ mod test {
             assert!(inactive_home_members.is_empty());
             assert_eq!(inactive_tract_members.len(), 5);
             assert_eq!(active_home_members.len(), 5);
-            assert!(active_tract_members.is_none());
+            assert!(active_tract_members.is_empty());
             assert_eq!(all_home_members.len(), 5);
             assert_eq!(all_tract_members.len(), 5);
         }
