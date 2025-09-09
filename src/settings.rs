@@ -1,4 +1,5 @@
 use crate::{
+    hospitalizations::Hospital,
     interventions::ContextItineraryModifierExt,
     parameters::{ContextParametersExt, CoreSettingsTypes, ItinerarySpecificationType, Params},
 };
@@ -121,6 +122,10 @@ pub enum ItineraryModifiers<'a> {
     Exclude {
         setting: &'a dyn SettingCategory,
         ranking: usize,
+    },
+    Hospitalize {
+        ranking: usize,
+        hospital: usize,
     },
 }
 
@@ -297,6 +302,7 @@ impl SettingDataContainer {
                     "Itinerary entry setting type not registered",
                 ));
             }
+
             self.set_member_activity(
                 person_id,
                 itinerary_entry.ratio,
@@ -657,7 +663,6 @@ pub trait ContextSettingExt:
         if !container.setting_categories.insert(setting.get_type_id()) {
             return Err(IxaError::from("Setting type is already registered"));
         }
-
         // Add properties
         container
             .setting_properties
@@ -677,7 +682,8 @@ pub trait ContextSettingExt:
         let ranking = match itinerary_modifier {
             ItineraryModifiers::ReplaceWith { ranking, .. }
             | ItineraryModifiers::RestrictTo { ranking, .. }
-            | ItineraryModifiers::Exclude { ranking, .. } => ranking,
+            | ItineraryModifiers::Exclude { ranking, .. }
+            | ItineraryModifiers::Hospitalize { ranking, .. } => ranking,
         };
         let previous_dominate_itinerary_ranking = container
             .get_dominate_modified_itinerary_ranking(person_id)
@@ -748,6 +754,26 @@ pub trait ContextSettingExt:
                     setting.get_type_id()
                 );
                 self.exclude_setting_from_itinerary(person_id, setting, ranking)
+            }
+            ItineraryModifiers::Hospitalize { ranking, hospital } => {
+                trace!("ItineraryModifier::Hospitalize person {person_id} -- ranking {ranking}");
+                let mut modified_itinerary = Vec::<ItineraryEntry>::new();
+                if let Some(itineraries) = self.get_itinerary(person_id, ItinerarySelector::Default)
+                {
+                    for entry in itineraries {
+                        let mut new_entry = entry.clone();
+                        new_entry.ratio = 0.0;
+                        modified_itinerary.push(new_entry);
+                    }
+                    let hospital_entry =
+                        ItineraryEntry::new(SettingId::new(Hospital, hospital), 1.0);
+                    modified_itinerary.push(hospital_entry);
+
+                    self.add_modified_itinerary(person_id, modified_itinerary, true, ranking)?;
+                    Ok(())
+                } else {
+                    Err(IxaError::from("Can't find itinerary for person"))
+                }
             }
         }
     }
@@ -957,7 +983,7 @@ pub fn init(context: &mut Context) {
 mod test {
     use super::*;
     use crate::{
-        hospitalizations::Hospitalized,
+        hospitalizations::{Hospital, Hospitalized},
         parameters::{GlobalParams, ItinerarySpecificationType},
         policies::previous_guidance::IsolatingStatus,
         settings::ContextSettingExt,
@@ -1711,6 +1737,74 @@ mod test {
 
         println!("HOME MEMBERS (exclude post-isolation): {h_members:?}");
         println!("WORK MEMBERS (exclude post-isolation): {w_members:?}");
+    }
+
+    #[test]
+    fn test_hospitalize_itinerary() {
+        let mut context = Context::new();
+        context.init_random(42);
+        register_default_settings(&mut context);
+        context
+            .register_setting_category(
+                &Hospital,
+                SettingProperties {
+                    alpha: 0.1,
+                    itinerary_specification: None,
+                },
+            )
+            .unwrap();
+
+        let person = context.add_person(()).unwrap();
+        let itinerary = vec![
+            ItineraryEntry::new(SettingId::new(Home, 0), 1.0),
+            ItineraryEntry::new(SettingId::new(Workplace, 0), 1.0),
+        ];
+
+        let _ = context.add_itinerary(person, itinerary.clone());
+
+        // Check membership
+        let h_members = context
+            .get_setting_members(&SettingId::new(Home, 0))
+            .unwrap();
+        let w_members = context
+            .get_setting_members(&SettingId::new(Workplace, 0))
+            .unwrap();
+        assert_eq!(h_members.len(), 1);
+        assert_eq!(w_members.len(), 1);
+
+        let itinerary_modifier = ItineraryModifiers::Hospitalize {
+            ranking: 1,
+            hospital: 0,
+        };
+        // Reduce itinerary to only Home
+        let _ = context.modify_itinerary(person, itinerary_modifier.clone());
+        // Check membership
+        let h_members = context
+            .get_setting_members(&SettingId::new(Home, 0))
+            .unwrap();
+        let w_members = context
+            .get_setting_members(&SettingId::new(Workplace, 0))
+            .unwrap();
+        let hos_members = context
+            .get_setting_members(&SettingId::new(Hospital, 0))
+            .unwrap();
+        assert_eq!(h_members.len(), 0);
+        assert_eq!(w_members.len(), 0);
+        assert_eq!(hos_members.len(), 1);
+
+        let _ = context.remove_modified_itinerary_entry(person, itinerary_modifier);
+        let h_members = context
+            .get_setting_members(&SettingId::new(Home, 0))
+            .unwrap();
+        let w_members = context
+            .get_setting_members(&SettingId::new(Workplace, 0))
+            .unwrap();
+        let hos_members = context
+            .get_setting_members(&SettingId::new(Hospital, 0))
+            .unwrap();
+        assert_eq!(h_members.len(), 1);
+        assert_eq!(w_members.len(), 1);
+        assert_eq!(hos_members.len(), 0);
     }
 
     #[test]

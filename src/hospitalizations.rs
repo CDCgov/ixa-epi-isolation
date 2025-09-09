@@ -11,7 +11,7 @@ use crate::{
     interventions::ContextItineraryModifierExt,
     parameters::{ContextParametersExt, ItinerarySpecificationType},
     population_loader::Age,
-    settings::{ContextSettingExt, Home, ItineraryModifiers, SettingProperties},
+    settings::{ContextSettingExt, ItineraryModifiers, SettingProperties},
     symptom_progression::PresentingWithSymptoms,
 };
 
@@ -168,9 +168,9 @@ pub fn init(context: &mut Context) {
                 Hospitalized,
                 &[(
                     true,
-                    ItineraryModifiers::RestrictTo {
-                        setting: &Home,
+                    ItineraryModifiers::Hospitalize {
                         ranking: 1,
+                        hospital: 0,
                     },
                 )],
             )
