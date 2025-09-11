@@ -1,6 +1,8 @@
 #####
 # Exclude many data and output file types by default
 poetry.lock
+**/data/input/
+**/data/raw_output/
 
 # Data
 *.csv
