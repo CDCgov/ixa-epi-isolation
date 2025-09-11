@@ -1,4 +1,4 @@
-FROM rust:slim-buster as rust-build
+FROM rust:bullseye as rust-build
 WORKDIR /app
 
 RUN apt-get -y update
@@ -10,7 +10,7 @@ COPY Cargo.lock .
 COPY Cargo.toml .
 
 # Second stage: Python with Java runtime
-FROM python:3.10.17
+FROM python:3.10-bullseye
 
 # Configure environment variables
 ENV PYTHONFAULTHANDLER=1 \
