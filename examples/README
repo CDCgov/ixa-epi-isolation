@@ -1,0 +1,40 @@
+The `examples` directory contains some simple exercises and best practices for using the
+`abmwrappers` python package with `ixa-epi-isolation`.
+
+## Getting started
+Be sure to activate the poetry environment by running `poetry install` and, if packages don't
+appear, running `$(poetry env activate)`.
+
+Build the current release binaries by executing `cargo build --release`
+
+Ensure that you can run the release from the command line by running
+```
+target/release/epi-isolation -c input/input.json
+```
+Note that if the files already exist in the root directory, you will only be able to run the above
+command by including the force overwrite argument `-f`
+
+### Rendering `quarto` docs
+Install (quarto)[https://docs.posit.co/resources/install-quarto.html] and ensure that your poetry
+environemnt is activated. Verify you can run quarto with `quarto check install`.
+
+To render a doc, use `quarto render path/to/file/output.qmd`
+
+### Replicate core example
+Here, we set up a replicate of the core example and then we plot the results in a quarto document.
+An analogous python script is included to demonstrate use of the scripts file hierarchy.
+
+This example serves to run 30 replicates of the `input/input.json` file and plot the counts by
+infection status over time.
+
+To run the example using only python, use the command
+
+```
+poetry run python examples/replicate-core-example/scripts/replicate.py -v
+```
+
+To create a quarto md doc, use the command
+
+```
+quarto render examples/replicate-core-example/docs/output.qmd
+```
