@@ -103,8 +103,7 @@ mod test {
     use super::*;
     use crate::parameters::{CoreSettingsTypes, GlobalParams, ItinerarySpecificationType};
     use crate::settings::{CensusTract, Home, School, SettingId, SettingProperties, Workplace};
-    use ixa::{ContextGlobalPropertiesExt, ContextPeopleExt};
-    use std::collections::HashMap;
+    use ixa::{ContextGlobalPropertiesExt, ContextPeopleExt, HashMap};
     use std::io::Write;
     use std::path::PathBuf;
     use tempfile::NamedTempFile;
@@ -122,44 +121,48 @@ mod test {
             // We need to specify an itinerary split here even though we don't draw people from
             // itineraries because `load_synth_population` calls `create_itinerary` for each person,
             // and that function requires an itinerary write function to be set.
-            settings_properties: HashMap::from([
-                (
-                    CoreSettingsTypes::Home,
-                    SettingProperties {
-                        alpha: 0.0,
-                        itinerary_specification: Some(ItinerarySpecificationType::Constant {
-                            ratio: 0.25,
-                        }),
-                    },
-                ),
-                (
-                    CoreSettingsTypes::School,
-                    SettingProperties {
-                        alpha: 0.0,
-                        itinerary_specification: Some(ItinerarySpecificationType::Constant {
-                            ratio: 0.25,
-                        }),
-                    },
-                ),
-                (
-                    CoreSettingsTypes::Workplace,
-                    SettingProperties {
-                        alpha: 0.0,
-                        itinerary_specification: Some(ItinerarySpecificationType::Constant {
-                            ratio: 0.25,
-                        }),
-                    },
-                ),
-                (
-                    CoreSettingsTypes::CensusTract,
-                    SettingProperties {
-                        alpha: 0.0,
-                        itinerary_specification: Some(ItinerarySpecificationType::Constant {
-                            ratio: 0.25,
-                        }),
-                    },
-                ),
-            ]),
+            settings_properties: HashMap::from_iter(
+                [
+                    (
+                        CoreSettingsTypes::Home,
+                        SettingProperties {
+                            alpha: 0.0,
+                            itinerary_specification: Some(ItinerarySpecificationType::Constant {
+                                ratio: 0.25,
+                            }),
+                        },
+                    ),
+                    (
+                        CoreSettingsTypes::School,
+                        SettingProperties {
+                            alpha: 0.0,
+                            itinerary_specification: Some(ItinerarySpecificationType::Constant {
+                                ratio: 0.25,
+                            }),
+                        },
+                    ),
+                    (
+                        CoreSettingsTypes::Workplace,
+                        SettingProperties {
+                            alpha: 0.0,
+                            itinerary_specification: Some(ItinerarySpecificationType::Constant {
+                                ratio: 0.25,
+                            }),
+                        },
+                    ),
+                    (
+                        CoreSettingsTypes::CensusTract,
+                        SettingProperties {
+                            alpha: 0.0,
+                            itinerary_specification: Some(ItinerarySpecificationType::Constant {
+                                ratio: 0.25,
+                            }),
+                        },
+                    ),
+                ]
+                .into_iter()
+                .collect::<HashMap<_, _>>(),
+            ),
             ..Default::default()
         };
         context

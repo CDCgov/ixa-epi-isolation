@@ -136,11 +136,11 @@ pub fn init(context: &mut Context) -> Result<(), IxaError> {
 #[cfg(test)]
 mod test {
     use serde::{Deserialize, Serialize};
-    use std::{cell::RefCell, collections::HashMap, rc::Rc};
+    use std::{cell::RefCell, rc::Rc};
 
     use ixa::{
         define_person_property_with_default, Context, ContextGlobalPropertiesExt, ContextPeopleExt,
-        ContextRandomExt, ExecutionPhase, IxaError, PersonId, PersonPropertyChangeEvent,
+        ContextRandomExt, ExecutionPhase, HashMap, IxaError, PersonId, PersonPropertyChangeEvent,
     };
 
     use statrs::{
@@ -197,35 +197,39 @@ mod test {
             max_time: 100.0,
             seed,
             infectiousness_rate_fn: RateFnType::Constant { rate, duration },
-            settings_properties: HashMap::from([
-                (
-                    CoreSettingsTypes::Home,
-                    SettingProperties {
-                        alpha: 0.5,
-                        itinerary_specification: Some(ItinerarySpecificationType::Constant {
-                            ratio: 1.0,
-                        }),
-                    },
-                ),
-                (
-                    CoreSettingsTypes::Workplace,
-                    SettingProperties {
-                        alpha: 0.5,
-                        itinerary_specification: Some(ItinerarySpecificationType::Constant {
-                            ratio: 1.0,
-                        }),
-                    },
-                ),
-                (
-                    CoreSettingsTypes::CensusTract,
-                    SettingProperties {
-                        alpha: 0.5,
-                        // Itinerary is specified in the `set_homogeneous_mixing_itinerary` function
-                        // so we do not need to set it here.
-                        itinerary_specification: None,
-                    },
-                ),
-            ]),
+            settings_properties: HashMap::from_iter(
+                [
+                    (
+                        CoreSettingsTypes::Home,
+                        SettingProperties {
+                            alpha: 0.5,
+                            itinerary_specification: Some(ItinerarySpecificationType::Constant {
+                                ratio: 1.0,
+                            }),
+                        },
+                    ),
+                    (
+                        CoreSettingsTypes::Workplace,
+                        SettingProperties {
+                            alpha: 0.5,
+                            itinerary_specification: Some(ItinerarySpecificationType::Constant {
+                                ratio: 1.0,
+                            }),
+                        },
+                    ),
+                    (
+                        CoreSettingsTypes::CensusTract,
+                        SettingProperties {
+                            alpha: 0.5,
+                            // Itinerary is specified in the `set_homogeneous_mixing_itinerary` function
+                            // so we do not need to set it here.
+                            itinerary_specification: None,
+                        },
+                    ),
+                ]
+                .into_iter()
+                .collect::<HashMap<_, _>>(),
+            ),
             ..Default::default()
         };
         context.init_random(parameters.seed);
