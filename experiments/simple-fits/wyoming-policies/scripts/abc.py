@@ -85,6 +85,7 @@ def main(config_file: str, keep: bool):
         distance_fn=hosp_lhood,
         data_read_fn=output_processing_function,
         files_to_upload=fps,
+        use_existing_distances=use_existing
     )
 
 
