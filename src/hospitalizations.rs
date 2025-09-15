@@ -1,11 +1,13 @@
 use ixa::{
-    define_derived_property, define_person_property_with_default, define_rng, trace, Context, ContextPeopleExt, ContextRandomExt, PersonId, PersonPropertyChangeEvent, PluginContext
+    define_derived_property, define_person_property_with_default, define_rng, trace, Context,
+    ContextPeopleExt, ContextRandomExt, PersonId, PersonPropertyChangeEvent, PluginContext,
 };
 use serde::{Deserialize, Serialize};
 use statrs::distribution::Exp;
 
 use crate::{
-    parameters::{ContextParametersExt, GlobalParams, Params}, population_loader::Age,
+    parameters::{ContextParametersExt, GlobalParams, Params},
+    population_loader::Age,
     symptom_progression::PresentingWithSymptoms,
 };
 
@@ -20,15 +22,21 @@ pub struct HospitalAgeGroups {
 define_rng!(HospitalizationRng);
 
 define_derived_property!(
-  HospitalAgeGroup,
-  HospitalAgeGroups,
-  [Age],
-  [GlobalParams],
+    HospitalAgeGroup,
+    HospitalAgeGroups,
+    [Age],
+    [GlobalParams],
     |age, params| {
         let p: &Params = params;
-        for (i, group) in p.hospitalization_parameters.age_groups.iter().enumerate().take(p.hospitalization_parameters.age_groups.len() - 1) {
+        for (i, group) in p
+            .hospitalization_parameters
+            .age_groups
+            .iter()
+            .enumerate()
+            .take(p.hospitalization_parameters.age_groups.len() - 1)
+        {
             let next_group = p.hospitalization_parameters.age_groups.get(i + 1).unwrap();
-            if (group.min..=next_group.min - 1).contains(&age) {
+            if (group.min..next_group.min).contains(&age) {
                 return *group;
             }
         }
@@ -78,7 +86,8 @@ trait ContextHospitalizationInternalExt:
     fn evaluate_hospitalization_risk(&mut self, person_id: PersonId) -> bool {
         // Evaluate the risk of hospitalization using the age group probabilities
         let p = self
-            .get_person_property(person_id, HospitalAgeGroup).probability;
+            .get_person_property(person_id, HospitalAgeGroup)
+            .probability;
         self.sample_bool(HospitalizationRng, p)
     }
 
@@ -311,7 +320,8 @@ mod test {
             context.subscribe_to_event::<PersonPropertyChangeEvent<Hospitalized>>(
                 move |context, event| {
                     if event.current {
-                        let age_group = context.get_person_property(event.person_id, HospitalAgeGroup);
+                        let age_group =
+                            context.get_person_property(event.person_id, HospitalAgeGroup);
                         if age_group.min == 0 {
                             *children_hospital_counter_clone.borrow_mut() += 1;
                         } else if age_group.min == 19 {
