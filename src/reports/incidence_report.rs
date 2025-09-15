@@ -24,7 +24,7 @@ define_report!(PersonPropertyIncidenceReport);
 struct PropertyReportDataContainer {
     infection_status_change: HashMap<(u8, InfectionStatusValue), u32>,
     symptom_onset: HashMap<(u8, SymptomValue), u32>,
-    hospitalization: HashMap<(u8, bool), u32>,
+    hospitalization: HashMap<u8, u32>,
 }
 
 define_data_plugin!(
@@ -81,7 +81,7 @@ fn update_hospitalization_incidence(
     if event.current {
         report_container_mut
             .hospitalization
-            .entry((age, event.current))
+            .entry(age)
             .and_modify(|count| *count += 1)
             .or_insert(1);
     }
@@ -126,7 +126,7 @@ fn send_incidence_counts(context: &mut Context) {
         });
     }
     // Hospitalization
-    for ((age, _), count) in &report_container.hospitalization {
+    for (age, count) in &report_container.hospitalization {
         // We only ever record entering the hospital, we print a string to avoid an ambiguous boolean value
         context.send_report(PersonPropertyIncidenceReport {
             t_upper,
@@ -178,7 +178,7 @@ pub fn init(context: &mut Context, file_name: &str, period: f64) -> Result<(), I
             report_container.symptom_onset.insert((age, symp_value), 0);
         }
 
-        report_container.hospitalization.insert((age, true), 0);
+        report_container.hospitalization.insert(age, 0);
     }
 
     context.subscribe_to_event::<PersonPropertyChangeEvent<InfectionStatus>>(|context, event| {
@@ -236,7 +236,7 @@ mod test {
 
     #[test]
     #[allow(clippy::float_cmp)]
-    fn test_generate_prevalence_report() {
+    fn test_generate_incidence_report() {
         let mut context = setup_context_with_report(ReportType::IncidenceReport {
             name: "output.csv".to_string(),
             period: 2.0,
@@ -270,7 +270,6 @@ mod test {
         assert!(file_path.exists());
         std::mem::drop(context);
 
-        assert!(file_path.exists());
         let mut reader = csv::Reader::from_path(file_path).unwrap();
         let mut line_count = 0;
         for result in reader.deserialize() {
@@ -288,5 +287,62 @@ mod test {
         // 2 time points
         // 2 ages
         assert_eq!(line_count, 28);
+    }
+
+    #[test]
+    fn test_age_change() {
+        let mut context = setup_context_with_report(ReportType::IncidenceReport {
+            name: "output.csv".to_string(),
+            period: 2.0,
+        });
+
+        let temp_dir = tempdir().unwrap();
+        let path = PathBuf::from(&temp_dir.path());
+        let config = context.report_options();
+        config.directory(path.clone());
+
+        let source = context.add_person((Age, 42)).unwrap();
+        let target = context.add_person((Age, 43)).unwrap();
+        let setting_type = Some("test_setting");
+        let setting_id: Option<usize> = Some(1);
+        let infection_time = 1.0;
+
+        context.infect_person(source, None, None, None);
+        crate::reports::init(&mut context).unwrap();
+
+        context.add_plan(infection_time, move |context| {
+            context.infect_person(target, Some(source), setting_type, setting_id);
+        });
+        context.add_plan(infection_time - 0.1, move |context| {
+            context.set_person_property(target, Age, 44);
+        });
+        context.execute();
+
+        let Params { reports, .. } = context.get_params();
+        let file_path = path.join(match &reports[0] {
+            ReportType::PrevalenceReport { name, .. } => name,
+            _ => panic!("Unreachable report encountered"),
+        });
+
+        assert!(file_path.exists());
+        std::mem::drop(context);
+
+        let mut reader = csv::Reader::from_path(file_path).unwrap();
+        let mut line_count = 0;
+        for result in reader.deserialize() {
+            let record: crate::reports::incidence_report::PersonPropertyIncidenceReport =
+                result.unwrap();
+            line_count += 1;
+            if record.t_upper == 2.0 && record.event == *"Infectious" && record.age == 44 {
+                assert_eq!(record.count, 1);
+            } else {
+                assert_eq!(record.count, 0);
+            }
+        }
+
+        // 7 event types: 4 symptom categories + hospitalization + Infectious + Recovered
+        // 2 time points
+        // 2 ages at first timepoint, 3 ages at second timepoint (7x2 + 7x3 = 35)
+        assert_eq!(line_count, 35);
     }
 }
