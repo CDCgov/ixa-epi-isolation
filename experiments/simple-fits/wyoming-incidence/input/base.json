@@ -29,7 +29,7 @@
     },
     "guidance_policy": { "UpdatedIsolationGuidance": {
       "post_isolation_duration": 5.0,
-      "isolation_probability": 0.0,
+      "policy_adherence": 0.0,
       "isolation_delay_period": 3.0
       }
     },

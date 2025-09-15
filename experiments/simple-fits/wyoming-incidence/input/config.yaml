@@ -19,13 +19,11 @@ azb:
   create_pool: false
 experiment_conditions:
   replicates_per_particle: 3
-  samples_per_step: 650
+  samples_per_step: 3
   seed: 12345
   scenario_key: epi_isolation.GlobalParams
   tolerance:
-    '0': 450
-    '1': 300
-    '2': 200
+    '0': 665
 local_path:
   default_params_file: experiments/simple-fits/wyoming-incidence/input/base.json
   exe_file: target/release/epi-isolation
