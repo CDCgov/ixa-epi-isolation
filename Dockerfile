@@ -1,4 +1,4 @@
-FROM rust:slim-buster as rust-build
+FROM rust:bullseye as rust-build
 WORKDIR /app
 
 RUN apt-get -y update
