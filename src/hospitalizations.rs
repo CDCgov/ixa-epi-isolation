@@ -1,19 +1,15 @@
 use ixa::{
-    define_data_plugin, define_person_property_with_default, define_rng, trace, Context,
-    ContextPeopleExt, ContextRandomExt, HashMap, PersonId, PersonPropertyChangeEvent,
-    PluginContext,
+    define_derived_property, define_person_property_with_default, define_rng, trace, Context, ContextPeopleExt, ContextRandomExt, PersonId, PersonPropertyChangeEvent, PluginContext
 };
 use serde::{Deserialize, Serialize};
 use statrs::distribution::Exp;
 
 use crate::{
-    parameters::ContextParametersExt, population_loader::Age,
+    parameters::{ContextParametersExt, GlobalParams, Params}, population_loader::Age,
     symptom_progression::PresentingWithSymptoms,
 };
 
 define_person_property_with_default!(Hospitalized, bool, false);
-
-define_rng!(HospitalizationRng);
 
 #[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq)]
 pub struct HospitalAgeGroups {
@@ -21,37 +17,23 @@ pub struct HospitalAgeGroups {
     pub probability: f64,
 }
 
-#[derive(Default)]
-struct HospitalDataContainer {
-    age_group_mapping: HashMap<u8, HospitalAgeGroups>,
-}
+define_rng!(HospitalizationRng);
 
-impl HospitalDataContainer {
-    fn set_age_group_mapping(&mut self, age_groups: &[HospitalAgeGroups]) {
-        for i in 1..=(age_groups.len()) {
-            let grp = &age_groups[i - 1];
-            let max = if i == age_groups.len() {
-                121u8
-            } else {
-                age_groups[i].min
-            };
-            for age in grp.min..max {
-                self.age_group_mapping.insert(age, *grp);
+define_derived_property!(
+  HospitalAgeGroup,
+  HospitalAgeGroups,
+  [Age],
+  [GlobalParams],
+    |age, params| {
+        let p: &Params = params;
+        for (i, group) in p.hospitalization_parameters.age_groups.iter().enumerate().take(p.hospitalization_parameters.age_groups.len() - 1) {
+            let next_group = p.hospitalization_parameters.age_groups.get(i + 1).unwrap();
+            if (group.min..=next_group.min - 1).contains(&age) {
+                return *group;
             }
         }
+        *p.hospitalization_parameters.age_groups.last().unwrap()
     }
-
-    fn get_age_group(&self, age: u8) -> &HospitalAgeGroups {
-        self.age_group_mapping
-            .get(&age)
-            .expect("Age group not found")
-    }
-}
-
-define_data_plugin!(
-    HospitalDataPlugin,
-    HospitalDataContainer,
-    HospitalDataContainer::default()
 );
 
 trait ContextHospitalizationInternalExt:
@@ -95,24 +77,11 @@ trait ContextHospitalizationInternalExt:
 
     fn evaluate_hospitalization_risk(&mut self, person_id: PersonId) -> bool {
         // Evaluate the risk of hospitalization using the age group probabilities
-        let age = self.get_person_property(person_id, Age);
         let p = self
-            .get_data_mut(HospitalDataPlugin)
-            .get_age_group(age)
-            .probability;
+            .get_person_property(person_id, HospitalAgeGroup).probability;
         self.sample_bool(HospitalizationRng, p)
     }
 
-    fn set_age_group_mapping(&mut self) {
-        let age_groups = self
-            .get_params()
-            .hospitalization_parameters
-            .age_groups
-            .clone();
-
-        let container = self.get_data_mut(HospitalDataPlugin);
-        container.set_age_group_mapping(&age_groups);
-    }
     fn setup_hospitalization_event_sequence(&mut self) {
         // Subscribe to individuals being presymptomatic to plan if/when they enter the hospital
         self.subscribe_to_event(
@@ -141,7 +110,6 @@ pub fn init(context: &mut Context) {
         .iter()
         .any(|grp| grp.probability > 0.0);
     if initialization_check {
-        context.set_age_group_mapping();
         context.setup_hospitalization_event_sequence();
     } else {
         trace!(
@@ -154,7 +122,7 @@ pub fn init(context: &mut Context) {
 mod test {
     use super::Hospitalized;
     use crate::{
-        hospitalizations::HospitalAgeGroups,
+        hospitalizations::{HospitalAgeGroup, HospitalAgeGroups},
         parameters::{GlobalParams, HospitalizationParameters, ProgressionLibraryType},
         population_loader::Age,
         rate_fns::load_rate_fns,
@@ -343,10 +311,10 @@ mod test {
             context.subscribe_to_event::<PersonPropertyChangeEvent<Hospitalized>>(
                 move |context, event| {
                     if event.current {
-                        let age = context.get_person_property(event.person_id, Age);
-                        if age == 1 {
+                        let age_group = context.get_person_property(event.person_id, HospitalAgeGroup);
+                        if age_group.min == 0 {
                             *children_hospital_counter_clone.borrow_mut() += 1;
-                        } else if age == 25 {
+                        } else if age_group.min == 19 {
                             *adult_hospital_counter_clone.borrow_mut() += 1;
                         } else {
                             *eldery_hospital_counter_clone.borrow_mut() += 1;
