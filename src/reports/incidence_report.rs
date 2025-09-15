@@ -290,6 +290,7 @@ mod test {
     }
 
     #[test]
+    #[allow(clippy::float_cmp)]
     fn test_age_change() {
         let mut context = setup_context_with_report(ReportType::IncidenceReport {
             name: "output.csv".to_string(),
@@ -320,7 +321,7 @@ mod test {
 
         let Params { reports, .. } = context.get_params();
         let file_path = path.join(match &reports[0] {
-            ReportType::PrevalenceReport { name, .. } => name,
+            ReportType::IncidenceReport { name, .. } => name,
             _ => panic!("Unreachable report encountered"),
         });
 
@@ -342,7 +343,7 @@ mod test {
 
         // 7 event types: 4 symptom categories + hospitalization + Infectious + Recovered
         // 2 time points
-        // 2 ages at first timepoint, 3 ages at second timepoint (7x2 + 7x3 = 35)
-        assert_eq!(line_count, 35);
+        // 2 ages at first timepoint, 3 ages at second timepoint for only one event (7x2x2 + 1 = 29)
+        assert_eq!(line_count, 29);
     }
 }
