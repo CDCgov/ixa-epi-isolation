@@ -40,7 +40,8 @@ that the super experiment name is `examples`.
 # Instantiate the experiment object
 experiment = Experiment(
     experiments_directory="",
-    config_file="examples/replicate-core-example/input/config.yaml"
+    config_file="examples/replicate-core-example/input/config.yaml",
+    verbose=False
 )
 ```
 
@@ -60,10 +61,12 @@ def infection_status_over_time(input_df: pl.DataFrame) -> pl.DataFrame:
 ```
 
 ```{python}
-# Run the step included in the config file (Experiment knows to provide random seeds for a single particle with no SMC commands)
+# Run the step included in the config file 
+# `Experiment` knows to provide random seeds for each replicate 
+# of a single parameter set in the absence of calibration commands
 experiment.run_step(data_filename="person_property_count.csv")
 
-# Read resutls to a temporary data frame for plotting
+# Read results to a runtime memory data frame for plotting
 results = experiment.read_results(
     "person_property_count.csv",
     data_read_fn=infection_status_over_time
@@ -74,8 +77,13 @@ Now we plot the results.
 
 ```{python}
 # Plot the results
-if experiment.verbose:
-    print("Making plot of infection compartment class counts over time.")
-sns.lineplot(results, x="t", y="count",units="simulation",estimator=None, hue="infection_status")
+print("Making plot of infection compartment class counts over time.")
+
+sns.lineplot(
+    results, 
+    x="t", y="count",
+    units="simulation", estimator=None,
+    hue="infection_status"
+)
 plt.show()
 ```
