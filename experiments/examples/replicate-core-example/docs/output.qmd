@@ -25,8 +25,8 @@ import os
 from abmwrappers.experiment_class import Experiment
 
 # The default working directory for quarto is the folder storing the document.
-# We change this for simplicity to be the repo by backing up three levels.
-os.chdir("../../../")
+# We change this for simplicity to be the repo by backing up four levels.
+os.chdir("../../../../")
 ```
 
 Every `Experiment` has to be instantiated using either a config file, as shown below, or by using an
@@ -39,8 +39,8 @@ that the super experiment name is `examples`.
 ```{python}
 # Instantiate the experiment object
 experiment = Experiment(
-    experiments_directory="",
-    config_file="examples/replicate-core-example/input/config.yaml",
+    experiments_directory="experiments",
+    config_file="experiments/examples/replicate-core-example/input/config.yaml",
     verbose=False
 )
 ```

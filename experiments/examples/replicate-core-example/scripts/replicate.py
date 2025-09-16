@@ -9,7 +9,7 @@ from abmwrappers.experiment_class import Experiment
 def main(config_file, verbose):
     # Instantiate the experiment object
     experiment = Experiment(
-        experiments_directory="", config_file=config_file, verbose=verbose
+        experiments_directory="experiments", config_file=config_file, verbose=verbose
     )
 
     # Run the step included in the config file (Experiment knows to provide random seeds for a single particle with no SMC commands)
@@ -44,7 +44,7 @@ parser.add_argument(
     "-c",
     "--config-file",
     type=str,
-    default="examples/replicate-core-example/input/config.yaml",
+    default="experiments/examples/replicate-core-example/input/config.yaml",
     help="Path to the configuration file for instantiating the experiment class object",
 )
 parser.add_argument(

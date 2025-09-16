@@ -41,13 +41,13 @@ infection status over time.
 To run the example using only python, use the command
 
 ```
-poetry run python examples/replicate-core-example/scripts/replicate.py -v
+poetry run python experiments/examples/replicate-core-example/scripts/replicate.py -v
 ```
 
 To create a quarto md doc, use the command
 
 ```
-quarto render examples/replicate-core-example/docs/output.qmd
+quarto render experiments/examples/replicate-core-example/docs/output.qmd
 ```
 
 ### Purposes of `.py` vs `.qmd` scripts
