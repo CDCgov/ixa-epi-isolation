@@ -22,10 +22,10 @@ command by including the force overwrite argument `-f`.
 ### Rendering `quarto` docs
 Install (quarto)[https://docs.posit.co/resources/install-quarto.html] and ensure that your poetry
 environment is activated with `$(poetry env activate)`. Verify you can run quarto with `quarto check install`,
-being sure to (add a symbolic link for quarto)[https://docs.posit.co/resources/install-quarto.html#add-symlink-quarto] if issues occur. 
+being sure to (add a symbolic link for quarto)[https://docs.posit.co/resources/install-quarto.html#add-symlink-quarto] if issues occur.
 In order to render documents, also be sure to install `tinytex` using `quarto install tinytex`.
 
-To render a doc, use 
+To render a doc, use
 
 ```
 quarto render path/to/file/output.qmd
@@ -49,3 +49,17 @@ To create a quarto md doc, use the command
 ```
 quarto render examples/replicate-core-example/docs/output.qmd
 ```
+
+### Purposes of `.py` vs `.qmd` scripts
+
+Python scripts should in general serve to generate products or call larger numbers of simulations.
+The data management, while happening mostly internally in `abmwrappers`, is more easily accomplished
+in a python environment and such scripts are typically run frequently during testing and devlopement,
+then only once again to generate the final data products.
+
+In contrast, `quarto` scripts might be run several times after initial devlopement to include text changes
+and figure updates, or small changes to data handling. While it's reasonable to accomplish the same tasks
+in both python and quarto, the focus of markdown files should be to communicate and document, rather than
+generate, results.
+
+Combining both types of scripts allows for cleaner record-keeping in each experiment.
