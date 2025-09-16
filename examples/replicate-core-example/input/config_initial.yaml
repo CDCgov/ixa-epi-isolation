@@ -1,0 +1,12 @@
+local_path:
+  default_params_file: input/input.json
+  exe_file: target/release/epi-isolation
+  sub_experiment_name: replicate-core-example
+  super_experiment_name: examples
+experiment_conditions:
+  replicates_per_particle: 10
+  samples_per_step: 2
+  seed: 1234
+  scenario_key: epi_isolation.GlobalParams
+azb:
+  azure_batch: false
