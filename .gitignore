@@ -3,6 +3,7 @@
 poetry.lock
 **/data/input/
 **/data/raw_output/
+experiments/**/data/
 
 config.toml
 *.pkl
