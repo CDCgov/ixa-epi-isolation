@@ -1,0 +1,89 @@
+---
+title: "Example model runs from core example"
+author: "Will Koval (AD71@cdc.gov, CDC/ORR/CFA)"
+format: pdf
+toc: false
+number-sections: true
+execute:
+    warning: false
+jupyter: python3
+---
+
+# Purpose
+This provides a quick example of how to simulate, record, and plot output from an ixa input file
+for ixa-epi-isolation.
+
+```{python}
+#| echo: false
+import argparse
+
+import polars as pl
+import seaborn as sns
+import matplotlib.pyplot as plt
+import os
+
+from abmwrappers.experiment_class import Experiment
+
+# The default working directory for quarto is the folder storing the document.
+# We change this for simplicity to be the repo by backing up four levels.
+os.chdir("../../../../")
+```
+
+Every `Experiment` has to be instantiated using either a config file, as shown below, or by using an
+image file loaded from a previously executed experiment.
+
+Here, we set the `experiments_directory`, necessary for every config-instantiated `Experiment`, to
+be blank, meaning that the experiment operates at the repo level. We declare in the config file
+that the super experiment name is `examples`.
+
+```{python}
+# Instantiate the experiment object
+experiment = Experiment(
+    experiments_directory="experiments",
+    config_file="experiments/examples/replicate-core-example/input/config.yaml",
+    verbose=False
+)
+```
+
+We now run the model using `run_step` and `read_results` that are methods on the `Experiment` class.
+The config file is specified to only iterate over one parameter set or "particle", so the experiment
+automatically knows to iterate over that parameter set with the number of replicates we specify in
+the config.
+
+We provide the `read_results` method with a reader function that transforms the data from
+`person_property_count` into the data we want to plot.
+
+```{python}
+#| echo: false
+def infection_status_over_time(input_df: pl.DataFrame) -> pl.DataFrame:
+    out = input_df.group_by(["t", "infection_status"]).agg(pl.sum("count"))
+    return(out)
+```
+
+```{python}
+# Run the step included in the config file
+# `Experiment` knows to provide random seeds for each replicate
+# of a single parameter set in the absence of calibration commands
+experiment.run_step(data_filename="person_property_count.csv")
+
+# Read results to a runtime memory data frame for plotting
+results = experiment.read_results(
+    "person_property_count.csv",
+    data_read_fn=infection_status_over_time
+)
+```
+
+Now we plot the results.
+
+```{python}
+# Plot the results
+print("Making plot of infection compartment class counts over time.")
+
+sns.lineplot(
+    results,
+    x="t", y="count",
+    units="simulation", estimator=None,
+    hue="infection_status"
+)
+plt.show()
+```
