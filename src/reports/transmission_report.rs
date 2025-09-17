@@ -67,7 +67,7 @@ mod test {
         infectiousness_manager::InfectionContextExt,
         parameters::{ContextParametersExt, GlobalParams, Params},
         rate_fns::load_rate_fns,
-        reports::ReportType,
+        reports::ReportParams,
     };
     use ixa::{
         Context, ContextGlobalPropertiesExt, ContextPeopleExt, ContextRandomExt, ContextReportExt,
@@ -76,14 +76,14 @@ mod test {
     use std::path::PathBuf;
     use tempfile::tempdir;
 
-    fn setup_context_with_report(report: ReportType) -> Context {
+    fn setup_context_with_report(transmission_report: ReportParams) -> Context {
         let mut context = Context::new();
         context
             .set_global_property_value(
                 GlobalParams,
                 Params {
                     max_time: 10.0,
-                    reports: vec![report],
+                    transmission_report,
                     ..Default::default()
                 },
             )
@@ -95,8 +95,10 @@ mod test {
 
     #[test]
     fn test_generate_transmission_report() {
-        let mut context = setup_context_with_report(ReportType::TransmissionReport {
-            name: "output.csv".to_string(),
+        let mut context = setup_context_with_report(ReportParams {
+            write: true,
+            name: Some("output.csv".to_string()),
+            period: None,
         });
 
         let temp_dir = tempdir().unwrap();
@@ -118,11 +120,15 @@ mod test {
         });
         context.execute();
 
-        let Params { reports, .. } = context.get_params();
-        let file_path = path.join(match &reports[0] {
-            ReportType::TransmissionReport { name } => name,
-            _ => panic!("Unreachable report encountered"),
-        });
+        let Params {
+            transmission_report,
+            ..
+        } = context.get_params().clone();
+        let file_path = if let Some(name) = transmission_report.name {
+            path.join(name)
+        } else {
+            panic!("No report name specified");
+        };
 
         assert!(file_path.exists());
         std::mem::drop(context);

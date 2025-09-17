@@ -133,7 +133,7 @@ mod test {
         infectiousness_manager::InfectionContextExt,
         parameters::{ContextParametersExt, GlobalParams, Params},
         rate_fns::load_rate_fns,
-        reports::ReportType,
+        reports::ReportParams,
         Age,
     };
     use ixa::{
@@ -142,14 +142,14 @@ mod test {
     use std::path::PathBuf;
     use tempfile::tempdir;
 
-    fn setup_context_with_report(report: ReportType) -> Context {
+    fn setup_context_with_report(prevalence_report: ReportParams) -> Context {
         let mut context = Context::new();
         context
             .set_global_property_value(
                 GlobalParams,
                 Params {
                     max_time: 3.0,
-                    reports: vec![report],
+                    prevalence_report,
                     ..Default::default()
                 },
             )
@@ -161,9 +161,10 @@ mod test {
 
     #[test]
     fn test_generate_prevalence_report() {
-        let mut context = setup_context_with_report(ReportType::PrevalenceReport {
-            name: "output.csv".to_string(),
-            period: 2.0,
+        let mut context = setup_context_with_report(ReportParams {
+            write: true,
+            name: Some("output.csv".to_string()),
+            period: Some(2.0),
         });
 
         let temp_dir = tempdir().unwrap();
@@ -185,11 +186,14 @@ mod test {
         });
         context.execute();
 
-        let Params { reports, .. } = context.get_params();
-        let file_path = path.join(match &reports[0] {
-            ReportType::PrevalenceReport { name, .. } => name,
-            _ => panic!("Unreachable report encountered"),
-        });
+        let Params {
+            prevalence_report, ..
+        } = context.get_params().clone();
+        let file_path = if let Some(name) = prevalence_report.name {
+            path.join(name)
+        } else {
+            panic!("No report name specified");
+        };
 
         assert!(file_path.exists());
         std::mem::drop(context);

@@ -4,7 +4,7 @@ use ixa::{define_global_property, Context, ContextGlobalPropertiesExt, IxaError,
 use serde::{Deserialize, Serialize};
 
 use crate::policies::{validate_guidance_policy, Policies};
-use crate::reports::ReportType;
+use crate::reports::ReportParams;
 use crate::{hospitalizations::HospitalAgeGroups, settings::SettingProperties};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -80,8 +80,12 @@ pub struct Params {
     pub settings_properties: HashMap<CoreSettingsTypes, SettingProperties>,
     /// The path to the synthetic population file loaded in `population_loader`
     pub synth_population_file: PathBuf,
-    /// Vector of report names and period, if applicable
-    pub reports: Vec<ReportType>,
+    /// Prevalence report with a period and name required
+    pub prevalence_report: ReportParams,
+    /// Incidence report with a period and name required
+    pub incidence_report: ReportParams,
+    /// Transmission report with a name required
+    pub transmission_report: ReportParams,
     /// Facemask parameters
     /// The reduction in transmission associated with wearing a facemask.
     pub facemask_parameters: Option<FacemaskParameters>,
@@ -114,7 +118,21 @@ impl Default for Params {
             proportion_asymptomatic: 0.0,
             // Asymptomatics, if included, should act as symptomatics unless otherwise specified
             relative_infectiousness_asymptomatics: 1.0,
-            reports: Vec::new(),
+            prevalence_report: ReportParams {
+                write: false,
+                name: None,
+                period: None,
+            },
+            incidence_report: ReportParams {
+                write: false,
+                name: None,
+                period: None,
+            },
+            transmission_report: ReportParams {
+                write: false,
+                name: None,
+                period: None,
+            },
             settings_properties: HashMap::new(),
             synth_population_file: PathBuf::new(),
             facemask_parameters: None,
