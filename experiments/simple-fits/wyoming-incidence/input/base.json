@@ -1,0 +1,53 @@
+{
+  "epi_isolation.GlobalParams": {
+    "max_time": 250.0,
+    "seed": 123,
+    "infectiousness_rate_fn": {
+        "EmpiricalFromFile": {
+        "file": "input/library_empirical_rate_fns.csv",
+        "scale": 0.05
+      }
+    },
+    "initial_incidence": 0.01,
+    "initial_recovered": 0.3,
+    "proportion_asymptomatic": 0.45,
+    "relative_infectiousness_asymptomatics": 0.81,
+    "settings_properties": {"Home": {"alpha": 0.2,
+                                     "itinerary_specification": {"Constant": {"ratio": 0.25}}},
+                            "Workplace": {"alpha": 0.05,
+                                          "itinerary_specification": {"Constant": {"ratio": 0.25}}},
+                            "School": {"alpha": 0.05,
+                                       "itinerary_specification": {"Constant": {"ratio": 0.25}}},
+                            "CensusTract": {"alpha": 0.0,
+                                            "itinerary_specification": {"Constant": {"ratio": 0.25}}}},
+    "symptom_progression_library" : {"EmpiricalFromFile": {"file": "input/library_symptom_parameters.csv"}},
+    "report_period": 7.0,
+		"person_property_report_name": "person_property_count.csv",
+    "synth_population_file": "experiments/simple-fits/wyoming-constant-rate/input/synth_pop_people_WY_589000.csv",
+    "facemask_parameters": {
+      "facemask_efficacy": 0.2
+    },
+    "guidance_policy": { "UpdatedIsolationGuidance": {
+      "post_isolation_duration": 5.0,
+      "policy_adherence": 0.0,
+      "isolation_delay_period": 3.0
+      }
+    },
+    "hospitalization_parameters": {
+      "mean_delay_to_hospitalization": 5.7,
+      "mean_duration_of_hospitalization": 8.0,
+      "age_groups": [
+        {"min": 0, "probability": 0.011},
+        {"min": 10, "probability": 0.0048},
+        {"min": 20, "probability": 0.0073},
+        {"min": 30, "probability": 0.015},
+        {"min": 40, "probability": 0.026},
+        {"min": 50, "probability": 0.047},
+        {"min": 60, "probability": 0.097},
+        {"min": 70, "probability": 0.19},
+        {"min": 80, "probability": 0.21}
+      ],
+      "hospital_incidence_report_name": "hospitalization.csv"
+    }
+  }
+}
