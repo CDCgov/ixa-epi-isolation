@@ -14,7 +14,9 @@ def main(config_file, verbose):
         verbose=verbose,
     )
 
-    # Run the step included in the config file (Experiment knows to provide random seeds for a single particle with no SMC commands)
+    # Run the step included in the config file
+    # `Experiment` knows to provide random seeds for each replicate
+    # of a single parameter set in the absence of calibration commands
     experiment.run_step(data_filename="person_property_count.csv")
 
     # Read resutls to a temporary data frame for plotting

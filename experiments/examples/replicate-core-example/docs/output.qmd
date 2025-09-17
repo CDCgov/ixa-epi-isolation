@@ -47,7 +47,7 @@ experiment = Experiment(
 
 We now run the model using `run_step` and `read_results` that are methods on the `Experiment` class.
 The config file is specified to only iterate over one parameter set or "particle", so the experiment
-automatically knows to iterate over that parameter set with the number of replicates we specuify in
+automatically knows to iterate over that parameter set with the number of replicates we specify in
 the config.
 
 We provide the `read_results` method with a reader function that transforms the data from
