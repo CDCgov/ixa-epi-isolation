@@ -20,12 +20,14 @@ Note that if the files already exist in the root directory, you will only be abl
 command by including the force overwrite argument `-f`.
 
 ### Rendering `quarto` docs
-Install (quarto)[https://docs.posit.co/resources/install-quarto.html] and ensure that your poetry
-environment is activated with `$(poetry env activate)`. Verify you can run quarto with `quarto check install`,
-being sure to (add a symbolic link for quarto)[https://docs.posit.co/resources/install-quarto.html#add-symlink-quarto] if issues occur.
+Install [quarto](https://docs.posit.co/resources/install-quarto.html). Verify you can run quarto with `quarto check install`,
+being sure to [add a symbolic link for quarto](https://docs.posit.co/resources/install-quarto.html#add-symlink-quarto) if issues occur.
 In order to render documents, also be sure to install `tinytex` using `quarto install tinytex`.
 
-To render a doc, use
+For VS Code, it can be helpful to install the [quarto extension](https://quarto.org/docs/get-started/hello/vscode.html).
+
+To render a doc, ensure that your poetry environment is activated with `$(poetry env activate)` or
+`source $(poetry env info --path)/bin/activate`. Then run
 
 ```
 quarto render path/to/file/output.qmd
