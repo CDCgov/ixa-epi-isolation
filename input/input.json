@@ -20,17 +20,17 @@
     "synth_population_file": "input/people_test.csv",
     "prevalence_report": {
         "write": true,
-        "name": "person_property_count.csv",
+        "filename": "person_property_count.csv",
         "period": 1.0
     },
     "incidence_report": {
         "write": true,
-        "name": "incidence_report.csv",
+        "filename": "incidence_report.csv",
         "period": 1.0
     },
     "transmission_report": {
         "write": true,
-        "name": "transmission_report.csv"
+        "filename": "transmission_report.csv"
     },
     "guidance_policy": { "UpdatedIsolationGuidance": {
       "post_isolation_duration": 5.0,
