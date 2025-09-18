@@ -165,7 +165,6 @@ mod test {
                 mean_delay_to_hospitalization,
                 mean_duration_of_hospitalization,
                 age_groups,
-                hospital_incidence_report_name: "hospital_incidence_report.csv".to_string(),
             },
             ..Default::default()
         };

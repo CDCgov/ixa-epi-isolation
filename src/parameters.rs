@@ -7,6 +7,7 @@ use ixa::{
 use serde::{Deserialize, Serialize};
 
 use crate::policies::{validate_guidance_policy, Policies};
+use crate::reports::ReportParams;
 use crate::{hospitalizations::HospitalAgeGroups, settings::SettingProperties};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -57,8 +58,6 @@ pub struct HospitalizationParameters {
     pub mean_duration_of_hospitalization: f64,
     /// Age groups for hospitalization probabilities.
     pub age_groups: Vec<HospitalAgeGroups>,
-    /// The path to the hospitalization incidence report file.
-    pub hospital_incidence_report_name: String,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -80,16 +79,16 @@ pub struct Params {
     pub proportion_asymptomatic: f64,
     /// Asymptomatic individuals are less infectious than symptomatic individuals
     pub relative_infectiousness_asymptomatics: f64,
-    /// The period at which to report tabulated values
-    pub report_period: f64,
     /// Setting properties by setting type
     pub settings_properties: HashMap<CoreSettingsTypes, SettingProperties>,
     /// The path to the synthetic population file loaded in `population_loader`
     pub synth_population_file: PathBuf,
-    /// The path to the transmission report file
-    pub transmission_report_name: Option<String>,
-    /// The path to the person property report file
-    pub person_property_report_name: Option<String>,
+    /// Prevalence report with a period and name required
+    pub prevalence_report: ReportParams,
+    /// Incidence report with a period and name required
+    pub incidence_report: ReportParams,
+    /// Transmission report with a name required
+    pub transmission_report: ReportParams,
     /// Facemask parameters
     /// The reduction in transmission associated with wearing a facemask.
     pub facemask_parameters: Option<FacemaskParameters>,
@@ -122,12 +121,23 @@ impl Default for Params {
             proportion_asymptomatic: 0.0,
             // Asymptomatics, if included, should act as symptomatics unless otherwise specified
             relative_infectiousness_asymptomatics: 1.0,
-            // If reports are called for some reason and not specified, 0.0 could lead to large memory errors
-            report_period: 1.0,
+            prevalence_report: ReportParams {
+                write: false,
+                filename: None,
+                period: None,
+            },
+            incidence_report: ReportParams {
+                write: false,
+                filename: None,
+                period: None,
+            },
+            transmission_report: ReportParams {
+                write: false,
+                filename: None,
+                period: None,
+            },
             settings_properties: HashMap::new(),
             synth_population_file: PathBuf::new(),
-            transmission_report_name: None,
-            person_property_report_name: None,
             facemask_parameters: None,
             hospitalization_parameters: HospitalizationParameters {
                 mean_delay_to_hospitalization: 0.0,
@@ -136,7 +146,6 @@ impl Default for Params {
                     min: 0,
                     probability: 0.0,
                 }],
-                hospital_incidence_report_name: "hospital_incidence_report.csv".to_string(),
             },
             guidance_policy: None,
             profiling_data_path: None,
@@ -170,11 +179,6 @@ fn validate_inputs(parameters: &Params) -> Result<(), IxaError> {
         ));
     }
 
-    if parameters.report_period < 0.0 {
-        return Err(IxaError::IxaError(
-            "The report writing period must be non-negative.".to_string(),
-        ));
-    }
     // Check the infectiousness rate function
     match parameters.infectiousness_rate_fn {
         RateFnType::Constant { rate, duration } => {
@@ -298,14 +302,6 @@ fn validate_inputs(parameters: &Params) -> Result<(), IxaError> {
     if hospitalization_parameters.age_groups[0].min != 0 {
         return Err(IxaError::IxaError(
             "The first age group for hospitalization probabilities must start at 0.".to_string(),
-        ));
-    }
-    if hospitalization_parameters
-        .hospital_incidence_report_name
-        .is_empty()
-    {
-        return Err(IxaError::IxaError(
-            "The hospital incidence report name must not be empty.".to_string(),
         ));
     }
 

@@ -17,10 +17,21 @@
                             "CensusTract": {"alpha": 0.0,
                                             "itinerary_specification": {"Constant": {"ratio": 0.25}}}},
     "symptom_progression_library" : {"EmpiricalFromFile": {"file": "input/library_symptom_parameters.csv"}},
-    "report_period": 1.0,
     "synth_population_file": "input/people_test.csv",
-    "transmission_report_name": "transmission_report.csv",
-		"person_property_report_name": "person_property_count.csv",
+    "prevalence_report": {
+        "write": true,
+        "filename": "person_property_count.csv",
+        "period": 1.0
+    },
+    "incidence_report": {
+        "write": true,
+        "filename": "incidence_report.csv",
+        "period": 1.0
+    },
+    "transmission_report": {
+        "write": true,
+        "filename": "transmission_report.csv"
+    },
     "guidance_policy": { "UpdatedIsolationGuidance": {
       "post_isolation_duration": 5.0,
       "policy_adherence": 1.0,
@@ -42,8 +53,7 @@
         {"min": 45, "probability": 0.01},
         {"min": 55, "probability": 0.02},
         {"min": 65,"probability": 0.05}
-      ],
-      "hospital_incidence_report_name": "hospital_incidence_report.csv"
+      ]
     },
     "profiling_data_path": "profiling_data.json"
   }
