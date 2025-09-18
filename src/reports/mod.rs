@@ -1,17 +1,51 @@
 use crate::parameters::{ContextParametersExt, Params};
-use ixa::{info, Context, HashSet, HashSetExt, IxaError};
+use ixa::{info, Context, IxaError};
 use serde::{Deserialize, Serialize};
-use std::mem::discriminant;
 
 pub mod incidence_report;
 pub mod prevalence_report;
 pub mod transmission_report;
 
 #[derive(Clone, Serialize, Deserialize, Debug)]
-pub enum ReportType {
-    PrevalenceReport { name: String, period: f64 },
-    IncidenceReport { name: String, period: f64 },
-    TransmissionReport { name: String },
+pub struct ReportParams {
+    pub write: bool,
+    pub filename: Option<String>,
+    pub period: Option<f64>,
+}
+
+fn get_report_name(params: &ReportParams) -> Result<Option<&str>, IxaError> {
+    if params.write {
+        if let Some(name) = &params.filename {
+            return Ok(Some(name));
+        }
+
+        return Err(IxaError::IxaError(
+            "Reports must be provided with a name when write is set to true".to_string(),
+        ));
+    }
+
+    if let Some(name) = &params.filename {
+        info!("Report {name} is off but has associated values with name.");
+    }
+    Ok(None)
+}
+
+fn get_period_report_name(params: &ReportParams) -> Result<Option<(&str, f64)>, IxaError> {
+    if let Some(name) = get_report_name(params)? {
+        if let Some(period) = params.period {
+            if period <= 0.0 {
+                return Err(IxaError::IxaError(
+                    format!("The report period must be greater than zero, found period {period} for {name} instead.")
+                ));
+            }
+            return Ok(Some((name, period)));
+        }
+
+        return Err(IxaError::IxaError(format!(
+            "Report {name} requires a period but none provided."
+        )));
+    }
+    Ok(None)
 }
 
 /// # Errors
@@ -19,63 +53,50 @@ pub enum ReportType {
 /// Will return `IxaError` if any report within the reports list cannot be added
 /// or if the period for any periodic report is less than 0.0
 pub fn init(context: &mut Context) -> Result<(), IxaError> {
-    let Params { reports, .. } = context.get_params().clone();
+    let Params {
+        prevalence_report,
+        incidence_report,
+        transmission_report,
+        ..
+    } = context.get_params().clone();
+    let mut report_count = 0;
 
-    // Should at least one report be required?
-    if reports.is_empty() {
-        info!("No reports are being generated.");
+    if let Some((name, period)) = get_period_report_name(&prevalence_report)? {
+        prevalence_report::init(context, name, period)?;
+        info!("Generating the prevalence report.");
+        report_count += 1;
     }
-    let mut types = HashSet::new();
-
-    for report in &reports {
-        if !types.insert(discriminant(report)) {
-            return Err(IxaError::IxaError(
-                "Report types must be unique to avoid overwriting.".to_string(),
-            ));
-        }
-
-        match report {
-            ReportType::PrevalenceReport { name, period } => {
-                if period <= &0.0 {
-                    return Err(IxaError::IxaError(
-                        "The prevalence report writing period must be greater than zero."
-                            .to_string(),
-                    ));
-                }
-                prevalence_report::init(context, name.as_str(), *period)?;
-            }
-            ReportType::IncidenceReport { name, period } => {
-                if period <= &0.0 {
-                    return Err(IxaError::IxaError(
-                        "The incidence report writing period must be greater than zero."
-                            .to_string(),
-                    ));
-                }
-                incidence_report::init(context, name.as_str(), *period)?;
-            }
-            ReportType::TransmissionReport { name } => {
-                transmission_report::init(context, name.as_str())?;
-            }
-        }
+    if let Some((name, period)) = get_period_report_name(&incidence_report)? {
+        incidence_report::init(context, name, period)?;
+        info!("Generating the incidence report.");
+        report_count += 1;
     }
+    if let Some(name) = get_report_name(&transmission_report)? {
+        transmission_report::init(context, name)?;
+        info!("Generating the transmission report.");
+        report_count += 1;
+    }
+
+    info!("Generating {report_count} report(s) in total.");
+
     Ok(())
 }
 
 #[cfg(test)]
 mod test {
 
-    use crate::reports::ReportType;
+    use super::get_period_report_name;
+    use crate::reports::ReportParams;
     use crate::{
         parameters::{ContextParametersExt, Params},
         rate_fns::load_rate_fns,
     };
     use ixa::{Context, ContextGlobalPropertiesExt, ContextRandomExt, IxaError};
     use statrs::assert_almost_eq;
-    use std::path::PathBuf;
-    use tempfile::tempdir;
-
     use std::fs::File;
     use std::io::Write;
+    use std::path::PathBuf;
+    use tempfile::tempdir;
 
     fn setup_context_from_str(params_json: &str) -> Context {
         let temp_dir = tempdir().unwrap();
@@ -105,19 +126,20 @@ mod test {
                     "relative_infectiousness_asymptomatics": 0.0,
                     "settings_properties": {},
                     "synth_population_file": "input/people_test.csv",
-                    "reports": [
-                        {"TransmissionReport": {
-                            "name": "transmission.csv"
-                        }},
-                        {"PrevalenceReport": {
-                            "name": "prevalence.csv",
-                            "period": 1.0
-                        }},
-                        {"IncidenceReport": {
-                            "name": "incidence.csv",
-                            "period": 2.0
-                        }}
-                    ],
+                    "prevalence_report": {
+                        "write": true,
+                        "filename": "prevalence.csv",
+                        "period": 1.0
+                    },
+                    "incidence_report": {
+                        "write": true,
+                        "filename": "incidence.csv",
+                        "period": 2.0
+                    },
+                    "transmission_report": {
+                        "write": true,
+                        "filename": "transmission.csv"
+                    },
                     "hospitalization_parameters": {
                         "age_groups": [
                             {"min": 0, "probability": 0.0},
@@ -131,79 +153,113 @@ mod test {
             }
         "#;
         let context = setup_context_from_str(params_json);
-        let Params { reports, .. } = context.get_params();
-        assert_eq!(reports.len(), 3);
-        for report in reports {
-            match report {
-                ReportType::TransmissionReport { name } => {
-                    assert_eq!(*name, "transmission.csv".to_string());
-                }
-                ReportType::PrevalenceReport { name, period } => {
-                    assert_eq!(*name, "prevalence.csv".to_string());
-                    assert_almost_eq!(*period, 1.0, 0.0);
-                }
-                ReportType::IncidenceReport { name, period } => {
-                    assert_eq!(*name, "incidence.csv".to_string());
-                    assert_almost_eq!(*period, 2.0, 0.0);
-                }
-            }
+        let Params {
+            prevalence_report,
+            incidence_report,
+            transmission_report,
+            ..
+        } = context.get_params().clone();
+
+        assert!(prevalence_report.write);
+        assert_eq!(
+            prevalence_report.filename,
+            Some("prevalence.csv".to_string())
+        );
+        assert_eq!(prevalence_report.period, Some(1.0));
+
+        assert!(incidence_report.write);
+        assert_eq!(incidence_report.filename, Some("incidence.csv".to_string()));
+        assert_eq!(incidence_report.period, Some(2.0));
+
+        assert!(transmission_report.write);
+        assert_eq!(
+            transmission_report.filename,
+            Some("transmission.csv".to_string())
+        );
+        assert_eq!(transmission_report.period, None);
+    }
+
+    #[test]
+    fn test_get_period_report_name() {
+        let name = "output.csv".to_string();
+        let period = 3.0;
+
+        let report = ReportParams {
+            write: true,
+            filename: Some(name.clone()),
+            period: Some(period),
+        };
+
+        if let Some((expect_name, expect_period)) = get_period_report_name(&report).unwrap() {
+            assert_eq!(name, *expect_name);
+            assert_almost_eq!(period, expect_period, 0.0);
+        } else {
+            panic!("Expected some value for the validated name and period");
         }
     }
 
     #[test]
-    fn test_duplicate_reports() {
-        let params_json = r#"
-            {
-                "epi_isolation.GlobalParams": {
-                    "max_time": 200.0,
-                    "seed": 123,
-                    "infectiousness_rate_fn": {"Constant": {"rate": 1.0, "duration": 5.0}},
-                    "initial_incidence": 0.01,
-                    "initial_recovered": 0.0,
-                    "proportion_asymptomatic": 0.0,
-                    "relative_infectiousness_asymptomatics": 0.0,
-                    "settings_properties": {},
-                    "synth_population_file": "input/people_test.csv",
-                    "reports": [
-                        {"PrevalenceReport": {
-                            "name": "prevalence.csv",
-                            "period": 1.0
-                        }},
-                        {"PrevalenceReport": {
-                            "name": "prevalence2.csv",
-                            "period": 2.0
-                        }}
-                    ],
-                    "hospitalization_parameters": {
-                        "age_groups": [
-                            {"min": 0, "probability": 0.0},
-                            {"min": 19, "probability": 0.0},
-                            {"min": 65, "probability": 0.0}
-                        ],
-                        "mean_delay_to_hospitalization": 1.0,
-                        "mean_duration_of_hospitalization": 1.0
-                    }
-                }
-            }
-        "#;
-        let mut context = setup_context_from_str(params_json);
-        let Params { reports, .. } = context.get_params();
-        assert_eq!(reports.len(), 2);
+    fn test_get_period_report_name_nowrite() {
+        let name = "output.csv".to_string();
+        let period = 3.0;
 
-        let e = crate::reports::init(&mut context).err();
+        let report = ReportParams {
+            write: false,
+            filename: Some(name),
+            period: Some(period),
+        };
 
-        match e {
+        assert_eq!(None, get_period_report_name(&report).unwrap());
+    }
+
+    #[test]
+    fn test_error_no_name() {
+        let period = 3.0;
+
+        let no_name_report = ReportParams {
+            write: true,
+            filename: None,
+            period: Some(period),
+        };
+
+        match get_period_report_name(&no_name_report).err() {
             Some(IxaError::IxaError(msg)) => {
                 assert_eq!(
                     msg,
-                    "Report types must be unique to avoid overwriting.".to_string()
+                    "Reports must be provided with a name when write is set to true".to_string()
                 );
             }
             Some(ue) => panic!(
-                "Expected an error that the report types should be unique. Instead got {:?}",
+                "Expected an error the report name is required. Instead got {:?}",
                 ue.to_string()
             ),
-            None => panic!("Expected an error. Instead, validation passed with no errors."),
+            None => panic!("Expected an error. Instead validation passed with no errors."),
+        }
+    }
+
+    #[test]
+    fn test_error_bad_period() {
+        let name = "output.csv".to_string();
+        let bad_period = 0.0;
+
+        let bad_period_report = ReportParams {
+            write: true,
+            filename: Some(name),
+            period: Some(bad_period),
+        };
+
+        match get_period_report_name(&bad_period_report).err() {
+            Some(IxaError::IxaError(msg)) => {
+                assert_eq!(
+                    msg,
+                    "The report period must be greater than zero, found period 0 for output.csv instead.".to_string()
+                );
+            }
+            Some(ue) => panic!(
+                "Expected an error the report name is required. Instead got {:?}",
+                ue.to_string()
+            ),
+            None => panic!("Expected an error. Instead validation passed with no errors."),
         }
     }
 }

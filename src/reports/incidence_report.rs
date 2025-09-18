@@ -208,7 +208,7 @@ mod test {
         infectiousness_manager::InfectionContextExt,
         parameters::{ContextParametersExt, GlobalParams, Params},
         rate_fns::load_rate_fns,
-        reports::ReportType,
+        reports::ReportParams,
         Age,
     };
     use ixa::{
@@ -217,14 +217,14 @@ mod test {
     use std::path::PathBuf;
     use tempfile::tempdir;
 
-    fn setup_context_with_report(report: ReportType) -> Context {
+    fn setup_context_with_report(incidence_report: ReportParams) -> Context {
         let mut context = Context::new();
         context
             .set_global_property_value(
                 GlobalParams,
                 Params {
                     max_time: 3.0,
-                    reports: vec![report],
+                    incidence_report,
                     ..Default::default()
                 },
             )
@@ -237,9 +237,10 @@ mod test {
     #[test]
     #[allow(clippy::float_cmp)]
     fn test_generate_incidence_report() {
-        let mut context = setup_context_with_report(ReportType::IncidenceReport {
-            name: "output.csv".to_string(),
-            period: 2.0,
+        let mut context = setup_context_with_report(ReportParams {
+            write: true,
+            filename: Some("output.csv".to_string()),
+            period: Some(2.0),
         });
 
         let temp_dir = tempdir().unwrap();
@@ -261,11 +262,14 @@ mod test {
         });
         context.execute();
 
-        let Params { reports, .. } = context.get_params();
-        let file_path = path.join(match &reports[0] {
-            ReportType::IncidenceReport { name, .. } => name,
-            _ => panic!("Unreachable report encountered"),
-        });
+        let Params {
+            incidence_report, ..
+        } = context.get_params().clone();
+        let file_path = if let Some(name) = incidence_report.filename {
+            path.join(name)
+        } else {
+            panic!("No report name specified");
+        };
 
         assert!(file_path.exists());
         std::mem::drop(context);
@@ -292,9 +296,10 @@ mod test {
     #[test]
     #[allow(clippy::float_cmp)]
     fn test_age_change() {
-        let mut context = setup_context_with_report(ReportType::IncidenceReport {
-            name: "output.csv".to_string(),
-            period: 2.0,
+        let mut context = setup_context_with_report(ReportParams {
+            write: true,
+            filename: Some("output.csv".to_string()),
+            period: Some(2.0),
         });
 
         let temp_dir = tempdir().unwrap();
@@ -319,11 +324,14 @@ mod test {
         });
         context.execute();
 
-        let Params { reports, .. } = context.get_params();
-        let file_path = path.join(match &reports[0] {
-            ReportType::IncidenceReport { name, .. } => name,
-            _ => panic!("Unreachable report encountered"),
-        });
+        let Params {
+            incidence_report, ..
+        } = context.get_params().clone();
+        let file_path = if let Some(name) = incidence_report.filename {
+            path.join(name)
+        } else {
+            panic!("No report name specified");
+        };
 
         assert!(file_path.exists());
         std::mem::drop(context);
