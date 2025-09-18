@@ -104,6 +104,7 @@ def main(config_file: str, keep: bool):
         data_read_fn=output_processing_function,
         files_to_upload=fps,
         use_existing_distances=use_existing,
+        keep_all_sims=keep,
     )
 
 
