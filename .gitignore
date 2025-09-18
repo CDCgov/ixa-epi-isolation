@@ -6,6 +6,7 @@ poetry.lock
 experiments/**/data/
 
 config.toml
+azure_config.yaml
 *.pkl
 
 # Data
