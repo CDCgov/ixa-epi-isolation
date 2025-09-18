@@ -11,6 +11,9 @@ azure_config.yaml
 
 profiling_data.json
 
+# experiment
+scripts/experiments/benchmarking/jul25-assessment/data/*
+scripts/experiments/benchmarking/jul25-assessment/scenarios/*
 # Data
 *.csv
 *.tsv
