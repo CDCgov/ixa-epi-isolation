@@ -97,7 +97,7 @@ mod test {
     fn test_generate_transmission_report() {
         let mut context = setup_context_with_report(ReportParams {
             write: true,
-            name: Some("output.csv".to_string()),
+            filename: Some("output.csv".to_string()),
             period: None,
         });
 
@@ -124,7 +124,7 @@ mod test {
             transmission_report,
             ..
         } = context.get_params().clone();
-        let file_path = if let Some(name) = transmission_report.name {
+        let file_path = if let Some(name) = transmission_report.filename {
             path.join(name)
         } else {
             panic!("No report name specified");

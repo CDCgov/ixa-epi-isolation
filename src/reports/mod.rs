@@ -9,13 +9,13 @@ pub mod transmission_report;
 #[derive(Clone, Serialize, Deserialize, Debug)]
 pub struct ReportParams {
     pub write: bool,
-    pub name: Option<String>,
+    pub filename: Option<String>,
     pub period: Option<f64>,
 }
 
 fn get_report_name(params: &ReportParams) -> Result<Option<&str>, IxaError> {
     if params.write {
-        if let Some(name) = &params.name {
+        if let Some(name) = &params.filename {
             return Ok(Some(name));
         }
 
@@ -24,7 +24,7 @@ fn get_report_name(params: &ReportParams) -> Result<Option<&str>, IxaError> {
         ));
     }
 
-    if let Some(name) = &params.name {
+    if let Some(name) = &params.filename {
         info!("Report {name} is off but has associated values with name.");
     }
     Ok(None)
@@ -128,17 +128,17 @@ mod test {
                     "synth_population_file": "input/people_test.csv",
                     "prevalence_report": {
                         "write": true,
-                        "name": "prevalence.csv",
+                        "filename": "prevalence.csv",
                         "period": 1.0
                     },
                     "incidence_report": {
                         "write": true,
-                        "name": "incidence.csv",
+                        "filename": "incidence.csv",
                         "period": 2.0
                     },
                     "transmission_report": {
                         "write": true,
-                        "name": "transmission.csv"
+                        "filename": "transmission.csv"
                     },
                     "hospitalization_parameters": {
                         "age_groups": [
@@ -161,16 +161,19 @@ mod test {
         } = context.get_params().clone();
 
         assert!(prevalence_report.write);
-        assert_eq!(prevalence_report.name, Some("prevalence.csv".to_string()));
+        assert_eq!(
+            prevalence_report.filename,
+            Some("prevalence.csv".to_string())
+        );
         assert_eq!(prevalence_report.period, Some(1.0));
 
         assert!(incidence_report.write);
-        assert_eq!(incidence_report.name, Some("incidence.csv".to_string()));
+        assert_eq!(incidence_report.filename, Some("incidence.csv".to_string()));
         assert_eq!(incidence_report.period, Some(2.0));
 
         assert!(transmission_report.write);
         assert_eq!(
-            transmission_report.name,
+            transmission_report.filename,
             Some("transmission.csv".to_string())
         );
         assert_eq!(transmission_report.period, None);
@@ -183,7 +186,7 @@ mod test {
 
         let report = ReportParams {
             write: true,
-            name: Some(name.clone()),
+            filename: Some(name.clone()),
             period: Some(period),
         };
 
@@ -202,7 +205,7 @@ mod test {
 
         let report = ReportParams {
             write: false,
-            name: Some(name),
+            filename: Some(name),
             period: Some(period),
         };
 
@@ -215,7 +218,7 @@ mod test {
 
         let no_name_report = ReportParams {
             write: true,
-            name: None,
+            filename: None,
             period: Some(period),
         };
 
@@ -241,7 +244,7 @@ mod test {
 
         let bad_period_report = ReportParams {
             write: true,
-            name: Some(name),
+            filename: Some(name),
             period: Some(bad_period),
         };
 

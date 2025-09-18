@@ -120,17 +120,17 @@ impl Default for Params {
             relative_infectiousness_asymptomatics: 1.0,
             prevalence_report: ReportParams {
                 write: false,
-                name: None,
+                filename: None,
                 period: None,
             },
             incidence_report: ReportParams {
                 write: false,
-                name: None,
+                filename: None,
                 period: None,
             },
             transmission_report: ReportParams {
                 write: false,
-                name: None,
+                filename: None,
                 period: None,
             },
             settings_properties: HashMap::new(),

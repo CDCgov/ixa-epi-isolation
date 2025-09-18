@@ -239,7 +239,7 @@ mod test {
     fn test_generate_incidence_report() {
         let mut context = setup_context_with_report(ReportParams {
             write: true,
-            name: Some("output.csv".to_string()),
+            filename: Some("output.csv".to_string()),
             period: Some(2.0),
         });
 
@@ -265,7 +265,7 @@ mod test {
         let Params {
             incidence_report, ..
         } = context.get_params().clone();
-        let file_path = if let Some(name) = incidence_report.name {
+        let file_path = if let Some(name) = incidence_report.filename {
             path.join(name)
         } else {
             panic!("No report name specified");
@@ -298,7 +298,7 @@ mod test {
     fn test_age_change() {
         let mut context = setup_context_with_report(ReportParams {
             write: true,
-            name: Some("output.csv".to_string()),
+            filename: Some("output.csv".to_string()),
             period: Some(2.0),
         });
 
@@ -327,7 +327,7 @@ mod test {
         let Params {
             incidence_report, ..
         } = context.get_params().clone();
-        let file_path = if let Some(name) = incidence_report.name {
+        let file_path = if let Some(name) = incidence_report.filename {
             path.join(name)
         } else {
             panic!("No report name specified");

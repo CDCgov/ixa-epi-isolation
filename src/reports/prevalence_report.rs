@@ -163,7 +163,7 @@ mod test {
     fn test_generate_prevalence_report() {
         let mut context = setup_context_with_report(ReportParams {
             write: true,
-            name: Some("output.csv".to_string()),
+            filename: Some("output.csv".to_string()),
             period: Some(2.0),
         });
 
@@ -189,7 +189,7 @@ mod test {
         let Params {
             prevalence_report, ..
         } = context.get_params().clone();
-        let file_path = if let Some(name) = prevalence_report.name {
+        let file_path = if let Some(name) = prevalence_report.filename {
             path.join(name)
         } else {
             panic!("No report name specified");
