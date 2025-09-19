@@ -74,7 +74,7 @@ def main(config_file: str, keep: bool):
             "synth_population_file": f"/{blob_experiment_directory}/{os.path.basename(synth_pop_file)}",
         }
         fps = [synth_pop_file, symptom_params_file, infectiousness_rate_file]
-        use_existing = True
+        use_existing = False
     else:
         fps = []
         use_existing = False
@@ -85,7 +85,8 @@ def main(config_file: str, keep: bool):
         distance_fn=hosp_lhood,
         data_read_fn=output_processing_function,
         files_to_upload=fps,
-        use_existing_distances=use_existing
+        use_existing_distances=use_existing,
+        keep_all_sims = True
     )
 
 
@@ -103,6 +104,12 @@ def hosp_lhood(results_data: pl.DataFrame, target_data: pl.DataFrame):
             .alias("negloglikelihood")
         )
     else:
+        max_t_target = target_data.select(pl.col(["t", "total_admissions"])).sort("total_admissions", descending=True).select("t").to_series()[0]
+        max_t_result = results_data.select(pl.col(["t", "count"])).sort("count", descending=True).select("t").to_series()[0]
+        difference = max_t_result - max_t_target
+        results_data = results_data.with_columns(
+            (pl.col("t") - difference).alias("t")
+        )
         joint_set = (
             results_data.select(pl.col(["t", "count"]))
             .join(
@@ -155,7 +162,7 @@ def task(
         simulation_index=simulation_index,
         distance_fn=hosp_lhood,
         data_read_fn=output_processing_function,
-        products=products,
+        products=["distances", "simulations"],
         products_output_dir=products_path,
         clean=clean,
     )

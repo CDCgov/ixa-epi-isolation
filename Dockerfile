@@ -10,7 +10,7 @@ COPY Cargo.lock .
 COPY Cargo.toml .
 
 # Second stage: Python with Java runtime
-FROM python:3.10-bullseye
+FROM python:3.10.17
 
 # Configure environment variables
 ENV PYTHONFAULTHANDLER=1 \

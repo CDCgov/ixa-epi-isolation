@@ -14,18 +14,20 @@ azb:
     registry_name: cfaprdbatchcr
     task_slots_per_node: 8
   azb_config_path: input/azure_config.yaml
-  azure_batch: false
+  azure_batch: true
   benchmark_test: false
-  create_pool: true
+  create_pool: false
 experiment_conditions:
   replicates_per_particle: 3
-  samples_per_step: 10
+  samples_per_step: 500
   seed: 12345
   scenario_key: epi_isolation.GlobalParams
   tolerance:
-    '0': 1000
-    '1': 1000
-    '2': 1000
+    '0': 300
+    '1': 200
+    '2': 150
+    '3': 100
+    '4': 50
 local_path:
   default_params_file: experiments/simple-fits/wyoming-policies/input/base.json
   exe_file: target/release/epi-isolation

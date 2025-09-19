@@ -173,7 +173,7 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 import polars as pl
 
-max_target = experiment.tolerance_dict[steps - 1]
+max_target = experiment.tolerance_dict[steps - 2]
 
 # For azure implementations, use default blob container read:
 if experiment.azure_batch:
