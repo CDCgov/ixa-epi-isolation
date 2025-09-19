@@ -10,7 +10,7 @@ def main():
     # Create the new Experiment and scenarios folder
     experiment = Experiment(
         experiments_directory="experiments",
-        config_file="experiments/benchmarking/parameter-sweep/input/config.yaml",
+        config_file="experiments/examples/parameter-sweep/input/config.yaml",
     )
 
     wrappers.create_scenario_subexperiments(experiment)
