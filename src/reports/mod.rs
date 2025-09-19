@@ -11,6 +11,7 @@ pub struct ReportParams {
     pub write: bool,
     pub filename: Option<String>,
     pub period: Option<f64>,
+    pub reporting_delay: Option<f64>,
 }
 
 fn get_report_name(params: &ReportParams) -> Result<Option<&str>, IxaError> {
@@ -30,7 +31,9 @@ fn get_report_name(params: &ReportParams) -> Result<Option<&str>, IxaError> {
     Ok(None)
 }
 
-fn get_period_report_name(params: &ReportParams) -> Result<Option<(&str, f64)>, IxaError> {
+fn get_period_delay_report_name(
+    params: &ReportParams,
+) -> Result<Option<(&str, f64, f64)>, IxaError> {
     if let Some(name) = get_report_name(params)? {
         if let Some(period) = params.period {
             if period <= 0.0 {
@@ -38,12 +41,21 @@ fn get_period_report_name(params: &ReportParams) -> Result<Option<(&str, f64)>, 
                     format!("The report period must be greater than zero, found period {period} for {name} instead.")
                 ));
             }
-            return Ok(Some((name, period)));
+            let delay = params.reporting_delay.unwrap_or(0.0);
+            return Ok(Some((name, period, delay)));
         }
 
         return Err(IxaError::IxaError(format!(
             "Report {name} requires a period but none provided."
         )));
+    }
+    Ok(None)
+}
+
+fn get_delay_report_name(params: &ReportParams) -> Result<Option<(&str, f64)>, IxaError> {
+    if let Some(name) = get_report_name(params)? {
+        let delay = params.reporting_delay.unwrap_or(0.0);
+        return Ok(Some((name, delay)));
     }
     Ok(None)
 }
@@ -61,18 +73,20 @@ pub fn init(context: &mut Context) -> Result<(), IxaError> {
     } = context.get_params().clone();
     let mut report_count = 0;
 
-    if let Some((name, period)) = get_period_report_name(&prevalence_report)? {
-        prevalence_report::init(context, name, period)?;
+    if let Some((name, period, reporting_delay)) = get_period_delay_report_name(&prevalence_report)?
+    {
+        prevalence_report::init(context, name, period, reporting_delay)?;
         info!("Generating the prevalence report.");
         report_count += 1;
     }
-    if let Some((name, period)) = get_period_report_name(&incidence_report)? {
-        incidence_report::init(context, name, period)?;
+    if let Some((name, period, reporting_delay)) = get_period_delay_report_name(&incidence_report)?
+    {
+        incidence_report::init(context, name, period, reporting_delay)?;
         info!("Generating the incidence report.");
         report_count += 1;
     }
-    if let Some(name) = get_report_name(&transmission_report)? {
-        transmission_report::init(context, name)?;
+    if let Some((name, reporting_delay)) = get_delay_report_name(&transmission_report)? {
+        transmission_report::init(context, name, reporting_delay)?;
         info!("Generating the transmission report.");
         report_count += 1;
     }
@@ -85,7 +99,7 @@ pub fn init(context: &mut Context) -> Result<(), IxaError> {
 #[cfg(test)]
 mod test {
 
-    use super::get_period_report_name;
+    use super::get_period_delay_report_name;
     use crate::reports::ReportParams;
     use crate::{
         parameters::{ContextParametersExt, Params},
@@ -188,11 +202,15 @@ mod test {
             write: true,
             filename: Some(name.clone()),
             period: Some(period),
+            reporting_delay: None,
         };
 
-        if let Some((expect_name, expect_period)) = get_period_report_name(&report).unwrap() {
+        if let Some((expect_name, expect_period, expected_delay)) =
+            get_period_delay_report_name(&report).unwrap()
+        {
             assert_eq!(name, *expect_name);
             assert_almost_eq!(period, expect_period, 0.0);
+            assert_almost_eq!(0.0, expected_delay, 0.0);
         } else {
             panic!("Expected some value for the validated name and period");
         }
@@ -207,9 +225,10 @@ mod test {
             write: false,
             filename: Some(name),
             period: Some(period),
+            reporting_delay: None,
         };
 
-        assert_eq!(None, get_period_report_name(&report).unwrap());
+        assert_eq!(None, get_period_delay_report_name(&report).unwrap());
     }
 
     #[test]
@@ -220,9 +239,10 @@ mod test {
             write: true,
             filename: None,
             period: Some(period),
+            reporting_delay: None,
         };
 
-        match get_period_report_name(&no_name_report).err() {
+        match get_period_delay_report_name(&no_name_report).err() {
             Some(IxaError::IxaError(msg)) => {
                 assert_eq!(
                     msg,
@@ -246,9 +266,10 @@ mod test {
             write: true,
             filename: Some(name),
             period: Some(bad_period),
+            reporting_delay: None,
         };
 
-        match get_period_report_name(&bad_period_report).err() {
+        match get_period_delay_report_name(&bad_period_report).err() {
             Some(IxaError::IxaError(msg)) => {
                 assert_eq!(
                     msg,

@@ -74,12 +74,12 @@ fn update_property_change_counts(context: &mut Context, event: ReportEvent) {
         .or_insert(0);
 }
 
-fn send_property_counts(context: &mut Context) {
+fn send_property_counts(context: &mut Context, reporting_delay: f64) {
     let report_container = context.get_data(PropertyReportDataPlugin);
 
     for (values, count_property) in &report_container.report_map_container {
         context.send_report(PersonPropertyReport {
-            t: context.get_current_time(),
+            t: context.get_current_time() + reporting_delay,
             age: values.age,
             infection_status: values.infection_status,
             symptoms: values.symptoms,
@@ -97,7 +97,12 @@ fn send_property_counts(context: &mut Context) {
 /// # Panics
 ///
 /// Will panic if symptom value string is not listed in enum
-pub fn init(context: &mut Context, file_name: &str, period: f64) -> Result<(), IxaError> {
+pub fn init(
+    context: &mut Context,
+    file_name: &str,
+    period: f64,
+    reporting_delay: f64,
+) -> Result<(), IxaError> {
     context.add_report::<PersonPropertyReport>(file_name)?;
 
     let mut map_counts = HashMap::default();
@@ -120,7 +125,7 @@ pub fn init(context: &mut Context, file_name: &str, period: f64) -> Result<(), I
     context.add_periodic_plan_with_phase(
         period,
         move |context: &mut Context| {
-            send_property_counts(context);
+            send_property_counts(context, reporting_delay);
         },
         ExecutionPhase::Last,
     );
@@ -165,6 +170,7 @@ mod test {
             write: true,
             filename: Some("output.csv".to_string()),
             period: Some(2.0),
+            reporting_delay: Some(7.0),
         });
 
         let temp_dir = tempdir().unwrap();
@@ -207,12 +213,12 @@ mod test {
             .collect();
         let mut expected = vec![
             //   t    | age |sym| inf status  | hosp   | count
-            vec!["0.0", "42", "", "Infectious", "false", "1"],
-            vec!["0.0", "43", "", "Susceptible", "false", "1"],
-            vec!["2.0", "42", "", "Infectious", "false", "1"],
-            vec!["2.0", "43", "", "Infectious", "false", "1"],
+            vec!["7.0", "42", "", "Infectious", "false", "1"],
+            vec!["7.0", "43", "", "Susceptible", "false", "1"],
+            vec!["9.0", "42", "", "Infectious", "false", "1"],
+            vec!["9.0", "43", "", "Infectious", "false", "1"],
             // Only an initialized combination can have a zero count
-            vec!["2.0", "43", "", "Susceptible", "false", "0"],
+            vec!["9.0", "43", "", "Susceptible", "false", "0"],
         ];
 
         actual.sort();

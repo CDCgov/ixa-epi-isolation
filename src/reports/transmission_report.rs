@@ -23,10 +23,11 @@ fn record_transmission_event(
     infected_by: Option<PersonId>,
     infection_setting_type: Option<String>,
     infection_setting_id: Option<usize>,
+    reporting_delay: f64,
 ) {
     if infected_by.is_some() {
         context.send_report(TransmissionReport {
-            time: context.get_current_time(),
+            time: context.get_current_time() + reporting_delay,
             target_id,
             infected_by,
             infection_setting_type,
@@ -38,26 +39,29 @@ fn record_transmission_event(
 /// # Errors
 ///
 /// Will return `IxaError` if the report cannot be added
-pub fn init(context: &mut Context, file_name: &str) -> Result<(), IxaError> {
+pub fn init(context: &mut Context, file_name: &str, reporting_delay: f64) -> Result<(), IxaError> {
     context.add_report::<TransmissionReport>(file_name)?;
-    context.subscribe_to_event::<PersonPropertyChangeEvent<InfectionData>>(|context, event| {
-        let _span = open_span("transmission_report");
-        if let InfectionDataValue::Infectious {
-            infected_by,
-            infection_setting_type,
-            infection_setting_id,
-            ..
-        } = event.current
-        {
-            record_transmission_event(
-                context,
-                event.person_id,
+    context.subscribe_to_event::<PersonPropertyChangeEvent<InfectionData>>(
+        move |context, event| {
+            let _span = open_span("transmission_report");
+            if let InfectionDataValue::Infectious {
                 infected_by,
-                infection_setting_type.map(ToString::to_string),
+                infection_setting_type,
                 infection_setting_id,
-            );
-        }
-    });
+                ..
+            } = event.current
+            {
+                record_transmission_event(
+                    context,
+                    event.person_id,
+                    infected_by,
+                    infection_setting_type.map(ToString::to_string),
+                    infection_setting_id,
+                    reporting_delay,
+                );
+            }
+        },
+    );
     Ok(())
 }
 
@@ -99,6 +103,7 @@ mod test {
             write: true,
             filename: Some("output.csv".to_string()),
             period: None,
+            reporting_delay: None,
         });
 
         let temp_dir = tempdir().unwrap();
