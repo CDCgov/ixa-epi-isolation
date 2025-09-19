@@ -31,7 +31,7 @@ fn get_report_name(params: &ReportParams) -> Result<Option<&str>, IxaError> {
     Ok(None)
 }
 
-fn get_period_delay_report_name(
+fn get_report_name_period_delay(
     params: &ReportParams,
 ) -> Result<Option<(&str, f64, f64)>, IxaError> {
     if let Some(name) = get_report_name(params)? {
@@ -52,7 +52,7 @@ fn get_period_delay_report_name(
     Ok(None)
 }
 
-fn get_delay_report_name(params: &ReportParams) -> Result<Option<(&str, f64)>, IxaError> {
+fn get_report_name_delay(params: &ReportParams) -> Result<Option<(&str, f64)>, IxaError> {
     if let Some(name) = get_report_name(params)? {
         let delay = params.reporting_delay.unwrap_or(0.0);
         return Ok(Some((name, delay)));
@@ -73,19 +73,19 @@ pub fn init(context: &mut Context) -> Result<(), IxaError> {
     } = context.get_params().clone();
     let mut report_count = 0;
 
-    if let Some((name, period, reporting_delay)) = get_period_delay_report_name(&prevalence_report)?
+    if let Some((name, period, reporting_delay)) = get_report_name_period_delay(&prevalence_report)?
     {
         prevalence_report::init(context, name, period, reporting_delay)?;
         info!("Generating the prevalence report.");
         report_count += 1;
     }
-    if let Some((name, period, reporting_delay)) = get_period_delay_report_name(&incidence_report)?
+    if let Some((name, period, reporting_delay)) = get_report_name_period_delay(&incidence_report)?
     {
         incidence_report::init(context, name, period, reporting_delay)?;
         info!("Generating the incidence report.");
         report_count += 1;
     }
-    if let Some((name, reporting_delay)) = get_delay_report_name(&transmission_report)? {
+    if let Some((name, reporting_delay)) = get_report_name_delay(&transmission_report)? {
         transmission_report::init(context, name, reporting_delay)?;
         info!("Generating the transmission report.");
         report_count += 1;
@@ -99,7 +99,7 @@ pub fn init(context: &mut Context) -> Result<(), IxaError> {
 #[cfg(test)]
 mod test {
 
-    use super::get_period_delay_report_name;
+    use super::get_report_name_period_delay;
     use crate::reports::ReportParams;
     use crate::{
         parameters::{ContextParametersExt, Params},
@@ -206,7 +206,7 @@ mod test {
         };
 
         if let Some((expect_name, expect_period, expected_delay)) =
-            get_period_delay_report_name(&report).unwrap()
+            get_report_name_period_delay(&report).unwrap()
         {
             assert_eq!(name, *expect_name);
             assert_almost_eq!(period, expect_period, 0.0);
@@ -228,7 +228,7 @@ mod test {
             reporting_delay: None,
         };
 
-        assert_eq!(None, get_period_delay_report_name(&report).unwrap());
+        assert_eq!(None, get_report_name_period_delay(&report).unwrap());
     }
 
     #[test]
@@ -242,7 +242,7 @@ mod test {
             reporting_delay: None,
         };
 
-        match get_period_delay_report_name(&no_name_report).err() {
+        match get_report_name_period_delay(&no_name_report).err() {
             Some(IxaError::IxaError(msg)) => {
                 assert_eq!(
                     msg,
@@ -269,7 +269,7 @@ mod test {
             reporting_delay: None,
         };
 
-        match get_period_delay_report_name(&bad_period_report).err() {
+        match get_report_name_period_delay(&bad_period_report).err() {
             Some(IxaError::IxaError(msg)) => {
                 assert_eq!(
                     msg,
