@@ -2,10 +2,25 @@
     "schema": "v0.3",
     "parameters": {
         "synth_population_file": {
-            "vary": ["input/synth_pop_people_WY_1000.csv", "input/synth_pop_people_WY_10000.csv", "input/synth_pop_people_WY_100000.csv", "input/synth_pop_people_WY_1000000.csv"]
+            "vary": ["input/synth_pop_people_WY_100000.csv"]
         },
-        "infectiousness_rate_fn>>>EmpiricalFromFile>>>scale": {
-            "vary": [0.025, 0.05, 0.075]
+        "settings_properties>>>Home>>>alpha": {
+            "vary": [0.0, 0.5, 1.0]
+        },
+        "settings_properties>>>School>>>alpha": {
+            "vary": [0.0]
+        },
+        "settings_properties>>>Workplace>>>alpha": {
+            "vary": [0.0]
+        },
+        "settings_properties>>>CensusTract>>>alpha": {
+            "vary": [0.0]
+        },
+        "guidance_policy>>>UpdatedIsolationGuidance>>>policy_adherence": {
+            "vary": [0.0, 0.25, 0.5, 0.75, 1]
+        },
+        "proportion_asymptomatic": {
+            "vary": [0.0, 0.25, 0.5]
         }
     }
 }

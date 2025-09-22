@@ -28,7 +28,9 @@ def main():
             experiments_directory=experiment.directory,
             config_file=config_path,
         )
-        subexperiment.run_step(data_read_fn=read_fn, products=["simulations"])
+        subexperiment.run_step(
+            data_read_fn=read_hospitalizations_fn, products=["simulations"]
+        )
         with open(experiment.griddle_file, "r") as fp:
             raw_griddle = json.load(fp)
 
@@ -56,11 +58,21 @@ def main():
     exp_output = experiment.read_results(filename="scenarios")
     exp_output = exp_output.join(parameter_df, on="scenario")
     exp_output.write_csv(
-        os.path.join(experiment.directory, "experiment_runtime.csv")
+        os.path.join(experiment.directory, "hospitalizations_asmp_home.csv")
     )
 
 
-def read_fn(outputs_dir):
+def read_hospitalizations_fn(outputs_dir):
+    data_path = os.path.join(
+        outputs_dir, "incidence_person_property_count.csv"
+    )
+    data = pl.read_csv(data_path)
+    data = data.filter(pl.col("event") == "true")
+    data = data.group_by("t_upper").agg(pl.col("count").sum().alias("count"))
+    return data
+
+
+def read_profiling_fn(outputs_dir):
     profiling_file_path = os.path.join(outputs_dir, "profiling_data.json")
     with open(profiling_file_path, "r") as f:
         profiling_data = json.load(f)

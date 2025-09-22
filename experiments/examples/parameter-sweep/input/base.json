@@ -3,8 +3,8 @@
     "max_time": 200.0,
     "seed": 123,
     "infectiousness_rate_fn": {"EmpiricalFromFile": {"file": "input/library_empirical_rate_fns.csv",
-                                                     "scale": 0.05}},
-    "initial_incidence": 0.1,
+                                                     "scale": 0.1}},
+    "initial_incidence": 0.001,
     "initial_recovered": 0.0,
     "proportion_asymptomatic": 0.3,
     "relative_infectiousness_asymptomatics": 0.7,
@@ -24,7 +24,7 @@
     "guidance_policy": { "UpdatedIsolationGuidance": {
       "post_isolation_duration": 5.0,
       "policy_adherence": 1.0,
-      "isolation_delay_period": 3.0
+      "isolation_delay_period": 0.0
     }
   },
     "facemask_parameters": {
