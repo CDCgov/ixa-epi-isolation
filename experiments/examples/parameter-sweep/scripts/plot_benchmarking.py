@@ -2,49 +2,53 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import seaborn as sns
+import polars as pl
+from scipy.stats import poisson
+from math import log
 
 sns.set_theme(style="whitegrid")
 
 
-def plot_hospitalizations(output_path):
+def plot_hospitalizations(output_path, param_one, param_two):
     scenario_data = pd.read_csv(output_path)
-
+    target_data = pd.read_csv("experiments/examples/parameter-sweep/input/target_data.csv")
+    target_data["total_admissions"] = target_data["total_admissions"]/5.89
     # Get unique values for rows and columns
-    proportion_asymptomatic_vals = sorted(
-        scenario_data["proportion_asymptomatic"].unique()
+    val_one = sorted(
+        scenario_data[param_one].unique()
     )
-    home_alpha_vals = sorted(
-        scenario_data["settings_properties>>>Home>>>alpha"].unique()
+    val_two = sorted(
+        scenario_data[param_two].unique()
     )
 
     fig, axes = plt.subplots(
-        nrows=len(proportion_asymptomatic_vals),
-        ncols=len(home_alpha_vals),
+        nrows=len(val_one),
+        ncols=len(val_two),
         figsize=(
-            6 * len(home_alpha_vals),
-            4 * len(proportion_asymptomatic_vals),
+            6 * len(val_one),
+            4 * len(val_two),
         ),
         sharex=True,
         sharey=True,
     )
 
     # If axes is 1D, make it 2D for consistency
-    if len(proportion_asymptomatic_vals) == 1:
+    if len(val_one) == 1:
         axes = axes[np.newaxis, :]
-    if len(home_alpha_vals) == 1:
+    if len(val_two) == 1:
         axes = axes[:, np.newaxis]
 
-    for i, proportion_asymptomatic in enumerate(proportion_asymptomatic_vals):
-        for j, home_alpha in enumerate(home_alpha_vals):
+    for i, one in enumerate(val_one):
+        for j, two in enumerate(val_two):
             ax = axes[i, j]
             subset = scenario_data[
                 (
-                    scenario_data["proportion_asymptomatic"]
-                    == proportion_asymptomatic
+                    scenario_data[param_one]
+                    == one
                 )
                 & (
-                    scenario_data["settings_properties>>>Home>>>alpha"]
-                    == home_alpha
+                    scenario_data[param_two]
+                    == two
                 )
             ]
             if subset.empty:
@@ -75,8 +79,18 @@ def plot_hospitalizations(output_path):
                     ax=ax,
                     legend=False,
                 )
+            # Plot target data as scatter
+            ax.scatter(
+              target_data["t"],
+              target_data["total_admissions"],
+              color="black",
+              label="Target Data",
+              zorder=10,
+            )
+            if (i, j) == (0, 0):
+              ax.legend()
             ax.set_title(
-                f"proportion_asymptomatic={proportion_asymptomatic}, home_alpha={home_alpha}"
+                f"{param_one}={one}, {param_two}={two}"
             )
 
     plt.tight_layout()
@@ -125,7 +139,80 @@ def plot_profiling(output_path):
         "experiments/examples/parameter-sweep/memory_by_population.png"
     )
 
+def grid_search_optimization(output_path):
+    scenario_data = pl.read_csv(output_path)
+    scenario_data = scenario_data.with_columns(
+        pl.col("count").mean().over(["scenario", "t_upper"]).alias("count")
+    )
+    scenario_data = scenario_data.rename({"t_upper": "t"})
+    scenario_data = scenario_data.with_columns(
+        pl.col("t").cast(pl.Int64)
+    )
+    scenario_data = scenario_data.unique(subset=["scenario", "t"])
+    target_data = pl.read_csv("experiments/examples/parameter-sweep/input/target_data.csv")
+    target_data = target_data.with_columns(
+        (pl.col("total_admissions") / 5.89).alias("total_admissions")
+    )
+    
+    scenario_ids = scenario_data.select(pl.col("scenario")).unique().to_series().to_list()
+    negloglikelihoods = []
+    for scenario_id in scenario_ids:
+        scenario_subset = scenario_data.filter(pl.col("scenario") == scenario_id)
+        lhood = hosp_lhood(scenario_subset, target_data)
+        print(lhood)
+        negloglikelihoods.append((scenario_id, lhood))
+    negloglikelihood_df = pl.DataFrame({"scenario": [x[0] for x in negloglikelihoods], "negloglikelihood": [x[1] for x in negloglikelihoods]})
+    scenario_data = scenario_data.join(negloglikelihood_df, on="scenario", how="left")
+    
+    threshold = scenario_data.select(pl.col("negloglikelihood")).quantile(0.05).item()
+    top_scenarios = scenario_data.filter(pl.col("negloglikelihood") <= threshold)
+    top_scenarios.write_csv("experiments/examples/parameter-sweep/top_scenarios.csv")
+    print(f"Showing {top_scenarios.select(pl.n_unique('scenario')).item()} accepted simulations")
+    sns.lineplot(top_scenarios, x="t", y="count",hue="negloglikelihood", units="scenario", estimator=None)
+    sns.scatterplot(target_data, x = "t", y="total_admissions",zorder=10)
+    plt.savefig(
+        "experiments/examples/parameter-sweep/top_10_percent_scenarios.png"
+    )
 
-plot_hospitalizations(
+
+def hosp_lhood(results_data: pl.DataFrame, target_data: pl.DataFrame):
+    def poisson_lhood(model, data):
+        return -log(poisson.pmf(model, data) + 1e-12)
+    if "t" not in results_data.columns:
+        joint_set = target_data.with_columns(
+            pl.col("total_admissions")
+            .map_elements(
+                lambda x: poisson_lhood(0, x),
+                return_dtype=pl.Float64,
+            )
+            .alias("negloglikelihood")
+        )
+    else:
+        joint_set = (
+            results_data.select(pl.col(["t", "count"]))
+            .join(
+                target_data.select(pl.col(["t", "total_admissions"])),
+                on="t",
+                how="right",
+            )
+            .with_columns(pl.col("count").fill_null(strategy="zero"))
+        )
+        print(joint_set)
+        joint_set = joint_set.with_columns(
+            pl.struct(["count", "total_admissions"])
+            .map_elements(
+                lambda x: poisson_lhood(x["count"], x["total_admissions"]),
+                return_dtype=pl.Float64,
+            )
+            .alias("negloglikelihood")
+        )
+    return joint_set.select(pl.col("negloglikelihood").sum()).item()
+
+grid_search_optimization(
     "experiments/examples/parameter-sweep/hospitalizations_asmp_home.csv"
 )
+# plot_hospitalizations(
+#     "experiments/examples/parameter-sweep/hospitalizations_asmp_home.csv",
+#     "proportion_asymptomatic",
+#     "settings_properties>>>Home>>>alpha"
+# )
