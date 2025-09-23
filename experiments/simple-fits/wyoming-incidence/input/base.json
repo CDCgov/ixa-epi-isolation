@@ -21,8 +21,17 @@
                             "CensusTract": {"alpha": 0.0,
                                             "itinerary_specification": {"Constant": {"ratio": 0.25}}}},
     "symptom_progression_library" : {"EmpiricalFromFile": {"file": "input/library_symptom_parameters.csv"}},
-    "report_period": 7.0,
-		"person_property_report_name": "person_property_count.csv",
+    "prevalence_report": {
+        "write": false
+    },
+    "incidence_report": {
+        "write": true,
+        "filename": "incidence_report.csv",
+        "period": 7.0
+    },
+    "transmission_report": {
+        "write": false
+    },
     "synth_population_file": "experiments/simple-fits/wyoming-constant-rate/input/synth_pop_people_WY_589000.csv",
     "facemask_parameters": {
       "facemask_efficacy": 0.2
@@ -46,8 +55,7 @@
         {"min": 60, "probability": 0.097},
         {"min": 70, "probability": 0.19},
         {"min": 80, "probability": 0.21}
-      ],
-      "hospital_incidence_report_name": "hospitalization.csv"
+      ]
     }
   }
 }
