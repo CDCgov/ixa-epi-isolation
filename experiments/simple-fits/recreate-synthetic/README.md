@@ -14,6 +14,7 @@ Then execute
 
 ```{shell}
 Rscript scripts/create_synthetic_population.R
+cargo build --release
 poetry run python experiments/simple-fits/recreate-synthetic/scripts/abc.py
 quarto render experiments/simple-fits/recreate-synthetic/docs/output.qmd
 ```
