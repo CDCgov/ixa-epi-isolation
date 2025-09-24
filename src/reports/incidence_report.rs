@@ -199,9 +199,7 @@ pub fn init(context: &mut Context, file_name: &str, period: f64) -> Result<(), I
         ExecutionPhase::Last,
     );
 
-    Ok(())
 }
-
 #[cfg(test)]
 mod test {
     use crate::{

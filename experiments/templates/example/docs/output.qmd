@@ -1,0 +1,66 @@
+---
+title:
+author:
+format: pdf
+toc: true
+number-sections: true
+execute:
+    warning: false
+jupyter: python3
+---
+
+# Purpose
+
+Describe the objective of the experiment
+
+# Methods
+
+## Data
+
+Describe the data sources and pre-processing steps
+
+## Parameters
+
+| Parameter name | Description |
+| :------------: | ----------- |
+
+### Fixed parameter values
+
+Describe the parameters, values, and relevant sources used for fixed values
+
+| Parameter | Value | Source |
+| :-------: | :---: | ------ |
+
+### Fitted parameter values
+
+Describe the parameters, priors, perturbations and relevant sources used for fixed values
+
+| Parameter | Prior | Source |
+| :-------: | :---: | ------ |
+
+## Distance function
+
+Describe the distance function used to compare target data with simulation output and rationale
+
+# Results
+
+Load the experiment history file if available
+
+```{python}
+from abmwrappers.experiment_class import Experiment
+
+experiment = Experiment(img_file="../data/experiment_history.pkl")
+print(f"Steps = {len(experiment.tolerance_dict)}")
+```
+
+## Simulation visualizations
+
+Plot and describe any relevant simulation output
+
+## Parameter posterior visualizations
+
+Plot any relevant figures for the posterior distributions of fitted parameters
+
+# Additional resources
+
+## Citations
