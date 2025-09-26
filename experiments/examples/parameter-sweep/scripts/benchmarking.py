@@ -58,16 +58,14 @@ def main():
     exp_output = experiment.read_results(filename="scenarios")
     exp_output = exp_output.join(parameter_df, on="scenario")
     exp_output.write_csv(
-        os.path.join(experiment.directory, "hospitalizations_asmp_home.csv")
+        os.path.join(experiment.directory, "hospitalizations_wy.csv")
     )
 
 
 def read_hospitalizations_fn(outputs_dir):
-    data_path = os.path.join(
-        outputs_dir, "incidence_person_property_count.csv"
-    )
+    data_path = os.path.join(outputs_dir, "incidence_report.csv")
     data = pl.read_csv(data_path)
-    data = data.filter(pl.col("event") == "true")
+    data = data.filter(pl.col("event") == "Hospitalized")
     data = data.group_by("t_upper").agg(pl.col("count").sum().alias("count"))
     return data
 
