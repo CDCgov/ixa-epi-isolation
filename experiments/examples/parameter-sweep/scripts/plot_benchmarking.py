@@ -130,42 +130,6 @@ def plot_profiling(output_path):
         "experiments/examples/parameter-sweep/memory_by_population.png"
     )
 
-
-def hosp_lhood(results_data: pl.DataFrame, target_data: pl.DataFrame):
-    def poisson_lhood(model, data):
-        return -log(poisson.pmf(model, data) + 1e-12)
-
-    if "t" not in results_data.columns:
-        joint_set = target_data.with_columns(
-            pl.col("total_admissions")
-            .map_elements(
-                lambda x: poisson_lhood(0, x),
-                return_dtype=pl.Float64,
-            )
-            .alias("negloglikelihood")
-        )
-    else:
-        joint_set = (
-            results_data.select(pl.col(["t", "count"]))
-            .join(
-                target_data.select(pl.col(["t", "total_admissions"])),
-                on="t",
-                how="right",
-            )
-            .with_columns(pl.col("count").fill_null(strategy="zero"))
-        )
-        print(joint_set)
-        joint_set = joint_set.with_columns(
-            pl.struct(["count", "total_admissions"])
-            .map_elements(
-                lambda x: poisson_lhood(x["count"], x["total_admissions"]),
-                return_dtype=pl.Float64,
-            )
-            .alias("negloglikelihood")
-        )
-    return joint_set.select(pl.col("negloglikelihood").sum()).item()
-
-
 plot_hospitalizations(
     "experiments/examples/parameter-sweep/hospitalizations_asmp_home.csv",
     "proportion_asymptomatic",
