@@ -3,6 +3,7 @@
 ## =================================#
 library(tidyverse)
 library(tigris)
+library(sf)
 library(tidycensus)
 library(patchwork)
 library(data.table)
@@ -11,7 +12,7 @@ set.seed(1234)
 
 state_synth <- "WY"
 year_synth <- 2023
-population_size <- 10000
+population_size <- 1000000
 school_per_pop_ratio <- 0.0005
 work_per_pop_ratio <- 0.1
 
@@ -73,7 +74,10 @@ tracts_by_puma <- read_csv(tract_puma_crosswalk_file) |>
   summarise(tracts = list(tract_id))
 
 ## Get spatial and other basic data on tracts for the state
-tracts_st <- tracts(state = state_synth, year = year_synth)
+tracts_st <- tracts(state = state_synth, year = year_synth, cb = TRUE)
+tracts_centroid <- st_coordinates(st_centroid(tracts_st))
+tracts_st <- tracts_st |>
+  mutate(lat = tracts_centroid[, "Y"], lon = tracts_centroid[, "X"])
 
 ## =================================#
 ## Create schools -----------
@@ -83,9 +87,8 @@ n_schools <- ceiling(school_per_pop_ratio * population_size)
 
 synth_school_df <- as_tibble(tracts_st) |>
   dplyr::slice_sample(n = n_schools, replace = TRUE) |>
-  dplyr::select(GEOID, INTPTLAT, INTPTLON) |>
+  dplyr::select(GEOID, lat, lon) |>
   dplyr::mutate(school_id = paste0(GEOID, sprintf("%06d", row_number()))) |>
-  dplyr::mutate(lat = as.numeric(INTPTLAT), lon = as.numeric(INTPTLON)) |>
   dplyr::select(school_id, lat, lon) |>
   mutate(enrolled = 0)
 
@@ -97,9 +100,8 @@ n_workplaces <- ceiling(work_per_pop_ratio * population_size)
 
 synth_workplace_df <- as_tibble(tracts_st) |>
   dplyr::slice_sample(n = n_workplaces, replace = TRUE) |>
-  dplyr::select(GEOID, INTPTLAT, INTPTLON) |>
+  dplyr::select(GEOID, lat, lon) |>
   dplyr::mutate(workplace_id = paste0(GEOID, sprintf("%06d", row_number()))) |>
-  dplyr::mutate(lat = as.numeric(INTPTLAT), lon = as.numeric(INTPTLON)) |>
   dplyr::select(workplace_id, lat, lon) |>
   mutate(enrolled = 0)
 
@@ -180,7 +182,7 @@ synth_pop_region_df <- synth_pop_df |>
   ) |>
   left_join(
     tracts_st |>
-      select(COUNTYFP, TRACTCE, GEOID, INTPTLAT, INTPTLON),
+      select(COUNTYFP, TRACTCE, GEOID, lat, lon),
     by = c("tract_id" = "GEOID")
   ) |>
   mutate(home_id = paste0(tract_id, sprintf("%06d", house_number)))
@@ -200,7 +202,6 @@ people_df <- synth_pop_region_df |>
 
 ## Region columns: region_id, lat, lon
 region_df <- synth_pop_region_df |>
-  dplyr::mutate(lat = as.numeric(INTPTLAT), lon = as.numeric(INTPTLON)) |>
   dplyr::select(tract_id, lat, lon) |>
   rename(censusTractId = tract_id)
 
