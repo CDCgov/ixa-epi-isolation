@@ -154,8 +154,8 @@ def output_processing_function(outputs_dir):
 
     if not df.is_empty():
         df = (
-            df.with_columns((pl.col("Age") < 18).alias("pediatric"))
-            .filter(pl.col("Hospitalized") == "true")
+            df.with_columns((pl.col("age") < 18).alias("pediatric"))
+            .filter(pl.col("hospitalized") == "true")
             .group_by("t", "pediatric")
             .agg(pl.sum("count"))
         )
