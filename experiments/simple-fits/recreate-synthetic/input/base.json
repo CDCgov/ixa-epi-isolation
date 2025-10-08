@@ -32,7 +32,7 @@
     "transmission_report": {
         "write": false
     },
-    "synth_population_file": "input/synth_pop_people_WY_100000.csv",
+    "synth_population_file": "input/synth_pop_people_WY_1000000.csv",
     "hospitalization_parameters": {
       "mean_delay_to_hospitalization": 5.7,
       "mean_duration_of_hospitalization": 8.0,
