@@ -201,7 +201,6 @@ pub fn init(context: &mut Context, file_name: &str, period: f64) -> Result<(), I
 
     Ok(())
 }
-
 #[cfg(test)]
 mod test {
     use crate::{

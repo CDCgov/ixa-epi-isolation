@@ -11,7 +11,7 @@ set.seed(1234)
 
 state_synth <- "WY"
 year_synth <- 2023
-population_size <- 1000000
+population_size <- 589000
 school_per_pop_ratio <- 0.002
 work_per_pop_ratio <- 0.1
 
@@ -134,17 +134,17 @@ while (sampled_pop < population_size) {
   ## Assign workplaces
   work_id_list <- map_chr(house_sample$WRK, function(x) {
     if (x %in% c("1")) {
-      sample(synth_workplace_df$workplace_id, size = 1)
+      return(sample(synth_workplace_df$workplace_id, size = 1))
     } else {
-      NA
+      return(NA)
     }
   })
 
   school_id_list <- map_chr(house_sample$SCH, function(x) {
     if (x %in% c("2", "3")) {
-      sample(synth_school_df$school_id, size = 1)
+      return(sample(synth_school_df$school_id, size = 1))
     } else {
-      NA
+      return(NA)
     }
   })
 
