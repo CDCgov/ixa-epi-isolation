@@ -203,7 +203,8 @@ people_df <- synth_pop_region_df |>
 ## Region columns: region_id, lat, lon
 region_df <- synth_pop_region_df |>
   dplyr::select(tract_id, lat, lon) |>
-  rename(censusTractId = tract_id)
+  dplyr::rename(censusTractId = tract_id) |>
+  dplyr::distinct()
 
 ## =================================#
 ## Write outputs -----------
