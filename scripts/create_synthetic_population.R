@@ -3,6 +3,7 @@
 ## =================================#
 library(tidyverse)
 library(tigris)
+library(sf)
 library(tidycensus)
 library(patchwork)
 library(data.table)
@@ -12,24 +13,34 @@ set.seed(1234)
 state_synth <- "WY"
 year_synth <- 2023
 population_size <- 1000000
-school_per_pop_ratio <- 0.002
+school_per_pop_ratio <- 0.0005
 work_per_pop_ratio <- 0.1
+
+## data on number of public and private schools by state are available in
+## National Center for Education Statistics Digest of Education Statistics
+## tables at
+## https://nces.ed.gov/programs/digest/d23/tables/dt23_216.70.asp
+## https://nces.ed.gov/programs/digest/d23/tables/dt23_205.80.asp
 
 pums_file <- sprintf("input/pums_%s_%d.csv", state_synth, year_synth)
 ## =================================#
 ## Get population ---------------
 ## =================================#
+
+# pums_variables is a data set included in tidycensus
 pums_vars <- pums_variables |>
-  filter(year == 2018, survey == "acs1") |>
+  filter(year == year_synth, survey == "acs1") |>
   distinct(var_code, var_label, data_type, level)
 
 person_variables <- c(
   "SPORDER", "SERIALNO", "PWGTP",
-  "AGEP", "SEX", "PUMA", "REGION",
+  "AGEP", "SEX", "PUMA",
   "SCH", "SCHG", "WRK"
 )
 
 house_variables <- c("WGTP", "NP")
+
+pums_vars[pums_vars$var_code %in% c(person_variables, house_variables), ]
 
 if (!file.exists(pums_file)) {
   sample_pums <- get_pums(
@@ -47,62 +58,50 @@ household_pums <- sample_pums |>
   dplyr::select(SERIALNO, all_of(house_variables)) |>
   distinct()
 
-## For now, we will use PUMA codes
-## instead of census tracts
-pumas_st <- pumas(state = state_synth, year = year_synth)
-tracts_st <- tracts(state = state_synth, year = year_synth)
+## Make crosswalk between PUMAs and census tracts
+tract_puma_crosswalk_file <- "input/2020_Census_Tract_to_2020_PUMA.csv"
+if (!file.exists(tract_puma_crosswalk_file)) {
+  download.file(
+    url = "https://www2.census.gov/geo/docs/maps-data/data/rel2020/2020_Census_Tract_to_2020_PUMA.txt", # nolint: line_length_linter.
+    destfile = tract_puma_crosswalk_file
+  )
+}
+
+tracts_by_puma <- read_csv(tract_puma_crosswalk_file) |>
+  mutate(puma_id = paste0(STATEFP, PUMA5CE)) |>
+  mutate(tract_id = paste0(STATEFP, COUNTYFP, TRACTCE)) |>
+  group_by(puma_id) |>
+  summarise(tracts = list(tract_id))
+
+## Get spatial and other basic data on tracts for the state
+tracts_st <- tracts(state = state_synth, year = year_synth, cb = TRUE)
+tracts_centroid <- st_coordinates(st_centroid(tracts_st))
+tracts_st <- tracts_st |>
+  mutate(lat = tracts_centroid[, "Y"], lon = tracts_centroid[, "X"])
 
 ## =================================#
 ## Create schools -----------
 ## =================================#
-puma_codes <- pumas_st$PUMACE20
+## Each schools is randomly assigned to a census tract
 n_schools <- ceiling(school_per_pop_ratio * population_size)
 
-synth_school_df <- as_tibble(pumas_st) |>
-  dplyr::sample_n(n_schools, replace = TRUE) |>
-  dplyr::select(STATEFP20, PUMACE20, INTPTLAT20, INTPTLON20) |>
-  mutate(
-    census_tract_id = sprintf(
-      "%02d%09d",
-      as.numeric(STATEFP20), as.numeric(PUMACE20)
-    ),
-    school_id = sprintf(
-      "%02d%09d%06d",
-      as.numeric(STATEFP20), as.numeric(PUMACE20), row_number()
-    )
-  ) |>
-  dplyr::mutate(
-    lat = as.numeric(INTPTLAT20),
-    lon = as.numeric(INTPTLON20)
-  ) |>
+synth_school_df <- as_tibble(tracts_st) |>
+  dplyr::slice_sample(n = n_schools, replace = TRUE) |>
+  dplyr::select(GEOID, lat, lon) |>
+  dplyr::mutate(school_id = paste0(GEOID, sprintf("%06d", row_number()))) |>
   dplyr::select(school_id, lat, lon) |>
   mutate(enrolled = 0)
 
 ## =================================#
 ## Create workplaces -----------
 ## =================================#
+## Each workplace is randomly assigned to a census tract
 n_workplaces <- ceiling(work_per_pop_ratio * population_size)
 
-synth_workplace_df <- as_tibble(pumas_st) |>
-  sample_n(n_workplaces, replace = TRUE) |>
-  dplyr::select(STATEFP20, PUMACE20, INTPTLAT20, INTPTLON20) |>
-  mutate(
-    census_tract_id = sprintf(
-      "%02d%09d",
-      as.numeric(STATEFP20),
-      as.numeric(PUMACE20)
-    ),
-    workplace_id = sprintf(
-      "%02d%09d%06d",
-      as.numeric(STATEFP20),
-      as.numeric(PUMACE20),
-      row_number()
-    )
-  ) |>
-  dplyr::mutate(
-    lat = as.numeric(INTPTLAT20),
-    lon = as.numeric(INTPTLON20)
-  ) |>
+synth_workplace_df <- as_tibble(tracts_st) |>
+  dplyr::slice_sample(n = n_workplaces, replace = TRUE) |>
+  dplyr::select(GEOID, lat, lon) |>
+  dplyr::mutate(workplace_id = paste0(GEOID, sprintf("%06d", row_number()))) |>
   dplyr::select(workplace_id, lat, lon) |>
   mutate(enrolled = 0)
 
@@ -131,7 +130,7 @@ while (sampled_pop < population_size) {
     mutate(house_number = house_counter:(house_counter + batch_size - 1)) |>
     left_join(sample_pums, by = (c("SERIALNO", "WGTP", "NP")))
 
-  ## Assign workplaces
+  ## Assign workplaces (randomly within state)
   work_id_list <- map_chr(house_sample$WRK, function(x) {
     if (x %in% c("1")) {
       sample(synth_workplace_df$workplace_id, size = 1)
@@ -140,6 +139,7 @@ while (sampled_pop < population_size) {
     }
   })
 
+  ## Assign schools (randomly within state)
   school_id_list <- map_chr(house_sample$SCH, function(x) {
     if (x %in% c("2", "3")) {
       sample(synth_school_df$school_id, size = 1)
@@ -165,23 +165,27 @@ print(end_time - start_time)
 ## =================================#
 ## Recode and math GEO -----------
 ## =================================#
+## sample census tract for each house_number based on PUMA
+
+house_puma_df <- synth_pop_df |>
+  dplyr::select(house_number, STATE, PUMA) |>
+  distinct() |>
+  mutate(puma_id = paste0(STATE, PUMA)) |>
+  left_join(tracts_by_puma, by = c("puma_id")) |>
+  mutate(tract_id = map_chr(tracts, sample, size = 1)) |>
+  select(-tracts)
+
 synth_pop_region_df <- synth_pop_df |>
   left_join(
-    pumas_st |>
-      dplyr::select(STATEFP20, PUMACE20, INTPTLAT20, INTPTLON20),
-    by = c("PUMA" = "PUMACE20")
+    house_puma_df |> select(-puma_id),
+    by = c("house_number", "STATE", "PUMA")
   ) |>
-  dplyr::select(-geometry) |>
-  mutate(
-    census_tract_id = sprintf(
-      "%02d%09d",
-      as.numeric(STATE), as.numeric(PUMA)
-    ),
-    home_id = sprintf(
-      "%02d%09d%06d",
-      as.numeric(STATE), as.numeric(PUMA), house_number
-    )
-  )
+  left_join(
+    tracts_st |>
+      select(COUNTYFP, TRACTCE, GEOID, lat, lon),
+    by = c("tract_id" = "GEOID")
+  ) |>
+  mutate(home_id = paste0(tract_id, sprintf("%06d", house_number)))
 
 
 ## split pop in persons and regions
@@ -198,9 +202,9 @@ people_df <- synth_pop_region_df |>
 
 ## Region columns: region_id, lat, lon
 region_df <- synth_pop_region_df |>
-  dplyr::mutate(lat = as.numeric(INTPTLAT20), lon = as.numeric(INTPTLON20)) |>
-  dplyr::select(census_tract_id, lat, lon) |>
-  rename(censusTractId = census_tract_id)
+  dplyr::select(tract_id, lat, lon) |>
+  dplyr::rename(censusTractId = tract_id) |>
+  dplyr::distinct()
 
 ## =================================#
 ## Write outputs -----------
@@ -235,6 +239,6 @@ g1 <- ggplot(region_df) +
   aes(x = lon, y = lat) +
   geom_point()
 
-g2 <- ggplot(pumas_st) +
+g2 <- ggplot(tracts_st) +
   geom_sf() +
   theme_void()
