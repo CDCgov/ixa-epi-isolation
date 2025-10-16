@@ -283,12 +283,12 @@ mod test {
 
     use ixa::{
         define_person_property_with_default, Context, ContextGlobalPropertiesExt, ContextPeopleExt,
-        ContextRandomExt, HashMap, IxaError, PersonPropertyChangeEvent,
+        ContextRandomExt, HashMap, HashSetExt, IxaError, PersonPropertyChangeEvent,
     };
 
     use super::{IsolatingStatus, MaskingStatus};
 
-    use statrs::assert_almost_eq;
+    use ixa::assert_almost_eq;
     #[allow(clippy::too_many_arguments)]
     fn setup_context(
         overall_policy_duration: f64,
@@ -949,7 +949,11 @@ mod test {
                 context.add_itinerary(person_id, itinerary.clone()).unwrap();
             }
             // Infect all of the people -- triggering the event subscriptions if they are symptomatic
-            for person in context.query_people((Alive, true)) {
+            let mut people_to_infect = Vec::new();
+            context.with_query_results((Alive, true), &mut |current_people| {
+                people_to_infect = current_people.to_owned_vec();
+            });
+            for person in people_to_infect {
                 context.infect_person(person, None, None, None);
             }
 

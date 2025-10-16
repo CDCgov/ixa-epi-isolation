@@ -92,7 +92,7 @@ mod test {
         rate_fns::load_rate_fns,
     };
     use ixa::{Context, ContextGlobalPropertiesExt, ContextRandomExt, IxaError};
-    use statrs::assert_almost_eq;
+    use ixa::assert_almost_eq;
     use std::fs::File;
     use std::io::Write;
     use std::path::PathBuf;

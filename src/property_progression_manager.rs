@@ -187,7 +187,7 @@ mod test {
         define_person_property_with_default, Context, ContextPeopleExt, ContextRandomExt,
         ExecutionPhase, IxaError, PersonPropertyChangeEvent,
     };
-    use statrs::assert_almost_eq;
+    use ixa::assert_almost_eq;
 
     use crate::{
         natural_history_parameter_manager::ContextNaturalHistoryParameterExt,

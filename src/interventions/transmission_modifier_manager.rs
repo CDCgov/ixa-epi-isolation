@@ -169,7 +169,7 @@ mod test {
         ContextGlobalPropertiesExt, ContextPeopleExt, ContextRandomExt, IxaError, PersonId,
     };
     use serde::{Deserialize, Serialize};
-    use statrs::assert_almost_eq;
+    use ixa::assert_almost_eq;
 
     use super::{
         ContextTransmissionModifierExt, PersonPropertyModifier, TransmissionModifier,

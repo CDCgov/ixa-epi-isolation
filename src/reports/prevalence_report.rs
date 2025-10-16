@@ -4,10 +4,12 @@ use crate::{
     population_loader::{Age, Alive},
     symptom_progression::{SymptomValue, Symptoms},
 };
-use ixa::{
-    define_data_plugin, define_derived_property, define_report, report::ContextReportExt, Context,
-    ContextPeopleExt, ExecutionPhase, HashMap, IxaError, PersonPropertyChangeEvent,
-};
+use ixa::prelude::*;
+use ixa::{ExecutionPhase, HashMap, PersonPropertyChangeEvent};
+// use ixa::{
+//     define_data_plugin, define_derived_property, define_report, report::ContextReportExt, Context,
+//     ContextPeopleExt, ExecutionPhase, HashMap, IxaError, PersonPropertyChangeEvent,
+// };
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
@@ -101,14 +103,16 @@ pub fn init(context: &mut Context, file_name: &str, period: f64) -> Result<(), I
     context.add_report::<PersonPropertyReport>(file_name)?;
 
     let mut map_counts = HashMap::default();
-
-    for person in context.query_people((Alive, true)) {
-        let value = context.get_person_property(person, PersonReportProperties);
-        map_counts
-            .entry(value)
-            .and_modify(|count| *count += 1)
-            .or_insert(1);
-    }
+    context.with_query_results((Alive, true), &mut |current_people| {
+        //current_people = results.to_owned_vec();
+        for person in current_people {
+            let value = context.get_person_property(*person, PersonReportProperties);
+            map_counts
+                .entry(value)
+                .and_modify(|count| *count += 1)
+                .or_insert(1);
+        }
+    });
 
     let report_container = context.get_data_mut(PropertyReportDataPlugin);
     report_container.report_map_container = map_counts;

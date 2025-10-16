@@ -170,13 +170,13 @@ mod test {
     use std::{cell::RefCell, path::PathBuf, rc::Rc};
 
     use ixa::{
-        Context, ContextGlobalPropertiesExt, ContextPeopleExt, ContextRandomExt, HashMap, IxaError,
-        PersonPropertyChangeEvent,
+        Context, ContextGlobalPropertiesExt, ContextPeopleExt, ContextRandomExt, HashMap,
+        HashSetExt, IxaError, PersonPropertyChangeEvent,
     };
 
     use super::{IsolatingStatus, MaskingStatus};
 
-    use statrs::assert_almost_eq;
+    use ixa::assert_almost_eq;
 
     fn setup_context(
         post_isolation_duration: f64,
@@ -254,7 +254,7 @@ mod test {
         // 6. Assert that end of facemask is end of symptoms + post isolation days
         let post_isolation_duration = 5.0;
         let policy_adherence = 1.0;
-        let isolation_delay_period = 1.0;
+        let isolation_delay_period = 0.95;
         let facemask_efficacy = 0.5;
         let proportion_asymptomatic = 0.0;
 
@@ -408,7 +408,11 @@ mod test {
                 },
             );
 
-            for person in context.query_people((Alive, true)) {
+            let mut people_to_infect = Vec::new();
+            context.with_query_results((Alive, true), &mut |current_people| {
+                people_to_infect = current_people.to_owned_vec();
+            });
+            for person in people_to_infect {
                 context.infect_person(person, None, None, None);
             }
             context.execute();

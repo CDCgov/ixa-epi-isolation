@@ -1,12 +1,10 @@
-use std::collections::HashMap;
-
 use ixa::rand::Rng;
 use ixa::{
     define_derived_property, define_person_property_with_default, define_rng, Context,
-    ContextPeopleExt, ContextRandomExt, IxaError, PersonPropertyChangeEvent,
+    ContextPeopleExt, ContextRandomExt, HashMap, IxaError, PersonPropertyChangeEvent,
 };
+use rand_distr::Weibull;
 use serde::{Deserialize, Serialize};
-use statrs::distribution::Weibull;
 
 use crate::interventions::{ContextTransmissionModifierExt, TransmissionModifier};
 use crate::natural_history_parameter_manager::{
@@ -355,11 +353,11 @@ mod test {
         Params,
     };
 
+    use ixa::assert_almost_eq;
     use ixa::{
-        Context, ContextGlobalPropertiesExt, ContextPeopleExt, ContextRandomExt, IxaError,
-        PersonPropertyChangeEvent,
+        Context, ContextGlobalPropertiesExt, ContextPeopleExt, ContextRandomExt, HashSetExt,
+        IxaError, PersonPropertyChangeEvent,
     };
-    use statrs::assert_almost_eq;
 
     fn setup(proportion_asymptomatic: f64) -> Context {
         let mut context = Context::new();
@@ -690,7 +688,11 @@ mod test {
             }
             subscribe_to_becoming_infected(&mut context);
             // Infect all of the people -- triggering the event subscriptions if they are symptomatic
-            for person in context.query_people((Alive, true)) {
+            let mut people_to_infect = Vec::new();
+            context.with_query_results((Alive, true), &mut |current_people| {
+                people_to_infect = current_people.to_owned_vec();
+            });
+            for person in people_to_infect {
                 context.infect_person(person, None, None, None);
             }
             context.execute();

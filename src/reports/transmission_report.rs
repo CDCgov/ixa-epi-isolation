@@ -72,7 +72,7 @@ mod test {
     use ixa::{
         Context, ContextGlobalPropertiesExt, ContextPeopleExt, ContextRandomExt, ContextReportExt,
     };
-    use statrs::assert_almost_eq;
+    use ixa::assert_almost_eq;
     use std::path::PathBuf;
     use tempfile::tempdir;
 

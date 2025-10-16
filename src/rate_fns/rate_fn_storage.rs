@@ -138,7 +138,7 @@ mod test {
 
     use super::*;
     use ixa::{Context, ContextGlobalPropertiesExt, ContextPeopleExt};
-    use statrs::assert_almost_eq;
+    use ixa::assert_almost_eq;
 
     struct TestRateFn;
 
