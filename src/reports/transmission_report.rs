@@ -69,10 +69,10 @@ mod test {
         rate_fns::load_rate_fns,
         reports::ReportParams,
     };
+    use ixa::assert_almost_eq;
     use ixa::{
         Context, ContextGlobalPropertiesExt, ContextPeopleExt, ContextRandomExt, ContextReportExt,
     };
-    use ixa::assert_almost_eq;
     use std::path::PathBuf;
     use tempfile::tempdir;
 

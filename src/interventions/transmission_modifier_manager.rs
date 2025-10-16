@@ -164,12 +164,12 @@ impl ContextTransmissionModifierExt for Context {
 
 #[cfg(test)]
 mod test {
+    use ixa::assert_almost_eq;
     use ixa::{
         define_person_property, define_person_property_with_default, Context,
         ContextGlobalPropertiesExt, ContextPeopleExt, ContextRandomExt, IxaError, PersonId,
     };
     use serde::{Deserialize, Serialize};
-    use ixa::assert_almost_eq;
 
     use super::{
         ContextTransmissionModifierExt, PersonPropertyModifier, TransmissionModifier,

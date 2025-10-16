@@ -183,11 +183,11 @@ mod test {
 
     use std::{any::TypeId, path::PathBuf};
 
+    use ixa::assert_almost_eq;
     use ixa::{
         define_person_property_with_default, Context, ContextPeopleExt, ContextRandomExt,
         ExecutionPhase, IxaError, PersonPropertyChangeEvent,
     };
-    use ixa::assert_almost_eq;
 
     use crate::{
         natural_history_parameter_manager::ContextNaturalHistoryParameterExt,

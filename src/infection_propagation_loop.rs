@@ -144,7 +144,7 @@ mod test {
     };
 
     use ixa::assert_almost_eq;
-    
+
     use crate::{
         define_setting_category,
         infection_propagation_loop::{
@@ -893,12 +893,10 @@ mod test {
         }
 
         // Finally, we check that the distribution of case counts is approximately Poisson distributed using the pmf
-        fn factorial(k: u64) -> u64 {
-            (1..=k).product()
-        }
-        fn poisson_pmf(lambda: f64, k: u64) -> f64 {
+        let factorial = |k: u64| -> u64 { (1..=k).product() };
+        let poisson_pmf = |lambda: f64, k: u64| -> f64 {
             (lambda.powi(k as i32) * (-lambda).exp()) / factorial(k) as f64
-        }
+        };
 
         let lambda = expected_cases / mask_changes;
         for (i, &counts) in case_count_distribution.iter().enumerate() {

@@ -91,8 +91,8 @@ mod test {
         parameters::{ContextParametersExt, Params},
         rate_fns::load_rate_fns,
     };
-    use ixa::{Context, ContextGlobalPropertiesExt, ContextRandomExt, IxaError};
     use ixa::assert_almost_eq;
+    use ixa::{Context, ContextGlobalPropertiesExt, ContextRandomExt, IxaError};
     use std::fs::File;
     use std::io::Write;
     use std::path::PathBuf;

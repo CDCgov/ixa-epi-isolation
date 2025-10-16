@@ -845,7 +845,9 @@ mod test {
         parameters::{GlobalParams, ItinerarySpecificationType},
         settings::ContextSettingExt,
     };
-    use ixa::{define_person_property, ContextGlobalPropertiesExt, ContextPeopleExt, assert_almost_eq};
+    use ixa::{
+        assert_almost_eq, define_person_property, ContextGlobalPropertiesExt, ContextPeopleExt,
+    };
 
     define_setting_category!(Community);
 

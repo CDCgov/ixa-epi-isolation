@@ -137,8 +137,8 @@ mod test {
     use crate::parameters::{GlobalParams, Params};
 
     use super::*;
-    use ixa::{Context, ContextGlobalPropertiesExt, ContextPeopleExt};
     use ixa::assert_almost_eq;
+    use ixa::{Context, ContextGlobalPropertiesExt, ContextPeopleExt};
 
     struct TestRateFn;
 
