@@ -1,9 +1,7 @@
-use ixa::{
-    define_derived_property, define_person_property_with_default, define_rng, trace, Context,
-    ContextPeopleExt, ContextRandomExt, PersonId, PersonPropertyChangeEvent, PluginContext,
-};
+use ixa::prelude::*;
+use ixa::{trace, PersonPropertyChangeEvent};
+use rand_distr::Exp;
 use serde::{Deserialize, Serialize};
-use statrs::distribution::Exp;
 
 use crate::{
     parameters::{ContextParametersExt, GlobalParams, Params},
@@ -145,7 +143,7 @@ mod test {
         ContextRandomExt, PersonPropertyChangeEvent,
     };
 
-    use statrs::assert_almost_eq;
+    use ixa::assert_almost_eq;
 
     fn setup_context(
         mean_delay_to_hospitalization: f64,

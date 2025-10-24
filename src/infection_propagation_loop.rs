@@ -1,5 +1,5 @@
 use core::f64;
-use statrs::distribution::Binomial;
+use rand_distr::Binomial;
 
 use crate::computed_statistics::{ACCEPTED_INFECTION_LABEL, FORECASTED_INFECTION_LABEL};
 use crate::infectiousness_manager::{
@@ -56,8 +56,8 @@ fn query_susceptibles_and_seed(
     seed_fn: impl Fn(&mut Context, PersonId),
 ) {
     let binom = Binomial::new(
-        proportion_to_seed,
         context.get_current_population().try_into().unwrap(),
+        proportion_to_seed,
     )
     .unwrap();
     let k: u64 = context.sample_distr(InfectionRng, binom);
@@ -143,10 +143,7 @@ mod test {
         ContextRandomExt, ExecutionPhase, HashMap, IxaError, PersonId, PersonPropertyChangeEvent,
     };
 
-    use statrs::{
-        assert_almost_eq,
-        distribution::{ContinuousCDF, Discrete, Poisson, Uniform},
-    };
+    use ixa::assert_almost_eq;
 
     use crate::{
         define_setting_category,
@@ -346,12 +343,15 @@ mod test {
         context.add_plan_with_phase(
             0.0,
             move |context| {
-                assert!(!context
-                    .query_people((InfectionStatus, InfectionStatusValue::Infectious))
-                    .is_empty());
-                assert!(!context
-                    .query_people((InfectionStatus, InfectionStatusValue::Recovered))
-                    .is_empty());
+                assert!(
+                    !context
+                        .query_people_count((InfectionStatus, InfectionStatusValue::Infectious))
+                        == 0
+                );
+                assert!(
+                    !context.query_people_count((InfectionStatus, InfectionStatusValue::Recovered))
+                        == 0
+                );
             },
             ExecutionPhase::Last,
         );
@@ -378,12 +378,10 @@ mod test {
         context.add_plan(0.0, move |context| {
             // Count the number of initial infections and recovered actually created from the binomial
             // sampling
-            *num_initial_infections_clone.borrow_mut() = context
-                .query_people((InfectionStatus, InfectionStatusValue::Infectious))
-                .len();
-            *num_initial_recovered_clone.borrow_mut() = context
-                .query_people((InfectionStatus, InfectionStatusValue::Recovered))
-                .len();
+            *num_initial_infections_clone.borrow_mut() =
+                context.query_people_count((InfectionStatus, InfectionStatusValue::Infectious));
+            *num_initial_recovered_clone.borrow_mut() =
+                context.query_people_count((InfectionStatus, InfectionStatusValue::Recovered));
         });
 
         // We want to count the number of new infections that are created to ensure this is equal to
@@ -528,7 +526,16 @@ mod test {
         assert_almost_eq!(modifier, INFECTIOUS_PARTIAL, 0.0);
         // Check whether the times at when people are infected fall uniformly on [0, 1].
         check_ks_stat(&mut infection_times.borrow_mut(), |x| {
-            Uniform::new(0.0, 1.0).unwrap().cdf(x)
+            // Manual CDF for Uniform[0, 1]: F(x) = 0 for x < a, F(x) = (x-a)/(b-a) for a ≤ x ≤ b, F(x) = 1 for x > b
+            let a = 0.0;
+            let b = 1.0;
+            if x < a {
+                0.0
+            } else if x <= b {
+                (x - a) / (b - a)
+            } else {
+                1.0
+            }
         });
     }
 
@@ -886,9 +893,14 @@ mod test {
         }
 
         // Finally, we check that the distribution of case counts is approximately Poisson distributed using the pmf
-        let poisson_dist = Poisson::new(expected_cases / mask_changes).unwrap();
+        let factorial = |k: u64| -> u64 { (1..=k).product() };
+        let poisson_pmf = |lambda: f64, k: u64| -> f64 {
+            (lambda.powi(k as i32) * (-lambda).exp()) / factorial(k) as f64
+        };
+
+        let lambda = expected_cases / mask_changes;
         for (i, &counts) in case_count_distribution.iter().enumerate() {
-            let poisson_prob = poisson_dist.pmf(i as u64);
+            let poisson_prob = poisson_pmf(lambda, i as u64);
             let empirical_prob = counts as f64 / (mask_changes * n_reps as f64);
             assert_almost_eq!(poisson_prob, empirical_prob, 0.005);
         }

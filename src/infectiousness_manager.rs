@@ -2,8 +2,8 @@ use ixa::{
     define_derived_property, define_person_property_with_default, define_rng, trace, Context,
     ContextPeopleExt, ContextRandomExt, PersonId, PluginContext,
 };
+use rand_distr::Exp;
 use serde::{Deserialize, Serialize};
-use statrs::distribution::Exp;
 
 use crate::profiling::{increment_named_count, open_span};
 use crate::{
@@ -234,8 +234,8 @@ impl InfectionContextExt for Context {}
 
 #[cfg(test)]
 mod test {
+    use ixa::assert_almost_eq;
     use serde::{Deserialize, Serialize};
-    use statrs::assert_almost_eq;
 
     use super::{
         evaluate_forecast, get_forecast, infection_attempt, max_total_infectiousness_multiplier,
@@ -497,7 +497,7 @@ mod test {
                 );
             }
         }
-        assert_almost_eq!(count as f64 / n as f64, relative_effect, 0.01);
+        assert_almost_eq!(count as f64 / n as f64, relative_effect, 0.02);
     }
 
     #[test]

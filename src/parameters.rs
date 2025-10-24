@@ -320,8 +320,7 @@ impl ContextParametersExt for Context {}
 
 #[cfg(test)]
 mod test {
-    use ixa::{Context, ContextGlobalPropertiesExt, HashMap, IxaError};
-    use statrs::assert_almost_eq;
+    use ixa::{assert_almost_eq, Context, ContextGlobalPropertiesExt, HashMap, IxaError};
 
     use super::{validate_inputs, CoreSettingsTypes, ItinerarySpecificationType};
     use crate::{

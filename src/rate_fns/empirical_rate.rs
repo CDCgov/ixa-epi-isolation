@@ -280,8 +280,8 @@ impl InfectiousnessRateFn for EmpiricalRate {
 
 #[cfg(test)]
 mod test {
+    use ixa::assert_almost_eq;
     use ixa::IxaError;
-    use statrs::assert_almost_eq;
 
     use super::{get_lower_index, EmpiricalRate};
     use crate::rate_fns::InfectiousnessRateFn;
