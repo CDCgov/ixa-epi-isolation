@@ -11,9 +11,9 @@ scipy = "^1.14.0"
 sobol-seq = "^0.2.0"
 seaborn = "^0.13.2"
 abctools = {git = "https://github.com/CDCgov/abc-calibration-tools.git"}
-abmwrappers = {git = "https://github.com/CDCgov/abm-python-wrappers.git", branch="wtk-viz"}
+abmwrappers = {git = "https://github.com/CDCgov/abm-python-wrappers.git"}
 griddler = {git = "https://github.com/CDCgov/pygriddler.git"}
-pyarrow = "^17.0.0"
+pyarrow = "^18.0.0"
 tqdm = "^4.66.5"
 polars = "^1.6.0"
 jupyter = "^1.1.1"
