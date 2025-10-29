@@ -30,7 +30,7 @@ jobs:
           echo '```' >> results.md
           if ! cargo bench --bench basic_benchmarks -- --baseline base 2>&1; then
             echo "Note: A comparison could not be generated. Maybe you added new benchmarks?" >> results.md
-            mise run bench:criterion 2>&1
+            cargo bench --bench basic_benchmarks 2>&1
           else
             cargo run -q -p epi-isolation --bin check_criterion_regressions >> results.md
           fi
