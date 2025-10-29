@@ -49,4 +49,3 @@ harness = false
 name = "check_criterion_regressions"
 path = "bench/check_criterion_regressions.rs"
 bench = false
-
