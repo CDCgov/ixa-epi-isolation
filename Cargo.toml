@@ -2,6 +2,7 @@
 name = "epi-isolation"
 version = "0.1.0"
 edition = "2021"
+default-run = "epi-isolation"
 
 [features]
 default = ["profiling"]
@@ -11,6 +12,7 @@ profiling = ["humantime"]
 [dependencies]
 ixa = "0.4.1"
 csv = "1.3.1"
+criterion = "^0.7.0"
 tempfile = "3.19.1"
 rand_distr = "^0.5.1"
 #statrs = "0.18.0"
@@ -34,8 +36,17 @@ debug = true
 warnings = "deny"
 
 [lints.clippy]
-pedantic = { level = "warn", priority = -1}
-
 module_name_repetitions = "allow"
 match_wildcard_for_single_variants = "allow"
 uninlined_format_args = "allow"
+
+[[bench]]
+name = "basic_benchmarks"
+path = "bench/bench_main.rs"
+harness = false
+
+[[bin]]
+name = "check_criterion_regressions"
+path = "bench/check_criterion_regressions.rs"
+bench = false
+

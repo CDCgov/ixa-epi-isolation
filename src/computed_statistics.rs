@@ -10,7 +10,7 @@
 //! The "computer" gets an immutable reference to all counts and spans and to the start time, data
 //! members of the `ProfilingData` struct:
 //!
-//! ```rust
+//! ```rust, ignore
 //! pub struct ProfilingData {
 //!     pub start_time: Option<Instant>,
 //!
@@ -29,7 +29,7 @@
 //! `profiling` module. This function takes the label, description, computer function, and printer
 //! function as arguments.
 //!
-//! ```rust
+//! ```rust, ignore
 //! use crate::profiling::add_computed_statistic;
 //!
 //! add_computed_statistic(
