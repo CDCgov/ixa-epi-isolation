@@ -104,7 +104,7 @@
 //! `ProfilingData`. Use `add_computed_statistic(label, description, computer, printer)`
 //! to add one. The relevant API is:
 //!
-//! ```rust
+//! ```rust, ignore
 //! // Not exactly as implemented for technical reasons.
 //! pub fn add_computed_statistic(
 //!     // The label used in the profiling JSON file

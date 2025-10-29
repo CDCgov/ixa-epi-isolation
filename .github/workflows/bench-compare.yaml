@@ -1,0 +1,44 @@
+name: Benchmark Pull Requests
+
+on:
+  pull_request:
+
+jobs:
+  compare-branches:
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+    steps:
+      - name: Checkout base branch
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.pull_request.base.ref }}
+          # This fetches all branches so we can compare the PR branch with the base branch
+          fetch-depth: 0
+
+      - name: Create a benchmark baseline
+        run: cargo bench --bench basic_benchmarks -- --save-baseline base || echo "Could not create baseline"
+
+      - name: Checkout PR branch
+        # The checkout is done manually to avoid cleaning up the baseline benchmark
+        run: git checkout ${{ github.event.pull_request.head.ref }}
+
+      - name: Run benchmarks on head branch and format output
+        run: |
+          echo '### Benchmark Results' > results.md
+          echo '#### Criterion'
+          echo '```' >> results.md
+          if ! cargo bench --bench basic_benchmarks -- --baseline base 2>&1; then
+            echo "Note: A comparison could not be generated. Maybe you added new benchmarks?" >> results.md
+            cargo bench --bench basic_benchmarks 2>&1
+          else
+            cargo run -q -p epi-isolation --bin check_criterion_regressions >> results.md
+          fi
+
+      - name: Add comment to PR
+        run: |
+          gh pr comment ${{ github.event.pull_request.number }} \
+            --repo ${{ github.repository }} \
+            --body-file results.md
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
