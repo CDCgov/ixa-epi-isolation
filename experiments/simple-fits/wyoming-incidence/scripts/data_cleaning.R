@@ -1,15 +1,19 @@
 library(tidyverse)
+download.file(
+  url = "https://data.cdc.gov/resource/aemt-mg7g.csv?jurisdiction=WY&$select=jurisdiction,week_end_date,total_admissions_pediatric_covid_confirmed,total_admissions_adult_covid_confirmed,total_admissions_all_covid_confirmed", # nolint: line_length_linter.
+  destfile = file.path("input", "weekly_hospitalization_metrics_WY.csv")
+)
 dir <- file.path("experiments", "simple-fits", "wyoming-incidence", "input")
 wyoming_data <- read_csv(
   file.path("input", "weekly_hospitalization_metrics_WY.csv")
 )
 
 weekly_admissions <- wyoming_data |>
-  mutate(date = as.Date(`Week Ending Date`)) |>
+  mutate(date = as.Date(week_end_date)) |>
   rename(
-    pediatric_admissions = `Weekly Total Pediatric COVID-19 Admissions`,
-    adult_admissions = `Weekly Total Adult COVID-19 Admissions`,
-    total_admissions = `Weekly Total COVID-19 Admissions`,
+    pediatric_admissions = total_admissions_pediatric_covid_confirmed,
+    adult_admissions = total_admissions_adult_covid_confirmed,
+    total_admissions = total_admissions_all_covid_confirmed,
   ) |>
   select(date, pediatric_admissions, adult_admissions, total_admissions)
 
