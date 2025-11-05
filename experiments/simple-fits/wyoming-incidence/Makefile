@@ -18,7 +18,7 @@ $(TARGET_DATA): $(TARGET_WRITER) $(RAW_DATA_FILE)
 run: $(HISTORY)
 ABC := $(DIR)/scripts/abc.py
 CONFIG := $(DIR)/input/config.yaml
-HISTORY := $(DIR)/data/experiemnt_history.pkl
+HISTORY := $(DIR)/data/experiment_history.pkl
 
 $(HISTORY): $(ABC) $(TARGET_DATA) $(BUILD) $(CONFIG)
 	$(python) $(<)
