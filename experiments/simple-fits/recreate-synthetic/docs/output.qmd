@@ -62,7 +62,7 @@ Simulation run time is set for 200 days.
 | `mean_duration_of_hospitalization` | 8.0 | Approximated during GCM experiments using NHCS data |
 | `age_groups.min` | 0, 18 | Split population into pediatric admissions and adult admissions |
 | `age_groups.probability` | 0.075, 0.15 | Assumed to be lower than Delta (0.456) and Omicron (0.373) estimates from vaccinated populations Menni et al Lancet |
-| `infectiousness_rate_fn` | Category-dependent triangle VL | Use posteriors from viral-load isolation gudiance |
+| `infectiousness_rate_fn` | Category-dependent triangle VL | Use posteriors from isolation guidance model|
 | `infectiousness_rate_fn.scale` | 0.01 | Re-scale infectiousness to reduce $R_0$ |
 
 ### Fitted parameter values
