@@ -92,7 +92,7 @@ def main(config_file: str, keep: bool):
             },
         }
         fps = [synth_pop_file, symptom_params_file, infectiousness_file]
-        use_existing = True
+        use_existing = False
     else:
         fps = []
         use_existing = False
@@ -101,7 +101,7 @@ def main(config_file: str, keep: bool):
     wrappers.run_abcsmc(
         experiment=experiment,
         distance_fn=hosp_lhood,
-        data_read_fn=output_processing_function,
+        data_processing_fn=output_processing_function,
         files_to_upload=fps,
         use_existing_distances=use_existing,
         keep_all_sims=keep,
