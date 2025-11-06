@@ -30,4 +30,4 @@ local_path:
   exe_file: target/release/epi-isolation
   sub_experiment_name: recreate-synthetic
   super_experiment_name: simple-fits
-  target_data_file: input/synth_pop_people_WY_1000000.csv
+  target_data_file: input/synth_pop_people_WY_100000.csv
