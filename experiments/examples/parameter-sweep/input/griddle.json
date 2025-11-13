@@ -1,0 +1,14 @@
+{
+    "schema": "v0.3",
+    "parameters": {
+        "settings_properties>>>Home>>>alpha": {
+            "vary": [0.0, 0.5, 1.0]
+        },
+        "settings_properties>>>School>>>alpha": {
+            "vary": [0.0, 0.5, 1.0]
+        },
+        "settings_properties>>>Workplace>>>alpha": {
+            "vary": [0.0, 0.5, 1.0]
+        }
+    }
+}
