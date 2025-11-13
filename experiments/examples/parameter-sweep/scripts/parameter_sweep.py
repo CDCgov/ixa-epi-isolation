@@ -57,8 +57,10 @@ def main():
     parameter_df = pl.DataFrame(parameters)
     exp_output = experiment.read_results(filename="scenarios")
     exp_output = exp_output.join(parameter_df, on="scenario")
+    output_dir = os.path.join(experiment.directory, "output")
+    os.makedirs(output_dir, exist_ok=True)
     exp_output.write_csv(
-        os.path.join(experiment.directory, "hospitalizations_wy.csv")
+        os.path.join(experiment.directory, "parameter_sweep.csv")
     )
 
 
