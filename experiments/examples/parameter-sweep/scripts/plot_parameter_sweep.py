@@ -1,17 +1,32 @@
-from math import log
-
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import polars as pl
 import seaborn as sns
-from scipy.stats import poisson
 
 sns.set_theme(style="whitegrid")
 
 
-def plot_hospitalizations(output_path, param_one, param_two):
+def plot_hospitalizations(output_path, param_one, param_two, param_three):
     scenario_data = pd.read_csv(output_path)
+    scenario_data = scenario_data.rename(columns={"t_upper": "Time"})
+    # Rename columns for clarity
+    scenario_data = scenario_data.rename(
+        columns={
+            param_one: "home_alpha",
+            param_two: "school_alpha",
+            param_three: "workplace_alpha",
+        }
+    )
+    param_one = param_one.replace(
+        "settings_properties>>>Home>>>alpha", "home_alpha"
+    )
+    param_two = param_two.replace(
+        "settings_properties>>>School>>>alpha", "school_alpha"
+    )
+    param_three = param_three.replace(
+        "setting_properties>>>Workplace>>>alpha", "workplace_alpha"
+    )
+
     target_data = pd.read_csv(
         "experiments/examples/parameter-sweep/input/target_data.csv"
     )
@@ -47,48 +62,48 @@ def plot_hospitalizations(output_path, param_one, param_two):
             if subset.empty:
                 ax.set_visible(False)
                 continue
-            subset["mean_hospitalizations"] = subset.groupby(
-                ["t_upper", "scenario"], as_index=False
+            subset["Infections"] = subset.groupby(
+                ["Time", "scenario"], as_index=False
             )["count"].transform("mean")
+
+            # Increase font size for axes
+            ax.tick_params(axis="both", labelsize=16)
+            ax.set_title(f"{param_one}={one}, {param_two}={two}", fontsize=18)
+            ax.set_xlabel(ax.get_xlabel(), fontsize=16)
+            ax.set_ylabel(ax.get_ylabel(), fontsize=16)
+            # Plot lines with increased thickness
             if (i, j) == (0, 0):
                 sns.lineplot(
                     subset,
-                    x="t_upper",
-                    y="mean_hospitalizations",
-                    hue="guidance_policy>>>UpdatedIsolationGuidance>>>policy_adherence",
+                    x="Time",
+                    y="Hospitalized",
+                    hue=param_three,
                     units="scenario",
                     estimator=None,
                     ax=ax,
                     legend=True,
+                    linewidth=3,
                 )
             else:
                 sns.lineplot(
                     subset,
-                    x="t_upper",
-                    y="mean_hospitalizations",
-                    hue="guidance_policy>>>UpdatedIsolationGuidance>>>policy_adherence",
+                    x="Time",
+                    y="Hospitalized",
+                    hue=param_three,
                     units="scenario",
                     estimator=None,
                     ax=ax,
                     legend=False,
+                    linewidth=3,
                 )
-            # Plot target data as scatter
-            ax.scatter(
-                target_data["t"],
-                target_data["total_admissions"],
-                color="black",
-                label="Target Data",
-                zorder=10,
-            )
             if (i, j) == (0, 0):
-                ax.legend()
-            ax.set_title(f"{param_one}={one}, {param_two}={two}")
-
+                ax.legend(fontsize=14)
     plt.tight_layout()
-
+    # Increase font size for the whole figure
     plt.savefig(
-        "experiments/examples/parameter-sweep/trajectories_mean.png",
+        "experiments/examples/parameter-sweep/parameter_sweep.png",
         bbox_inches="tight",
+        dpi=150,
     )
 
 
@@ -130,8 +145,10 @@ def plot_profiling(output_path):
         "experiments/examples/parameter-sweep/memory_by_population.png"
     )
 
+
 plot_hospitalizations(
-    "experiments/examples/parameter-sweep/hospitalizations_asmp_home.csv",
-    "proportion_asymptomatic",
+    "experiments/examples/parameter-sweep/parameter_sweep.csv",
     "settings_properties>>>Home>>>alpha",
+    "settings_properties>>>School>>>alpha",
+    "setting_properties>>>Workplace>>>alpha",
 )
