@@ -1,6 +1,13 @@
 python := poetry run python
 BUILD := target/release/epi-isolation
 DIR := experiments/simple-fits/wyoming-incidence
+TARGET_DATA := $(DIR)/input/target_data.csv
+TARGET_WRITER := $(DIR)/scripts/data_cleaning.R
+ABC := $(DIR)/scripts/abc.py
+CONFIG := $(DIR)/input/config.yaml
+HISTORY := $(DIR)/data/experiment_history.pkl
+MD := $(DIR)/docs/output.qmd
+REPORT := $(DIR)/docs/output.pdf
 
 .PHONY: all
 all: run write
@@ -8,24 +15,15 @@ all: run write
 $(BUILD): Cargo.toml src/*.rs
 	cargo build --release
 
-TARGET_DATA := $(DIR)/input/target_data.csv
-RAW_DATA_FILE := input/weekly_hospitalization_metrics_WY.csv
-TARGET_WRITER := $(DIR)/scripts/data_cleaning.R
-
-$(TARGET_DATA): $(TARGET_WRITER) $(RAW_DATA_FILE)
+$(TARGET_DATA): $(TARGET_WRITER)
 	Rscript $(<)
-
-run: $(HISTORY)
-ABC := $(DIR)/scripts/abc.py
-CONFIG := $(DIR)/input/config.yaml
-HISTORY := $(DIR)/data/experiment_history.pkl
 
 $(HISTORY): $(ABC) $(TARGET_DATA) $(BUILD) $(CONFIG)
 	$(python) $(<)
 
-write: $(REPORT)
-MD := $(DIR)/docs/output.qmd
-REPORT := $(DIR)/docs/output.pdf
+run: $(HISTORY)
 
 $(REPORT): $(MD) $(HISTORY)
-	quarto render $(MD)
+	poetry run quarto render $(MD)
+
+write: $(REPORT)

@@ -87,9 +87,10 @@ def main(config_file: str, keep: bool):
 
 def hosp_lhood(results_data: pl.DataFrame, target_data: pl.DataFrame):
     def poisson_lhood(model, data):
-        return -log(poisson.pmf(model, data) + 1e-12)
+        # Probability of data value given the model value as expectation
+        return -poisson.logpmf(data, model + 1e-6)
 
-    if "t" not in results_data.columns:
+    if "t" not in results_data.columns or results_data.is_empty():
         joint_set = target_data.with_columns(
             pl.col("total_admissions")
             .map_elements(
@@ -121,15 +122,15 @@ def hosp_lhood(results_data: pl.DataFrame, target_data: pl.DataFrame):
 
 
 def output_processing_function(outputs_dir):
-    fp = os.path.join(outputs_dir, "incidence_person_property_count.csv")
+    fp = os.path.join(outputs_dir, "incidence_report.csv")
 
     df = pl.read_csv(fp, raise_if_empty=False)
 
     if not df.is_empty():
         df = (
             df.filter(
-                pl.col("event") == "true"
-            )  # True is the hospitalization event, this will change with reports.
+                pl.col("event") == "Hospitalized"
+            )
             .group_by("t_upper")
             .agg(pl.sum("count"))
             .with_columns(pl.col("t_upper").cast(pl.Int64).alias("t"))

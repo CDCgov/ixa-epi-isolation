@@ -11,13 +11,13 @@ jupyter: python3
 
 # Purpose
 
-Describe the objective of the experiment
+The purpose of this analysis is to provide a simple proof-of-concept demonstration of calibrating to real-world data. Wyoming was chosen solely because it is the least populous US state, which makes the calibration process faster.
 
 # Methods
 
 ## Data
 
-The National Hospital Surveillance Network (NHSN) data was downloaded from the public data repository
+The National Healthcare Safety Network (NHSN) data on COVID-19 hospital admissions was downloaded from the public data repository
 and filtered by state to select data from Wyoming. We then filter for dates on or after September 19th, 2020,
 leaving September 12th to be the day 0 of the simulation.
 
@@ -36,10 +36,10 @@ and the population size to 589,000 to reflect Wyoming's size.
 | `SettingCategory.ratio` | Property of `SettingCategory` settings that determines the absolute time weight of a setting type in an itinerary. Relative to other settings. |
 | `symptom_progression_library` | Rates of symptom onset and recovery for symptom categories |
 | `mean_delay_to_hospitalization` | Mean time from symptom onset to hospitalization |
-| `mean_duration_of_hospitalization` | Mean time that hospitalized individuals stay in the hospital before recovery | In estimated range |
+| `mean_duration_of_hospitalization` | Mean time that hospitalized individuals stay in the hospital before recovery |
 | `age_groups.min` | Age group lower bound associated with hospitalization risk values |
 | `age_groups.probability` | Probability that symptomatic individuals become hospitalized for a given age group |
-| `infectiousness_rate_fn` | Function to determine the rate at which infecitous indivudals generate infection attempts |
+| `infectiousness_rate_fn` | Function to determine the rate at which infectious individuals generate infection attempts |
 
 ### Fixed parameter values
 
@@ -63,7 +63,7 @@ if an individual goes to only `School` or `Work`, in addition to their `CensusTr
 of their day at `Home` and in their community than someone who goes to both `School` and `Work`.
 
 The relative infectiousness of asymptomatics is assumed to be proportional to the WT ratio of log viral load between individuals
-with mild and severe symptoms, estimated to be 0.81 two days after symptom onset by Chen et al., 2021. Age and sex were National
+with mild and severe symptoms, estimated to be 0.81 two days after symptom onset by Chen et al., 2021. Age and sex were
 found to be significant predictors of viral load. We assume that differences between this ratio and the relative infectiousness
 of asymptomatics can be averaged out in the infectiousness rate scaling factor.
 
@@ -107,11 +107,11 @@ simulation are as follows:
 | $\alpha_\text{Home}$ | Uniform(0.0, 0.2) | uninformative |
 | $\alpha_\text{Work}$ | Uniform(0.0, 0.2) | uninformative |
 | $\alpha_\text{Sch}$ | Uniform(0.0, 0.2) | uninformative |
-| `initial_recovered` | Beta(5, 15) | Assumed partial protection in summer wave |
+| `initial_recovered` | Beta(5, 15) | Assumed partial protection from infections in spring/summer before calibration |
 | `infectiousness_rate_fn.scale` | Uniform(0.0, 0.2) | uninformative |
 | `proportion_asymptomatic` | Beta(45, 55) | WT variant point estimate (0.45) with wider variance, Whitaker et al. 2022 Nat Comm. |
 
-The point estimate for the alpha variant wave, which corresponds to the timing of the data we filter from NHSN, has narrow margins
+The point estimate for the alpha variant wave, which partially corresponds to the timing of the data we filter from NHSN, has narrow margins
 (0.45, 95% CI: 0.43, 0.46). We increase the variance to account for reasonable differences between UK and US populations, as well as
 to allow for the appropriate calibration of IHR since we fixed age-group hospitalization risks.
 
@@ -137,44 +137,60 @@ take the negative log likelihood score as our distance measure.
 ```{python}
 #| echo: false
 from abmwrappers.experiment_class import Experiment
+import yaml
 
 experiment = Experiment(img_file="../data/experiment_history.pkl")
-steps = len(experiment.tolerance_dict)
-print(experiment)
+
+with open("../input/config.yaml", "r") as f:
+    config = yaml.safe_load(f)
+
+sub_experiment_name = config["local_path"]["sub_experiment_name"]
+
+experiment.sub_experiment_name = sub_experiment_name
+
+for step, tolerance in experiment.tolerance_dict.items():
+    print(f"Step {step} filtered for distances below {tolerance}.")
 ```
 
 ## Simulation visualizations
-Posterior results are shown here, with the median 50% credible interval shown in orange an the 95% credible interval shown in blue.
+Posterior results are shown here, with the median 50% credible interval shown in orange and the 95% credible interval shown in blue.
 ```{python}
 #| echo: false
+#| output: false
 import seaborn as sns
 import matplotlib.pyplot as plt
 import polars as pl
 
-max_target = experiment.tolerance_dict[steps - 1]
-
 # For azure implementations, use default blob container read:
 if experiment.azure_batch:
-    simulations = experiment.read_results(filename="simulations", verbose = False)
-    distances = experiment.read_results(filename="distances",verbose=False)
+    simulations = experiment.read_results(filename="simulations")
+    distances = experiment.read_results(filename="distances")
 # For local implementations, account for relative path of docs:
 else:
     simulations = experiment.read_results(filename="simulations", input_dir ="../data")
     distances = experiment.read_results(filename="distances", input_dir ="../data")
+```
+
+```{python}
+#| echo: false
+# restrict to simulations below the distance threshold
+steps = len(experiment.tolerance_dict)
+max_target = experiment.tolerance_dict[steps - 1]
 
 posterior_sims=distances.sort("distance").filter(pl.col("distance")<max_target).join(simulations, on="simulation", how="inner")
 print(f"Showing {posterior_sims.select(pl.n_unique('simulation')).item()} accepted simulations from last step below threshold {max_target}")
+
 sns.lineplot(posterior_sims, x="t", y="count", estimator="median", errorbar=lambda x: (x.quantile(0.025), x.quantile(0.975)))
 sns.lineplot(posterior_sims, x="t", y="count", estimator="median", errorbar=lambda x: (x.quantile(0.25), x.quantile(0.75)))
-# sns.lineplot(posterior_sims, x="t", y="count",hue="distance", units="simulation", estimator=None)
 sns.scatterplot(experiment.target_data, x = "t", y="total_admissions",zorder=10)
+plt.ylabel("incident weekly hospital admissions")
 plt.show()
-
 ```
 
-Other simulations from the last step are shown here, with the median 50% credible interval shown in orange an the 95% credible interval shown in blue.
-```
+The following plot shows all simulations from the last step, with the median 50% credible interval shown in orange an the 95% credible interval shown in blue. Note that the credible intervals are wider than in the plot above.
 
+```{python}
+#| echo: false
 print(f"Showing all {simulations.filter(pl.col('simulation') > 3899).select(pl.n_unique('simulation')).item()} proposed simulations from last step")
 sns.lineplot(simulations, x="t", y="count", estimator="median", errorbar=lambda x: (x.quantile(0.025), x.quantile(0.975)))
 sns.lineplot(simulations, x="t", y="count", estimator="median", errorbar=lambda x: (x.quantile(0.25), x.quantile(0.75)))
@@ -184,24 +200,151 @@ plt.show()
 
 ## Parameter posterior visualizations
 
-Plot any relevant figures for the posterior distributions of fitted parameters
 ```{python}
-from abmwrappers import plotting
+#| echo: false
 
-plotting.plot_posterior_distribution_2d(experiment)
+import matplotlib.pyplot as plt
+import polars as pl
+import seaborn as sns
 
-plotting.plot_posterior_distribution(
-    experiment,
-    visualization_methods=["density"],
-    facet_by="parameter",
-    include_priors=True
+# Determine and extract the simulation inputs and all steps
+
+include_steps = list(experiment.tolerance_dict.keys())
+include_steps.extend([experiment.current_step])
+
+sims = []
+for step in include_steps:
+    sims.extend(
+        [
+            i + experiment.n_simulations * step
+            for i in range(experiment.n_simulations)
+        ]
+    )
+
+input_data = experiment.collect_inputs(sims).with_columns(
+    pl.col("simulation")
+    .map_elements(experiment.step_from_index, return_dtype=pl.Int64)
+    .alias("step")
 )
-plotting.plot_posterior_distribution(
-    experiment,
-    visualization_methods=["density", "histogram"],
-    facet_by=["parameter", "step"],
-    include_previous_steps=True
+
+```
+
+The following plot shows the priors (blue histograms) and posteriors (orange histograms) for the 6 parameters fitted in the calibration process.
+```{python}
+#| echo: false
+#| fig-width: 5
+#| fig-height: 6
+
+# Create a "long" form of the dataset
+# as opposed to one column for each parameter
+id_cols = ["simulation", "step"]
+parameters = input_data.drop(
+    id_cols + [experiment.seed_variable_name]
+).columns
+
+input_data_long = input_data.select(id_cols + parameters).unpivot(
+    index=id_cols, variable_name="parameter"
 )
+
+input_data_long_prior_post = input_data_long.filter(
+    pl.col("step").is_in([include_steps[0], include_steps[-1]])
+)
+
+# Plot the posteriors and priors
+g = sns.FacetGrid(input_data_long_prior_post, col="parameter", hue="step", col_wrap=1, sharex=False, sharey=False, height = 1.5, aspect = 3)
+
+g.map_dataframe(sns.histplot, x="value", fill=True, stat="density", binwidth = 0.01)
+
+plt.show()
+
+```
+
+The next plot shows scatterplots illustrating pair-wise correlations of the posterior distributions of each parameter. (The histograms on the diagonal are the same univariate posteriors as plotted in the figure above.)
+
+```{python}
+#| echo: false
+#| fig-width: 6.5
+#| fig-height: 6.5
+# restrict only to posteriors; exclude step == 0 (the priors)
+input_data_post = input_data.filter(pl.col("step") == include_steps[-1])
+
+# make the plot
+g2 = sns.PairGrid(data=input_data_post.drop(id_cols + [experiment.seed_variable_name]))
+
+g2.map_diag(sns.histplot)
+
+g2.map_lower(sns.scatterplot)
+
+# Hide the upper panels
+for i in range(len(g2.axes)):
+    for j in range(len(g2.axes)):
+        if j > i:  # Upper triangle
+            ax = g2.axes[i, j]
+            ax.set_visible(False)
+
+# Rotate the x-axis and y-axis labels
+for ax in g2.axes.flatten():
+    ax.xaxis.label.set_rotation(30)
+    ax.yaxis.label.set_rotation(30)
+    ax.xaxis.label.set_ha('right')
+    ax.yaxis.label.set_ha('right')
+
+plt.tight_layout()
+plt.subplots_adjust(bottom=0.3, left=0.3)
+
+plt.show()
+
+```
+
+The final plot shows for each variable how the inferred distribution changes across steps, with the top row of panels corresponding to the priors and the bottom row of panels corresponding to the posteriors plotted above.
+```{python}
+#| echo: false
+#| fig-width: 6.5
+#| fig-height: 6.5
+# Plot how the distributions have changed
+# for each parameter step-by-step
+facet_by=["parameter", "step"]
+step_aspect = facet_by.index("step")
+sharex = ["row", "col"][step_aspect]
+
+plt.rcParams.update({
+    'font.size': 8,           # Default text size
+    'axes.titlesize': 8,      # Panel titles
+    'axes.labelsize': 8,      # Axis labels
+    'xtick.labelsize': 8,     # X tick labels
+    'ytick.labelsize': 8,     # Y tick labels
+    'legend.fontsize': 8      # Legend text
+})
+
+g3 = sns.FacetGrid(input_data_long, col=facet_by[0], row=facet_by[1], sharex=sharex, sharey=True, height = 1, aspect = 1)
+
+g3.map_dataframe(sns.histplot, x="value", fill=True, stat="density", binwidth = 0.01)
+
+g3.set_titles("")
+
+# Add column labels (parameter names) above each column
+for col_idx, param in enumerate(input_data_long["parameter"].unique()):
+    # Place title above the top axis in each column
+    ax = g3.axes[0, col_idx]
+    ax.set_title(param, fontsize=8, pad=20, rotation=30, ha='left')
+
+# Add row labels (step values) to the right of each row
+for row_idx, step in enumerate(input_data_long["step"].unique()):
+    # Place label to the right of the last axis in each row
+    ax = g3.axes[row_idx, -1]
+    ax.annotate(
+        f"Step: {step}",
+        xy=(1.05, 0.5),
+        xycoords='axes fraction',
+        ha='left',
+        va='center',
+        fontsize=8,
+        rotation=90
+    )
+
+plt.subplots_adjust(bottom=0.1, left=0.1, top=0.7, right=0.7, wspace=0.2, hspace = 0.2)
+plt.show()
+
 ```
 # Additional resources
 
