@@ -101,7 +101,7 @@ def main(config_file: str, keep: bool):
     wrappers.run_abcsmc(
         experiment=experiment,
         distance_fn=hosp_lhood,
-        data_processing_fn=output_processing_function,
+        data_read_fn=output_processing_function,
         files_to_upload=fps,
         use_existing_distances=use_existing,
         keep_all_sims=keep,
@@ -111,7 +111,7 @@ def main(config_file: str, keep: bool):
 def hosp_lhood(results_data: pl.DataFrame, target_data: pl.DataFrame):
     def poisson_lhood(model, data):
         # Probability of data value given the model value as expectation
-        return -log(poisson.pmf(data, model + 1e-6) + 1e-12)
+        return -poisson.logpmf(data, model + 1e-6)
 
     # This doesn't work because of apply groups per key in abctools
     # The distance value is generated, but the empty data frame leads to an empty eval list
@@ -128,6 +128,7 @@ def hosp_lhood(results_data: pl.DataFrame, target_data: pl.DataFrame):
         joint_set = (
             results_data.select(pl.col(["t", "count", "pediatric"]))
             .rename({"count": "model_count"})
+            .with_columns(pl.col('t').cast(pl.Float64))
             .join(
                 target_data.select(pl.col(["t", "count", "pediatric"])),
                 on=["t", "pediatric"],
