@@ -1,0 +1,14 @@
+schema: v0.4
+experiment:
+  union:
+    - product:
+        - [{ enableUpdatedGuidance: true }]
+        - [{ enablePreviousGuidance: false }]
+        - [{ probabilityIsolationUpdatedGuidance: 0.25 }, { probabilityIsolationUpdatedGuidance: 0.75 }]
+    - product:
+        - [{ enableUpdatedGuidance: false }]
+        - [{ enablePreviousGuidance: true }]
+        - [{ probabilityIsolationOldGuidance: 0.25 }, { probabilityIsolationOldGuidance: 0.75 }]
+    - product:
+        - [{ enableUpdatedGuidance: false }]
+        - [{ enablePreviousGuidance: false }]

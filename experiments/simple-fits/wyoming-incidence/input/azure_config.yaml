@@ -1,4 +1,4 @@
-blob_container_name: wtk-ixa-epi
+blob_container_name: etr-ixa-epi
 config_path: config.toml
 debug_mode: false
 docker_image: ./Dockerfile
@@ -8,6 +8,6 @@ job_prefix: null
 max_autoscale_nodes: 25
 n_nodes: 2
 pool_mode: autoscale
-pool_name: wtk-ixa-epi
+pool_name: etr-ixa-epi
 registry_name: cfaprdbatchcr
 task_slots_per_node: 8

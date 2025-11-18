@@ -1,6 +1,6 @@
 azb:
   azb_config:
-    blob_container_name: wtk-ixa-epi
+    blob_container_name: etr-ixa-epi
     config_path: config.toml
     debug_mode: false
     docker_image: ./Dockerfile
@@ -10,22 +10,21 @@ azb:
     max_autoscale_nodes: 25
     n_nodes: 2
     pool_mode: autoscale
-    pool_name: wtk-ixa-epi
+    pool_name: etr-ixa-epi
     registry_name: cfaprdbatchcr
     task_slots_per_node: 8
   azb_config_path: input/azure_config.yaml
   azure_batch: true
   benchmark_test: false
-  create_pool: false
+  create_pool: true
 experiment_conditions:
   replicates_per_particle: 3
-  samples_per_step: 650
+  samples_per_step: 50
   seed: 12345
   scenario_key: epi_isolation.GlobalParams
   tolerance:
     '0': 450
     '1': 300
-    '2': 200
 local_path:
   default_params_file: experiments/simple-fits/wyoming-incidence/input/base.json
   exe_file: target/release/epi-isolation

@@ -70,7 +70,7 @@ of asymptomatics can be averaged out in the infectiousness rate scaling factor.
 To approximate hospitalization given the onset of any symptoms, we use the deciles table from Hladish et al., 2024.
 
 We assumed that P(hospitalization | severe symptoms) $\times$ P(severe symptoms | Age) from Hladish et al., 2024 would generate
-a viable age-specific hospitalization risk table. However, our model uses P (Hospitalization | Age, symptomatic).
+a viable age-specific hospitalization risk table. However, our model uses P (Hospitalization | Age, symptomatic). 
 
 | Age group | $P(H \vert \text{Age})$ |
 | :-------: | :---: |
@@ -84,7 +84,7 @@ a viable age-specific hospitalization risk table. However, our model uses P (Hos
 | 70-79 | 0.0855 |
 | 80+ | 0.0945 |
 
-We assume that dividing by the point estimate of the proportion asymptomatic for the WT variant (0.45, Whitaker et al., 2022. Table S2)
+We assume that dividing by the point estimate of the proportion asymptomatic for the WT variant (0.45, Whitaker et al., 2022. Table S2) 
 can initially approximate that value and we later fit the proportion asymptomatic with strong priors. the final values used in the
 simulation are as follows:
 
@@ -144,7 +144,7 @@ print(experiment)
 ```
 
 ## Simulation visualizations
-Posterior results are shown here, with the median 50% credible interval shown in orange an the 95% credible interval shown in blue.
+
 ```{python}
 #| echo: false
 import seaborn as sns
@@ -167,17 +167,6 @@ print(f"Showing {posterior_sims.select(pl.n_unique('simulation')).item()} accept
 sns.lineplot(posterior_sims, x="t", y="count", estimator="median", errorbar=lambda x: (x.quantile(0.025), x.quantile(0.975)))
 sns.lineplot(posterior_sims, x="t", y="count", estimator="median", errorbar=lambda x: (x.quantile(0.25), x.quantile(0.75)))
 # sns.lineplot(posterior_sims, x="t", y="count",hue="distance", units="simulation", estimator=None)
-sns.scatterplot(experiment.target_data, x = "t", y="total_admissions",zorder=10)
-plt.show()
-
-```
-
-Other simulations from the last step are shown here, with the median 50% credible interval shown in orange an the 95% credible interval shown in blue.
-```
-
-print(f"Showing all {simulations.filter(pl.col('simulation') > 3899).select(pl.n_unique('simulation')).item()} proposed simulations from last step")
-sns.lineplot(simulations, x="t", y="count", estimator="median", errorbar=lambda x: (x.quantile(0.025), x.quantile(0.975)))
-sns.lineplot(simulations, x="t", y="count", estimator="median", errorbar=lambda x: (x.quantile(0.25), x.quantile(0.75)))
 sns.scatterplot(experiment.target_data, x = "t", y="total_admissions",zorder=10)
 plt.show()
 ```

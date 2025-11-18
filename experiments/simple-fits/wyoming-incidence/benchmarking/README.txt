@@ -1,0 +1,3 @@
+Task IDs can be simulate type tasks or can be gather type tasks. Look at the config.yaml file under inputs to determine the number of simulations per step (for example 3 reps * 650 samples = 1950 simulations) and use that to identify gather tasks. 
+
+Azure batch initiates at 1, so tasks 1-1950 in the above case would be simulation takss, 1951 would be a gather, and 1952-3901 would be simulate, etc.)

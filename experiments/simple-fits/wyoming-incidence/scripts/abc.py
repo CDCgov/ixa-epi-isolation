@@ -5,7 +5,7 @@ from math import log
 import polars as pl
 from abmwrappers import wrappers
 from abmwrappers.experiment_class import Experiment
-from scipy.stats import beta, norm, poisson, uniform
+from scipy.stats import beta, norm, poisson, uniform, randint
 
 
 def main(config_file: str, keep: bool):
@@ -20,6 +20,7 @@ def main(config_file: str, keep: bool):
             "Workplace": {"alpha": uniform(0.0, 0.2)},
         },
         "initial_recovered": beta(5, 15),
+        "burn_in_period": uniform(-112, 112),  # Discrete uniform distribution
     }
 
     perturbation = {
@@ -33,6 +34,7 @@ def main(config_file: str, keep: bool):
             "Workplace": {"alpha": norm(0.0, 0.01)},
         },
         "initial_recovered": norm(0.0, 0.02),
+        "burn_in_period": uniform(-7,14),
     }
 
     # Initialize experiment object
@@ -121,20 +123,19 @@ def hosp_lhood(results_data: pl.DataFrame, target_data: pl.DataFrame):
 
 
 def output_processing_function(outputs_dir):
-    fp = os.path.join(outputs_dir, "incidence_person_property_count.csv")
+    fp = os.path.join(outputs_dir, "incidence_report.csv")
 
     df = pl.read_csv(fp, raise_if_empty=False)
 
     if not df.is_empty():
         df = (
             df.filter(
-                pl.col("event") == "true"
+                pl.col("event") == "Hospitalized"
             )  # True is the hospitalization event, this will change with reports.
             .group_by("t_upper")
             .agg(pl.sum("count"))
             .with_columns(pl.col("t_upper").cast(pl.Int64).alias("t"))
         )
-
     return df
 
 

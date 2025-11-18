@@ -1,0 +1,38 @@
+{
+    "schema": "v0.3",
+    "parameters": {
+        "guidance_policy": {
+            "vary": [{"UpdatedIsolationGuidance": {
+      "post_isolation_duration": 5.0,
+      "policy_adherence": 0.0,
+      "isolation_delay_period": 0.0
+      }}, {"UpdatedIsolationGuidance": {
+        "post_isolation_duration": 5.0,
+        "policy_adherence": 0.25,
+        "isolation_delay_period": 0.0
+        }}, {"UpdatedIsolationGuidance": {
+            "post_isolation_duration": 5.0,
+            "policy_adherence": 0.75,
+            "isolation_delay_period": 0.0
+            }},
+            {"PreviousIsolationGuidance": {
+                "overall_policy_duration": 10,
+                "mild_symptom_isolation_duration": 5,
+                "moderate_symptom_isolation_duration": 10,
+                "delay_to_retest": 2,
+                "policy_adherence": 0.25,
+                "isolation_delay_period": 0.0,
+                "test_sensitivity": 0.9
+                }},
+                {"PreviousIsolationGuidance": {
+                    "overall_policy_duration": 10,
+                    "mild_symptom_isolation_duration": 5,
+                    "moderate_symptom_isolation_duration": 10,
+                    "delay_to_retest": 2,
+                    "policy_adherence": 0.75,
+                    "isolation_delay_period": 0.0,
+                    "test_sensitivity": 0.9
+                    }}]
+        }
+    }
+}
