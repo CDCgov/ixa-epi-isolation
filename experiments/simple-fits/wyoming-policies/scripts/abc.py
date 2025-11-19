@@ -5,15 +5,13 @@ from math import log
 import polars as pl
 from abmwrappers import wrappers
 from abmwrappers.experiment_class import Experiment
-from scipy.stats import beta, uniform, norm, poisson
+from scipy.stats import beta, norm, poisson, uniform, randint
 
 
 def main(config_file: str, keep: bool):
     prior = {
         "infectiousness_rate_fn": {
-            "EmpiricalFromFile": {
-                "scale": uniform(0.0, 0.2)
-            }
+            "EmpiricalFromFile": {"scale": uniform(0.0, 0.2)}
         },
         "proportion_asymptomatic": beta(45, 55),
         "settings_properties": {
@@ -22,13 +20,12 @@ def main(config_file: str, keep: bool):
             "Workplace": {"alpha": uniform(0.0, 0.2)},
         },
         "initial_recovered": beta(5, 15),
+        "burn_in_period": uniform(-112, 112),  # Discrete uniform distribution
     }
 
     perturbation = {
         "infectiousness_rate_fn": {
-            "EmpiricalFromFile": {
-                "scale": norm(0.0, 0.01)
-            }
+            "EmpiricalFromFile": {"scale": norm(0.0, 0.01)}
         },
         "proportion_asymptomatic": norm(0.0, 0.02),
         "settings_properties": {
@@ -37,6 +34,7 @@ def main(config_file: str, keep: bool):
             "Workplace": {"alpha": norm(0.0, 0.01)},
         },
         "initial_recovered": norm(0.0, 0.02),
+        "burn_in_period": uniform(-7,14),
     }
 
     # Initialize experiment object
@@ -86,7 +84,6 @@ def main(config_file: str, keep: bool):
         data_read_fn=output_processing_function,
         files_to_upload=fps,
         use_existing_distances=use_existing,
-        keep_all_sims = True
     )
 
 
@@ -104,12 +101,6 @@ def hosp_lhood(results_data: pl.DataFrame, target_data: pl.DataFrame):
             .alias("negloglikelihood")
         )
     else:
-        # max_t_target = target_data.select(pl.col(["t", "total_admissions"])).sort("total_admissions", descending=True).select("t").to_series()[0]
-        # max_t_result = results_data.select(pl.col(["t", "count"])).sort("count", descending=True).select("t").to_series()[0]
-        # difference = max_t_result - max_t_target
-        # results_data = results_data.with_columns(
-        #     (pl.col("t") - difference).alias("t")
-        # )
         joint_set = (
             results_data.select(pl.col(["t", "count"]))
             .join(
@@ -134,20 +125,18 @@ def hosp_lhood(results_data: pl.DataFrame, target_data: pl.DataFrame):
 def output_processing_function(outputs_dir):
     fp = os.path.join(outputs_dir, "incidence_report.csv")
 
-    try:
-        df = pl.read_csv(fp)
+    df = pl.read_csv(fp, raise_if_empty=False)
 
+    if not df.is_empty():
         df = (
-            df
-            .filter(pl.col("event") == "Hospitalized")
+            df.filter(
+                pl.col("event") == "Hospitalized"
+            )  # True is the hospitalization event, this will change with reports.
             .group_by("t_upper")
             .agg(pl.sum("count"))
             .with_columns(pl.col("t_upper").cast(pl.Int64).alias("t"))
         )
-
-        return df
-    except:
-        return pl.DataFrame()
+    return df
 
 
 def task(
@@ -162,7 +151,7 @@ def task(
         simulation_index=simulation_index,
         distance_fn=hosp_lhood,
         data_read_fn=output_processing_function,
-        products=["distances", "simulations"],
+        products=products,
         products_output_dir=products_path,
         clean=clean,
     )

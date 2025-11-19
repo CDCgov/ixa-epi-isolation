@@ -26,7 +26,7 @@ def plot_hospitalizations_simple(output_path):
     plt.figure(figsize=(10, 6))
     # Create subplots for each level of Policy Adherence
     policy_adherence_levels = scenario_data["Policy Adherence"].unique()
-    policy_adherence_levels = policy_adherence_levels[policy_adherence_levels != 0]
+    policy_adherence_levels = sorted(policy_adherence_levels[policy_adherence_levels != 0])
     num_levels = len(policy_adherence_levels)
     fig, axes = plt.subplots(
         nrows=1,
@@ -77,7 +77,6 @@ def plot_hospitalizations_simple(output_path):
             x="t_adjusted",
             y="count",
             hue="Guidance",
-            style="Policy Adherence",
             estimator="median",
             errorbar=lambda x: (x.quantile(0.25), x.quantile(0.75)),
             ax = ax,
@@ -88,7 +87,6 @@ def plot_hospitalizations_simple(output_path):
             x="t_adjusted",
             y="count",
             hue="Guidance",
-            style="Policy Adherence",
             estimator="median",
             errorbar=lambda x: (x.quantile(0.025), x.quantile(0.975)),
             ax = ax,
@@ -99,6 +97,33 @@ def plot_hospitalizations_simple(output_path):
         ax.set_title(f"Policy Adherence: {level}")
         ax.set_xlabel("Time")
         ax.set_ylabel("Hospitalizations")
+    
+    plt.show()
+    
+    subset = scenario_data[scenario_data["Policy Adherence"] == 0]
+    sns.lineplot(
+        subset,
+        x="t_adjusted",
+        y="count",
+        hue="Guidance",
+        estimator="median",
+        errorbar=lambda x: (x.quantile(0.25), x.quantile(0.75)),
+        legend=True,  # Show legend for this plot
+    )
+    sns.lineplot(
+        subset,
+        x="t_adjusted",
+        y="count",
+        hue="Guidance",
+        estimator="median",
+        errorbar=lambda x: (x.quantile(0.025), x.quantile(0.975)),
+        legend=False,  # Show legend for this plot
+    )
+
+    sns.scatterplot(target_data, x="t", y="total_admissions", zorder=10, label = "Target Data", legend = True)
+    plt.title("Model Calibration")
+    plt.xlabel("Time")
+    plt.ylabel("Hospitalizations")
     
     plt.show()
     

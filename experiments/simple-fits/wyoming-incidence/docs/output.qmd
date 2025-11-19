@@ -138,7 +138,7 @@ take the negative log likelihood score as our distance measure.
 #| echo: false
 from abmwrappers.experiment_class import Experiment
 
-experiment = Experiment(img_file="../data/experiment_history.pkl")
+experiment = Experiment(img_file="../experiment_history.pkl")
 steps = len(experiment.tolerance_dict)
 print(experiment)
 ```
@@ -162,6 +162,19 @@ else:
     simulations = experiment.read_results(filename="simulations", input_dir ="../data")
     distances = experiment.read_results(filename="distances", input_dir ="../data")
 
+inputs = [experiment.simulation_bundles[key].accepted for key in range(steps)]
+inputs = pl.concat(inputs)
+inputs = inputs.with_columns(
+    ((pl.col("burn_in_period") // 7) * 7
+    ).alias("burn_in_period")
+)
+
+simulations = simulations.join(inputs, on="simulation", how="inner")
+
+simulations = simulations.with_columns(
+    (pl.col("t") + pl.col("burn_in_period")).cast(pl.Int64).alias("t")
+).filter(pl.col("t") >= 0)
+
 posterior_sims=distances.sort("distance").filter(pl.col("distance")<max_target).join(simulations, on="simulation", how="inner")
 print(f"Showing {posterior_sims.select(pl.n_unique('simulation')).item()} accepted simulations from last step below threshold {max_target}")
 sns.lineplot(posterior_sims, x="t", y="count", estimator="median", errorbar=lambda x: (x.quantile(0.025), x.quantile(0.975)))
@@ -173,25 +186,214 @@ plt.show()
 
 ## Parameter posterior visualizations
 
-Plot any relevant figures for the posterior distributions of fitted parameters
+The following plot shows the priors (blue histograms) and posteriors (orange histograms) for the 6 parameters fitted in the calibration process.
 ```{python}
-from abmwrappers import plotting
+#| echo: false
+#| fig-width: 5
+#| fig-height: 6
+# Create a "long" form of the dataset
+# as opposed to one column for each parameter
+include_steps = list(experiment.tolerance_dict.keys())
+include_steps.extend([experiment.current_step])
 
-plotting.plot_posterior_distribution_2d(experiment)
+sims = []
+for step in include_steps:
+    sims.extend(
+        [
+            i + experiment.n_simulations * step
+            for i in range(experiment.n_simulations)
+        ]
+    )
+input_data = experiment.collect_inputs(sims).with_columns(
+    pl.col("simulation")
+    .map_elements(experiment.step_from_index, return_dtype=pl.Int64)
+    .alias("step")
+)
 
-plotting.plot_posterior_distribution(
-    experiment,
-    visualization_methods=["density"],
-    facet_by="parameter",
-    include_priors=True
+id_cols = ["simulation", "step"]
+parameters = input_data.drop(
+    id_cols + [experiment.seed_variable_name]
+).columns
+input_data_long = input_data.select(id_cols + parameters).unpivot(
+    index=id_cols, variable_name="parameter"
 )
-plotting.plot_posterior_distribution(
-    experiment,
-    visualization_methods=["density", "histogram"],
-    facet_by=["parameter", "step"],
-    include_previous_steps=True
+input_data_long_prior_post = input_data_long.filter(
+    pl.col("step").is_in([include_steps[0], include_steps[-1]])
 )
+# Plot the posteriors and priors
+g = sns.FacetGrid(input_data_long_prior_post, col="parameter", hue="step", col_wrap=1, sharex=False, sharey=False, height = 1.5, aspect = 3)
+g.map_dataframe(sns.histplot, x="value", fill=True, stat="density", binwidth = 0.01)
+plt.show()
 ```
+
+The next plot shows scatterplots illustrating pair-wise correlations of the posterior distributions of each parameter. (The histograms on the diagonal are the same univariate posteriors as plotted in the figure above.)
+
+```{python}
+#| echo: false
+#| fig-width: 6.5
+#| fig-height: 6.5
+# restrict only to posteriors; exclude step == 0 (the priors)
+input_data_post = input_data.filter(pl.col("step") == include_steps[-1])
+# make the plot
+g2 = sns.PairGrid(data=input_data_post.drop(id_cols + [experiment.seed_variable_name]))
+g2.map_diag(sns.histplot)
+g2.map_lower(sns.scatterplot)
+# Hide the upper panels
+for i in range(len(g2.axes)):
+    for j in range(len(g2.axes)):
+        if j > i:  # Upper triangle
+            ax = g2.axes[i, j]
+            ax.set_visible(False)
+# Rotate the x-axis and y-axis labels
+for ax in g2.axes.flatten():
+    ax.xaxis.label.set_rotation(30)
+    ax.yaxis.label.set_rotation(30)
+    ax.xaxis.label.set_ha('right')
+    ax.yaxis.label.set_ha('right')
+plt.tight_layout()
+plt.subplots_adjust(bottom=0.3, left=0.3)
+plt.show()
+```
+
+The final plot shows for each variable how the inferred distribution changes across steps, with the top row of panels corresponding to the priors and the bottom row of panels corresponding to the posteriors plotted above.
+```{python}
+#| echo: false
+#| fig-width: 6.5
+#| fig-height: 6.5
+# Plot how the distributions have changed
+# for each parameter step-by-step
+facet_by=["parameter", "step"]
+step_aspect = facet_by.index("step")
+sharex = ["row", "col"][step_aspect]
+plt.rcParams.update({
+    'font.size': 8,           # Default text size
+    'axes.titlesize': 8,      # Panel titles
+    'axes.labelsize': 8,      # Axis labels
+    'xtick.labelsize': 8,     # X tick labels
+    'ytick.labelsize': 8,     # Y tick labels
+    'legend.fontsize': 8      # Legend text
+})
+g3 = sns.FacetGrid(input_data_long, col=facet_by[0], row=facet_by[1], sharex=sharex, sharey=True, height = 1, aspect = 1)
+g3.map_dataframe(sns.histplot, x="value", fill=True, stat="density", binwidth = 0.01)
+g3.set_titles("")
+# Add column labels (parameter names) above each column
+for col_idx, param in enumerate(input_data_long["parameter"].unique()):
+    # Place title above the top axis in each column
+    ax = g3.axes[0, col_idx]
+    ax.set_title(param, fontsize=8, pad=20, rotation=30, ha='left')
+# Add row labels (step values) to the right of each row
+for row_idx, step in enumerate(input_data_long["step"].unique()):
+    # Place label to the right of the last axis in each row
+    ax = g3.axes[row_idx, -1]
+    ax.annotate(
+        f"Step: {step}",
+        xy=(1.05, 0.5),
+        xycoords='axes fraction',
+        ha='left',
+        va='center',
+        fontsize=8,
+        rotation=90
+    )
+plt.subplots_adjust(bottom=0.1, left=0.1, top=0.7, right=0.7, wspace=0.2, hspace = 0.2)
+plt.show()
+```
+
+Scenario plotting
+```{python}
+# import os
+# import json
+# from abmwrappers import utils
+# experiment = Experiment(img_file="../data/experiment_history.pkl")
+# scenario_data = experiment.read_results(filename="scenarios", input_dir ="../data")
+# scenarios_dir = "../scenarios"
+# parameters = []
+# for scenario in os.listdir(scenarios_dir):
+#     with open("../input/griddle.json", "r") as fp:
+#         raw_griddle = json.load(fp)
+    
+#     parameter_dict = {}
+#     for key in raw_griddle["parameters"].keys():
+#         subexperiment_params = os.path.join(
+#             scenarios_dir, scenario, "input", "base.json"
+#         )
+#         with open(subexperiment_params, "r") as fp:
+#             subexperiment_params_dict = json.load(fp)
+#         flattened_dict = utils.flatten_dict(subexperiment_params_dict)
+#         for k in flattened_dict.keys():
+#             if "UpdatedIsolationGuidance" in k:
+#                 adherence = flattened_dict["guidance_policy>>>UpdatedIsolationGuidance>>>policy_adherence"]
+#                 if adherence == 0:
+#                     parameter_dict["Guidance"] = "No Guidance"
+#                     parameter_dict["Policy Adherence"] = adherence
+#                 else:
+#                     parameter_dict["Guidance"] = "Updated"
+#                     parameter_dict["Policy Adherence"] = adherence
+#                 break
+#             elif "PreviousIsolationGuidance" in k:
+#                 adherence = flattened_dict["guidance_policy>>>PreviousIsolationGuidance>>>policy_adherence"]
+#                 parameter_dict["Guidance"] = "Previous"
+#                 parameter_dict["Policy Adherence"] = adherence
+#                 break 
+#     parameter_dict["scenario"] = int(scenario.split("=")[-1])
+#     parameter_dict["burn_in_period"] = subexperiment_params_dict["burn_in_period"]
+#     parameters.append(parameter_dict)
+# scenario_data = scenario_data.join(parameter_df, on="scenario")
+
+# target_data = pd.read_csv(
+#     "experiments/simple-fits/wyoming-incidence/input/target_data.csv"
+# )
+# scenario_data["burn_in_period"] = (scenario_data["burn_in_period"] // 7) * 7
+# scenario_data["t_adjusted"] = (scenario_data["t_upper"] + scenario_data["burn_in_period"]).astype(int)
+# scenario_data = scenario_data[scenario_data["t_adjusted"] >= 0]
+
+# policy_adherence_levels = scenario_data["Policy Adherence"].unique()
+# policy_adherence_levels = policy_adherence_levels[policy_adherence_levels != 0]
+# num_levels = len(policy_adherence_levels)
+
+# fig, axes = plt.subplots(
+#     nrows=1,
+#     ncols=num_levels,
+#     figsize=(10, 6 * num_levels),
+#     sharex=True,
+#     sharey=True,
+# )
+
+# if num_levels == 1:
+#     axes = [axes]  # Ensure axes is iterable for a single subplot
+
+
+# for ax, level in zip(axes, policy_adherence_levels):
+#     subset = scenario_data[(scenario_data["Policy Adherence"] == level) | (scenario_data["Policy Adherence"] == 0)]
+#     sns.lineplot(
+#         subset,
+#         x="t_adjusted",
+#         y="count",
+#         hue="Guidance",
+#         estimator="median",
+#         errorbar=lambda x: (x.quantile(0.25), x.quantile(0.75)),
+#         ax = ax,
+#         legend=True,  # Show legend for this plot
+#     )
+#     sns.lineplot(
+#         subset,
+#         x="t_adjusted",
+#         y="count",
+#         hue="Guidance",
+#         estimator="median",
+#         errorbar=lambda x: (x.quantile(0.025), x.quantile(0.975)),
+#         ax = ax,
+#         legend=False,  # Show legend for this plot
+#     )
+
+#     sns.scatterplot(target_data, x="t", y="total_admissions", ax = ax, zorder=10, label = "Target Data", legend = True)
+#     ax.set_title(f"Policy Adherence: {level}")
+#     ax.set_xlabel("Time")
+#     ax.set_ylabel("Hospitalizations")
+
+# plt.show()
+
+```
+
 # Additional resources
 
 ## Citations
