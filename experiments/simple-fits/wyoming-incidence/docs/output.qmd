@@ -139,7 +139,7 @@ take the negative log likelihood score as our distance measure.
 from abmwrappers.experiment_class import Experiment
 import yaml
 
-experiment = Experiment(img_file="../data/experiment_history.pkl")
+experiment = Experiment(img_file="../experiment_history_eric.pkl")
 
 with open("../input/config.yaml", "r") as f:
     config = yaml.safe_load(f)
@@ -172,7 +172,7 @@ else:
 ```
 
 ```{python}
-#| echo: false
+# #| echo: false
 # restrict to simulations below the distance threshold
 steps = len(experiment.tolerance_dict)
 max_target = experiment.tolerance_dict[steps - 1]
@@ -346,6 +346,128 @@ plt.subplots_adjust(bottom=0.1, left=0.1, top=0.7, right=0.7, wspace=0.2, hspace
 plt.show()
 
 ```
+
+# Scenario Analysis
+
+```{python}
+#| echo: false
+#| fig-width: 6.5
+#| fig-height: 6.5
+import os
+import polars as pl
+import json
+from abmwrappers.experiment_class import Experiment
+
+
+# Create the new Experiment and scenarios folder
+experiment = Experiment(
+    img_file="../data/experiment_history.pkl",
+    azure_batch = False,
+    griddle_file = "experiments/simple-fits/wyoming-incidence/input/griddle.json",
+    replicates = 1
+)
+
+# Iterate over config files in the new scenarios directory
+# Create simulation data and store as parquet file in each scenario folder
+scenarios_dir = "../scenarios"
+parameters = []
+for scenario in os.listdir(scenarios_dir):
+    input_file = os.path.join(
+        scenarios_dir, scenario, "input", "base.json"
+    )
+    with open(input_file, "r") as f:
+        input_params = json.load(f)
+
+    with open("../input/griddle.json", "r") as fp:
+        raw_griddle = json.load(fp)
+
+    parameter_dict = {}
+    for key in raw_griddle["parameters"].keys():
+        flattened_dict = utils.flatten_dict(input_params)
+        for k in flattened_dict.keys():
+            if "UpdatedIsolationGuidance" in k:
+                adherence = flattened_dict["epi_isolation.GlobalParams>>>guidance_policy>>>UpdatedIsolationGuidance>>>policy_adherence"]
+                if adherence == 0:
+                    parameter_dict["Guidance"] = "No Guidance"
+                    parameter_dict["Policy Adherence"] = adherence
+                else:
+                    parameter_dict["Guidance"] = "Updated"
+                    parameter_dict["Policy Adherence"] = adherence
+                break
+            elif "PreviousIsolationGuidance" in k:
+                adherence = flattened_dict["epi_isolation.GlobalParams>>>guidance_policy>>>PreviousIsolationGuidance>>>policy_adherence"]
+                parameter_dict["Guidance"] = "Previous"
+                parameter_dict["Policy Adherence"] = adherence
+                break
+    parameter_dict["scenario"] = int(scenario.split("=")[-1])
+
+    parameters.append(parameter_dict)
+
+parameter_df = pl.DataFrame(parameters)
+scenario_data = experiment.read_results(filename="scenarios", input_dir = "../data")
+scenario_data = scenario_data.join(parameter_df, on="scenario")
+
+import matplotlib.pyplot as plt
+import polars as pl
+import seaborn as sns
+
+sns.set_theme(style="whitegrid")
+
+
+target_data = pl.read_csv(
+"../input/target_data.csv"
+)
+
+# Create subplots for each level of Policy Adherence
+policy_adherence_levels = scenario_data["Policy Adherence"].unique().to_list()
+policy_adherence_levels.remove(0)
+policy_adherence_levels.sort()
+num_levels = len(policy_adherence_levels)
+
+fig, axes = plt.subplots(
+    nrows=1,
+    ncols=num_levels,
+    figsize=(10, 6 * num_levels),
+    sharex=True,
+    sharey=True,
+)
+
+if num_levels == 1:
+    axes = [axes]  # Ensure axes is iterable for a single subplot
+
+
+for ax, level in zip(axes, policy_adherence_levels):
+    subset = scenario_data.filter((pl.col("Policy Adherence") == level) | (pl.col("Policy Adherence") == 0))
+    sns.lineplot(
+        subset,
+        x="t_upper",
+        y="count",
+        hue="Guidance",
+        estimator="median",
+        errorbar=lambda x: (x.quantile(0.25), x.quantile(0.75)),
+        ax = ax,
+        legend=True,  # Show legend for this plot
+    )
+    sns.lineplot(
+        subset,
+        x="t_upper",
+        y="count",
+        hue="Guidance",
+        estimator="median",
+        errorbar=lambda x: (x.quantile(0.025), x.quantile(0.975)),
+        ax = ax,
+        legend=False,  # Show legend for this plot
+    )
+
+    sns.scatterplot(target_data, x="t", y="total_admissions", ax = ax, zorder=10, label = "Target Data", legend = True)
+    ax.set_title(f"Policy Adherence: {level}")
+    ax.set_xlabel("Time")
+    ax.set_ylabel("Hospitalizations")
+
+plt.show()
+
+```
+
 # Additional resources
 
 ## Citations

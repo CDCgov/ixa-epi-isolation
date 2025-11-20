@@ -1,6 +1,5 @@
 import argparse
 import os
-from math import log
 
 import polars as pl
 from abmwrappers import utils, wrappers
@@ -128,7 +127,7 @@ def hosp_lhood(results_data: pl.DataFrame, target_data: pl.DataFrame):
         joint_set = (
             results_data.select(pl.col(["t", "count", "pediatric"]))
             .rename({"count": "model_count"})
-            .with_columns(pl.col('t').cast(pl.Float64))
+            .with_columns(pl.col("t").cast(pl.Float64))
             .join(
                 target_data.select(pl.col(["t", "count", "pediatric"])),
                 on=["t", "pediatric"],

@@ -83,7 +83,8 @@ stopifnot(
 # `functions.R` for now) is defined in terms of the time since symptom onset.
 # This function is defined in terms of the time since infection.
 triangle_vl_wrt_infected_time <- function(
-    tp, dp, wp, wr, infection_start_time, max_time, dt) {
+  tp, dp, wp, wr, infection_start_time, max_time, dt
+) {
   # take the argument-wise max wrt to 0 because we assume infectiousness
   # starts at logVL > 0.
   curve <- pmax(triangle_vl(
