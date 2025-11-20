@@ -3,6 +3,13 @@
 poetry.lock
 **/data/input/
 **/data/raw_output/
+experiments/**/data/
+
+config.toml
+azure_config.yaml
+*.pkl
+
+profiling_data.json
 
 # Data
 *.csv
