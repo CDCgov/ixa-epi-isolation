@@ -1,18 +1,17 @@
 import os
-import polars as pl
-from abmwrappers import experiment_class, wrappers
 
 import polars as pl
-from abmwrappers import wrappers
+from abmwrappers import experiment_class, wrappers
 from abmwrappers.experiment_class import Experiment
+
 
 def main():
     # Create the new Experiment and scenarios folder
     experiment = experiment_class.Experiment(
         img_file="experiment_history_eric.pkl",
-        azure_batch = False,
-        griddle_file = "experiments/simple-fits/wyoming-incidence/input/griddle.json",
-        replicates = 1
+        azure_batch=False,
+        griddle_file="experiments/simple-fits/wyoming-incidence/input/griddle.json",
+        replicates=1,
     )
     local_directory = "input"
     defaults = experiment.get_default_params()
@@ -36,11 +35,9 @@ def main():
         },
         "synth_population_file": f"{local_directory}/{os.path.basename(synth_pop_file)}",
     }
-    
+
     wrappers.create_scenario_subexperiments(
-        experiment = experiment,
-        sample_posterior = True,
-        n_samples = 5
+        experiment=experiment, sample_posterior=True, n_samples=5
     )
 
     # Iterate over config files in the new scenarios directory
@@ -77,5 +74,6 @@ def read_hospitalizations_fn(outputs_dir):
     data = data.filter(pl.col("event") == "Hospitalized")
     data = data.group_by("t_upper").agg(pl.col("count").sum().alias("count"))
     return data
+
 
 main()

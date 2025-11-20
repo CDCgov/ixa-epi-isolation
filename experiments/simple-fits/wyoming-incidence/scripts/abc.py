@@ -1,6 +1,5 @@
 import argparse
 import os
-from math import log
 
 import polars as pl
 from abmwrappers import wrappers

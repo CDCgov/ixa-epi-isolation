@@ -357,6 +357,7 @@ import os
 import polars as pl
 import json
 from abmwrappers.experiment_class import Experiment
+from abmwrappers import utils
 
 
 # Create the new Experiment and scenarios folder
