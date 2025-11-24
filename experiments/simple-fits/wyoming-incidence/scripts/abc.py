@@ -1,6 +1,5 @@
 import argparse
 import os
-from math import log
 
 import polars as pl
 from abmwrappers import wrappers
@@ -128,9 +127,7 @@ def output_processing_function(outputs_dir):
 
     if not df.is_empty():
         df = (
-            df.filter(
-                pl.col("event") == "Hospitalized"
-            )
+            df.filter(pl.col("event") == "Hospitalized")
             .group_by("t_upper")
             .agg(pl.sum("count"))
             .with_columns(pl.col("t_upper").cast(pl.Int64).alias("t"))

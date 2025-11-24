@@ -25,7 +25,7 @@ adult cases (ages 18+) for each day.
 
 | Parameter name | Description |
 | :------------: | ----------- |
-| `initial_incidence` | Initial fraction of population infected |
+| `initial_incidence` | Initial fraction of population infectious |
 | `initial_recovered` | Initial fraction of population immune to infection |
 | `proportion_asymptomatic` | The fraction of new cases that will never develop symptoms |
 | `relative_infectiousness_asymptomatics` | Multiplier for the relative infectiousness of asymptomatic infectious individuals compared to symptomatics |
@@ -168,7 +168,7 @@ plt.show()
 
 ## Parameter posterior visualizations
 
-The next plot shows the priors (blue histograms) and posteriors (orange histograms) for the 4 parameters fitted in the calibration process. Briefly, the calibration appears to have worked fairly well to capture the "true" scale parameter and less well at capturing the other parameters, especially the value of alpha in school settings.
+The next plot shows the priors (light-shaded histograms) and posteriors (dark-shaded histograms) for the 4 parameters fitted in the calibration process. Briefly, the calibration appears to have worked fairly well to capture the "true" scale parameter and less well at capturing the other parameters, especially the value of alpha in school settings.
 ```{python}
 #| echo: false
 #| fig-width: 5
@@ -209,10 +209,13 @@ input_data_long = input_data.select(id_cols + parameters).unpivot(
     index=id_cols, variable_name="parameter"
 )
 
-# Plot the posteriors
-g = sns.FacetGrid(input_data_long, col="parameter", hue="step", col_wrap=1, sharex=False, sharey=False, height = 1.5, aspect = 3)
-
-g.map_dataframe(sns.histplot, x="value", fill=True, stat="density", binwidth = 0.01)
+# Plot the posteriors and priors
+g = sns.displot(
+    data=input_data_long, x="value", col="parameter", hue="step",
+    col_wrap=1, kind="hist", height = 1.5, aspect = 3,
+    facet_kws={"sharex": False, "sharey": False},
+    fill=True, stat="density", binwidth = 0.01, common_bins=False
+)
 
 plt.show()
 

@@ -229,7 +229,7 @@ input_data = experiment.collect_inputs(sims).with_columns(
 
 ```
 
-The following plot shows the priors (blue histograms) and posteriors (orange histograms) for the 6 parameters fitted in the calibration process.
+The following plot shows the priors (light-shaded histograms) and posteriors (dark-shaded histograms) for the 6 parameters fitted in the calibration process.
 ```{python}
 #| echo: false
 #| fig-width: 5
@@ -251,9 +251,12 @@ input_data_long_prior_post = input_data_long.filter(
 )
 
 # Plot the posteriors and priors
-g = sns.FacetGrid(input_data_long_prior_post, col="parameter", hue="step", col_wrap=1, sharex=False, sharey=False, height = 1.5, aspect = 3)
-
-g.map_dataframe(sns.histplot, x="value", fill=True, stat="density", binwidth = 0.01)
+g = sns.displot(
+    data=input_data_long_prior_post, x="value", col="parameter", hue="step",
+    col_wrap=1, kind="hist", height = 1.5, aspect = 3,
+    facet_kws={"sharex": False, "sharey": False},
+    fill=True, stat="density", binwidth = 0.01, common_bins=False
+)
 
 plt.show()
 
@@ -316,9 +319,13 @@ plt.rcParams.update({
     'legend.fontsize': 8      # Legend text
 })
 
-g3 = sns.FacetGrid(input_data_long, col=facet_by[0], row=facet_by[1], sharex=sharex, sharey=True, height = 1, aspect = 1)
-
-g3.map_dataframe(sns.histplot, x="value", fill=True, stat="density", binwidth = 0.01)
+g3 = sns.displot(
+    data=input_data_long, x="value",
+    col=facet_by[0], row=facet_by[1],
+    kind="hist", height = 1, aspect = 1,
+    facet_kws={"sharex": sharex, "sharey": True},
+    fill=True, stat="density", binwidth = 0.01, common_bins=False
+)
 
 g3.set_titles("")
 

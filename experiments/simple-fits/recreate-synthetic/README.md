@@ -12,7 +12,7 @@ population_size <- 100000
 
 To generate a synthetic population, execute:
 ```{shell}
-docker build -t ixa-epi-isolation-r -f Dockerfile.R . && docker run --rm -v "$(pwd):/app" ixa-epi-isolation-r Rscript scripts/create_synthetic_population.R
+docker build -t ixa-epi-isolation-r -f DockerfileR . && docker run --rm -v "$(pwd):/app" ixa-epi-isolation-r Rscript scripts/create_synthetic_population.R
 ```
 
 (See https://docs.docker.com/desktop/features/wsl/ for more information about installing Docker and using it in WSL.)
