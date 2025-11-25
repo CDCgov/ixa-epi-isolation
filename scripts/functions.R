@@ -28,7 +28,8 @@ triangle_vl <- function(t, dp, tp, wp, wr) {
 }
 
 calculate_weibull_scale <- function(
-    si_beta_0_exponentiated, si_beta_wr, wr, wr_mean, wr_sd) {
+  si_beta_0_exponentiated, si_beta_wr, wr, wr_mean, wr_sd
+) {
   # We need wr_raw for the discrete Weibull scale parameter.
   # wr_raw is the individual-level standard normal deviation of
   # an individual's clearance time from the pooled mean.
