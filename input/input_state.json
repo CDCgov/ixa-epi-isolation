@@ -1,45 +1,60 @@
 {
   "epi_isolation.GlobalParams": {
-    "max_time": 365.0,
+    "max_time": 200.0,
     "seed": 123,
-    "infectiousness_rate_fn": {"Constant":{
-      "rate": 1.0,
-      "duration": 2.0}
-    },
-    "initial_incidence": 0.01,
-    "initial_recovered": 0.0,
+    "infectiousness_rate_fn": {"EmpiricalFromFile": {"file": "input/library_empirical_rate_fns.csv",
+                                                     "scale": 0.05}},
+    "initial_incidence": 0.1,
+    "initial_recovered": 0.35,
     "proportion_asymptomatic": 0.3,
     "relative_infectiousness_asymptomatics": 0.7,
-    "settings_properties": {"Home": {"alpha": 0.1,
-      "itinerary_specification": {"Constant": {"ratio": 0.25}}},
-      "Workplace": {"alpha": 0.1,
-        "itinerary_specification": {"Constant": {"ratio": 0.25}}},
-      "School": {"alpha": 0.1,
-        "itinerary_specification": {"Constant": {"ratio": 0.25}}},
-      "CensusTract": {"alpha": 0.0,
-        "itinerary_specification": {"Constant": {"ratio": 0.25}}}},
+    "settings_properties": {"Home": {"alpha": 0.0,
+                                     "itinerary_specification": {"Constant": {"ratio": 0.25}}},
+                            "Workplace": {"alpha": 0.0,
+                                          "itinerary_specification": {"Constant": {"ratio": 0.25}}},
+                            "School": {"alpha": 0.0,
+                                       "itinerary_specification": {"Constant": {"ratio": 0.25}}},
+                            "CensusTract": {"alpha": 0.0,
+                                            "itinerary_specification": {"Constant": {"ratio": 0.25}}}},
     "symptom_progression_library" : {"EmpiricalFromFile": {"file": "input/library_symptom_parameters.csv"}},
-    "report_period": 1.0,
-    "synth_population_file": "input/synth_pop_people_WY_10000.csv",
-    "transmission_report_name": "transmission_report.csv",
+    "synth_population_file": "input/synth_pop_people_WY_589000.csv",
+    "prevalence_report": {
+        "write": true,
+        "filename": "person_property_count.csv",
+        "period": 1.0
+    },
+    "incidence_report": {
+        "write": true,
+        "filename": "incidence_report.csv",
+        "period": 1.0
+    },
+    "transmission_report": {
+        "write": true,
+        "filename": "transmission_report.csv"
+    },
+    "guidance_policy": { "UpdatedIsolationGuidance": {
+      "post_isolation_duration": 5.0,
+      "policy_adherence": 1.0,
+      "isolation_delay_period": 3.0
+    }
+  },
     "facemask_parameters": {
       "facemask_efficacy": 0.2
     },
-    "person_property_report_name": "person_property_count.csv",
-    "guidance_policy": { "UpdatedIsolationGuidance": {
-      "post_isolation_duration": 5.0,
-      "isolation_probability": 0.0,
-      "isolation_delay_period": 3.0
-    }
-    },
     "hospitalization_parameters": {
-      "mean_delay_to_hospitalization": 1.0,
-      "mean_duration_of_hospitalization": 10.0,
+      "mean_delay_to_hospitalization": 6.0,
+      "mean_duration_of_hospitalization": 8.0,
       "age_groups": [
-        {"min": 0, "probability": 0.5},
-				{"min": 80, "probability": 0.5}
-      ],
-      "hospital_incidence_report_name": "hospital_incidence_report.csv"
-    }
+        {"min": 0, "probability": 0.0},
+        {"min": 5, "probability": 0.001},
+        {"min": 15, "probability": 0.001},
+        {"min": 25, "probability": 0.01},
+        {"min": 35, "probability": 0.01},
+        {"min": 45, "probability": 0.01},
+        {"min": 55, "probability": 0.02},
+        {"min": 65,"probability": 0.05}
+      ]
+    },
+    "profiling_data_path": "profiling_data.json"
   }
 }

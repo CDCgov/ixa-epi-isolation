@@ -339,6 +339,16 @@ mod test {
     }
 
     #[test]
+    fn test_standard_state_input_file() {
+        let mut context = Context::new();
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("input/input_state.json");
+        context
+            .load_global_properties(&path)
+            .expect("Could not load input file");
+        context.get_params();
+    }
+
+    #[test]
     fn test_default_rate_fn_type() {
         let Params {
             infectiousness_rate_fn,
