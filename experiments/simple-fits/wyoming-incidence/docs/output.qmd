@@ -514,26 +514,26 @@ modifed_scenario_data = modifed_scenario_data.join(
     on=["scenario", "Policy Adherence", "Facemask Efficacy"]
 )
 
-sns.displot(
+sns.catplot(
     modifed_scenario_data,
     x="max_count",
+    y="Guidance",
     hue="Guidance",
-    kind="hist",
+    kind="violin",
     row="Policy Adherence",
     col="Facemask Efficacy",
-    bins=20,
 )
 plt.setp(plt.gcf().axes, xlabel="Peak Weekly Hospital Admissions")
 plt.show()
 
-sns.displot(
+sns.catplot(
     modifed_scenario_data,
     x="total_count",
+    y="Guidance",
     hue="Guidance",
-    kind="hist",
+    kind="violin",
     row="Policy Adherence",
     col="Facemask Efficacy",
-    bins=20,
 )
 plt.setp(plt.gcf().axes, xlabel="Total Hospital Admissions")
 plt.show()
