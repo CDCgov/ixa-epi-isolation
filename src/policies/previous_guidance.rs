@@ -34,17 +34,15 @@ struct InterventionPolicyParameters {
 trait ContextIsolationGuidanceInternalExt:
     PluginContext + ContextRandomExt + ContextPeopleExt + ContextSettingExt
 {
-    fn modify_itinerary_and_isolation_status(
-        &mut self,
-        person: PersonId,
-        isolation_status: bool,
-    ) -> Result<(), IxaError> {
-        self.set_person_property(person, IsolatingStatus, isolation_status);
-        if isolation_status {
-            self.modify_itinerary(person, ItineraryModifiers::RestrictTo { setting: &Home })?;
-        } else {
-            self.remove_modified_itinerary(person)?;
-        }
+    fn begin_isolation(&mut self, person: PersonId) -> Result<(), IxaError> {
+        self.set_person_property(person, IsolatingStatus, true);
+        self.modify_itinerary(person, ItineraryModifiers::RestrictTo { setting: &Home })?;
+        Ok(())
+    }
+
+    fn end_isolation(&mut self, person: PersonId) -> Result<(), IxaError> {
+        self.set_person_property(person, IsolatingStatus, false);
+        self.remove_modified_itinerary(person)?;
         Ok(())
     }
 
@@ -53,6 +51,8 @@ trait ContextIsolationGuidanceInternalExt:
         person_id: PersonId,
         intervention_policy_parameters: InterventionPolicyParameters,
     ) {
+        // Schedule person to start following the policy after the isolation delay period
+        // The person will test and begin to isolate at that time if they are symptomatic
         self.add_plan(
             self.get_current_time() + intervention_policy_parameters.isolation_delay_period,
             move |context| {
@@ -61,9 +61,7 @@ trait ContextIsolationGuidanceInternalExt:
                         person_id,
                         intervention_policy_parameters,
                     );
-                    context
-                        .modify_itinerary_and_isolation_status(person_id, true)
-                        .unwrap();
+                    context.begin_isolation(person_id).unwrap();
                     trace!("Person {person_id} is now isolating");
                 }
             },
@@ -73,21 +71,16 @@ trait ContextIsolationGuidanceInternalExt:
     fn make_post_isolation_masking_plan(
         &mut self,
         person_id: PersonId,
-        intervention_policy_parameters: InterventionPolicyParameters,
+        proposed_policy_end_time: f64,
     ) {
-        if let Some(symptom_record) = self.get_person_property(person_id, SymptomRecord) {
-            let proposed_masking_end_time = symptom_record.symptom_start
-                + intervention_policy_parameters.overall_policy_duration;
-            if proposed_masking_end_time > self.get_current_time() {
-                self.set_person_property(person_id, MaskingStatus, true);
-                trace!("Person {person_id} is now masking");
+        // The person will mask until the overall policy duration has elapsed after they exit isolation
+        self.set_person_property(person_id, MaskingStatus, true);
+        trace!("Person {person_id} is now masking");
 
-                self.add_plan(proposed_masking_end_time, move |context| {
-                    context.set_person_property(person_id, MaskingStatus, false);
-                    trace!("Person {person_id} is now no longer masking");
-                });
-            }
-        }
+        self.add_plan(proposed_policy_end_time, move |context| {
+            context.set_person_property(person_id, MaskingStatus, false);
+            trace!("Person {person_id} is now no longer masking");
+        });
     }
 
     fn administer_test_and_schedule_any_followup(
@@ -104,22 +97,25 @@ trait ContextIsolationGuidanceInternalExt:
                 PreviousPolicyRng,
                 intervention_policy_parameters.test_sensitivity,
             ) {
-                // A known positive doesn't require a retest, keeping default `false`
+                // A known positive doesn't require a retest
                 self.set_person_property(person_id, LastTestResult, Some(true));
             } else {
+                // if this is there first test and it is negative, schedule a retest
                 if last_test_result.is_none() {
                     retest = true;
                 }
                 self.set_person_property(person_id, LastTestResult, Some(false));
             }
         } else {
+            // if this is their first test and they are not infectious (i.e., the test is negative)
+            // schedule a retest
             if last_test_result.is_none() {
                 retest = true;
             }
             self.set_person_property(person_id, LastTestResult, Some(false));
         }
         trace!("Person {person_id} was tested");
-
+        // Schedule follow up test if
         if retest {
             self.schedule_retest(person_id, intervention_policy_parameters);
         }
@@ -152,33 +148,34 @@ trait ContextIsolationGuidanceInternalExt:
             .get_person_property(person_id, LastTestResult)
             .unwrap_or(false)
         {
-            if let Some(symptom_record) = self.get_person_property(person_id, SymptomRecord) {
-                // even if there is a delay to start isolation, people's isolation time is counted
-                // from their symptom start time
-                let minimum_isolation_time = if symptom_record.severe {
-                    intervention_policy_parameters.moderate_symptom_isolation_duration
-                        + symptom_record.symptom_start
-                } else {
-                    intervention_policy_parameters.mild_symptom_isolation_duration
-                        + symptom_record.symptom_start
-                };
-                let isolation_end = f64::max(minimum_isolation_time, self.get_current_time());
-                self.add_plan(isolation_end, move |context| {
-                    context
-                        .modify_itinerary_and_isolation_status(person_id, false)
-                        .unwrap();
-                    trace!("Person {person_id} is now no longer isolating");
-                    if !symptom_record.severe {
-                        context.make_post_isolation_masking_plan(
-                            person_id,
-                            intervention_policy_parameters,
-                        );
-                    }
-                });
-            }
+            // if the person handles_symptom_resolutions, then they have a symptom record
+            let symptom_record = self.get_person_property(person_id, SymptomRecord).unwrap();
+            // even if there is a delay to start isolation, people's isolation time is counted
+            // from their symptom start time
+            let minimum_isolation_time = if symptom_record.severe {
+                intervention_policy_parameters.moderate_symptom_isolation_duration
+                    + symptom_record.symptom_start
+            } else {
+                intervention_policy_parameters.mild_symptom_isolation_duration
+                    + symptom_record.symptom_start
+            };
+            let isolation_end = f64::max(minimum_isolation_time, self.get_current_time());
+            self.add_plan(isolation_end, move |context| {
+                context.end_isolation(person_id).unwrap();
+                trace!("Person {person_id} is now no longer isolating");
+
+                // if the overall policy duration has not yet elapsed when isolation ends, schedule masking
+                // if moderate_symptom_isolation_duration == overall_policy_duration, this will not schedule masking
+                // for moderate cases
+                let proposed_policy_end_time = symptom_record.symptom_start
+                    + intervention_policy_parameters.overall_policy_duration;
+                if proposed_policy_end_time > context.get_current_time() {
+                    context.make_post_isolation_masking_plan(person_id, proposed_policy_end_time);
+                }
+            });
         } else {
-            self.modify_itinerary_and_isolation_status(person_id, false)
-                .unwrap();
+            // If a person's latest test is false or none, then they end isolation.
+            self.end_isolation(person_id).unwrap();
         }
     }
 
@@ -193,12 +190,15 @@ trait ContextIsolationGuidanceInternalExt:
                         PreviousPolicyRng,
                         intervention_policy_parameters.policy_adherence,
                     ) {
+                        // the policy begins when an individual's symptoms begin and they have been selected
+                        // to adhere to the policy
                         context
                             .make_isolation_plan(event.person_id, intervention_policy_parameters);
                     }
                 } else if event.previous
                     && context.get_person_property(event.person_id, IsolatingStatus)
                 {
+                    // when an individual's symptoms resolve, handle how to end their isolation/masking
                     context
                         .handle_symptom_resolution(event.person_id, intervention_policy_parameters);
                 }

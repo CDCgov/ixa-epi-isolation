@@ -88,6 +88,14 @@ pub fn validate_guidance_policy(guidance_policy: Option<Policies>) -> Result<(),
                     "The moderate symptom isolation duration must be non-negative.".to_string(),
                 ));
             }
+            if !(mild_symptom_isolation_duration <= moderate_symptom_isolation_duration
+                && moderate_symptom_isolation_duration <= overall_policy_duration)
+            {
+                return Err(IxaError::IxaError(
+                    "The isolation durations must satisfy: mild <= moderate <= overall."
+                        .to_string(),
+                ));
+            }
             if delay_to_retest < 0.0 {
                 return Err(IxaError::IxaError(
                     "The delay to retest must be non-negative.".to_string(),
