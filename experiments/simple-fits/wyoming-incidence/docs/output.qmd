@@ -500,18 +500,12 @@ The next two figures show the distribution of peak and cumulative hospital admis
 #| echo: false
 #| fig-width: 6.5
 #| fig-height: 6.5
-modifed_scenario_data = modifed_scenario_data.join(
-    modifed_scenario_data.group_by(["scenario", "Policy Adherence", "Facemask Efficacy"]).agg(
-        pl.col("count").max().alias("max_count")
-    ),
-    on=["scenario", "Policy Adherence", "Facemask Efficacy"]
+modifed_scenario_data = modifed_scenario_data.with_columns(
+    pl.col("count").max().over(["scenario", "Policy Adherence", "Facemask Efficacy"]).alias("max_count")
 )
 
-modifed_scenario_data = modifed_scenario_data.join(
-    modifed_scenario_data.group_by(["scenario", "Policy Adherence", "Facemask Efficacy"]).agg(
-        pl.col("count").sum().alias("total_count")
-    ),
-    on=["scenario", "Policy Adherence", "Facemask Efficacy"]
+modifed_scenario_data = modifed_scenario_data.with_columns(
+    pl.col("count").sum().over(["scenario", "Policy Adherence", "Facemask Efficacy"]).alias("total_count")
 )
 
 sns.catplot(
