@@ -127,6 +127,7 @@ mod test {
                     "relative_infectiousness_asymptomatics": 0.0,
                     "settings_properties": {},
                     "synth_population_file": "input/people_test.csv",
+                    "burn_in_period": 0.0,
                     "prevalence_report": {
                         "write": true,
                         "filename": "prevalence.csv",
