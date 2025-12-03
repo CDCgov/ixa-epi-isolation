@@ -83,6 +83,8 @@ pub struct Params {
     pub settings_properties: HashMap<CoreSettingsTypes, SettingProperties>,
     /// The path to the synthetic population file loaded in `population_loader`
     pub synth_population_file: PathBuf,
+    /// Burn in period during which initial infections are seeded but no transmissions occur
+    pub burn_in_period: f64,
     /// Prevalence report with a period and name required
     pub prevalence_report: ReportParams,
     /// Incidence report with a period and name required
@@ -121,6 +123,7 @@ impl Default for Params {
             proportion_asymptomatic: 0.0,
             // Asymptomatics, if included, should act as symptomatics unless otherwise specified
             relative_infectiousness_asymptomatics: 1.0,
+            burn_in_period: 0.0,
             prevalence_report: ReportParams {
                 write: false,
                 filename: None,

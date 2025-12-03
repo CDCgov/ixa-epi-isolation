@@ -103,9 +103,9 @@ fn reset_incidence_map(context: &mut Context) {
         .for_each(|v| *v = 0);
 }
 
-fn send_incidence_counts(context: &mut Context) {
+fn send_incidence_counts(context: &mut Context, burn_in_period: f64) {
     let report_container = context.get_data(PropertyReportDataPlugin);
-    let t_upper = context.get_current_time();
+    let t_upper = context.get_current_time() - burn_in_period;
 
     // Infection status
     for ((age, infection_status), count) in &report_container.infection_status_change {
@@ -145,7 +145,12 @@ fn send_incidence_counts(context: &mut Context) {
 /// # Panics
 ///
 /// Will panic if an age group cannot be parsed from the tabulated string
-pub fn init(context: &mut Context, file_name: &str, period: f64) -> Result<(), IxaError> {
+pub fn init(
+    context: &mut Context,
+    file_name: &str,
+    period: f64,
+    burn_in_period: f64,
+) -> Result<(), IxaError> {
     context.add_report::<PersonPropertyIncidenceReport>(file_name)?;
 
     let tabulator = (Age,);
@@ -194,7 +199,7 @@ pub fn init(context: &mut Context, file_name: &str, period: f64) -> Result<(), I
     context.add_periodic_plan_with_phase(
         period,
         move |context: &mut Context| {
-            send_incidence_counts(context);
+            send_incidence_counts(context, burn_in_period);
         },
         ExecutionPhase::Last,
     );

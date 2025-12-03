@@ -77,10 +77,17 @@ fn query_susceptibles_and_seed(
     }
 }
 
-fn seed_initial_infections(context: &mut Context, initial_incidence: f64) {
+fn seed_initial_infections(context: &mut Context, initial_incidence: f64, burn_in_period: f64) {
     query_susceptibles_and_seed(context, initial_incidence, |context, person_id| {
         trace!("Infecting person {person_id} as an initial infection.");
         context.infect_person(person_id, None, None, None);
+        context.add_plan(burn_in_period, move |context| {
+            if context.get_person_property(person_id, InfectionStatus)
+                == InfectionStatusValue::Infectious
+            {
+                schedule_next_forecasted_infection(context, person_id);
+            }
+        });
     });
 }
 
@@ -105,6 +112,7 @@ pub fn init(context: &mut Context) -> Result<(), IxaError> {
     let &Params {
         initial_incidence,
         initial_recovered,
+        burn_in_period,
         ..
     } = context.get_params();
 
@@ -112,7 +120,7 @@ pub fn init(context: &mut Context) -> Result<(), IxaError> {
 
     context.add_plan(0.0, move |context| {
         if initial_incidence > 0.0 {
-            seed_initial_infections(context, initial_incidence);
+            seed_initial_infections(context, initial_incidence, burn_in_period);
         }
         if initial_recovered > 0.0 {
             seed_initial_recovered(context, initial_recovered);
@@ -121,12 +129,14 @@ pub fn init(context: &mut Context) -> Result<(), IxaError> {
 
     // Subscribe to the person becoming infectious to trigger the infection propagation loop
     context.subscribe_to_event(
-        |context, event: PersonPropertyChangeEvent<InfectionStatus>| {
+        move |cxt, event: PersonPropertyChangeEvent<InfectionStatus>| {
             if event.current != InfectionStatusValue::Infectious {
                 return;
             }
-            schedule_next_forecasted_infection(context, event.person_id);
-            schedule_recovery(context, event.person_id);
+            if cxt.get_current_time() > burn_in_period {
+                schedule_next_forecasted_infection(cxt, event.person_id);
+            }
+            schedule_recovery(cxt, event.person_id);
         },
     );
 
@@ -254,7 +264,7 @@ mod test {
     fn test_seed_initial_conditions() {
         let mut context = setup_context(0, 1.0, 1.0, 5.0, 0.0);
         let initial_infected = context.add_person(()).unwrap();
-        seed_initial_infections(&mut context, 1.0);
+        seed_initial_infections(&mut context, 1.0, 0.0);
         assert_eq!(
             context.get_person_property(initial_infected, InfectionStatus),
             InfectionStatusValue::Infectious
@@ -272,7 +282,7 @@ mod test {
     fn test_seed_initial_conditions_empty() {
         let mut context = setup_context(0, 1.0, 1.0, 5.0, 0.0);
         let person = context.add_person(()).unwrap();
-        seed_initial_infections(&mut context, 0.0);
+        seed_initial_infections(&mut context, 0.0, 0.0);
         assert_eq!(
             context.get_person_property(person, InfectionStatus),
             InfectionStatusValue::Susceptible
@@ -290,7 +300,7 @@ mod test {
         for _ in 0..pop_size {
             context.add_person(()).unwrap();
         }
-        seed_initial_infections(&mut context, incidence);
+        seed_initial_infections(&mut context, incidence, 0.0);
         seed_initial_recovered(&mut context, recovered);
         context.query_people_count((InfectionStatus, InfectionStatusValue::Infectious))
     }
@@ -565,7 +575,7 @@ mod test {
         let mut context = setup_context(0, 0.0, 1.0, 5.0, 0.0);
         load_rate_fns(&mut context).unwrap();
         let person = context.add_person(()).unwrap();
-        seed_initial_infections(&mut context, 1.0);
+        seed_initial_infections(&mut context, 1.0, 0.0);
         // For later, we need to get the recovery time from the rate function.
         let recovery_time = context.get_person_rate_fn(person).infection_duration();
         schedule_recovery(&mut context, person);

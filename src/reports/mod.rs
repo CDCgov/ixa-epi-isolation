@@ -57,22 +57,23 @@ pub fn init(context: &mut Context) -> Result<(), IxaError> {
         prevalence_report,
         incidence_report,
         transmission_report,
+        burn_in_period,
         ..
     } = context.get_params().clone();
     let mut report_count = 0;
 
     if let Some((name, period)) = get_period_report_name(&prevalence_report)? {
-        prevalence_report::init(context, name, period)?;
+        prevalence_report::init(context, name, period, burn_in_period)?;
         info!("Generating the prevalence report.");
         report_count += 1;
     }
     if let Some((name, period)) = get_period_report_name(&incidence_report)? {
-        incidence_report::init(context, name, period)?;
+        incidence_report::init(context, name, period, burn_in_period)?;
         info!("Generating the incidence report.");
         report_count += 1;
     }
     if let Some(name) = get_report_name(&transmission_report)? {
-        transmission_report::init(context, name)?;
+        transmission_report::init(context, name, burn_in_period)?;
         info!("Generating the transmission report.");
         report_count += 1;
     }
