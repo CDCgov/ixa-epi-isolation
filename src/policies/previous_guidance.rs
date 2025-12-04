@@ -16,7 +16,7 @@ use crate::{
 
 define_person_property_with_default!(MaskingStatus, bool, false);
 define_person_property_with_default!(IsolatingStatus, bool, false);
-define_person_property_with_default!(LastTestResult, Option<bool>, None);
+define_person_property_with_default!(LastTestResult, bool, false);
 
 define_rng!(PreviousPolicyRng);
 
@@ -57,10 +57,7 @@ trait ContextIsolationGuidanceInternalExt:
             self.get_current_time() + intervention_policy_parameters.isolation_delay_period,
             move |context| {
                 if context.get_person_property(person_id, PresentingWithSymptoms) {
-                    context.administer_test_and_schedule_any_followup(
-                        person_id,
-                        intervention_policy_parameters,
-                    );
+                    context.initiate_testing_sequence(person_id, intervention_policy_parameters);
                     context.begin_isolation(person_id).unwrap();
                     trace!("Person {person_id} is now isolating");
                 }
@@ -83,40 +80,36 @@ trait ContextIsolationGuidanceInternalExt:
         });
     }
 
-    fn administer_test_and_schedule_any_followup(
+    fn test(
         &mut self,
         person_id: PersonId,
         intervention_policy_parameters: InterventionPolicyParameters,
     ) {
-        let last_test_result = self.get_person_property(person_id, LastTestResult);
-        let mut retest = false;
-
+        // this implementation of testing requires that individual is infectious to test positive
+        // and it does not account for time varying infectiousness
         if self.get_person_property(person_id, InfectionStatus) == InfectionStatusValue::Infectious
         {
             if self.sample_bool(
                 PreviousPolicyRng,
                 intervention_policy_parameters.test_sensitivity,
             ) {
-                // A known positive doesn't require a retest
-                self.set_person_property(person_id, LastTestResult, Some(true));
+                self.set_person_property(person_id, LastTestResult, true);
             } else {
-                // if this is there first test and it is negative, schedule a retest
-                if last_test_result.is_none() {
-                    retest = true;
-                }
-                self.set_person_property(person_id, LastTestResult, Some(false));
+                // we redunantly set the property to false here so it possible to count the number of tests
+                // in other modules.
+                self.set_person_property(person_id, LastTestResult, false);
             }
-        } else {
-            // if this is their first test and they are not infectious (i.e., the test is negative)
-            // schedule a retest
-            if last_test_result.is_none() {
-                retest = true;
-            }
-            self.set_person_property(person_id, LastTestResult, Some(false));
         }
-        trace!("Person {person_id} was tested");
-        // Schedule follow up test if
-        if retest {
+    }
+
+    fn initiate_testing_sequence(
+        &mut self,
+        person_id: PersonId,
+        intervention_policy_parameters: InterventionPolicyParameters,
+    ) {
+        // for the initial test upon symptom onset LastTestResult is false
+        self.test(person_id, intervention_policy_parameters);
+        if !self.get_person_property(person_id, LastTestResult) {
             self.schedule_retest(person_id, intervention_policy_parameters);
         }
     }
@@ -130,10 +123,7 @@ trait ContextIsolationGuidanceInternalExt:
             self.get_current_time() + intervention_policy_parameters.delay_to_retest,
             move |context| {
                 if context.get_person_property(person_id, PresentingWithSymptoms) {
-                    context.administer_test_and_schedule_any_followup(
-                        person_id,
-                        intervention_policy_parameters,
-                    );
+                    context.test(person_id, intervention_policy_parameters);
                 }
             },
         );
@@ -144,11 +134,8 @@ trait ContextIsolationGuidanceInternalExt:
         person_id: PersonId,
         intervention_policy_parameters: InterventionPolicyParameters,
     ) {
-        if self
-            .get_person_property(person_id, LastTestResult)
-            .unwrap_or(false)
-        {
-            // if the person handles_symptom_resolutions, then they have a symptom record
+        if self.get_person_property(person_id, LastTestResult) {
+            // this function is called only for persons with a symptom record
             let symptom_record = self.get_person_property(person_id, SymptomRecord).unwrap();
             // even if there is a delay to start isolation, people's isolation time is counted
             // from their symptom start time
@@ -159,6 +146,8 @@ trait ContextIsolationGuidanceInternalExt:
                 intervention_policy_parameters.mild_symptom_isolation_duration
                     + symptom_record.symptom_start
             };
+            // schedule end of isolation in at the minimum isolation time if it has not already passed
+            // otherwise end isolation immediately
             let isolation_end = f64::max(minimum_isolation_time, self.get_current_time());
             self.add_plan(isolation_end, move |context| {
                 context.end_isolation(person_id).unwrap();
@@ -738,13 +727,13 @@ mod test {
 
             context.subscribe_to_event::<PersonPropertyChangeEvent<LastTestResult>>(
                 move |context, event| {
-                    if event.current.unwrap_or(false)
+                    if event.current
                         && context.get_person_property(event.person_id, NumberOfTests) == 0
                     {
                         context.shutdown();
                         *shutdown_flag_clone.borrow_mut() = true;
                     }
-                    if !event.current.unwrap_or(false)
+                    if !event.current
                         && context.get_person_property(event.person_id, NumberOfTests) == 1
                     {
                         context.shutdown();
@@ -959,7 +948,7 @@ mod test {
 
             context.subscribe_to_event::<PersonPropertyChangeEvent<LastTestResult>>(
                 move |_context, event| {
-                    if event.current.unwrap_or(false) {
+                    if event.current {
                         *num_people_policy_clone.borrow_mut() += 1;
                     }
                 },
