@@ -20,7 +20,6 @@ person_property_report <- readr::read_csv(file.path(
 
 # Infectious curves
 x <- person_property_report |>
-  filter(t > 0) |>
   group_by(t, infection_status) |>
   summarise(count = sum(count), .groups = "drop") |>
   ggplot(aes(x = t, y = count)) +
@@ -31,7 +30,6 @@ print(x)
 # Symptom curves
 x <- person_property_report |>
   filter(!is.na(symptoms)) |>
-  filter(t > 0) |>
   group_by(t, symptoms) |>
   summarise(count = sum(count), .groups = "drop") |>
   ggplot(aes(x = t, y = count)) +
@@ -42,7 +40,6 @@ print(x)
 # Symptom curves
 x <- person_property_report |>
   filter(hospitalized == TRUE) |>
-  filter(t > 0) |>
   group_by(t, hospitalized) |>
   summarise(count = sum(count), .groups = "drop") |>
   ggplot(aes(x = t, y = count)) +

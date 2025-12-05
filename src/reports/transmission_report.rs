@@ -50,16 +50,14 @@ pub fn init(context: &mut Context, file_name: &str, burn_in_period: f64) -> Resu
             ..
         } = event.current
         {
-            if cxt.get_current_time() >= burn_in_period {
-                record_transmission_event(
-                    cxt,
-                    event.person_id,
-                    infected_by,
-                    infection_setting_type.map(ToString::to_string),
-                    infection_setting_id,
-                    burn_in_period,
-                );
-            }
+            record_transmission_event(
+                cxt,
+                event.person_id,
+                infected_by,
+                infection_setting_type.map(ToString::to_string),
+                infection_setting_id,
+                burn_in_period,
+            );
         }
     });
     Ok(())
