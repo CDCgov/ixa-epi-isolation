@@ -122,6 +122,8 @@ trait ContextIsolationGuidanceInternalExt:
         self.add_plan(
             self.get_current_time() + intervention_policy_parameters.delay_to_retest,
             move |context| {
+                // checking for symtpoms during the retest individuals are not tested
+                // after their symptoms resolve
                 if context.get_person_property(person_id, PresentingWithSymptoms) {
                     context.test(person_id, intervention_policy_parameters);
                 }
@@ -146,7 +148,7 @@ trait ContextIsolationGuidanceInternalExt:
                 intervention_policy_parameters.mild_symptom_isolation_duration
                     + symptom_record.symptom_start
             };
-            // schedule end of isolation in at the minimum isolation time if it has not already passed
+            // schedule end of isolation at the minimum isolation time if it has not already passed
             // otherwise end isolation immediately
             let isolation_end = f64::max(minimum_isolation_time, self.get_current_time());
             self.add_plan(isolation_end, move |context| {
@@ -163,7 +165,8 @@ trait ContextIsolationGuidanceInternalExt:
                 }
             });
         } else {
-            // If a person's latest test is false or none, then they end isolation.
+            // If a person's latest test is false (i.e., they test false or fail to test
+            // before symptoms resolve), then they end isolation.
             self.end_isolation(person_id).unwrap();
         }
     }
