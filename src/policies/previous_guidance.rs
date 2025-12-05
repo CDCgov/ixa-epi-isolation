@@ -122,7 +122,7 @@ trait ContextIsolationGuidanceInternalExt:
         self.add_plan(
             self.get_current_time() + intervention_policy_parameters.delay_to_retest,
             move |context| {
-                // checking for symtpoms during the retest individuals are not tested
+                // checking for symptoms during the retest; individuals are not tested
                 // after their symptoms resolve
                 if context.get_person_property(person_id, PresentingWithSymptoms) {
                     context.test(person_id, intervention_policy_parameters);
