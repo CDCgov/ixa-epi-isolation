@@ -1,5 +1,5 @@
 use core::f64;
-use rand_distr::Binomial;
+use rand_distr::{Binomial, Uniform};
 
 use crate::computed_statistics::{ACCEPTED_INFECTION_LABEL, FORECASTED_INFECTION_LABEL};
 use crate::infectiousness_manager::{
@@ -77,11 +77,22 @@ fn query_susceptibles_and_seed(
     }
 }
 
-fn seed_initial_infections(context: &mut Context, initial_incidence: f64, burn_in_period: f64) {
+fn seed_initial_infections(context: &mut Context, initial_incidence: f64) {
     query_susceptibles_and_seed(context, initial_incidence, |context, person_id| {
         trace!("Infecting person {person_id} as an initial infection.");
-        context.infect_person(person_id, None, None, None);
-        context.add_plan(burn_in_period, move |context| {
+        // sample an offset for the individuals infectious period
+        let uniform = Uniform::new(
+            -context.get_person_rate_fn(person_id).infection_duration(),
+            0.0,
+        )
+        .unwrap();
+        #[allow(unused_assignments)]
+        let mut offset = context.sample_distr(InfectionRng, uniform);
+        offset = 0.0;
+        context.add_plan(offset, move |context| {
+            context.infect_person(person_id, None, None, None);
+        });
+        context.add_plan(0.0, move |context| {
             if context.get_person_property(person_id, InfectionStatus)
                 == InfectionStatusValue::Infectious
             {
@@ -112,31 +123,29 @@ pub fn init(context: &mut Context) -> Result<(), IxaError> {
     let &Params {
         initial_incidence,
         initial_recovered,
-        burn_in_period,
         ..
     } = context.get_params();
 
     load_rate_fns(context)?;
-
-    context.add_plan(0.0, move |context| {
-        if initial_incidence > 0.0 {
-            seed_initial_infections(context, initial_incidence, burn_in_period);
-        }
+    if initial_incidence > 0.0 {
+        seed_initial_infections(context, initial_incidence);
+    }
+    context.add_plan(0.0, move |cxt| {
         if initial_recovered > 0.0 {
-            seed_initial_recovered(context, initial_recovered);
+            seed_initial_recovered(cxt, initial_recovered);
         }
     });
 
     // Subscribe to the person becoming infectious to trigger the infection propagation loop
     context.subscribe_to_event(
-        move |cxt, event: PersonPropertyChangeEvent<InfectionStatus>| {
+        move |context, event: PersonPropertyChangeEvent<InfectionStatus>| {
             if event.current != InfectionStatusValue::Infectious {
                 return;
             }
-            if cxt.get_current_time() > burn_in_period {
-                schedule_next_forecasted_infection(cxt, event.person_id);
+            if context.get_current_time() > 0.0 {
+                schedule_next_forecasted_infection(context, event.person_id);
             }
-            schedule_recovery(cxt, event.person_id);
+            schedule_recovery(context, event.person_id);
         },
     );
 
@@ -263,12 +272,16 @@ mod test {
     #[test]
     fn test_seed_initial_conditions() {
         let mut context = setup_context(0, 1.0, 1.0, 5.0, 0.0);
+        load_rate_fns(&mut context).unwrap();
         let initial_infected = context.add_person(()).unwrap();
-        seed_initial_infections(&mut context, 1.0, 0.0);
-        assert_eq!(
-            context.get_person_property(initial_infected, InfectionStatus),
-            InfectionStatusValue::Infectious
-        );
+        seed_initial_infections(&mut context, 1.0);
+        // we check at time 0 to since individuals infections begin before time 0
+        context.add_plan(0.0, move |context| {
+            assert_eq!(
+                context.get_person_property(initial_infected, InfectionStatus),
+                InfectionStatusValue::Infectious
+            );
+        });
 
         let initial_recovered = context.add_person(()).unwrap();
         seed_initial_recovered(&mut context, 1.0);
@@ -281,8 +294,9 @@ mod test {
     #[test]
     fn test_seed_initial_conditions_empty() {
         let mut context = setup_context(0, 1.0, 1.0, 5.0, 0.0);
+        load_rate_fns(&mut context).unwrap();
         let person = context.add_person(()).unwrap();
-        seed_initial_infections(&mut context, 0.0, 0.0);
+        seed_initial_infections(&mut context, 0.0);
         assert_eq!(
             context.get_person_property(person, InfectionStatus),
             InfectionStatusValue::Susceptible
@@ -295,48 +309,76 @@ mod test {
         );
     }
 
-    fn seed_initial_conditions_binomial(incidence: f64, recovered: f64, pop_size: i32) -> usize {
-        let mut context = setup_context(0, 1.0, 1.0, 5.0, 0.0);
-        for _ in 0..pop_size {
-            context.add_person(()).unwrap();
-        }
-        seed_initial_infections(&mut context, incidence, 0.0);
-        seed_initial_recovered(&mut context, recovered);
-        context.query_people_count((InfectionStatus, InfectionStatusValue::Infectious))
-    }
-
     #[test]
     fn test_binomial_incidence() {
         let reps = 1000;
-        let incidence = 0.01;
+        let incidence = 0.5;
         let recovered = 0.0;
         let pop_size = 100;
-
-        let mut infections = 0;
-        for _ in 0..reps {
-            let i = seed_initial_conditions_binomial(incidence, recovered, pop_size);
-            infections += i;
+        let num_initial_infections = Rc::new(RefCell::new(0));
+        let num_initial_recovered = Rc::new(RefCell::new(0));
+        for rep in 0..reps {
+            let num_initial_infections_clone: Rc<RefCell<usize>> =
+                Rc::clone(&num_initial_infections);
+            let num_initial_recovered_clone: Rc<RefCell<usize>> = Rc::clone(&num_initial_recovered);
+            let mut context = setup_context(rep, 1.0, 1.0, 5.0, 0.0);
+            load_rate_fns(&mut context).unwrap();
+            for _ in 0..pop_size {
+                context.add_person(()).unwrap();
+            }
+            seed_initial_infections(&mut context, incidence);
+            context.add_plan(0.0, move |context| {
+                seed_initial_recovered(context, recovered);
+                *num_initial_infections_clone.borrow_mut() +=
+                    context.query_people_count((InfectionStatus, InfectionStatusValue::Infectious));
+                *num_initial_recovered_clone.borrow_mut() +=
+                    context.query_people_count((InfectionStatus, InfectionStatusValue::Recovered));
+            });
+            context.execute();
         }
         #[allow(clippy::cast_precision_loss, clippy::cast_lossless)]
-        let observed = infections as f64 / (reps as f64 * pop_size as f64);
-        assert_almost_eq!(incidence, observed, 0.01);
+        let observed_incidence =
+            *num_initial_infections.borrow() as f64 / (reps as f64 * pop_size as f64);
+        let observed_recovered =
+            *num_initial_recovered.borrow() as f64 / (reps as f64 * pop_size as f64);
+        assert_almost_eq!(incidence, observed_incidence, 0.01);
+        assert_almost_eq!(recovered, observed_recovered, 0.01);
     }
 
     #[test]
     fn test_binomial_incidence_and_recovery() {
         let reps = 1000;
-        let incidence = 0.01;
-        let recovered = 0.99;
-        let pop_size = 100;
-
-        let mut infections = 0;
-        for _ in 0..reps {
-            let i = seed_initial_conditions_binomial(incidence, recovered, pop_size);
-            infections += i;
+        let incidence = 0.1;
+        let recovered = 0.1;
+        let pop_size = 1000;
+        let num_initial_infections = Rc::new(RefCell::new(0));
+        let num_initial_recovered = Rc::new(RefCell::new(0));
+        for rep in 0..reps {
+            let num_initial_infections_clone: Rc<RefCell<usize>> =
+                Rc::clone(&num_initial_infections);
+            let num_initial_recovered_clone: Rc<RefCell<usize>> = Rc::clone(&num_initial_recovered);
+            let mut context = setup_context(rep, 1.0, 1.0, 5.0, 0.0);
+            load_rate_fns(&mut context).unwrap();
+            for _ in 0..pop_size {
+                context.add_person(()).unwrap();
+            }
+            seed_initial_infections(&mut context, incidence);
+            context.add_plan(0.0, move |context| {
+                seed_initial_recovered(context, recovered);
+                *num_initial_infections_clone.borrow_mut() +=
+                    context.query_people_count((InfectionStatus, InfectionStatusValue::Infectious));
+                *num_initial_recovered_clone.borrow_mut() +=
+                    context.query_people_count((InfectionStatus, InfectionStatusValue::Recovered));
+            });
+            context.execute();
         }
         #[allow(clippy::cast_precision_loss, clippy::cast_lossless)]
-        let observed = infections as f64 / (reps as f64 * pop_size as f64);
-        assert_almost_eq!(incidence, observed, 0.01);
+        let observed_incidence =
+            *num_initial_infections.borrow() as f64 / (reps as f64 * pop_size as f64);
+        let observed_recovered =
+            *num_initial_recovered.borrow() as f64 / (reps as f64 * pop_size as f64);
+        assert_almost_eq!(incidence, observed_incidence, 0.01);
+        assert_almost_eq!(recovered, observed_recovered, 0.01);
     }
 
     #[test]
@@ -575,7 +617,7 @@ mod test {
         let mut context = setup_context(0, 0.0, 1.0, 5.0, 0.0);
         load_rate_fns(&mut context).unwrap();
         let person = context.add_person(()).unwrap();
-        seed_initial_infections(&mut context, 1.0, 0.0);
+        seed_initial_infections(&mut context, 1.0);
         // For later, we need to get the recovery time from the rate function.
         let recovery_time = context.get_person_rate_fn(person).infection_duration();
         schedule_recovery(&mut context, person);

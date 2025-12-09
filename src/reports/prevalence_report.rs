@@ -76,12 +76,12 @@ fn update_property_change_counts(context: &mut Context, event: ReportEvent) {
         .or_insert(0);
 }
 
-fn send_property_counts(context: &mut Context, burn_in_period: f64) {
+fn send_property_counts(context: &mut Context) {
     let report_container = context.get_data(PropertyReportDataPlugin);
 
     for (values, count_property) in &report_container.report_map_container {
         context.send_report(PersonPropertyReport {
-            t: context.get_current_time() - burn_in_period,
+            t: context.get_current_time(),
             age: values.age,
             infection_status: values.infection_status,
             symptoms: values.symptoms,
@@ -99,12 +99,7 @@ fn send_property_counts(context: &mut Context, burn_in_period: f64) {
 /// # Panics
 ///
 /// Will panic if symptom value string is not listed in enum
-pub fn init(
-    context: &mut Context,
-    file_name: &str,
-    period: f64,
-    burn_in_period: f64,
-) -> Result<(), IxaError> {
+pub fn init(context: &mut Context, file_name: &str, period: f64) -> Result<(), IxaError> {
     context.add_report::<PersonPropertyReport>(file_name)?;
 
     let mut map_counts = HashMap::default();
@@ -129,7 +124,7 @@ pub fn init(
     context.add_periodic_plan_with_phase(
         period,
         move |context: &mut Context| {
-            send_property_counts(context, burn_in_period);
+            send_property_counts(context);
         },
         ExecutionPhase::Last,
     );

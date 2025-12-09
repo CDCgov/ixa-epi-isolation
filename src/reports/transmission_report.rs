@@ -23,11 +23,10 @@ fn record_transmission_event(
     infected_by: Option<PersonId>,
     infection_setting_type: Option<String>,
     infection_setting_id: Option<usize>,
-    burn_in_period: f64,
 ) {
     if infected_by.is_some() {
         context.send_report(TransmissionReport {
-            time: context.get_current_time() - burn_in_period,
+            time: context.get_current_time(),
             target_id,
             infected_by,
             infection_setting_type,
@@ -39,7 +38,7 @@ fn record_transmission_event(
 /// # Errors
 ///
 /// Will return `IxaError` if the report cannot be added
-pub fn init(context: &mut Context, file_name: &str, burn_in_period: f64) -> Result<(), IxaError> {
+pub fn init(context: &mut Context, file_name: &str) -> Result<(), IxaError> {
     context.add_report::<TransmissionReport>(file_name)?;
     context.subscribe_to_event::<PersonPropertyChangeEvent<InfectionData>>(move |cxt, event| {
         let _span = open_span("transmission_report");
@@ -56,7 +55,6 @@ pub fn init(context: &mut Context, file_name: &str, burn_in_period: f64) -> Resu
                 infected_by,
                 infection_setting_type.map(ToString::to_string),
                 infection_setting_id,
-                burn_in_period,
             );
         }
     });

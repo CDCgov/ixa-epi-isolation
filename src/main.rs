@@ -29,19 +29,14 @@ use crate::profiling::{print_profiling_data, ProfilingContextExt};
 fn main() {
     let mut context = run_with_args(|context, _, _| {
         // Read the global properties.
-        let &Params {
-            max_time,
-            seed,
-            burn_in_period,
-            ..
-        } = context.get_params();
+        let &Params { max_time, seed, .. } = context.get_params();
 
         // Set the random seed.
         context.init_random(seed);
 
         // Add a plan to shut down the simulation after `max_time`, regardless of
         // what else is happening in the model.
-        context.add_plan(max_time + burn_in_period, |context| {
+        context.add_plan(max_time, |context| {
             context.shutdown();
         });
 
