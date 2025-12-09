@@ -104,11 +104,11 @@ simulation are as follows:
 
 | Parameter | Prior | Source |
 | :-------: | :---: | ------ |
-| $\alpha_\text{Home}$ | Uniform(0.0, 0.2) | uninformative |
-| $\alpha_\text{Work}$ | Uniform(0.0, 0.2) | uninformative |
-| $\alpha_\text{Sch}$ | Uniform(0.0, 0.2) | uninformative |
+| $\alpha_\text{Home}$ | Uniform(0.0, 0.2) | Assumed/uninformative |
+| $\alpha_\text{Work}$ | Uniform(0.0, 0.2) | Assumed/uninformative |
+| $\alpha_\text{Sch}$ | Uniform(0.0, 0.2) | Assumed/uninformative |
 | `initial_recovered` | Beta(5, 15) | Assumed partial protection from infections in spring/summer before calibration |
-| `infectiousness_rate_fn.scale` | Uniform(0.0, 0.2) | uninformative |
+| `infectiousness_rate_fn.scale` | Uniform(0.0, 0.2) | Assumed/uninformative |
 | `proportion_asymptomatic` | Beta(45, 55) | WT variant point estimate (0.45) with wider variance, Whitaker et al. 2022 Nat Comm. |
 
 The point estimate for the alpha variant wave, which partially corresponds to the timing of the data we filter from NHSN, has narrow margins
@@ -356,7 +356,7 @@ plt.show()
 
 # Scenario Analysis
 
-A scenario analysis is conducted that studies effects of the update and previous isolation guidance on hospitalizations. The guidances are compared to a counterfactual "No Guidance", which is the context for the model calibration. Two relavent policy parameters are studied in set of scenarios that are enumerated in the following table.
+The scenario analysis assesses the effects of the update and previous isolation guidance on hospitalizations in the calibrated "No Guidance" model. The table below shows the counterfactual scenarios and the relevant parameters varied by scenario.
 
 | Guidance Policy | Policy Adherence | Facemask Efficacy |
 | :-------: | :---: | ------ |
@@ -374,7 +374,7 @@ A scenario analysis is conducted that studies effects of the update and previous
 | Previous | 75% | 50% |
 | Previous | 75% | 80% |
 
-Fifty sampled posterior distribution parameter sets are used to simulate 50 replicates of each scenario parameter combination. The results are presented in the following figure, which shows the weekly incidence hospital admission over time. The figure is faceted by policy adherence and facemask efficacy. The calibration target data is presented to show the robustness of the calibration (shown in the "No Guidance" scenario) to stochasticity.
+We sample 50 particles from the approximate posterior to combine with each counterfactual scenario parameter set. The results are presented in the following figure, which shows the weekly incidence hospital admission over time. The figure is faceted by policy adherence and facemask efficacy. The calibration target data is presented to show the robustness of the calibration (shown in the "No Guidance" scenario) to stochasticity.
 
 ```{python}
 #| echo: false
@@ -514,8 +514,8 @@ sns.catplot(
     y="Guidance",
     hue="Guidance",
     kind="violin",
-    row="Policy Adherence",
-    col="Facemask Efficacy",
+    col="Policy Adherence",
+    row="Facemask Efficacy",
 )
 plt.setp(plt.gcf().axes, xlabel="Peak Weekly Hospital Admissions")
 plt.show()
@@ -526,8 +526,8 @@ sns.catplot(
     y="Guidance",
     hue="Guidance",
     kind="violin",
-    row="Policy Adherence",
-    col="Facemask Efficacy",
+    col="Policy Adherence",
+    row="Facemask Efficacy",
 )
 plt.setp(plt.gcf().axes, xlabel="Total Hospital Admissions")
 plt.show()
