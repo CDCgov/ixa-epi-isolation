@@ -1,14 +1,14 @@
 {
     "schema": "v0.3",
     "parameters": {
-        "settings_properties>>>Home>>>alpha": {
-            "vary": [0.0, 0.5, 1.0]
+        "synth_population_file": {
+            "vary": ["input/synth_pop_people_WY_1000.csv",
+                    "input/synth_pop_people_WY_10000.csv",
+                    "input/synth_pop_people_WY_100000.csv",
+                    "input/synth_pop_people_WY_1000000.csv"]
         },
-        "settings_properties>>>School>>>alpha": {
-            "vary": [0.0, 0.5, 1.0]
-        },
-        "settings_properties>>>Workplace>>>alpha": {
-            "vary": [0.0, 0.5, 1.0]
+        "infectiousness_rate_fn>>>EmpiricalFromFile>>>scale": {
+            "vary": [0.05, 0.1, 0.15]
         }
     }
 }

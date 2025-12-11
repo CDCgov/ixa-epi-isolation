@@ -6,9 +6,9 @@ experiment_conditions:
   seed: 12345
   scenario_key: epi_isolation.GlobalParams
 local_path:
-  default_params_file: ./experiments/examples/parameter-sweep/input/base.json
-  griddle_file: ./experiments/examples/parameter-sweep/input/griddle.json
+  default_params_file: ./experiments/examples/benchmarking/input/base.json
+  griddle_file: ./experiments/examples/benchmarking/input/griddle.json
   exe_file: target/release/epi-isolation
-  sub_experiment_name: parameter-sweep
+  sub_experiment_name: benchmarking
   super_experiment_name: examples
   target_data_file: null

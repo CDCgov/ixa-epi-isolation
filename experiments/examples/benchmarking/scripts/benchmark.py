@@ -1,16 +1,20 @@
 import json
 import os
 
+import matplotlib.pyplot as plt
 import polars as pl
+import seaborn as sns
 from abmwrappers import utils, wrappers
 from abmwrappers.experiment_class import Experiment
+
+sns.set_theme(style="whitegrid")
 
 
 def main():
     # Create the new Experiment and scenarios folder
     experiment = Experiment(
         experiments_directory="experiments",
-        config_file="experiments/examples/parameter-sweep/input/config.yaml",
+        config_file="experiments/examples/benchmarking/input/config.yaml",
     )
 
     wrappers.create_scenario_subexperiments(experiment)
@@ -29,7 +33,7 @@ def main():
             config_file=config_path,
         )
         subexperiment.run_step(
-            data_read_fn=read_hospitalizations_fn, products=["simulations"]
+            data_read_fn=read_profiling_fn, products=["simulations"]
         )
         with open(experiment.griddle_file, "r") as fp:
             raw_griddle = json.load(fp)
@@ -57,19 +61,7 @@ def main():
     parameter_df = pl.DataFrame(parameters)
     exp_output = experiment.read_results(filename="scenarios")
     exp_output = exp_output.join(parameter_df, on="scenario")
-    output_dir = os.path.join(experiment.directory, "output")
-    os.makedirs(output_dir, exist_ok=True)
-    exp_output.write_csv(
-        os.path.join(experiment.directory, "parameter_sweep.csv")
-    )
-
-
-def read_hospitalizations_fn(outputs_dir):
-    data_path = os.path.join(outputs_dir, "incidence_report.csv")
-    data = pl.read_csv(data_path)
-    data = data.filter(pl.col("event") == "Hospitalized")
-    data = data.group_by("t_upper").agg(pl.col("count").sum().alias("count"))
-    return data
+    plot_profiling(exp_output)
 
 
 def read_profiling_fn(outputs_dir):
@@ -89,6 +81,44 @@ def read_profiling_fn(outputs_dir):
         "load_synth_pop": profiling_data["named_spans"][0]["duration"],
     }
     return pl.DataFrame([data])
+
+
+def plot_profiling(df):
+    # Plot Simulation runtime
+    plt.figure(figsize=(8, 6))
+    sns.scatterplot(
+        data=df,
+        x="pop_size",
+        y="cpu_time",
+        hue="attack_rate",
+        palette="viridis",
+    )
+    plt.xscale("log")
+    plt.yscale("log")
+    plt.title("Simulation runtime")
+    plt.xlabel("Population Size (log scale)")
+    plt.ylabel("CPU Time in Seconds (log scale)")
+    plt.legend(title="Attack Rate")
+    plt.tight_layout()
+    plt.savefig(
+        "experiments/examples/benchmarking/data/runtime_by_population.png"
+    )
+
+    # Plot Simulation memory
+    plt.figure(figsize=(8, 6))
+    sns.scatterplot(
+        data=df, x="pop_size", y="memory", hue="attack_rate", palette="viridis"
+    )
+    plt.xscale("log")
+    plt.yscale("log")
+    plt.title("Simulation Memory")
+    plt.xlabel("Population Size (log scale)")
+    plt.ylabel("Memory in Bytes (log scale)")
+    plt.legend(title="Attack Rate")
+    plt.tight_layout()
+    plt.savefig(
+        "experiments/examples/benchmarking/data/memory_by_population.png"
+    )
 
 
 main()
