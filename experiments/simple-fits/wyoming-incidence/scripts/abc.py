@@ -82,6 +82,12 @@ def main(config_file: str, keep: bool):
         files_to_upload=fps,
         use_existing_distances=use_existing,
     )
+    new_img_file = os.path.join(experiment.data_path, "experiment_history.pkl")
+    new_experiment = Experiment(
+        img_file=new_img_file,
+    )
+    new_path = os.path.join(new_experiment.directory, "experiment_history.pkl")
+    new_experiment.save(new_path)
 
 
 def hosp_lhood(results_data: pl.DataFrame, target_data: pl.DataFrame):

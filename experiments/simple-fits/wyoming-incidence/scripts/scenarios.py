@@ -5,7 +5,7 @@ from abmwrappers import experiment_class, wrappers
 from abmwrappers.experiment_class import Experiment
 
 
-def main():
+def main(scenario_replicates: int = 50):
     # Create the new Experiment and scenarios folder
     # Move the pickle file produced during calibration out of the data folder
     # the pickle file produced from the scenarios will live in the data folder
@@ -39,7 +39,9 @@ def main():
     }
 
     wrappers.create_scenario_subexperiments(
-        experiment=experiment, sample_posterior=True, n_samples=50
+        experiment=experiment,
+        sample_posterior=True,
+        n_samples=scenario_replicates,
     )
 
     # Iterate over config files in the new scenarios directory
