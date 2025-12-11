@@ -20,28 +20,30 @@ person_property_report <- readr::read_csv(file.path(
 
 # Infectious curves
 x <- person_property_report |>
-  group_by(t, InfectionStatus) |>
+  group_by(t, infection_status) |>
   summarise(count = sum(count), .groups = "drop") |>
   ggplot(aes(x = t, y = count)) +
-  geom_line(aes(color = InfectionStatus)) +
+  geom_line(aes(color = infection_status)) +
   xlab("Day") +
   ylab("Number of people")
 print(x)
 # Symptom curves
 x <- person_property_report |>
-  group_by(t, Symptoms) |>
+  filter(!is.na(symptoms)) |>
+  group_by(t, symptoms) |>
   summarise(count = sum(count), .groups = "drop") |>
   ggplot(aes(x = t, y = count)) +
-  geom_line(aes(color = Symptoms)) +
+  geom_line(aes(color = symptoms)) +
   xlab("Day") +
   ylab("Number of people")
 print(x)
 # Symptom curves
 x <- person_property_report |>
-  group_by(t, Hospitalized) |>
+  filter(hospitalized == TRUE) |>
+  group_by(t, hospitalized) |>
   summarise(count = sum(count), .groups = "drop") |>
   ggplot(aes(x = t, y = count)) +
-  geom_line(aes(color = Hospitalized)) +
+  geom_line(aes(color = hospitalized)) +
   xlab("Day") +
   ylab("Number of people")
 
