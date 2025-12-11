@@ -57,7 +57,10 @@ trait ContextIsolationGuidanceInternalExt:
             self.get_current_time() + intervention_policy_parameters.isolation_delay_period,
             move |context| {
                 if context.get_person_property(person_id, PresentingWithSymptoms) {
-                    context.initiate_testing_sequence(person_id, intervention_policy_parameters);
+                    context.initiate_test_for_infection_sequence(
+                        person_id,
+                        intervention_policy_parameters,
+                    );
                     context.begin_isolation(person_id).unwrap();
                     trace!("Person {person_id} is now isolating");
                 }
@@ -80,7 +83,7 @@ trait ContextIsolationGuidanceInternalExt:
         });
     }
 
-    fn test(
+    fn test_for_infection(
         &mut self,
         person_id: PersonId,
         intervention_policy_parameters: InterventionPolicyParameters,
@@ -102,19 +105,19 @@ trait ContextIsolationGuidanceInternalExt:
         }
     }
 
-    fn initiate_testing_sequence(
+    fn initiate_test_for_infection_sequence(
         &mut self,
         person_id: PersonId,
         intervention_policy_parameters: InterventionPolicyParameters,
     ) {
         // for the initial test upon symptom onset LastTestResult is false
-        self.test(person_id, intervention_policy_parameters);
+        self.test_for_infection(person_id, intervention_policy_parameters);
         if !self.get_person_property(person_id, LastTestResult) {
-            self.schedule_retest(person_id, intervention_policy_parameters);
+            self.schedule_retest_for_infection(person_id, intervention_policy_parameters);
         }
     }
 
-    fn schedule_retest(
+    fn schedule_retest_for_infection(
         &mut self,
         person_id: PersonId,
         intervention_policy_parameters: InterventionPolicyParameters,
@@ -125,7 +128,7 @@ trait ContextIsolationGuidanceInternalExt:
                 // checking for symptoms during the retest; individuals are not tested
                 // after their symptoms resolve
                 if context.get_person_property(person_id, PresentingWithSymptoms) {
-                    context.test(person_id, intervention_policy_parameters);
+                    context.test_for_infection(person_id, intervention_policy_parameters);
                 }
             },
         );
