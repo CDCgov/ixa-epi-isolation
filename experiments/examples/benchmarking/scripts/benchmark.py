@@ -17,6 +17,8 @@ def main():
         config_file="experiments/examples/benchmarking/input/config.yaml",
     )
 
+    validate_griddle(experiment.griddle_file)
+
     wrappers.create_scenario_subexperiments(experiment)
 
     # Iterate over config files in the new scenarios directory
@@ -32,6 +34,7 @@ def main():
             experiments_directory=experiment.directory,
             config_file=config_path,
         )
+
         subexperiment.run_step(
             data_read_fn=read_profiling_fn, products=["simulations"]
         )
@@ -61,7 +64,9 @@ def main():
     parameter_df = pl.DataFrame(parameters)
     exp_output = experiment.read_results(filename="scenarios")
     exp_output = exp_output.join(parameter_df, on="scenario")
-    plot_profiling(exp_output)
+    figures_dir = os.path.join(experiment.directory, "figures")
+    os.makedirs(figures_dir, exist_ok=True)
+    plot_profiling(exp_output, figures_dir)
 
 
 def read_profiling_fn(outputs_dir):
@@ -83,7 +88,7 @@ def read_profiling_fn(outputs_dir):
     return pl.DataFrame([data])
 
 
-def plot_profiling(df):
+def plot_profiling(df, figures_dir):
     # Plot Simulation runtime
     plt.figure(figsize=(8, 6))
     sns.scatterplot(
@@ -100,9 +105,7 @@ def plot_profiling(df):
     plt.ylabel("CPU Time in Seconds (log scale)")
     plt.legend(title="Attack Rate")
     plt.tight_layout()
-    plt.savefig(
-        "experiments/examples/benchmarking/data/runtime_by_population.png"
-    )
+    plt.savefig(os.path.join(figures_dir, "runtime_by_population.png"))
 
     # Plot Simulation memory
     plt.figure(figsize=(8, 6))
@@ -116,9 +119,17 @@ def plot_profiling(df):
     plt.ylabel("Memory in Bytes (log scale)")
     plt.legend(title="Attack Rate")
     plt.tight_layout()
-    plt.savefig(
-        "experiments/examples/benchmarking/data/memory_by_population.png"
-    )
+    plt.savefig(os.path.join(figures_dir, "memory_by_population.png"))
+
+
+def validate_griddle(griddle_file):
+    with open(griddle_file, "r") as fp:
+        griddle = json.load(fp)
+    for file in griddle["parameters"]["synth_population_file"]["vary"]:
+        if not os.path.exists(file):
+            raise FileNotFoundError(
+                f"Synthetic population file {file} does not exist."
+            )
 
 
 main()
