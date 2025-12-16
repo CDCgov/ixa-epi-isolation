@@ -15,7 +15,7 @@ use crate::{parameters::ProgressionLibraryType, symptom_progression::SymptomData
 use crate::natural_history_parameter_manager::{
     ContextNaturalHistoryParameterExt, NaturalHistoryParameterLibrary,
 };
-use crate::profiling::increment_named_count;
+use ixa::profiling::increment_named_count;
 
 /// Defines a semi-Markovian method for getting the next value of a person property based on how
 /// it's changed (the event) and `&Context`. `P` is the person property being mapped in the progression.

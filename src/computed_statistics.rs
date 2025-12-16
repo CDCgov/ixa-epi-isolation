@@ -11,7 +11,7 @@
 //! members of the `ProfilingData` struct:
 //!
 //! ```rust, ignore
-//! pub struct ProfilingData {
+//!pub struct ProfilingData {
 //!     pub start_time: Option<Instant>,
 //!
 //!     // A map from the count label to the value of the count
@@ -30,7 +30,7 @@
 //! function as arguments.
 //!
 //! ```rust, ignore
-//! use crate::profiling::add_computed_statistic;
+//! use ixa::profiling::add_computed_statistic;
 //!
 //! add_computed_statistic(
 //!     "infection forecasting efficiency",
@@ -41,7 +41,7 @@
 //! ```
 //!
 
-use crate::profiling::{
+use ixa::profiling::{
     add_computed_statistic, CustomStatisticComputer, CustomStatisticPrinter, ProfilingData,
 };
 
@@ -93,22 +93,4 @@ pub fn init() {
 
     // Use the free function in the `profiling` module to register the statistic.
     add_computed_statistic(label, description, computer, printer);
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::profiling::{get_profiling_data, print_named_counts};
-    use std::time::{Duration, Instant};
-
-    #[test]
-    fn print_named_counts_computes_forecast_efficiency() {
-        {
-            let mut data = get_profiling_data();
-            data.start_time = Some(Instant::now().checked_sub(Duration::from_secs(2)).unwrap());
-            data.counts.insert(FORECASTED_INFECTION_LABEL, 10);
-            data.counts.insert(ACCEPTED_INFECTION_LABEL, 4);
-        }
-        print_named_counts(); // should print "40.00% efficiency"
-    }
 }

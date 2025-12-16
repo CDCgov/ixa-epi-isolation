@@ -12,7 +12,6 @@ pub mod natural_history_parameter_manager;
 pub mod parameters;
 pub mod policies;
 pub mod population_loader;
-pub mod profiling;
 pub mod property_progression_manager;
 pub mod rate_fns;
 pub mod reports;

@@ -349,8 +349,8 @@ macro_rules! define_setting_category {
     };
 }
 
-use crate::profiling::open_span;
 pub use define_setting_category;
+use ixa::profiling::open_span;
 
 define_setting_category!(Home);
 define_setting_category!(CensusTract);
