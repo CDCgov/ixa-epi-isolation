@@ -9,7 +9,7 @@ config.toml
 azure_config.yaml
 *.pkl
 
-profiling_data.json
+**/profiling.json
 
 # Data
 *.csv

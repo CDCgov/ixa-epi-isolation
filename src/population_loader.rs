@@ -7,10 +7,10 @@ use serde::Deserialize;
 use std::path::PathBuf;
 
 use crate::parameters::{ContextParametersExt, Params};
-use crate::profiling::open_span;
 use crate::settings::{
     append_itinerary_entry, CensusTract, ContextSettingExt, Home, School, SettingId, Workplace,
 };
+use ixa::profiling::open_span;
 
 #[derive(Deserialize, Debug)]
 #[allow(non_snake_case)]

@@ -7,7 +7,6 @@ mod natural_history_parameter_manager;
 mod parameters;
 mod policies;
 mod population_loader;
-mod profiling;
 mod property_progression_manager;
 pub mod rate_fns;
 pub mod reports;
@@ -15,12 +14,11 @@ mod settings;
 mod symptom_progression;
 pub mod utils;
 
+use ixa::profiling::ProfilingContextExt;
 use ixa::runner::run_with_args;
 use ixa::{ContextPeopleExt, ContextRandomExt};
 use parameters::{ContextParametersExt, Params};
 use population_loader::Age;
-
-use crate::profiling::{print_profiling_data, ProfilingContextExt};
 
 // You must run this with a parameters file:
 // cargo run -- --config input/input.json
@@ -62,5 +60,5 @@ fn main() {
 
     // Write the profiling data and context's execution statistics to a JSON file.
     context.write_profiling_data();
-    print_profiling_data();
+    ixa::profiling::print_profiling_data();
 }

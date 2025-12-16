@@ -1,5 +1,5 @@
 use crate::infectiousness_manager::{InfectionData, InfectionDataValue};
-use crate::profiling::open_span;
+use ixa::profiling::open_span;
 use ixa::{
     define_report, report::ContextReportExt, Context, IxaError, PersonId, PersonPropertyChangeEvent,
 };

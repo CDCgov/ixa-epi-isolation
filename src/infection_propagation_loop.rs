@@ -7,8 +7,8 @@ use crate::infectiousness_manager::{
     InfectionData, InfectionDataValue, InfectionStatus, InfectionStatusValue,
 };
 use crate::parameters::{ContextParametersExt, Params};
-use crate::profiling::{increment_named_count, open_span};
 use crate::rate_fns::{load_rate_fns, InfectiousnessRateExt};
+use ixa::profiling::{increment_named_count, open_span};
 use ixa::{
     define_rng, trace, Context, ContextPeopleExt, ContextRandomExt, IxaError, PersonId,
     PersonPropertyChangeEvent,
