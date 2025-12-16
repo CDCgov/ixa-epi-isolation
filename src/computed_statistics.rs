@@ -11,7 +11,7 @@
 //! members of the `ProfilingData` struct:
 //!
 //! ```rust, ignore
-//!pub struct ProfilingData {
+//! pub struct ProfilingData {
 //!     pub start_time: Option<Instant>,
 //!
 //!     // A map from the count label to the value of the count
