@@ -1,6 +1,6 @@
 [package]
 name = "epi-isolation"
-version = "0.1.0"
+version = "0.2.1"
 edition = "2021"
 default-run = "epi-isolation"
 
