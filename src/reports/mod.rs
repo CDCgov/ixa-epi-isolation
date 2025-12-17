@@ -133,7 +133,7 @@ mod test {
                         ],
                         "mean_delay_to_hospitalization": 1.0,
                         "mean_duration_of_hospitalization": 1.0
-                    }
+                    },
                     "settings_properties": {},
                     "prevalence_report": {
                         "write": true,
