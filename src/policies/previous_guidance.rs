@@ -299,14 +299,14 @@ mod test {
     ) -> Context {
         let mut context = Context::new();
         let parameters = Params {
+            max_time: 100.0,
             initial_incidence: 0.1,
             initial_recovered: 0.35,
-            proportion_asymptomatic,
-            max_time: 100.0,
             infectiousness_rate_fn: RateFnType::EmpiricalFromFile {
                 file: PathBuf::from("./input/library_empirical_rate_fns.csv"),
                 scale: 0.05,
             },
+            proportion_asymptomatic,
             symptom_progression_library: Some(ProgressionLibraryType::EmpiricalFromFile {
                 file: PathBuf::from("./input/library_symptom_parameters.csv"),
             }),

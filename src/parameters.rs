@@ -60,47 +60,54 @@ pub struct HospitalizationParameters {
     pub age_groups: Vec<HospitalAgeGroups>,
 }
 
+/// Parameters are ordered according to the following categories:
+/// 1. Simulation control parameters
+/// 2. Initial conditions
+/// 3. Infection parameters
+/// 4. Symptom progression parameters
+/// 5. Hospitalization parameters
+/// 6. Setting properties
+/// 7. Guidance policy
+/// 8. Reporting parameters
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Params {
+    /// The random seed for the simulation.
+    pub seed: u64,
+    /// The maximum run time of the simulation; even if there are still infections
+    /// scheduled to occur, the simulation will stop at this time.
+    pub max_time: f64,
+    /// The path to the synthetic population file loaded in `population_loader`
+    pub synth_population_file: PathBuf,
     /// The proportion of initial people who are infectious when we seed the population.
     pub initial_incidence: f64,
     /// The proportion of people that are initially recovered (fully immune to disease).
     pub initial_recovered: f64,
-    /// The maximum run time of the simulation; even if there are still infections
-    /// scheduled to occur, the simulation will stop at this time.
-    pub max_time: f64,
-    /// The random seed for the simulation.
-    pub seed: u64,
     /// A library of infection rates to assign to infected people.
     pub infectiousness_rate_fn: RateFnType,
-    /// A library of symptom progressions
-    pub symptom_progression_library: Option<ProgressionLibraryType>,
     /// Proportion of infected individuals who do not develop symptoms
     pub proportion_asymptomatic: f64,
     /// Asymptomatic individuals are less infectious than symptomatic individuals
     pub relative_infectiousness_asymptomatics: f64,
+    /// A library of symptom progressions
+    pub symptom_progression_library: Option<ProgressionLibraryType>,
+    /// Hospitalization parameters contain the probability of hospitalization by age group
+    /// The mean of the delay distribution to hospitalization, and the mean of the duration of hospitalization.
+    pub hospitalization_parameters: HospitalizationParameters,
     /// Setting properties by setting type
     pub settings_properties: HashMap<CoreSettingsTypes, SettingProperties>,
-    /// The path to the synthetic population file loaded in `population_loader`
-    pub synth_population_file: PathBuf,
+    /// Guidance Policy
+    /// Specifies the policy guidance to use for interventions, defaulting to None
+    /// Enum variants should contain structs with policy-relevant data values
+    pub guidance_policy: Option<Policies>,
+    /// Facemask parameters
+    /// The reduction in transmission associated with wearing a facemask.
+    pub facemask_parameters: Option<FacemaskParameters>,
     /// Prevalence report with a period and name required
     pub prevalence_report: ReportParams,
     /// Incidence report with a period and name required
     pub incidence_report: ReportParams,
     /// Transmission report with a name required
     pub transmission_report: ReportParams,
-    /// Facemask parameters
-    /// The reduction in transmission associated with wearing a facemask.
-    pub facemask_parameters: Option<FacemaskParameters>,
-    /// Hospitalization parameters contain the probability of hospitalization by age group
-    /// The mean of the delay distribution to hospitalization, and the mean of the duration of hospitalization.
-    pub hospitalization_parameters: HospitalizationParameters,
-    /// Guidance Policy
-    /// Specifies the policy guidance to use for interventions, defaulting to None
-    /// Enum variants should contain structs with policy-relevant data values
-    pub guidance_policy: Option<Policies>,
-    /// Any profiling data will be written to `{profiling_data_path}.json`
-    pub profiling_data_path: Option<String>,
 }
 
 // Any default parameters must be specified here
@@ -109,18 +116,30 @@ pub struct Params {
 impl Default for Params {
     fn default() -> Self {
         Params {
+            seed: 0,
+            max_time: 0.0,
             initial_incidence: 0.0,
             initial_recovered: 0.0,
-            max_time: 0.0,
-            seed: 0,
             infectiousness_rate_fn: RateFnType::Constant {
                 rate: 1.0,
                 duration: 5.0,
             },
-            symptom_progression_library: None,
             proportion_asymptomatic: 0.0,
             // Asymptomatics, if included, should act as symptomatics unless otherwise specified
             relative_infectiousness_asymptomatics: 1.0,
+            symptom_progression_library: None,
+            hospitalization_parameters: HospitalizationParameters {
+                mean_delay_to_hospitalization: 0.0,
+                mean_duration_of_hospitalization: 0.0,
+                age_groups: vec![HospitalAgeGroups {
+                    min: 0,
+                    probability: 0.0,
+                }],
+            },
+            settings_properties: HashMap::new(),
+            guidance_policy: None,
+            facemask_parameters: None,
+            synth_population_file: PathBuf::new(),
             prevalence_report: ReportParams {
                 write: false,
                 filename: None,
@@ -136,19 +155,6 @@ impl Default for Params {
                 filename: None,
                 period: None,
             },
-            settings_properties: HashMap::new(),
-            synth_population_file: PathBuf::new(),
-            facemask_parameters: None,
-            hospitalization_parameters: HospitalizationParameters {
-                mean_delay_to_hospitalization: 0.0,
-                mean_duration_of_hospitalization: 0.0,
-                age_groups: vec![HospitalAgeGroups {
-                    min: 0,
-                    probability: 0.0,
-                }],
-            },
-            guidance_policy: None,
-            profiling_data_path: None,
         }
     }
 }

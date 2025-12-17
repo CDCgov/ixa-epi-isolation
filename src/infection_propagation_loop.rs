@@ -189,10 +189,10 @@ mod test {
     ) -> Context {
         let mut context = Context::new();
         let parameters = Params {
+            seed,
+            max_time: 100.0,
             initial_incidence: 0.1, // 10% of the population
             initial_recovered,
-            max_time: 100.0,
-            seed,
             infectiousness_rate_fn: RateFnType::Constant { rate, duration },
             settings_properties: HashMap::from_iter(
                 [
