@@ -117,15 +117,24 @@ mod test {
         let params_json = r#"
             {
                 "epi_isolation.GlobalParams": {
-                    "max_time": 200.0,
                     "seed": 123,
-                    "infectiousness_rate_fn": {"Constant": {"rate": 1.0, "duration": 5.0}},
+                    "max_time": 200.0,
+                    "synth_population_file": "input/people_test.csv",
                     "initial_incidence": 0.01,
                     "initial_recovered": 0.0,
+                    "infectiousness_rate_fn": {"Constant": {"rate": 1.0, "duration": 5.0}},
                     "proportion_asymptomatic": 0.0,
                     "relative_infectiousness_asymptomatics": 0.0,
+                    "hospitalization_parameters": {
+                        "age_groups": [
+                            {"min": 0, "probability": 0.0},
+                            {"min": 19, "probability": 0.0},
+                            {"min": 65, "probability": 0.0}
+                        ],
+                        "mean_delay_to_hospitalization": 1.0,
+                        "mean_duration_of_hospitalization": 1.0
+                    },
                     "settings_properties": {},
-                    "synth_population_file": "input/people_test.csv",
                     "prevalence_report": {
                         "write": true,
                         "filename": "prevalence.csv",
@@ -139,15 +148,6 @@ mod test {
                     "transmission_report": {
                         "write": true,
                         "filename": "transmission.csv"
-                    },
-                    "hospitalization_parameters": {
-                        "age_groups": [
-                            {"min": 0, "probability": 0.0},
-                            {"min": 19, "probability": 0.0},
-                            {"min": 65, "probability": 0.0}
-                        ],
-                        "mean_delay_to_hospitalization": 1.0,
-                        "mean_duration_of_hospitalization": 1.0
                     }
                 }
             }
