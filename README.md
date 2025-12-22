@@ -19,9 +19,16 @@ school_per_pop_ratio <- 0.002
 work_per_pop_ratio <- 0.1
 ```
 
+### Advanced examples
+To recreate advanced examples see [documentation in the experiments directory](experiments/README.md). This includes benchmarking the model, calibration to synthetic incidence data, and calibration to NHSN hospitalization incidence data and counterfactual scenario analysis at the state level.
+
+### Documentation
+
+Modules and integration tests are described in the docs directory.
+
 ## Project Admin
 
-William Koval (CDC/IOD/ORR/CFA), Chirag Kumar (CDC/IOD/ORR/CFA), and Guido Camargo España (CDC/IOD/ORR/CFA)
+William Koval (CDC/IOD/ORR/CFA), Erik Rosenstrom (CDC/IOD/ORR/CFA), and Guido Camargo España (CDC/IOD/ORR/CFA)
 
 ## General Disclaimer
 This repository was created for use by CDC programs to collaborate on public health related projects in support of the [CDC mission](https://www.cdc.gov/about/organization/mission.htm).  GitHub is not hosted by the CDC, but is a third party website used by CDC and its partners to share information and collaborate on software. CDC use of GitHub does not imply an endorsement of any one particular service, product, or enterprise.
