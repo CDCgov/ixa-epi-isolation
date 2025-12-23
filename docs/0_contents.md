@@ -1,5 +1,9 @@
 # Table of contents
 
+Notes:
+- Background on what motivated the work in the top level readme
+- Linking model input to other documents and documents to other documents when required
+
 1. [Model input](model-input.md)
 2. [Simulation Initialization](initialization.md)
 3. [Transmission](transmission.md)
