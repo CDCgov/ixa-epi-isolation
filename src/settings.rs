@@ -349,7 +349,6 @@ macro_rules! define_setting_category {
     };
 }
 
-pub use define_setting_category;
 use ixa::profiling::open_span;
 
 define_setting_category!(Home);
