@@ -1,5 +1,5 @@
 # Symptom Progression
+Once an individual becomes infectious, they begin to progress seperately.
 
-- description of symptom progressions
-- description of connection to natural history
-- description of arbitrary progressions
+## Connection to infectiousness
+When emperical infectiousness rate functions are used, they are correlated
