@@ -11,8 +11,6 @@ The flow between presymptomatic, symptomatic and symtpom recovery is shown in th
     <img src="figures/symptom_progression.png" alt="alt text" width="500">
 </p>
 
-
-
 The how transitions between symptom states and the times are informed by symptom progression data defined in an emperical symptom progression file. Both of these topics are discussed below.
 
 ## Symptom Progressions Connection to Infectiousness
@@ -28,5 +26,3 @@ An file defining individual level symptom progression is required to model sympt
 - `progression_type` defines the type of progression. Possible values currently available `SymptomData`. Different progression can be defined within the same file.
 - `parameter_name` identifier of the distribution parameter. Possible values are "Symptom category", "Incubation period", "Weibull shape", "Weibull scale", and "Weibull upper bound". All values are required for a single `id` to fully define the symptom progression distribution.
 - `parameter_value` value of the corresponding parameter
-
-Progressions are read in and new progressions can be defined in `property_progression_manager.rs`.
