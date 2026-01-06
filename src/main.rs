@@ -38,6 +38,7 @@ fn main() {
             context.shutdown();
         });
 
+        context.set_start_time(-1000.);
         settings::init(context);
 
         // Load the synthetic population from the `synthetic_population_file`

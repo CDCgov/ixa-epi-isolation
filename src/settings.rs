@@ -1,10 +1,11 @@
 use crate::parameters::{
     ContextParametersExt, CoreSettingsTypes, ItinerarySpecificationType, Params,
 };
+
 use indexmap::set::IndexSet;
 use ixa::{
-    define_data_plugin, define_rng, trace, Context, ContextPeopleExt, ContextRandomExt, HashMap,
-    HashMapExt, HashSet, HashSetExt, IxaError, PersonId, PluginContext,
+    define_data_plugin, define_rng, profiling::open_span, trace, Context, ContextPeopleExt,
+    ContextRandomExt, HashMap, HashMapExt, HashSet, HashSetExt, IxaError, PersonId, PluginContext,
 };
 use serde::{Deserialize, Serialize};
 
@@ -348,9 +349,6 @@ macro_rules! define_setting_category {
         }
     };
 }
-
-pub use define_setting_category;
-use ixa::profiling::open_span;
 
 define_setting_category!(Home);
 define_setting_category!(CensusTract);
