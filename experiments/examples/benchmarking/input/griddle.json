@@ -1,0 +1,14 @@
+{
+    "schema": "v0.3",
+    "parameters": {
+        "synth_population_file": {
+            "vary": ["input/synth_pop_people_WY_1000.csv",
+                    "input/synth_pop_people_WY_10000.csv",
+                    "input/synth_pop_people_WY_100000.csv",
+                    "input/synth_pop_people_WY_1000000.csv"]
+        },
+        "infectiousness_rate_fn>>>EmpiricalFromFile>>>scale": {
+            "vary": [0.05, 0.1, 0.15]
+        }
+    }
+}

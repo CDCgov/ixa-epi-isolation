@@ -1,0 +1,61 @@
+{
+  "epi_isolation.GlobalParams": {
+    "max_time": 365.0,
+    "seed": 123,
+    "infectiousness_rate_fn": {"EmpiricalFromFile": {"file": "input/library_empirical_rate_fns.csv",
+                                                     "scale": 0.1}},
+    "initial_incidence": 0.01,
+    "initial_recovered": 0.0,
+    "proportion_asymptomatic": 0.3,
+    "relative_infectiousness_asymptomatics": 0.7,
+    "settings_properties": {"Home": {"alpha": 0.0,
+                                     "itinerary_specification": {"Constant": {"ratio": 0.25}}},
+                            "Workplace": {"alpha": 0.0,
+                                          "itinerary_specification": {"Constant": {"ratio": 0.25}}},
+                            "School": {"alpha": 0.0,
+                                       "itinerary_specification": {"Constant": {"ratio": 0.25}}},
+                            "CensusTract": {"alpha": 0.0,
+                                            "itinerary_specification": {"Constant": {"ratio": 0.25}}}},
+    "symptom_progression_library" : {"EmpiricalFromFile": {"file": "input/library_symptom_parameters.csv"}},
+    "report_period": 1.0,
+    "synth_population_file": "input/synth_pop_people_WY_100000.csv",
+    "guidance_policy": { "UpdatedIsolationGuidance": {
+      "post_isolation_duration": 5.0,
+      "policy_adherence": 1.0,
+      "isolation_delay_period": 0.0
+    }
+  },
+    "prevalence_report": {
+        "write": false,
+        "filename": "person_property_count.csv",
+        "period": 1.0
+    },
+    "incidence_report": {
+        "write": true,
+        "filename": "incidence_report.csv",
+        "period": 7.0
+    },
+    "transmission_report": {
+        "write": false,
+        "filename": "transmission_report.csv"
+    },
+    "facemask_parameters": {
+      "facemask_efficacy": 0.2
+    },
+    "hospitalization_parameters": {
+      "mean_delay_to_hospitalization": 6.0,
+      "mean_duration_of_hospitalization": 8.0,
+      "age_groups": [
+        {"min": 0, "probability": 0.0},
+        {"min": 5, "probability": 0.001},
+        {"min": 15, "probability": 0.001},
+        {"min": 25, "probability": 0.01},
+        {"min": 35, "probability": 0.01},
+        {"min": 45, "probability": 0.01},
+        {"min": 55, "probability": 0.02},
+        {"min": 65,"probability": 0.05}
+      ]
+    },
+    "profiling_data_path": "profiling_data.json"
+  }
+}
