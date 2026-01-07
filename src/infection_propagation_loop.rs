@@ -1,5 +1,5 @@
 use core::f64;
-use rand_distr::{Binomial, Uniform};
+use rand_distr::Binomial;
 
 use crate::computed_statistics::{ACCEPTED_INFECTION_LABEL, FORECASTED_INFECTION_LABEL};
 use crate::infectiousness_manager::{
@@ -80,42 +80,33 @@ fn query_susceptibles_and_seed(
 fn seed_initial_infections(context: &mut Context, initial_incidence: f64) {
     query_susceptibles_and_seed(context, initial_incidence, |context, person_id| {
         trace!("Infecting person {person_id} as an initial infection.");
-        // sample an offset for the individuals infectious period
-        let uniform = Uniform::new(
-            -context.get_person_rate_fn(person_id).infection_duration(),
-            0.0,
-        )
-        .unwrap();
-        #[allow(unused_assignments)]
-        let mut offset = context.sample_distr(InfectionRng, uniform);
-        offset = 0.0;
-        context.add_plan(offset, move |context| {
-            context.infect_person(person_id, None, None, None);
-        });
+        context.seed_infection(person_id);
         context.add_plan(0.0, move |context| {
-            if context.get_person_property(person_id, InfectionStatus)
-                == InfectionStatusValue::Infectious
-            {
-                schedule_next_forecasted_infection(context, person_id);
-            }
+            assert!(
+                context.get_person_property(person_id, InfectionStatus)
+                    == InfectionStatusValue::Infectious
+            );
+            schedule_next_forecasted_infection(context, person_id);
         });
     });
 }
 
 fn seed_initial_recovered(context: &mut Context, initial_recovered: f64) {
-    query_susceptibles_and_seed(context, initial_recovered, |context, person_id| {
-        trace!("Recovering person {person_id} as an initial recovered.");
-        context.set_person_property(
-            person_id,
-            InfectionData,
-            InfectionDataValue::Recovered {
-                // If we choose to seed the population with people who are in various levels of "recovered"
-                // and include waning immunity based on that, we could changes these values to reflect
-                // when prior to simulation start an individual was actually infected/recovered.
-                infection_time: f64::NAN,
-                recovery_time: f64::NAN,
-            },
-        );
+    context.add_plan(0.0, move |context| {
+        query_susceptibles_and_seed(context, initial_recovered, |context, person_id| {
+            trace!("Recovering person {person_id} as an initial recovered.");
+            context.set_person_property(
+                person_id,
+                InfectionData,
+                InfectionDataValue::Recovered {
+                    // If we choose to seed the population with people who are in various levels of "recovered"
+                    // and include waning immunity based on that, we could changes these values to reflect
+                    // when prior to simulation start an individual was actually infected/recovered.
+                    infection_time: f64::NAN,
+                    recovery_time: f64::NAN,
+                },
+            );
+        });
     });
 }
 
@@ -130,15 +121,13 @@ pub fn init(context: &mut Context) -> Result<(), IxaError> {
     if initial_incidence > 0.0 {
         seed_initial_infections(context, initial_incidence);
     }
-    context.add_plan(0.0, move |cxt| {
-        if initial_recovered > 0.0 {
-            seed_initial_recovered(cxt, initial_recovered);
-        }
-    });
+    if initial_recovered > 0.0 {
+        seed_initial_recovered(context, initial_recovered);
+    }
 
     // Subscribe to the person becoming infectious to trigger the infection propagation loop
     context.subscribe_to_event(
-        move |context, event: PersonPropertyChangeEvent<InfectionStatus>| {
+        |context, event: PersonPropertyChangeEvent<InfectionStatus>| {
             if event.current != InfectionStatusValue::Infectious {
                 return;
             }
@@ -286,10 +275,12 @@ mod test {
 
         let initial_recovered = context.add_person(()).unwrap();
         seed_initial_recovered(&mut context, 1.0);
-        assert_eq!(
-            context.get_person_property(initial_recovered, InfectionStatus),
-            InfectionStatusValue::Recovered
-        );
+        context.add_plan(0.0, move |context| {
+            assert_eq!(
+                context.get_person_property(initial_recovered, InfectionStatus),
+                InfectionStatusValue::Recovered
+            );
+        });
     }
 
     #[test]
@@ -366,8 +357,8 @@ mod test {
                 context.add_person(()).unwrap();
             }
             seed_initial_infections(&mut context, incidence);
+            seed_initial_recovered(&mut context, recovered);
             context.add_plan(0.0, move |context| {
-                seed_initial_recovered(context, recovered);
                 *num_initial_infections_clone.borrow_mut() +=
                     context.query_people_count((InfectionStatus, InfectionStatusValue::Infectious));
                 *num_initial_recovered_clone.borrow_mut() +=
@@ -619,26 +610,24 @@ mod test {
     fn test_schedule_recovery() {
         // Create a simulation with an infected person and schedule their recovery.
         let mut context = setup_context(0, 0.0, 1.0, 5.0, 0.0);
-        context.set_start_time(-1000.);
         load_rate_fns(&mut context).unwrap();
         let person = context.add_person(()).unwrap();
-        seed_initial_infections(&mut context, 1.0);
+        context.infect_person(person, None, None, None);
         // For later, we need to get the recovery time from the rate function.
         context.execute();
         let recovery_time = context.get_person_rate_fn(person).infection_duration();
-        println!("Expected recovery time: {}", recovery_time);
         schedule_recovery(&mut context, person);
         context.execute();
         // Make sure person is recovered.
-        // assert_eq!(
-        //     context.get_person_property(person, InfectionData),
-        //     InfectionDataValue::Recovered {
-        //         infection_time: 0.0,
-        //         recovery_time
-        //     }
-        // );
+        assert_eq!(
+            context.get_person_property(person, InfectionData),
+            InfectionDataValue::Recovered {
+                infection_time: 0.0,
+                recovery_time
+            }
+        );
         // Make sure nothing has happened after person is recovered.
-        // assert_almost_eq!(context.get_current_time(), recovery_time, 0.0);
+        assert_almost_eq!(context.get_current_time(), recovery_time, 0.0);
     }
 
     #[test]

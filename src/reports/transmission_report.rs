@@ -40,7 +40,7 @@ fn record_transmission_event(
 /// Will return `IxaError` if the report cannot be added
 pub fn init(context: &mut Context, file_name: &str) -> Result<(), IxaError> {
     context.add_report::<TransmissionReport>(file_name)?;
-    context.subscribe_to_event::<PersonPropertyChangeEvent<InfectionData>>(move |cxt, event| {
+    context.subscribe_to_event::<PersonPropertyChangeEvent<InfectionData>>(|context, event| {
         let _span = open_span("transmission_report");
         if let InfectionDataValue::Infectious {
             infected_by,
@@ -50,7 +50,7 @@ pub fn init(context: &mut Context, file_name: &str) -> Result<(), IxaError> {
         } = event.current
         {
             record_transmission_event(
-                cxt,
+                context,
                 event.person_id,
                 infected_by,
                 infection_setting_type.map(ToString::to_string),
