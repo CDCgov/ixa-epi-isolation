@@ -104,11 +104,11 @@ simulation are as follows:
 
 | Parameter | Prior | Source |
 | :-------: | :---: | ------ |
-| $\alpha_\text{Home}$ | Uniform(0.0, 0.2) | uninformative |
-| $\alpha_\text{Work}$ | Uniform(0.0, 0.2) | uninformative |
-| $\alpha_\text{Sch}$ | Uniform(0.0, 0.2) | uninformative |
+| $\alpha_\text{Home}$ | Uniform(0.0, 0.2) | Assumed/uninformative |
+| $\alpha_\text{Work}$ | Uniform(0.0, 0.2) | Assumed/uninformative |
+| $\alpha_\text{Sch}$ | Uniform(0.0, 0.2) | Assumed/uninformative |
 | `initial_recovered` | Beta(5, 15) | Assumed partial protection from infections in spring/summer before calibration |
-| `infectiousness_rate_fn.scale` | Uniform(0.0, 0.2) | uninformative |
+| `infectiousness_rate_fn.scale` | Uniform(0.0, 0.2) | Assumed/uninformative |
 | `proportion_asymptomatic` | Beta(45, 55) | WT variant point estimate (0.45) with wider variance, Whitaker et al. 2022 Nat Comm. |
 
 The point estimate for the alpha variant wave, which partially corresponds to the timing of the data we filter from NHSN, has narrow margins
@@ -139,7 +139,7 @@ take the negative log likelihood score as our distance measure.
 from abmwrappers.experiment_class import Experiment
 import yaml
 
-experiment = Experiment(img_file="../data/experiment_history.pkl")
+experiment = Experiment(img_file="../experiment_history.pkl")
 
 with open("../input/config.yaml", "r") as f:
     config = yaml.safe_load(f)
@@ -353,6 +353,186 @@ plt.subplots_adjust(bottom=0.1, left=0.1, top=0.7, right=0.7, wspace=0.2, hspace
 plt.show()
 
 ```
+
+# Scenario Analysis
+
+The scenario analysis assesses the effects of the update and previous isolation guidance on hospitalizations in the calibrated "No Guidance" model. The table below shows the counterfactual scenarios and the relevant parameters varied by scenario.
+
+| Guidance Policy | Policy Adherence | Facemask Efficacy |
+| :-------: | :---: | ------ |
+| No Guidance | 0% | 0% |
+| Updated | 25% | 20% |
+| Updated | 25% | 50% |
+| Updated | 25% | 80% |
+| Updated | 75% | 20% |
+| Updated | 75% | 50% |
+| Updated | 75% | 80% |
+| Previous | 25% | 20% |
+| Previous | 25% | 50% |
+| Previous | 25% | 80% |
+| Previous | 75% | 20% |
+| Previous | 75% | 50% |
+| Previous | 75% | 80% |
+
+We sample 50 particles from the approximate posterior to combine with each counterfactual scenario parameter set. The results are presented in the following figure, which shows the weekly incidence hospital admission over time. The figure is faceted by policy adherence and facemask efficacy. The calibration target data is presented to show the robustness of the calibration (shown in the "No Guidance" scenario) to stochasticity.
+
+```{python}
+#| echo: false
+#| fig-width: 6.5
+#| fig-height: 6.5
+import os
+import polars as pl
+import json
+from abmwrappers.experiment_class import Experiment
+from abmwrappers import utils
+
+
+# Create the new Experiment and scenarios folder
+experiment = Experiment(
+    img_file="../data/experiment_history.pkl",
+    azure_batch = False,
+    griddle_file = "experiments/simple-fits/wyoming-incidence/input/griddle.json",
+    replicates = 1
+)
+
+# Iterate over config files in the new scenarios directory
+# Create simulation data and store as parquet file in each scenario folder
+scenarios_dir = "../scenarios"
+parameters = []
+for scenario in os.listdir(scenarios_dir):
+    input_file = os.path.join(
+        scenarios_dir, scenario, "input", "base.json"
+    )
+    with open(input_file, "r") as f:
+        input_params = json.load(f)
+
+    with open("../input/griddle.json", "r") as fp:
+        raw_griddle = json.load(fp)
+
+    parameter_dict = {}
+    for key in raw_griddle["parameters"].keys():
+        flattened_dict = utils.flatten_dict(input_params)
+        for k in flattened_dict.keys():
+            if "UpdatedIsolationGuidance" in k:
+                adherence = flattened_dict["epi_isolation.GlobalParams>>>guidance_policy>>>UpdatedIsolationGuidance>>>policy_adherence"]
+                if adherence == 0:
+                    parameter_dict["Guidance"] = "No Guidance"
+                    parameter_dict["Policy Adherence"] = adherence
+                else:
+                    parameter_dict["Guidance"] = "Updated"
+                    parameter_dict["Policy Adherence"] = adherence
+                break
+            elif "PreviousIsolationGuidance" in k:
+                adherence = flattened_dict["epi_isolation.GlobalParams>>>guidance_policy>>>PreviousIsolationGuidance>>>policy_adherence"]
+                parameter_dict["Guidance"] = "Previous"
+                parameter_dict["Policy Adherence"] = adherence
+                break
+            elif "facemask" in k:
+                parameter_dict["Facemask Efficacy"] = flattened_dict["epi_isolation.GlobalParams>>>facemask_parameters>>>facemask_efficacy"]
+
+    parameter_dict["scenario"] = int(scenario.split("=")[-1])
+
+    parameters.append(parameter_dict)
+
+parameter_df = pl.DataFrame(parameters)
+scenario_data = experiment.read_results(filename="scenarios", input_dir = "../data")
+scenario_data = scenario_data.join(parameter_df, on="scenario")
+
+import matplotlib.pyplot as plt
+import polars as pl
+import seaborn as sns
+
+sns.set_theme(style="whitegrid")
+
+
+target_data = pl.read_csv(
+"../input/target_data.csv"
+)
+
+# Create subplots for each level of Policy Adherence
+policy_adherence_levels = scenario_data["Policy Adherence"].unique().to_list()
+policy_adherence_levels.remove(0)
+policy_adherence_levels.sort()
+num_levels = len(policy_adherence_levels)
+
+calibration_data = scenario_data.filter(pl.col("Policy Adherence") == 0)
+modified_scenario_data = scenario_data.filter(pl.col("Policy Adherence") != 0)
+
+modified_calibration_data = []
+for level in policy_adherence_levels:
+    temp_df = calibration_data.with_columns(
+        pl.lit(level).alias("Policy Adherence")
+    )
+    modified_calibration_data.append(temp_df)
+calibration_data = pl.concat(modified_calibration_data)
+modifed_scenario_data = pl.concat([calibration_data, modified_scenario_data])
+
+scenario_data = scenario_data.sort("Guidance")
+modifed_scenario_data = modifed_scenario_data.sort("Guidance")
+
+
+plot = sns.relplot(
+    modifed_scenario_data,
+    x="t_upper",
+    y="count",
+    hue="Guidance",
+    col="Policy Adherence",
+    row="Facemask Efficacy",
+    kind="line",
+    estimator="median",
+    errorbar=lambda x: (x.quantile(0.25), x.quantile(0.75)),
+    legend=True,  # Show legend for this plot
+)
+ax = plot.axes
+for x in range(ax.shape[0]):
+    for y in range(ax.shape[1]):
+        current_ax = ax[x, y]
+        sns.scatterplot(target_data, x="t", y="total_admissions", ax = current_ax, zorder=10, label = "Target Data", color="black", marker="x", legend=False)
+
+plot.set_axis_labels("Time (days)", "Incident weekly hospital admissions")
+
+plt.show()
+```
+
+The next two figures show the distribution of peak and cumulative hospital admissions for each scenario. The figure is faceted by policy adherence and facemask efficacy.
+
+```{python}
+#| echo: false
+#| fig-width: 6.5
+#| fig-height: 6.5
+modifed_scenario_data = modifed_scenario_data.with_columns(
+    pl.col("count").max().over(["scenario", "Policy Adherence", "Facemask Efficacy"]).alias("max_count")
+)
+
+modifed_scenario_data = modifed_scenario_data.with_columns(
+    pl.col("count").sum().over(["scenario", "Policy Adherence", "Facemask Efficacy"]).alias("total_count")
+)
+
+sns.catplot(
+    modifed_scenario_data,
+    x="max_count",
+    y="Guidance",
+    hue="Guidance",
+    kind="violin",
+    col="Policy Adherence",
+    row="Facemask Efficacy",
+)
+plt.setp(plt.gcf().axes, xlabel="Peak Weekly Hospital Admissions")
+plt.show()
+
+sns.catplot(
+    modifed_scenario_data,
+    x="total_count",
+    y="Guidance",
+    hue="Guidance",
+    kind="violin",
+    col="Policy Adherence",
+    row="Facemask Efficacy",
+)
+plt.setp(plt.gcf().axes, xlabel="Total Hospital Admissions")
+plt.show()
+```
+
 # Additional resources
 
 ## Citations
