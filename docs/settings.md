@@ -1,5 +1,5 @@
 # Settings
-The setting module provides the framework governing the contact structure of individuals in the model. Philosophically, a setting is a place where transmission can occur.
+The setting module provides the framework governing the contact structure of individuals in the model where transmission can occur.
 
 ## Setting Definition
 A setting is defined by `SettingId` and a set of `SettingProperties`. A `SettingId` contains the setting category (e.g., home, school, workplace, etc.) and a unique identifier within the given category. Each setting category is associated with `SettingProperties` which contain a parameter for density dependent transmission `alpha`, and `itinerary_specification` which defines the proportion of time an individual interacts in the setting category. This value is also referred to as a ratio. Setting properties are assigned for each setting category in [model input](model-input.md). It is assumed that setting properties are uniform across all settings of a certain type. Settings are implemented with the `AnySettingId` trait, which is referenced throughout the implementation when working with generic setting objects.
