@@ -1,5 +1,5 @@
 use core::f64;
-use rand_distr::Binomial;
+use rand_distr::{Binomial, Uniform};
 
 use crate::computed_statistics::{ACCEPTED_INFECTION_LABEL, FORECASTED_INFECTION_LABEL};
 use crate::infectiousness_manager::{
@@ -77,10 +77,23 @@ fn query_susceptibles_and_seed(
     }
 }
 
+fn seed_infection(context: &mut Context, person_id: PersonId) {
+    // sample an offset for the individuals infectious period
+    let uniform = Uniform::new(
+        -context.get_person_rate_fn(person_id).infection_duration(),
+        0.0,
+    )
+    .unwrap();
+    let infection_time = context.sample_distr(InfectionRng, uniform);
+    context.add_plan(infection_time, move |context| {
+        context.infect_person(person_id, None, None, None);
+    });
+}
+
 fn seed_initial_infections(context: &mut Context, initial_incidence: f64) {
     query_susceptibles_and_seed(context, initial_incidence, |context, person_id| {
         trace!("Infecting person {person_id} as an initial infection.");
-        context.seed_infection(person_id);
+        seed_infection(context, person_id);
         context.add_plan(0.0, move |context| {
             assert!(
                 context.get_person_property(person_id, InfectionStatus)

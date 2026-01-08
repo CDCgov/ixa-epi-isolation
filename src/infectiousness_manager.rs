@@ -2,7 +2,7 @@ use ixa::{
     define_derived_property, define_person_property_with_default, define_rng, trace, Context,
     ContextPeopleExt, ContextRandomExt, PersonId, PluginContext,
 };
-use rand_distr::{Exp, Uniform};
+use rand_distr::Exp;
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -228,18 +228,6 @@ pub trait InfectionContextExt: PluginContext + ContextPeopleExt + Infectiousness
             panic!("Person {person_id} is not infectious")
         };
         self.get_current_time() - infection_time
-    }
-    fn seed_infection(&mut self, person_id: PersonId) {
-        // sample an offset for the individuals infectious period
-        let uniform = Uniform::new(
-            -self.get_person_rate_fn(person_id).infection_duration(),
-            0.0,
-        )
-        .unwrap();
-        let infection_time = self.sample_distr(ForecastRng, uniform);
-        self.add_plan(infection_time, move |context| {
-            context.infect_person(person_id, None, None, None);
-        });
     }
 }
 impl InfectionContextExt for Context {}
