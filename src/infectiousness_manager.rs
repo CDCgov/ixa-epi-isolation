@@ -181,7 +181,7 @@ pub fn evaluate_forecast(
     true
 }
 
-pub trait InfectionContextExt: PluginContext + ContextPeopleExt {
+pub trait InfectionContextExt: PluginContext + ContextPeopleExt + InfectiousnessRateExt {
     // This function should be called from the main loop whenever
     // someone is first infected. It assigns all their properties needed to
     // calculate intrinsic infectiousness
