@@ -9,7 +9,7 @@ There are three types of reports generated in `ixa-epi-isolation`: incidence, pr
 This report records the number of incident person property updates that occur over the simulation horizon. The person properties for which updates are tracked are `InfectionStatus`, `Symptoms`, and `Hospitalized`. Each tracked update is aggregated by age. For each person property tracked, this report maintains a map with keys that are a combination of the tracked person property's values and ages. The map values are counts that record how many person property updates have occurred over the current `period`. The internal map is updated using event subscriptions. After the data is recorded at the end of the period the values in the internal map are reset to zero.
 
 The report structure has four columns:
-- `t_upper` the time at which counts are recorded. Counts cover the time period range $[t_{upper}, t_{upper}  + period)$
+- `t_upper` the time at which counts are recorded. Counts cover the time period range $[t_{upper} - period, t_{upper})$, with the first value of `t_upper` being equal to the `period`
 - `age` report is stratified by age
 - `event` the person property value of interested
 - `count` the number of instances that an individual with `Age = age` updated a person property to have value equivalent to `event` in the period defined by `t_upper`
