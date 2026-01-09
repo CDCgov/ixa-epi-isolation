@@ -1,0 +1,10 @@
+# Hospitalizations
+
+Symptomatic individuals can be hospitalized. Hospitalizations are implemented as a boolean person property, `Hospitalized`. How individuals move through the hospitalization progression is defined by `HospitalParameters` which is a struct with the following elements:
+- `mean_duration_of_hospitalization` mean of the exponential distribution which generates an individual's hospital durations
+- `mean_delay_to_hospitalization` mean of the exponential distribution which generates an individual's  delay from symptom onset to hospital
+- `age_groups` dictionary defining age buckets and the corresponding probability of hospitalization given moderate symptoms. The age value key defines the lower bound of the age bucket. The noninclusive upper bound of the age bucket is next age key value.
+
+All individuals begin with `Hospitalized = false`. When individuals become symptomatic they are eligible to be hospitalized, regardless of symptom severity. At the time an individual starts presenting with symptoms, they are randomly selected for hospitalization given the age group they belong to and the probability defined in `HospitalParameters`. If an individual is selected for hospitalization, a plan is created to set `Hospitalized = true` at the current simulation time plus a delay. The delay value is sampled from an exponential distribution with mean `mean_delay_to_hospitalization`. The duration of hospitalization is sampled from an exponential distribution with mean `mean_duration_of_hospitalization` after which the individual exits the hospital. Incident and prevalent hospitalization are captured in reports.
+
+A limitation of the implementation is that hospitals do not impact an individual's activity in their settings. Ideally, hospitals would be modeled as a separate setting. Itinerary modifiers would handle individuals switching to between their default and modified itineraries. Additionally, itinerary modifications associated with hospitalization would override those associated with isolation.

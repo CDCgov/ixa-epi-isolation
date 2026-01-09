@@ -1,77 +1,24 @@
-# Transmission model
+# Modeling Transmission
+An infectious individual (infector) attempts to infect other individuals they are in contact during their infection (infectee). The mechanism that generates this these infection attempts is referred to as the infection propagation loop (implemented in `infection_propagation_loop.rs`). Supporting implementation to construct the infection loop is implemented in `infectiousness_manager.rs`. The objective of the transmission modules is to model time-varying infectiousness.
 
-## Overview
+## Time-varying Infectiousness
+The model maintains a functional representation of infector's infectiousness rate over their infection called the `infectiousness_rate_fn`. This implementation bypasses the common epidemiological assumption that the time between infection attempts is exponentially distributed. It enables infectiousness to be informed by individual level viral-load trajectories. There are two supported ways to define `infectiousness_rate_fn`.
 
-The transmission model controls person-to-person transmission between an
-infectious agent and other susceptible agents. Agents become infectious immediately
-upon successful infection attempt, though they may have a transmission probability of
-0 for some time (mimicking an exposed compartment). Once infectious, agents have a pre-assigned
-number of infection attempts. Infection attempt times are drawn from the generation interval.
-Once there are no more infection attempts remaining for the agent, the agent moves to the
-recovered compartment (for now), which triggers the immunity manager to set the agent's immunity
-levels.
+### `Constant`
+A constant infectiousness rate function is defined by a rate parameter `r` and duration parameter, `infection_duration`. An individual's infectiousness rate does not vary during their infection. Using this approach results in the traditional exponentially distributed time between infection attempts.
 
-## Workflow
+### `EmpiricalFromFile`
+Individual level infectiousness rate trajectories can be provided in a file. The file must contain `id`, `time`, `value` columns, where `time` and `value` entries are data points of the functional representation for a given curve `id`. Linear interpolation is used between data points. A `scale` parameter is also required for this implementation which is a constant multiplier on the `value` column, effectively increasing or decreasing all infectiousness rate trajectories.
 
-The transmission model is centered around a key workflow:
-1. Watch for an agent becoming infectious (S --> I transition).
-2. For the infectious agent, draw a number of infection attempts. This could be from an $R_i$ distribution
-or the distribution of the number of contacts an individual has based on their network connectivity.
-There is also an option for each infection attempt to have a probability of transmission. This serves to
-scale the contact distribution to a potential $R_i$ distribution.
-3. Draw an infection time for the agent. This consists of taking an ordered draw from the generation
-interval. The math for this is abstracted away under a generic `get_next_infection_time` method.
-4. Draw a susceptible contact from the agent's contact group. Contacts could be drawn uniformly
-from the contact group or with weight based on person characteristics. The actual
-drawing of a contact can be abstracted into a `get_contact` method. Evaluate whether
-the infection attempt is successful. Success is based on:
-    - a potential probability of transmission in the case where we are drawing the
-    number of contacts from a contact distribution,
-    - whether any interventions are present that may reduce transmission,
-    - the contact's immunity level which is updated when the contact is drawn.
+## Transmission Modifiers
+Transmission modifiers are multipliers that scale an individual's infectiousness rate function similarly to the `scale` parameter of `EmpiricalFromFile`. A transmission modifier is associated directly with an `InfectionStatus` value and a person property, the effects of transmission modifiers are automatically handled by `transmission_modifier_manager.rs`. An individual's total transmission multiplier, also referred to as the relative total transmission, is the product of all active individual transmission modifiers given the individual's `InfectionStatus` and person property values. Masks are the primary use case of transmission modifiers in the model. They are associated with the `InfectionStatus::Infectious` value and a Boolean `MaskingStatus` person property. A critical note when using this API is to store the transmission modifier with multiplier of one minus the intended value. For example, if masks reduce transmission by 80%, the relative total transmission multiplier would be 0.2.
 
-    If the infection attempt is successful, the susceptible contact is labeled as infectious.
-5. Repeat steps #3 and #4, decreasing the number of infection attempts left by one each time
-regardless of whether the attempt is successful and ending when the agent has no zero
-infection attempts remaining.
-6. Label the agent as recovered. Doing so will trigger the immunity manager to set the
-agent's natural level of immunity.
+There are inherent transmission modifiers other than those associated with person properties. As discussed in [settings documentation](settings.md), settings implement density dependent transmission modifiers governed by setting category specific parameters $\alpha$ and take the form $(N-1)^\alpha$. For an individual's active itinerary, a transmission modifier is applied that is the weighted average of the density dependent transmission modifiers. The weights in this case are the proportion of time the individual spends in the setting. The largest setting specific modifier is tracked across both default and modified itineraries for an individual. Another inherent transmission modifier is in place with individuals at are asymptomatic. This is governed by the input parameter `relative_infectiousness_asymptomatics`.
 
-## Relationship to other managers/out of scope for the transmission manager
+## Forecasting Infection Attempts
+When interventions (e.g., transmission modifiers and itinerary modifiers) are activated relative to an individual's infection introduces complexity that must be addressed when generating infection attempts with time-varying rates. It is not possible to know how an individual's infectiousness rate function will change due to modifiers over the course of their infection duration. This motivates using a rejection sampling approach in which forecasted infection attempts are generated using the individual's maximum infectiousness rate function. This function is defined as the individual's infectiousness rate function scaled by the largest setting specific modifier. At the time of the forecasted infection attempt the individual's actual infectiousness rate can be calculated as the product of their infectiousness rate function at the current time and all transmission modifiers. The forecast is then evaluated to be successful with probability equivalent to the ratio of the actual and maximum infectiousness at the current time. If the forecasted infection attempt is successful the remainder of the infection propagation loop is executed.
 
-- The transmission manager does not implement interventions. It does not keep track
-of interventions present or how they impact transmission.
+Given an individual's maximum infectiousness rate function, the next forecasted infection is stochastically generated using inverse transform sampling. A number of events to occur is sampled from an exponential distribution with rate one. Given the number of events the expected time to for those events to occur is calculated from cumulative growth rate of the maximum infectiousness rate curve at the current time. This time is returned, and the next forecasted infection attempt is scheduled at that time in the future. More information can be found in the [appendix](appendix/time-varying-infectiousness.md)
 
-- The transmission manager does not track an individual's contacts. Instead, the transmission
-manager calls a generic method called `get_contact` which is in the `mod contact_manager` to obtain
-the individual's contacts.
-
-- The transmission manager does not track an individual's health status.
-
-- The transmission manager does not track an individual's waning immunity over time. It can
-interface with other methods that do calculate an individual's immunity -- for evaluating
-whether a susceptible agent with partial immunity gets infected -- and the agent's natural
-immunity level set at the end of their infectious period is done by that same immunity
-manager.
-
-## Diagram
-
-Diagram of workflow:
-
-```mermaid
-graph TB
-A[watch for becoming I]-->B[draw number of infection attempts]-->C[draw ordered transmission time from generation interval]-->D[Evaluate whether there are more infection attempts left]-->E[Repeat]-->C
-D-->F[agent's infectious period is over and gets relabeled as S]
-
-```
-
-Diagram of interactions:
-
-```mermaid
-graph TB
-
-A[transmission]-->B[contact manager]
-A[transmission]-->C[intervention plugin]
-A[transmission]-->D[immunity manager]
-
-```
+## Infection Propagation Loop
+The logic of the infection propagation loop is as follows. At the time a forecasted infection attempt is successful for a given infector, a setting is sampled from the infectors active itinerary with probability proportional to normalized itinerary ratio values. From the sampled setting, an infectee is sampled from the set of active individuals. Once the infectee is selected, their infection status is checked, if the individual is not susceptible, then the infection attempt is unsuccessful. Transmission modifiers can be used to reduce susceptibility as well, so the relative total transmission for the infectee is calculated, and the infection attempt is successful with probability equal to the relative total transmission. If the infection attempt is successful then the person is moved from `InfectionStatus::Susceptible` to `InfectionStatus::Infectious`. This event triggers plans to be created which recover the individual at some point in the future, begin their [symptom progression](symptom-progression.md), and record the transmission attempt.

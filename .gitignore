@@ -54,6 +54,7 @@ output/**
 !input/isolation_guidance_stan_parameters.csv
 !input/library_empirical_rate_fns.csv
 !input/library_symptom_parameters.csv
+!docs/figures/*
 
 #####
 # Python
