@@ -30,17 +30,17 @@ This optional parameter is type `ProgressionLibraryType`. Similarly to `infectio
 
 #### `hospitalization_parameters`
 This parameter struct has three components:
-- `mean_duration_of_hospitalization` mean of the exponential distribution which generates an individual's hospital durations
-- `mean_delay_to_hospitalization` mean of the exponential distribution which generates an individual's  delay from symptom onset to hospital
+- `mean_duration_of_hospitalization` mean of the exponential distribution which generates an individual's hospital duration
+- `mean_delay_to_hospitalization` mean of the exponential distribution which generates an individual's  delay from symptom onset to hospitalization
 - `age_groups` dictionary defining age buckets and the corresponding probability of hospitalization given moderate symptoms. The age value key defines the lower bound of the age bucket. The noninclusive upper bound of the age bucket is next age key value.
 
-See the [hospitalization documentation](hospitalization.md) for more details
+See the [hospitalization documentation](hospitalization.md) for more details.
 
 #### `setting_properties`
 
 This parameter struct defines a map of `CoreSettingsTypes` and `SettingProperties`. There must be alignment between the settings enumerated in this struct and the settings that are declared in the model instantiation. With each setting type, the following attributes must be defined in the `SettingProperties`:
-- `alpha` parameter informing density dependent transmission in the setting. Density dependent transmission is a multiplier on an individual's infectiousness
-- `itinerary_specification` parameter used to define the proportion of time an individual spend in the setting
+- `alpha` parameter informing density-dependent transmission in the setting. Density-dependent transmission is a multiplier on an individual's infectiousness
+- `itinerary_specification` parameter used to define the proportion of time an individual spends in the setting
 
 See the [settings documentation](settings.md) for more details.
 
