@@ -48,7 +48,7 @@ The previous isolation guidance implementation is outlined in the figure below. 
 Several assumptions are made in this implementation which are listed below:
 - If an individual's symptoms resolve before their first test/they begin isolating, they will exit the policy and take no further action.
 - If an individual's symptoms resolve before their second test, the result of their first test will be used to determine their next steps in the policy.
-- Symptom categories 1 and 2 are regarded as moderate symptoms and categories 3 and 4 are mild symptoms.
+- Symptom category 1 is regarded as moderate symptoms and categories 2 - 4 are mild symptoms (this distinction is hard coded as the boolean `severe` symptom progression property in `symptom_progression.rs`).
 
 <p align="center">
     <img src="figures/previous_policy.png" alt="alt text" width="300">
